@@ -36,7 +36,8 @@ const placeSchema = z.object({
   location: latLng.optional(),
   types: z.array(z.string()).optional(),
   primaryType: z.string().optional(),
-  addressComponents: z.array(z.object({ longText: z.string().optional(), shortText: z.string().optional(), types: z.array(z.string()) })).optional(),
+  /* Google omits `types` on some components; one such row used to reject the whole response, and the lookup was thrown away as a provider failure. */
+  addressComponents: z.array(z.object({ longText: z.string().optional(), shortText: z.string().optional(), types: z.array(z.string()).default([]) })).optional(),
   businessStatus: z.enum(['OPERATIONAL', 'CLOSED_TEMPORARILY', 'CLOSED_PERMANENTLY']).optional(),
   regularOpeningHours: z
     .object({
@@ -125,7 +126,7 @@ function component(place: GooglePlaceRecord, type: string, short = false): strin
  * not a match: anything outside `maxDistanceKm` or with a name that does not
  * agree is `weak`, and the caller keeps the model anchor unverified.
  */
-export async function resolveIdentity(input: { name: string; locality?: string; category?: string; near: { lat: number; lng: number }; radiusKm: number; maxDistanceKm?: number }, http: PlacesHttp = {}): Promise<ResolvedPlaceIdentity | null> {
+export async function resolveIdentity(input: { name: string; locality?: string; category?: string; near: { lat: number; lng: number }; radiusKm: number; maxDistanceKm?: number; /** The name a result must agree with, when the search text is not the name itself ("Seceda cable car" searched, "Seceda" matched). */ matchName?: string }, http: PlacesHttp = {}): Promise<ResolvedPlaceIdentity | null> {
   const body = {
     textQuery: input.locality ? `${input.name}, ${input.locality}` : input.name,
     pageSize: 5,
@@ -134,7 +135,7 @@ export async function resolveIdentity(input: { name: string; locality?: string; 
   const raw = await call<unknown>(http, `${PLACES_BASE}/places:searchText`, { method: 'POST', body: JSON.stringify(body), fieldMask: PLACES_FIELD_MASKS.identity });
   const parsed = searchResponseSchema.safeParse(raw);
   if (!parsed.success) throw new ProviderFailure('provider_error', 'google-places', 'Unexpected response shape.');
-  const wanted = normalise(input.name);
+  const wanted = normalise(input.matchName ?? input.name);
   const maxKm = input.maxDistanceKm ?? Math.max(input.radiusKm * 2, 40);
   const scored = (parsed.data.places ?? [])
     .filter((p) => p.location && p.displayName)

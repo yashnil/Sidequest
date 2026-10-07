@@ -1,3 +1,4 @@
+import type { AccessKind } from './access-point';
 import { assessConfidence, type DestinationEntityType, type ScopeBreadth } from '../schemas/geography';
 import { GEOGRAPHIC_SCOPE_VERSION, scopeFingerprint, type GeographicScope } from '../schemas/scope';
 import { licence } from '../schemas/licence';
@@ -50,6 +51,16 @@ export interface ResolvedPosition {
   approximate: boolean;
   /** Settled locality from the provider, when it gave one. */
   locality?: string;
+  /**
+   * Private alpha — the coordinates are where the activity is *started* (a
+   * trailhead, car park, lift station or hut), not the activity itself, which
+   * is a route or an area. Routing uses the point; the itinerary keeps the
+   * activity's own name. `footprint` is where the activity's area placed.
+   * `name` only when the source may be stored (never a Google display name).
+   */
+  accessPoint?: { kind: AccessKind; provider: string; query: string; name?: string; footprint?: { lat: number; lng: number } };
+  /** An area-level candidate whose access point was searched for and not verified. */
+  accessPointUnverified?: boolean;
 }
 
 export interface ScanPoint {
@@ -128,7 +139,12 @@ export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<st
       continue;
     }
     if (position.approximate && !AREA_LIKE.has(candidate.kind)) {
-      unplaced.push({ key: candidate.key, name: candidate.name, reason: 'Only its town could be placed, which is not precise enough to plan around.', code: 'approximate_only' });
+      unplaced.push({
+        key: candidate.key,
+        name: candidate.name,
+        reason: position.accessPointUnverified ? 'A great fit, but only its area could be found and no trailhead, car park or lift could be verified — not planned until its access point is.' : 'Only its town could be placed, which is not precise enough to plan around.',
+        code: 'approximate_only',
+      });
       continue;
     }
     const duplicate = points.find((p) => p.kind === 'place' && haversineKm(p.coordinates, position.coordinates) <= 0.3 && sharesLeadingName(p.name, candidate.name));
@@ -540,7 +556,9 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const popularity = c.tier === 'classic' ? 0.8 : c.tier === 'side_quest' ? 0.45 : 0.25;
     const hidden = c.tier === 'hidden_gem' ? 0.75 : c.tier === 'side_quest' ? 0.5 : 0.15;
     const sourceName =
-      position.method === 'places'
+      position.accessPoint
+        ? `Proposed by Sidequest's research model; routed from its ${position.accessPoint.kind.replace(/_/g, ' ')}${position.accessPoint.name ? ` (${position.accessPoint.name})` : ''}, located with ${position.provider}`
+        : position.method === 'places'
         ? `Proposed by Sidequest's research model; located with ${position.provider}`
         : position.method === 'geocoder'
           ? `Proposed by Sidequest's research model; located with ${position.provider}`
@@ -553,7 +571,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       locality: c.locality || position.locality || input.destinationName,
       shortDescription: c.why.slice(0, 280),
       coordinates: position.coordinates,
-      tags: [`kind:${c.kind}`, `tier:${c.tier}`, ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : [])],
+      tags: [`kind:${c.kind}`, `tier:${c.tier}`, ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
       source: {
         name: sourceName,
         kind: position.method === 'places' && position.provider.includes('google') ? 'google_places' : 'osm',

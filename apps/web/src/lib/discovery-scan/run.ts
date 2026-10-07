@@ -312,6 +312,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
           ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
           placesBudget: proposal.candidates.length,
+          namedByTraveller: namedMustDos,
           deadline: () => Date.now() - placementStarted > PLACEMENT_DEADLINE_MS,
           onProgress: (placed, attempted) => {
             if (attempted % 4 === 0) noteScanCounters(tripId, scanId, { placed }, new Date());
@@ -370,8 +371,12 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         unplaced: placementDiagnostics.map((d) => ({ name: d.name, locality: d.locality, category: d.category, isBase: d.isBase, outcome: d.outcome, attempts: d.attempts })),
       },
       assembly: plan.unplaced.filter((u) => u.code !== 'not_placed').map((u) => ({ name: u.name, code: u.code })),
+      accessRecovery: placement.diagnostics.filter((d) => d.recovery).map((d) => ({ name: d.name, ...d.recovery! })),
       recovery,
     };
+    if (diagnostics.accessRecovery && diagnostics.accessRecovery.length > 0) {
+      console.warn(`Discovery scan access points for ${tripId}: ${diagnostics.accessRecovery.map((r) => `${r.name} [${r.outcome}${r.accessPoint ? ` ${r.accessPoint.kind} via ${r.accessPoint.provider}` : ''}; ${r.queries.length} queries]`).join('; ')}`);
+    }
     if (placementDiagnostics.length > 0 || diagnostics.assembly.length > 0) {
       console.warn(`Discovery scan unplaced for ${tripId}: ${[...placementDiagnostics.map((d) => `${d.name} [${d.outcome}]`), ...diagnostics.assembly.map((a) => `${a.name} [${a.code}]`)].join('; ')}`);
     }

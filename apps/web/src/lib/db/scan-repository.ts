@@ -183,6 +183,8 @@ export interface ScanDiagnostics {
   };
   /** Placed, but not usable as a point: only the town placed, or the same place as another proposal. */
   assembly: { name: string; code: string }[];
+  /** Private alpha — area-only candidates that got a bounded access-point search, and what it found. */
+  accessRecovery?: { name: string; originalOutcome: string; attempted: boolean; queries: { provider: string; query: string; outcome: string }[]; outcome: string; accessPoint?: { kind: string; provider: string; coordinates: { lat: number; lng: number } } }[];
   recovery: {
     attempted: boolean;
     reasons: string[];

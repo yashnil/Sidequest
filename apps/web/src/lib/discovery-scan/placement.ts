@@ -1,5 +1,7 @@
 import 'server-only';
-import { haversineKm, type ResolvedPosition, type ScanProposal, SCAN_KIND_PROFILES } from '@sidequest/core';
+import { ACCESS_AMBIGUITY_KM, ACCESS_RADIUS_KM, MAX_ACCESS_QUERIES, MAX_ACCESS_RECOVERIES, accessEvidence, accessRecoveryQueries, accessStemOf, haversineKm, routeAnswerIsAreaLevel, worthAccessRecovery, type ResolvedPosition, type ScanProposal, SCAN_KIND_PROFILES } from '@sidequest/core';
+import { matchNamedMustDos } from './match';
+import type { AccessKind } from '@sidequest/core';
 import { geocode, type NominatimPlace } from '../providers/nominatim';
 import { boundedAll } from '../providers/cost-budget';
 import { resolveIdentity } from '../providers/google-places';
@@ -32,6 +34,8 @@ export interface PlacementOptions {
   countryName?: string;
   /** Places-provider lookups allowed this scan. */
   placesBudget: number;
+  /** The places the traveller named themselves; an area-only match among them is always worth an access-point search. */
+  namedByTraveller?: readonly string[];
   deadline: () => boolean;
   onProgress?: (placed: number, attempted: number) => void;
 }
@@ -46,6 +50,16 @@ export interface PlacementAttempt {
   outcome: PlacementOutcome;
 }
 
+/** Private alpha — what a bounded access-point search did for an area-only candidate. */
+export interface AccessRecoveryDiagnostic {
+  /** What placement had before the search: an area-level point, or nothing. */
+  originalOutcome: 'approximate_only' | PlacementOutcome;
+  attempted: boolean;
+  queries: PlacementAttempt[];
+  outcome: 'recovered_access_point' | 'no_access_point' | 'ambiguous_access_point' | 'provider_failure';
+  accessPoint?: { kind: string; provider: string; coordinates: { lat: number; lng: number } };
+}
+
 export interface PlacementDiagnostic {
   key: string;
   name: string;
@@ -54,6 +68,7 @@ export interface PlacementDiagnostic {
   isBase: boolean;
   outcome: PlacementOutcome;
   attempts: PlacementAttempt[];
+  recovery?: AccessRecoveryDiagnostic;
 }
 
 export interface PlacementResult {
@@ -110,10 +125,12 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
   const country = options.countryName ? `, ${options.countryName}` : '';
   const radiusKm = Math.min(50, Math.max(10, options.maxDistanceKm / 4));
 
-  const items: { key: string; name: string; localName?: string; locality: string; category: string; areaLike: boolean }[] = [
+  const named = new Set(matchNamedMustDos(options.namedByTraveller ?? [], proposal.candidates.map((c) => ({ id: c.key, name: c.name }))));
+  const items: { key: string; name: string; localName?: string; locality: string; category: string; areaLike: boolean; kind?: string; recoverable?: boolean }[] = [
     ...proposal.bases.map((b) => ({ key: b.key, name: b.name, locality: b.locality, category: 'locality', areaLike: true })),
-    ...proposal.candidates.map((c) => ({ key: c.key, name: c.name, ...(c.localName ? { localName: c.localName } : {}), locality: c.locality, category: SCAN_KIND_PROFILES[c.kind].category, areaLike: SCAN_KIND_PROFILES[c.kind].hours === 'open_ground' })),
+    ...proposal.candidates.map((c) => ({ key: c.key, name: c.name, ...(c.localName ? { localName: c.localName } : {}), locality: c.locality, category: SCAN_KIND_PROFILES[c.kind].category, areaLike: SCAN_KIND_PROFILES[c.kind].hours === 'open_ground', kind: c.kind, recoverable: worthAccessRecovery({ kind: c.kind, tier: c.tier, namedByTraveller: named.has(c.key) }) })),
   ];
+  let recoveries = 0;
   let attempted = 0;
   let placed = 0;
   const diagnosticByKey = new Map<string, PlacementDiagnostic>();
@@ -138,7 +155,8 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
             method: 'places',
             provider: 'google-places',
             providerRef: found.providerRef,
-            approximate: false,
+            /* A route answered by an area (a hiking area, a natural feature, a park) is not a point to route to. */
+            approximate: Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, googleTypes: found.types })),
             // Google's own locality is not stored (Maps Content); the proposal's locality stands.
           };
           providers.add('google-places');
@@ -156,7 +174,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 && !isBase, ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
           providers.add('nominatim');
         }
       } catch {
@@ -180,7 +198,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16, ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
           providers.add('nominatim');
         }
       } catch {
@@ -200,7 +218,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 && !isBase, ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
           providers.add('nominatim');
         }
       } catch {
@@ -222,13 +240,41 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
       }
     }
+    /*
+     * Private alpha — an important route or area found only as an area (or not
+     * at all) gets a bounded search for where it is started. See
+     * `@sidequest/core` scan/access-point.ts for what counts as an access point.
+     */
+    let recovery: AccessRecoveryDiagnostic | undefined;
+    if (item.recoverable && item.kind && (!position || position.approximate) && recoveries < MAX_ACCESS_RECOVERIES && !options.deadline()) {
+      recoveries += 1;
+      /* Only the activity's own area anchors the search; a town or region centroid from the locality fallback is not where the activity is. */
+      const searched = await recoverAccessPoint({ name: item.name, kind: item.kind, footprint: position && position.method !== 'locality' ? position.coordinates : null, options, country, http: usePlaces ? http : null });
+      placesCalls += searched.placesCalls;
+      geocoderCalls += searched.geocoderCalls;
+      recovery = { originalOutcome: position ? 'approximate_only' : 'no_results', attempted: true, queries: searched.queries, outcome: searched.outcome, ...(searched.found ? { accessPoint: { kind: searched.found.kind, provider: searched.found.provider, coordinates: searched.found.coordinates } } : {}) };
+      if (searched.found) {
+        const found = searched.found;
+        position = {
+          coordinates: found.coordinates,
+          method: found.provider === 'google-places' ? 'places' : 'geocoder',
+          provider: found.provider,
+          ...(found.providerRef ? { providerRef: found.providerRef } : {}),
+          approximate: false,
+          accessPoint: { kind: found.kind, provider: found.provider, query: found.query, ...(found.name ? { name: found.name } : {}), ...(position && position.method !== 'locality' ? { footprint: position.coordinates } : {}) },
+        };
+        providers.add(found.provider);
+      } else if (position) {
+        position = { ...position, accessPointUnverified: true };
+      }
+    }
     attempted += 1;
     if (position) placed += 1;
     positions.set(item.key, position);
     /* The item's outcome is the most informative refusal: a wrong country or a far match says more than "nothing came back". */
     const refusals = attempts.map((a) => a.outcome).filter((o) => o !== 'placed');
     const outcome: PlacementOutcome = position ? 'placed' : (['country_mismatch', 'outside_envelope', 'provider_failure', 'no_results', 'not_attempted_budget'] as const).find((o) => refusals.includes(o)) ?? 'no_results';
-    diagnosticByKey.set(item.key, { key: item.key, name: item.name, locality: item.locality, category: item.category, isBase, outcome, attempts });
+    diagnosticByKey.set(item.key, { key: item.key, name: item.name, locality: item.locality, category: item.category, isBase, outcome, attempts, ...(recovery ? { recovery } : {}) });
     options.onProgress?.(placed, attempted);
     return position;
   });
@@ -236,6 +282,85 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
   /* Items the placement deadline never reached are named as such, not as places nobody could find. */
   const diagnostics = items.map((item) => diagnosticByKey.get(item.key) ?? { key: item.key, name: item.name, locality: item.locality, category: item.category, isBase: item.category === 'locality', outcome: 'not_attempted_deadline' as const, attempts: [] });
   return { positions, providers: [...providers], placesCalls, geocoderCalls, diagnostics };
+}
+
+interface RecoveredAccess {
+  coordinates: { lat: number; lng: number };
+  kind: AccessKind;
+  provider: 'google-places' | 'nominatim';
+  providerRef?: string;
+  query: string;
+  /** Only an open-data name; a Google display name is matched, never stored. */
+  name?: string;
+}
+
+/**
+ * At most MAX_ACCESS_QUERIES queries, Google Places first when it is usable,
+ * otherwise the geocoder. An answer is taken only with access evidence, in the
+ * right country, near the area the activity placed at (or within the
+ * destination's reach when nothing placed), and unambiguous.
+ */
+async function recoverAccessPoint(input: {
+  name: string;
+  kind: string;
+  footprint: { lat: number; lng: number } | null;
+  options: PlacementOptions;
+  country: string;
+  http: ReturnType<typeof placesHttpFor> | null;
+}): Promise<{ found: RecoveredAccess | null; outcome: AccessRecoveryDiagnostic['outcome']; queries: PlacementAttempt[]; placesCalls: number; geocoderCalls: number }> {
+  const stem = accessStemOf(input.name);
+  const anchor = input.footprint ?? input.options.center;
+  const radiusKm = input.footprint ? ACCESS_RADIUS_KM : input.options.maxDistanceKm;
+  const queries: PlacementAttempt[] = [];
+  let placesCalls = 0;
+  let geocoderCalls = 0;
+  let sawAmbiguity = false;
+  let sawFailure = false;
+  const near = (point: { lat: number; lng: number }) => haversineKm(anchor, point) <= radiusKm && haversineKm(input.options.center, point) <= input.options.maxDistanceKm;
+  const countryOk = (code: string | undefined) => !input.options.countryCode || !code || code.toUpperCase() === input.options.countryCode.toUpperCase();
+  for (const query of accessRecoveryQueries(input.name, input.kind).slice(0, MAX_ACCESS_QUERIES)) {
+    if (input.http) {
+      placesCalls += 1;
+      try {
+        const hit = await resolveIdentity({ name: query, matchName: stem, near: anchor, radiusKm: Math.min(50, radiusKm), maxDistanceKm: radiusKm }, input.http);
+        const kind = hit ? accessEvidence({ stem, resultName: hit.name, googleTypes: hit.types }) : null;
+        if (hit && kind && countryOk(hit.countryCode) && near(hit.coordinates)) {
+          queries.push({ provider: 'google-places', query, outcome: 'placed' });
+          return { found: { coordinates: hit.coordinates, kind, provider: 'google-places', providerRef: hit.providerRef, query }, outcome: 'recovered_access_point', queries, placesCalls, geocoderCalls };
+        }
+        queries.push({ provider: 'google-places', query, outcome: hit ? (near(hit.coordinates) ? 'no_results' : 'outside_envelope') : 'no_results' });
+      } catch {
+        sawFailure = true;
+        queries.push({ provider: 'google-places', query, outcome: 'provider_failure' });
+      }
+      continue;
+    }
+    geocoderCalls += 1;
+    try {
+      const result = await geocode(`${query}${input.country}`, { limit: 5 });
+      const accepted = result.places
+        .map((place) => ({ place, point: { lat: Number(place.lat), lng: Number(place.lon) }, kind: accessEvidence({ stem, resultName: place.name ?? place.display_name?.split(',')[0], osmClass: place.category, osmType: place.type }) }))
+        .filter((row) => row.kind && Number.isFinite(row.point.lat) && Number.isFinite(row.point.lng) && countryOk(countryOf(row.place)) && near(row.point));
+      if (accepted.length === 0) {
+        queries.push({ provider: 'nominatim', query: `${query}${input.country}`, outcome: 'no_results' });
+        continue;
+      }
+      const spread = accepted.some((row) => haversineKm(row.point, accepted[0]!.point) > ACCESS_AMBIGUITY_KM);
+      if (spread) {
+        sawAmbiguity = true;
+        queries.push({ provider: 'nominatim', query: `${query}${input.country}`, outcome: 'no_results' });
+        continue;
+      }
+      const best = accepted[0]!;
+      queries.push({ provider: 'nominatim', query: `${query}${input.country}`, outcome: 'placed' });
+      const name = best.place.name ?? best.place.display_name?.split(',')[0]?.trim();
+      return { found: { coordinates: best.point, kind: best.kind!, provider: 'nominatim', query, ...(name ? { name } : {}) }, outcome: 'recovered_access_point', queries, placesCalls, geocoderCalls };
+    } catch {
+      sawFailure = true;
+      queries.push({ provider: 'nominatim', query: `${query}${input.country}`, outcome: 'provider_failure' });
+    }
+  }
+  return { found: null, outcome: sawAmbiguity ? 'ambiguous_access_point' : sawFailure && queries.every((q) => q.outcome === 'provider_failure') ? 'provider_failure' : 'no_access_point', queries, placesCalls, geocoderCalls };
 }
 
 /**
