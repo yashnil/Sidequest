@@ -1,5 +1,5 @@
 import 'server-only';
-import { ACCESS_AMBIGUITY_KM, ACCESS_RADIUS_KM, MAX_ACCESS_QUERIES, MAX_ACCESS_RECOVERIES, accessEvidence, accessRecoveryQueries, accessStemOf, haversineKm, routeAnswerIsAreaLevel, worthAccessRecovery, type ResolvedPosition, type ScanProposal, SCAN_KIND_PROFILES } from '@sidequest/core';
+import { ACCESS_AMBIGUITY_KM, ACCESS_RADIUS_KM, MAX_ACCESS_QUERIES, MAX_ACCESS_RECOVERIES, accessEvidence, accessRecoveryQueries, accessRecoveryPriority, accessStemOf, haversineKm, providerNameCoversPhrase, providerNameIsCanonical, routeAnswerIsAreaLevel, type CandidateIdentityType, type ResolvedPosition, type ScanProposal, SCAN_KIND_PROFILES } from '@sidequest/core';
 import { matchNamedMustDos } from './match';
 import type { AccessKind } from '@sidequest/core';
 import { geocode, type NominatimPlace } from '../providers/nominatim';
@@ -36,12 +36,14 @@ export interface PlacementOptions {
   placesBudget: number;
   /** The places the traveller named themselves; an area-only match among them is always worth an access-point search. */
   namedByTraveller?: readonly string[];
+  /** The traveller's priority interests: the personal-fit signal for which area-only candidates earn an access-point search. */
+  priorities?: readonly string[];
   deadline: () => boolean;
   onProgress?: (placed: number, attempted: number) => void;
 }
 
 /** Why one placement attempt did or did not produce a point. Typed, so a thin scan explains itself without a rerun. */
-export type PlacementOutcome = 'placed' | 'no_results' | 'country_mismatch' | 'outside_envelope' | 'provider_failure' | 'not_attempted_deadline' | 'not_attempted_budget';
+export type PlacementOutcome = 'placed' | 'no_results' | 'country_mismatch' | 'outside_envelope' | 'provider_failure' | 'not_attempted_deadline' | 'not_attempted_budget' | 'partial_identity';
 
 export interface PlacementAttempt {
   provider: 'google-places' | 'nominatim';
@@ -60,9 +62,19 @@ export interface AccessRecoveryDiagnostic {
   accessPoint?: { kind: string; provider: string; coordinates: { lat: number; lng: number } };
 }
 
+/** Private alpha — what was looked up for a candidate, and why it differs from what the model wrote. */
+export interface CandidateIdentityDiagnostic {
+  original: string;
+  lookupName: string;
+  type: CandidateIdentityType;
+  /** The first query actually sent to a provider. */
+  query: string | null;
+}
+
 export interface PlacementDiagnostic {
   key: string;
   name: string;
+  identity?: CandidateIdentityDiagnostic;
   locality: string;
   category: string;
   isBase: boolean;
@@ -99,11 +111,12 @@ function judge(place: NominatimPlace, options: PlacementOptions): { point: { lat
 }
 
 /** The first acceptable row, or why there was none: no rows at all, or the first refusal among the rows that came back. */
-async function geocodeFirst(query: string, options: PlacementOptions): Promise<{ point: { lat: number; lng: number }; place: NominatimPlace } | { outcome: PlacementOutcome }> {
+async function geocodeFirst(query: string, options: PlacementOptions, wholePhrase?: string): Promise<{ point: { lat: number; lng: number }; place: NominatimPlace } | { outcome: PlacementOutcome }> {
   const result = await geocode(query, { limit: 5 });
   let refusal: PlacementOutcome = 'no_results';
   for (const place of result.places) {
-    const verdict = judge(place, options);
+    /* A phrase naming two places is placed only by a row that names both; a row for one of them is a guess. */
+    const verdict = wholePhrase && !providerNameCoversPhrase(wholePhrase, place.name ?? place.display_name ?? '') ? { refused: 'partial_identity' as const } : judge(place, options);
     if ('point' in verdict) return { point: verdict.point, place };
     if (refusal === 'no_results') refusal = verdict.refused;
   }
@@ -126,10 +139,14 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
   const radiusKm = Math.min(50, Math.max(10, options.maxDistanceKm / 4));
 
   const named = new Set(matchNamedMustDos(options.namedByTraveller ?? [], proposal.candidates.map((c) => ({ id: c.key, name: c.name }))));
-  const items: { key: string; name: string; localName?: string; locality: string; category: string; areaLike: boolean; kind?: string; recoverable?: boolean }[] = [
-    ...proposal.bases.map((b) => ({ key: b.key, name: b.name, locality: b.locality, category: 'locality', areaLike: true })),
-    ...proposal.candidates.map((c) => ({ key: c.key, name: c.name, ...(c.localName ? { localName: c.localName } : {}), locality: c.locality, category: SCAN_KIND_PROFILES[c.kind].category, areaLike: SCAN_KIND_PROFILES[c.kind].hours === 'open_ground', kind: c.kind, recoverable: worthAccessRecovery({ kind: c.kind, tier: c.tier, namedByTraveller: named.has(c.key) }) })),
+  /* Recovery goes to the area-only candidates that matter most, highest priority first, never more than the cap. */
+  const priorityOf = new Map(proposal.candidates.map((c) => [c.key, accessRecoveryPriority({ kind: c.kind, tier: c.tier, namedByTraveller: named.has(c.key), interests: c.interests, ...(options.priorities ? { priorities: options.priorities } : {}), crowd: c.crowd, routeAnchored: c.identity?.type === 'route_anchor' })]));
+  const items: { key: string; name: string; lookupName: string; identityType: CandidateIdentityType; localName?: string; locality: string; category: string; areaLike: boolean; kind?: string; priority: number }[] = [
+    ...proposal.bases.map((b) => ({ key: b.key, name: b.name, lookupName: b.name, identityType: 'unchanged' as const, locality: b.locality, category: 'locality', areaLike: true, priority: 0 })),
+    ...proposal.candidates.map((c) => ({ key: c.key, name: c.name, lookupName: c.identity?.lookupName ?? c.name, identityType: c.identity?.type ?? ('unchanged' as const), ...(c.localName ? { localName: c.localName } : {}), locality: c.locality, category: SCAN_KIND_PROFILES[c.kind].category, areaLike: SCAN_KIND_PROFILES[c.kind].hours === 'open_ground', kind: c.kind, priority: priorityOf.get(c.key) ?? 0 })),
   ];
+  const recoveryOrder = items.filter((i) => i.priority > 0).sort((a, b) => b.priority - a.priority).map((i) => i.key);
+  const recoverySlots = new Set(recoveryOrder.slice(0, MAX_ACCESS_RECOVERIES));
   let recoveries = 0;
   let attempted = 0;
   let placed = 0;
@@ -140,16 +157,21 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
     let position: ResolvedPosition | null = null;
     const isBase = item.category === 'locality';
     const attempts: PlacementAttempt[] = [];
-    if (usePlaces && http && !isBase && placesCalls >= options.placesBudget) attempts.push({ provider: 'google-places', query: `${item.name}, ${item.locality}`, outcome: 'not_attempted_budget' });
+    let canonicalizedByProvider = false;
+    const wholePhrase = item.identityType === 'ambiguous' ? item.lookupName : undefined;
+    if (usePlaces && http && !isBase && placesCalls >= options.placesBudget) attempts.push({ provider: 'google-places', query: `${item.lookupName}, ${item.locality}`, outcome: 'not_attempted_budget' });
     if (usePlaces && http && !isBase && placesCalls < options.placesBudget) {
       placesCalls += 1;
-      const query = `${item.name}, ${item.locality}`;
+      const query = `${item.lookupName}, ${item.locality}`;
       try {
-        const found = await resolveIdentity({ name: item.name, locality: item.locality, near: options.center, radiusKm, maxDistanceKm: options.maxDistanceKm }, http);
+        const found = await resolveIdentity({ name: item.lookupName, locality: item.locality, near: options.center, radiusKm, maxDistanceKm: options.maxDistanceKm }, http);
+        /* The provider's own name is the clean form of a descriptive one the deterministic reading kept as written. Matched, never stored. */
+        if (found && item.identityType === 'unchanged' && found.name.trim().toLowerCase() !== item.lookupName.trim().toLowerCase() && providerNameIsCanonical(item.lookupName, found.name)) canonicalizedByProvider = true;
         const far = found ? haversineKm(options.center, found.coordinates) > options.maxDistanceKm : false;
         const wrongCountry = found ? Boolean(options.countryCode && found.countryCode && found.countryCode.toUpperCase() !== options.countryCode.toUpperCase()) : false;
-        attempts.push({ provider: 'google-places', query, outcome: !found ? 'no_results' : far ? 'outside_envelope' : wrongCountry ? 'country_mismatch' : 'placed' });
-        if (found && !far && !wrongCountry) {
+        const partial = found ? Boolean(wholePhrase && !providerNameCoversPhrase(wholePhrase, found.name)) : false;
+        attempts.push({ provider: 'google-places', query, outcome: !found ? 'no_results' : far ? 'outside_envelope' : wrongCountry ? 'country_mismatch' : partial ? 'partial_identity' : 'placed' });
+        if (found && !far && !wrongCountry && !partial) {
           position = {
             coordinates: found.coordinates,
             method: 'places',
@@ -167,10 +189,10 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       }
     }
     if (!position) {
-      const query = `${item.name}, ${item.locality}${country}`;
+      const query = `${item.lookupName}, ${item.locality}${country}`;
       try {
         geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options);
+        const hit = await geocodeFirst(query, options, wholePhrase);
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
@@ -191,10 +213,10 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
      * answer, not a miss, and is never retried.
      */
     if (!position && !isBase && item.locality && attempts.length > 0 && attempts[attempts.length - 1]!.outcome === 'no_results') {
-      const query = `${item.name}${country}`;
+      const query = `${item.lookupName}${country}`;
       try {
         geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options);
+        const hit = await geocodeFirst(query, options, wholePhrase);
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
@@ -214,7 +236,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       const query = `${item.localName}${country}`;
       try {
         geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options);
+        const hit = await geocodeFirst(query, options, wholePhrase);
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
@@ -225,7 +247,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
       }
     }
-    if (!position && (item.areaLike || isBase) && item.locality && item.locality.toLowerCase() !== item.name.toLowerCase()) {
+    if (!position && (item.areaLike || isBase) && item.locality && item.locality.toLowerCase() !== item.lookupName.toLowerCase()) {
       const query = `${item.locality}${country}`;
       try {
         geocoderCalls += 1;
@@ -246,10 +268,10 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
      * `@sidequest/core` scan/access-point.ts for what counts as an access point.
      */
     let recovery: AccessRecoveryDiagnostic | undefined;
-    if (item.recoverable && item.kind && (!position || position.approximate) && recoveries < MAX_ACCESS_RECOVERIES && !options.deadline()) {
+    if (recoverySlots.has(item.key) && !wholePhrase && item.kind && (!position || position.approximate) && recoveries < MAX_ACCESS_RECOVERIES && !options.deadline()) {
       recoveries += 1;
       /* Only the activity's own area anchors the search; a town or region centroid from the locality fallback is not where the activity is. */
-      const searched = await recoverAccessPoint({ name: item.name, kind: item.kind, footprint: position && position.method !== 'locality' ? position.coordinates : null, options, country, http: usePlaces ? http : null });
+      const searched = await recoverAccessPoint({ name: item.lookupName, kind: item.kind, footprint: position && position.method !== 'locality' ? position.coordinates : null, options, country, http: usePlaces ? http : null });
       placesCalls += searched.placesCalls;
       geocoderCalls += searched.geocoderCalls;
       recovery = { originalOutcome: position ? 'approximate_only' : 'no_results', attempted: true, queries: searched.queries, outcome: searched.outcome, ...(searched.found ? { accessPoint: { kind: searched.found.kind, provider: searched.found.provider, coordinates: searched.found.coordinates } } : {}) };
@@ -273,8 +295,9 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
     positions.set(item.key, position);
     /* The item's outcome is the most informative refusal: a wrong country or a far match says more than "nothing came back". */
     const refusals = attempts.map((a) => a.outcome).filter((o) => o !== 'placed');
-    const outcome: PlacementOutcome = position ? 'placed' : (['country_mismatch', 'outside_envelope', 'provider_failure', 'no_results', 'not_attempted_budget'] as const).find((o) => refusals.includes(o)) ?? 'no_results';
-    diagnosticByKey.set(item.key, { key: item.key, name: item.name, locality: item.locality, category: item.category, isBase, outcome, attempts, ...(recovery ? { recovery } : {}) });
+    const outcome: PlacementOutcome = position ? 'placed' : (['partial_identity', 'country_mismatch', 'outside_envelope', 'provider_failure', 'no_results', 'not_attempted_budget'] as const).find((o) => refusals.includes(o)) ?? 'no_results';
+    const identity: CandidateIdentityDiagnostic = { original: item.name, lookupName: item.lookupName, type: canonicalizedByProvider ? 'provider_canonicalized' : item.identityType, query: attempts[0]?.query ?? null };
+    diagnosticByKey.set(item.key, { key: item.key, name: item.name, ...(isBase ? {} : { identity }), locality: item.locality, category: item.category, isBase, outcome, attempts, ...(recovery ? { recovery } : {}) });
     options.onProgress?.(placed, attempted);
     return position;
   });

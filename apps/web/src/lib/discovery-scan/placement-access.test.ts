@@ -100,3 +100,54 @@ describe('access-point recovery for routes and areas', () => {
     expect(calls.some((c) => /trailhead|parking|cable car/.test(c))).toBe(false);
   });
 });
+
+describe('the lookup name placement asks for', () => {
+  it('asks for the place, not the recommendation, and records what it asked', async () => {
+    const { placeScanProposal } = await import('./placement');
+    const p = proposal([{ name: 'Valley Museum traditional lunch stop', locality: 'Valley Town', kind: 'museum', tier: 'classic', why: 'History.' }]);
+    const result = await placeScanProposal({ ...p, bases: [] }, options());
+    expect(calls[0]).toBe('Valley Museum, Valley Town, Italy');
+    expect(result.positions.get(p.candidates[0]!.key)?.coordinates).toEqual({ lat: 46.54, lng: 12.14 });
+    expect(result.diagnostics[0]).toMatchObject({ name: 'Valley Museum traditional lunch stop', identity: { original: 'Valley Museum traditional lunch stop', lookupName: 'Valley Museum', type: 'descriptive_suffix_removed', query: 'Valley Museum, Valley Town, Italy' } });
+  });
+
+  it('a route is looked up at its start', async () => {
+    const { placeScanProposal } = await import('./placement');
+    const p = proposal([{ name: 'Valley Museum to Grey Ridge sunset viewpoint', locality: 'Valley Town', kind: 'viewpoint', tier: 'classic', why: 'Views.' }]);
+    const result = await placeScanProposal({ ...p, bases: [] }, options());
+    expect(calls[0]).toBe('Valley Museum, Valley Town, Italy');
+    expect(result.diagnostics[0]?.identity).toMatchObject({ lookupName: 'Valley Museum', type: 'route_anchor' });
+  });
+
+  it('two places joined are asked for as written, never as one of them', async () => {
+    const { placeScanProposal } = await import('./placement');
+    const p = proposal([{ name: 'Valley Museum and Grey Ridge view', locality: 'Valley Town', kind: 'landmark', tier: 'classic', why: 'Both.' }]);
+    const result = await placeScanProposal({ ...p, bases: [] }, options());
+    expect(calls.every((c) => c.startsWith('Valley Museum and Grey Ridge view'))).toBe(true);
+    // The geocoder answered with one of the two; that is a guess, refused as a typed outcome.
+    expect(result.positions.get(p.candidates[0]!.key)).toBeNull();
+    expect(result.diagnostics[0]).toMatchObject({ outcome: 'partial_identity', identity: { type: 'ambiguous' } });
+    expect(calls.some((c) => /trailhead|parking|cable car/.test(c))).toBe(false);
+  });
+
+  it('a lower-tier hike the traveller selected gets recovery; a low-value area candidate spends nothing', async () => {
+    const { placeScanProposal } = await import('./placement');
+    const p = proposal([{ name: 'Summit Lakes easy walk', locality: 'Upper Valley', kind: 'easy_walk', tier: 'side_quest', why: 'Picked.' }]);
+    const picked = await placeScanProposal({ ...p, bases: [] }, options({ namedByTraveller: ['Summit Lakes easy walk'] }));
+    expect(picked.diagnostics[0]?.recovery?.outcome).toBe('recovered_access_point');
+
+    calls.splice(0);
+    const q = proposal([{ name: 'Quiet Lakes easy walk', locality: 'Upper Valley', kind: 'easy_walk', tier: 'side_quest', why: 'Filler.', interests: ['photography'] }]);
+    const low = await placeScanProposal({ ...q, bases: [] }, options({ priorities: ['hiking_and_trails'] }));
+    expect(low.diagnostics[0]?.recovery).toBeUndefined();
+    expect(calls.some((c) => /trailhead|parking|cable car/.test(c))).toBe(false);
+  });
+
+  it('a hidden-gem hike serving the traveller\'s priority interests earns recovery without being named', async () => {
+    const { placeScanProposal } = await import('./placement');
+    const p = proposal([{ name: 'Summit Lakes loop', locality: 'Upper Valley', kind: 'day_hike', tier: 'hidden_gem', why: 'Fits.' }]);
+    const interests = p.candidates[0]!.interests;
+    const result = await placeScanProposal({ ...p, bases: [] }, options({ priorities: interests }));
+    expect(result.diagnostics[0]?.recovery?.outcome).toBe('recovered_access_point');
+  });
+});

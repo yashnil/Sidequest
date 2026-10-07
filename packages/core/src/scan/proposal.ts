@@ -1,3 +1,4 @@
+import { normalizeCandidateIdentity, type CandidateIdentity } from './candidate-identity';
 import { INTERESTS, type CostLevel, type CrowdLevel, type Interest, type PhysicalIntensity, type PlaceCategory, type TimeOfDay } from '../schemas/common';
 
 /**
@@ -119,6 +120,12 @@ export interface ScanCandidateProposal {
   name: string;
   /** The place's own name in the local language or script, when the model knows it differs: the open geocoder often knows only that one. */
   localName?: string;
+  /**
+   * Private alpha — what placement looks up, read deterministically from the
+   * name (`candidate-identity.ts`). `name` stays exactly what the model wrote
+   * and is what the traveller sees.
+   */
+  identity?: CandidateIdentity;
   /** Town, district or area that disambiguates the name for a geocoder. */
   locality: string;
   kind: ScanKind;
@@ -264,6 +271,7 @@ export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
       key: `c${candidates.length + 1}`,
       name,
       ...(localName && localName.toLowerCase() !== name.toLowerCase() ? { localName } : {}),
+      identity: normalizeCandidateIdentity(name),
       locality,
       kind,
       tier: pick(c.tier, SCAN_TIERS, 'classic', coerced, `${path}.tier`),

@@ -301,6 +301,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     // --- 2. place ---------------------------------------------------------------
     markScanStage(tripId, scanId, 'placing', new Date());
     const placementStarted = Date.now();
+    /* The traveller's priority interests: personal fit for recovery now, sufficiency below. */
+    const priorities = (Object.entries(profile.interests) as [Interest, string][]).filter(([, level]) => level === 'core' || level === 'frequent').map(([interest]) => interest);
     const reach = placementReachKm(envelope.scale, days - 1);
     let placement = fixtureScan() || !isGeocoderEnabled()
       ? fixtureScan()
@@ -313,6 +315,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
           placesBudget: proposal.candidates.length,
           namedByTraveller: namedMustDos,
+          priorities,
           deadline: () => Date.now() - placementStarted > PLACEMENT_DEADLINE_MS,
           onProgress: (placed, attempted) => {
             if (attempted % 4 === 0) noteScanCounters(tripId, scanId, { placed }, new Date());
@@ -323,7 +326,6 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
 
     // --- 2b. enough to plan from? one bounded supplement if not -------------------------
     const requested = scanCandidateTarget(days).min;
-    const priorities = (Object.entries(profile.interests) as [Interest, string][]).filter(([, level]) => level === 'core' || level === 'frequent').map(([interest]) => interest);
     const sufficiencyOf = () =>
       scanSufficiency({
         days,
@@ -372,8 +374,12 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       },
       assembly: plan.unplaced.filter((u) => u.code !== 'not_placed').map((u) => ({ name: u.name, code: u.code })),
       accessRecovery: placement.diagnostics.filter((d) => d.recovery).map((d) => ({ name: d.name, ...d.recovery! })),
+      identities: placement.diagnostics.filter((d) => d.identity && d.identity.type !== 'unchanged').map((d) => d.identity!),
       recovery,
     };
+    if (diagnostics.identities && diagnostics.identities.length > 0) {
+      console.warn(`Discovery scan lookup names for ${tripId}: ${diagnostics.identities.map((i) => `${i.original} → ${i.lookupName} [${i.type}]`).join('; ')}`);
+    }
     if (diagnostics.accessRecovery && diagnostics.accessRecovery.length > 0) {
       console.warn(`Discovery scan access points for ${tripId}: ${diagnostics.accessRecovery.map((r) => `${r.name} [${r.outcome}${r.accessPoint ? ` ${r.accessPoint.kind} via ${r.accessPoint.provider}` : ''}; ${r.queries.length} queries]`).join('; ')}`);
     }

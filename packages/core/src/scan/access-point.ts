@@ -36,13 +36,40 @@ export const ACCESS_AMBIGUITY_KM = 5;
 export type AccessKind = 'trailhead' | 'parking' | 'lift_station' | 'hut' | 'station' | 'entrance';
 
 /**
- * Worth spending recovery queries on: a defining classic, or something the
- * traveller named. Hidden gems and side quests that only placed as an area are
- * left out rather than bought back one provider call at a time.
+ * What makes an area-only candidate worth spending recovery queries on. At
+ * placement time there is no fit score yet (the board computes it later), so
+ * the signals are the ones the proposal and the traveller already give: an
+ * explicit include, the model's tier (a signal, not an authority), how many of
+ * the traveller's priority interests it serves (the personal-fit proxy),
+ * whether it is a famously busy — defining — stop, and whether the model
+ * described it as a route.
  */
-export function worthAccessRecovery(input: { kind: string; tier: string; namedByTraveller: boolean }): boolean {
-  if (!ACCESS_RECOVERY_KINDS.has(input.kind)) return false;
-  return input.namedByTraveller || input.tier === 'classic';
+export interface AccessRecoverySignals {
+  kind: string;
+  tier: string;
+  namedByTraveller: boolean;
+  interests?: readonly string[];
+  priorities?: readonly string[];
+  crowd?: string;
+  routeAnchored?: boolean;
+}
+
+const TIER_WEIGHT: Record<string, number> = { classic: 3, hidden_gem: 1.5, side_quest: 0.5 };
+/** The least a candidate must score to earn recovery queries. A classic alone qualifies; a hidden gem needs the traveller's interest or fame behind it. */
+export const ACCESS_RECOVERY_THRESHOLD = 2.5;
+
+/** 0 when not worth recovering; otherwise a priority, so the cap goes to the candidates that matter most. */
+export function accessRecoveryPriority(input: AccessRecoverySignals): number {
+  if (!ACCESS_RECOVERY_KINDS.has(input.kind)) return 0;
+  if (input.namedByTraveller) return 10;
+  const priorities = new Set(input.priorities ?? []);
+  const served = (input.interests ?? []).filter((i) => priorities.has(i)).length;
+  const score = (TIER_WEIGHT[input.tier] ?? 0) + (served >= 2 ? 2 : served === 1 ? 1.5 : 0) + (input.crowd === 'busy' || input.crowd === 'very_busy' ? 1 : 0) + (input.routeAnchored ? 0.5 : 0);
+  return score >= ACCESS_RECOVERY_THRESHOLD ? score : 0;
+}
+
+export function worthAccessRecovery(input: AccessRecoverySignals): boolean {
+  return accessRecoveryPriority(input) > 0;
 }
 
 const TRAILING_GENERIC = /\s+(?:loop|circuit|walk|hike|trail|track|path|route|section|traverse|trek|ridge walk|viewpoint walk|panoramic walk|lake walk|lake loop|circular walk|viewpoint|panorama|panoramic|cable car|gondola|chairlift|lift)$/i;
