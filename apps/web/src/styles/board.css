@@ -1,0 +1,149 @@
+/*
+ * THE DISCOVERY BOARD — the few things Tailwind utilities say badly.
+ *
+ * Field Atlas tokens only (paper, ink, flare, glacier, night): no new colours.
+ * Every motion here is cut by `prefers-reduced-motion`.
+ */
+
+/* The action bar: a raised, frosted strip that rides the register (desktop) or the thumb (phone). */
+.board-action-bar {
+  background: color-mix(in srgb, var(--color-paper-raised) 96%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  box-shadow:
+    0 1px 0 rgb(13 26 31 / 0.04),
+    0 18px 40px -24px rgb(13 26 31 / 0.45);
+}
+@media (max-width: 639.98px) {
+  .board-action-bar {
+    background: var(--color-paper-raised);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 -12px 32px -18px rgb(13 26 31 / 0.4);
+  }
+}
+
+/* The count ticks when it changes: keyed in React, so each new number re-runs this once. */
+.board-count {
+  display: inline-block;
+  animation: board-tick 360ms var(--ease-spring) both;
+}
+@keyframes board-tick {
+  from {
+    transform: translateY(35%);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* A place card: lifts under the pointer, glows when it is in the trip. */
+.board-card {
+  transition:
+    transform var(--motion-base) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    opacity var(--motion-base) var(--ease-out);
+}
+@media (hover: hover) {
+  .board-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 34px -22px rgb(13 26 31 / 0.45);
+  }
+}
+.board-card[data-status='included'] {
+  border-color: color-mix(in srgb, var(--color-ink) 45%, transparent);
+  background: var(--color-paper-raised);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-ink) 18%, transparent);
+}
+.board-card[data-focused='true'] {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-glacier) 80%, var(--color-ink) 20%),
+    0 16px 34px -22px rgb(13 26 31 / 0.45);
+}
+
+/* The number a place wears on its picture and on its pin. */
+.board-pin-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: var(--color-night);
+  color: var(--color-bone);
+  box-shadow: 0 0 0 2px var(--color-paper-raised);
+}
+.board-card[data-status='included'] .board-pin-badge {
+  background: var(--color-flare);
+  color: var(--color-night);
+}
+
+/* The decision control: one pill, three segments. */
+.board-decision {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+}
+.board-decision > button {
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.board-decision > button[aria-pressed='false']:not(:disabled):hover {
+  background: var(--color-paper-raised);
+  color: var(--color-ink);
+}
+
+/* The group jump row scrolls sideways on a phone rather than wrapping into a wall. */
+.board-jump {
+  scrollbar-width: none;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
+  padding-right: 2.5rem;
+}
+.board-jump::-webkit-scrollbar {
+  display: none;
+}
+
+/* The rescan control is a quiet action in the header, beside a primary one. */
+.board-header-rescan [data-testid='board-rescan'] {
+  border-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-count {
+    animation: none;
+  }
+  .board-card,
+  .board-card:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* A card's chips take the board's pill shape. */
+[data-testid='card-chips'] > span {
+  border-radius: 999px;
+  padding-inline: 0.55rem;
+}
+
+/* Sticky on a wide screen: the strip above the bar is filled, so cards never peek between the chrome and the bar. */
+@media (min-width: 640px) {
+  .board-action-bar::before {
+    content: '';
+    position: absolute;
+    inset-inline: -1px;
+    bottom: 100%;
+    height: 0.6rem;
+    background: var(--color-paper);
+  }
+}

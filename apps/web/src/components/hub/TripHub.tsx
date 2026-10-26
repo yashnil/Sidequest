@@ -26,6 +26,7 @@ import {
   buildBookingProgress,
 } from '@sidequest/core';
 import { Badge, Panel, cx, type BadgeTone } from '../ui';
+import { humanDate } from './plan-format';
 import { TripConfidence } from './TripConfidence';
 import { Glyph } from '../interview/glyphs';
 import { BookedItemForm, BookedItemRow, CheckBox, ReadinessProfileForm } from './HubForms';
@@ -33,6 +34,7 @@ import { BookingActions } from './BookingActions';
 import { isSkipped, skipNote } from './booking-copy';
 import { checklistRows } from './checklist-titles';
 import { DiscoverButton } from '@/app/(product)/trips/[id]/itinerary/live-controls';
+import { FigureRow, RailSection } from './views/ViewHead';
 
 /**
  * THE TRIP HUB.
@@ -102,10 +104,41 @@ export function HubUrgent({ intel }: { intel: TravelIntelligence }) {
 }
 
 /** V6 §27 — "6 of 8 critical items arranged", with the groups and the next thing to do. */
-export function BookingProgressLine({ intel, nextStatedAbove = false }: { intel: TravelIntelligence; /** V11 §I — true where a "Book next" block on the same page already names it. */ nextStatedAbove?: boolean }) {
+export function BookingProgressLine({ intel, nextStatedAbove = false, variant = 'card' }: { intel: TravelIntelligence; /** `strip` — the boxed figure row a view head carries. */ variant?: 'card' | 'strip'; /** V11 §I — true where a "Book next" block on the same page already names it. */ nextStatedAbove?: boolean }) {
   const progress = buildBookingProgress(intel.bookings.items);
   if (progress.critical === 0) return null;
   const share = progress.critical > 0 ? Math.round((progress.arranged / progress.critical) * 100) : 0;
+  if (variant === 'strip') {
+    return (
+      <div data-testid="booking-progress">
+        <FigureRow
+          figures={[
+            {
+              label: 'Book first',
+              value: (
+                <>
+                  <span className="type-figure">{progress.arranged}</span> of <span className="type-figure">{progress.critical}</span> arranged
+                </>
+              ),
+            },
+            ...progress.groups.map((group) => ({ label: group.title, value: <span className="type-figure">{group.done}/{group.total}</span>, testId: `booking-progress-${group.id}`, attrs: { 'data-done': String(group.done), 'data-total': String(group.total) } })),
+          ]}
+        />
+        <div aria-hidden="true" className="hv-range mt-0" style={{ ['--lo' as string]: '0%', ['--hi' as string]: `${share}%` }}>
+          <i className="!bg-pine" />
+        </div>
+        {progress.nextAction ? (
+          nextStatedAbove ? null : (
+            <p className="mt-3 type-small text-ink-muted">
+              Next: <span className="font-medium text-ink">{progress.nextAction.travelerAction}</span>
+            </p>
+          )
+        ) : (
+          <p className="mt-3 type-small text-pine">Everything this trip depends on is arranged.</p>
+        )}
+      </div>
+    );
+  }
   return (
     /*
      * V8 — BOOK FIRST AS A CHECKLIST CARD.
@@ -172,69 +205,119 @@ export function StaysSection({ intel, tripId, itinerary, coordinates = {} }: { i
     const stop = day.items.find((i) => i.kind === 'activity' && i.placeId && coordinates[i.placeId]);
     return stop?.placeId ? (coordinates[stop.placeId] ?? null) : null;
   };
+  /* The days each base holds, from the days themselves; nothing here is inferred from nights alone. */
+  const daysAt = (baseId: string, name: string) => {
+    const numbers = itinerary.days.filter((d) => d.baseId === baseId || d.baseName === name).map((d) => d.dayNumber);
+    if (numbers.length === 0) return null;
+    const first = Math.min(...numbers);
+    const last = Math.max(...numbers);
+    return first === last ? `Day ${first}` : `Days ${first}–${last}`;
+  };
+  const churn = lodging.churn;
   return (
     <section className="mt-14" aria-labelledby="stays" data-testid="hub-stays">
       <SectionHeader id="stays" title="Where to stay" blurb={lodging.hotelChangeNote} />
-      {lodging.churn ? (
-        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-muted" data-testid="hub-stays-churn" data-level={lodging.churn.level}>
-          <Badge tone={lodging.churn.level === 'aggressive' ? 'amber' : 'neutral'}>{lodging.churn.level === 'settled' ? 'One base' : lodging.churn.level === 'aggressive' ? 'Fast-moving route' : 'Steady route'}</Badge>
-          <span className="numeral">
-            {lodging.churn.baseCount} bases · {lodging.churn.nights} nights · {lodging.churn.hotelChanges} hotel changes · {lodging.churn.averageNightsPerBase} nights per base
-          </span>
-          {lodging.churn.simplerRoute[0] ? <span className="basis-full text-ink">Simpler: {lodging.churn.simplerRoute[0]}.</span> : null}
-        </p>
+      {churn ? (
+        <div className="mt-5" data-testid="hub-stays-churn" data-level={churn.level}>
+          <FigureRow
+            figures={[
+              { label: 'Route', value: churn.level === 'settled' ? 'One base' : churn.level === 'aggressive' ? 'Fast-moving' : 'Steady' },
+              { label: 'Bases', value: <span className="type-figure">{churn.baseCount}</span> },
+              { label: 'Nights', value: <span className="type-figure">{churn.nights}</span> },
+              { label: 'Hotel changes', value: <span className="type-figure">{churn.hotelChanges}</span> },
+              { label: 'Nights per base', value: <span className="type-figure">{churn.averageNightsPerBase}</span> },
+            ]}
+          />
+          {/* Said once: the change note above often already carries the simpler route. */}
+          {churn.simplerRoute[0] && !lodging.hotelChangeNote.includes(churn.simplerRoute[0]) ? <p className="mt-3 text-sm text-ink">Simpler: {churn.simplerRoute[0]}.</p> : null}
+        </div>
       ) : null}
-      {/* A single base is one card, not one card and an equal column of nothing beside it. */}
-      <ol className={cx('mt-5 grid gap-4', lodging.bases.length > 1 && 'sm:grid-cols-2')} data-testid="where-to-stay">
+      {/*
+        SURVEY ATLAS — THE ROUTE AS A SEQUENCE OF BEDS.
+
+        Each base is a cell whose width is its share of the nights, in the order
+        the trip sleeps there, with the nights set as the figure. It is the one
+        picture of a stay plan that answers "how long where, in what order" at a
+        glance; the rows beneath carry the reasons.
+      */}
+      {lodging.bases.length > 1 ? (
+        <ol className="hv-strip mt-6" aria-label="Where you sleep, in order">
+          {lodging.bases.map((base, index) => (
+            <li key={base.baseId} style={{ ['--n' as string]: String(Math.max(base.nights, 1)) }}>
+              <p className="coordbar text-ink-faint">
+                {String(index + 1).padStart(2, '0')}
+                <span className="hv-strip-days">{daysAt(base.baseId, base.name) ? ` · ${daysAt(base.baseId, base.name)}` : ''}</span>
+              </p>
+              <p className="mt-2 flex items-end gap-2">
+                <span className="hv-nights">{base.nights}</span>
+                <span className="hidden pb-0.5 type-meta sm:inline">{base.nights === 1 ? 'night' : 'nights'}</span>
+                <span className="sr-only sm:hidden">{base.nights === 1 ? 'night' : 'nights'} in {base.name}</span>
+              </p>
+              <p className="mt-2 hidden break-words font-display sm:line-clamp-2 text-base leading-tight text-ink" title={base.name}>
+                {base.name}
+              </p>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      <ol className="ruled mt-6 border-t-[1.5px] border-ink" data-testid="where-to-stay">
         {lodging.bases.map((base, index) => (
-          <li key={base.baseId} className="card flex flex-col p-5" data-testid="hub-base">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <span aria-hidden="true" className="type-figure grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-control)] bg-ink text-sm text-paper">
-                  {index + 1}
+          <li key={base.baseId} className="hv-base" data-testid="hub-base">
+            <span aria-hidden="true" className="hv-specimen">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            <div className="min-w-0">
+              <p className="coordbar text-ink-faint">{daysAt(base.baseId, base.name) ?? ' '}</p>
+              <p className="mt-1 font-display text-2xl leading-tight text-ink">{base.name}</p>
+              <p className="mt-1 text-sm text-ink-muted">
+                {base.area !== base.name ? `${base.area} · ` : ''}
+                {base.styleLabel} · {base.priceTier}
+                <span className="sm:hidden">
+                  {' '}
+                  · <span className="type-figure text-ink">{base.nights}</span> {base.nights === 1 ? 'night' : 'nights'}
                 </span>
-                <div className="min-w-0">
-                  <p className="font-display text-xl leading-tight text-ink">{base.name}</p>
-                  <p className="mt-1 text-sm text-ink-muted">{base.area !== base.name ? `${base.area} · ` : ''}{base.styleLabel} · {base.priceTier}</p>
+              </p>
+              <p className="measure mt-3 text-sm leading-relaxed text-ink">{base.why}</p>
+              {base.booked ? (
+                <p className="mt-3 flex flex-wrap items-center gap-2" data-testid="hub-base-booked">
+                  <StatusWord status="booked" /> <span className="text-sm text-ink">{base.booked.title}</span>
+                </p>
+              ) : (
+                <p className="mt-3">
+                  <span className="hv-status" data-tone="quiet">Not booked yet</span>
+                </p>
+              )}
+              {base.advantages.length + base.tradeoffs.length > 0 ? (
+                <div className="mt-4 grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                  {base.advantages.length > 0 ? (
+                    <ul className="space-y-1 text-sm leading-snug text-ink-muted">
+                      {base.advantages.map((a) => (
+                        <li key={a} className="flex gap-2">
+                          <span aria-hidden="true" className="type-figure text-pine">+</span>
+                          <span>{a}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {base.tradeoffs.length > 0 ? (
+                    <ul className="space-y-1 text-sm leading-snug text-ink-muted">
+                      {base.tradeoffs.map((t) => (
+                        <li key={t} className="flex gap-2">
+                          <span aria-hidden="true" className="type-figure text-amber">–</span>
+                          <span>{t}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
-              </div>
-              <span className="shrink-0 text-right">
-                <span className="type-figure block text-lg leading-none text-ink">{base.nights}</span>
-                <span className="type-meta block">{base.nights === 1 ? 'night' : 'nights'}</span>
-              </span>
+              ) : null}
+              {base.alternatives.length > 0 ? <p className="mt-3 type-meta">Also worth a look: {base.alternatives.map((a) => a.name).join(', ')}.</p> : null}
+              {tripId ? <DiscoverButton tripId={tripId} kind="stays" near={nearBase(base.baseId, base.name)} label="Find stays near this base" query={`hotel near ${base.area}`} /> : null}
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-ink">{base.why}</p>
-            {base.booked ? (
-              <p className="mt-3" data-testid="hub-base-booked">
-                <Badge tone="pine">Booked</Badge> <span className="text-sm text-ink">{base.booked.title}</span>
-              </p>
-            ) : (
-              <p className="mt-3">
-                <Badge>Not booked yet</Badge>
-              </p>
-            )}
-            {base.advantages.length > 0 ? (
-              <ul className="mt-3 space-y-1 text-sm leading-snug text-ink-muted">
-                {base.advantages.map((a) => (
-                  <li key={a} className="flex gap-2">
-                    <span aria-hidden="true" className="text-pine">+</span>
-                    <span>{a}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {base.tradeoffs.length > 0 ? (
-              <ul className="mt-1.5 space-y-1 text-sm leading-snug text-ink-muted">
-                {base.tradeoffs.map((t) => (
-                  <li key={t} className="flex gap-2">
-                    <span aria-hidden="true" className="text-amber">–</span>
-                    <span>{t}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {base.alternatives.length > 0 ? <p className="mt-3 type-meta">Also worth a look: {base.alternatives.map((a) => a.name).join(', ')}.</p> : null}
-            {tripId ? <DiscoverButton tripId={tripId} kind="stays" near={nearBase(base.baseId, base.name)} label="Find stays near this base" query={`hotel near ${base.area}`} /> : null}
+            <p className="hidden text-right sm:block">
+              <span className="hv-nights block">{base.nights}</span>
+              <span className="mt-1 block type-meta">{base.nights === 1 ? 'night' : 'nights'}</span>
+            </p>
           </li>
         ))}
       </ol>
@@ -252,36 +335,49 @@ export function TransportSection({ intel }: { intel: TravelIntelligence }) {
   const t = intel.transport;
   const major = t.legs.filter((l) => l.role !== 'terminal' && (l.role === 'base_move' || (l.km ?? 0) >= 40 || l.durationBasis === 'unmeasured'));
   return (
-    <div className="mt-6" data-testid="hub-transport">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <div className="mt-10" data-testid="hub-transport">
+      {/* The two edges of the trip, side by side: how you arrive and how you leave. */}
+      <div className="grid divide-y divide-ink border border-ink sm:grid-cols-2 sm:divide-x sm:divide-y-0">
         <TerminalCard title="Arriving" edge={t.terminal.arrival} ok={t.terminal.arrivalRespected} />
         <TerminalCard title="Leaving" edge={t.terminal.departure} ok={t.terminal.departureRespected} />
       </div>
       {major.length > 0 ? (
         <>
-          <h3 className="mt-8 type-section text-ink">The transfers that shape the days</h3>
-          <ol className="card mt-3 divide-y divide-rule" data-testid="hub-legs">
+          <div className="mt-10 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b-[1.5px] border-ink pb-2">
+            <h3 className="type-section text-ink">The transfers that shape the days</h3>
+            {/* The legend is the map's own: the line says what kind of figure the minutes are. */}
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 type-meta" aria-hidden="true">
+              <span className="inline-flex items-center gap-1.5"><span className="hv-swatch" data-evidence="measured" /> measured</span>
+              <span className="inline-flex items-center gap-1.5"><span className="hv-swatch" data-evidence="estimated" /> estimated</span>
+              <span className="inline-flex items-center gap-1.5"><span className="hv-swatch" data-evidence="unmeasured" /> not timed</span>
+            </p>
+          </div>
+          <ol className="ruled" data-testid="hub-legs">
             {major.slice(0, 12).map((leg) => {
               /*
                * V8 — every leg says what kind of figure it carries. Measured,
                * estimated from map distance, on the operator's timing, or an
                * allowance because nobody could time it: the same four words the
-               * Days view and the map legend use.
+               * Days view and the map legend use, and the same line.
                */
               const state = legDurationState(leg.durationBasis, leg.unmeasuredReason);
               return (
-                <li key={leg.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 text-sm" data-testid="hub-leg" data-mode={leg.mode} data-basis={leg.durationBasis}>
-                  <span className="min-w-0 flex-1 text-ink">
-                    <span className="type-figure text-ink-faint">Day {leg.dayNumber} · </span>
-                    {leg.originName} → {leg.destinationName}
+                <li key={leg.id} className="hv-leg text-sm" data-testid="hub-leg" data-mode={leg.mode} data-basis={leg.durationBasis}>
+                  <span className="coordbar text-ink-muted">Day {String(leg.dayNumber).padStart(2, '0')}</span>
+                  <span className="min-w-0 text-ink">
+                    <span className="font-medium">{leg.originName}</span> <span aria-hidden="true" className="text-ink-faint">→</span>
+                    <span className="sr-only"> to </span> <span className="font-medium">{leg.destinationName}</span>
                   </span>
-                  <span className="flex flex-wrap items-center gap-2">
-                    <Badge>{LEG_MODE_LABELS[leg.mode]}</Badge>
-                    <span className="type-figure text-sm text-ink">{leg.durationMinutes === null ? 'not timed' : `${leg.durationMinutes} min`}</span>
-                    <Badge tone={state.tone} title={DURATION_BASIS_LABELS[leg.durationBasis]}>
-                      {state.word}
-                      {leg.trafficState === 'live' ? ' · live traffic' : leg.trafficState === 'typical' ? ' · typical traffic' : ''}
-                    </Badge>
+                  <span className="hv-leg-meta">
+                    <span className="sheet-label text-ink-muted">{LEG_MODE_LABELS[leg.mode]}</span>
+                    <span className="type-figure min-w-[4.5rem] text-right text-base text-ink">{leg.durationMinutes === null ? <span aria-label="no figure">—</span> : `${leg.durationMinutes} min`}</span>
+                    <span className="inline-flex items-center gap-2" title={DURATION_BASIS_LABELS[leg.durationBasis]}>
+                      <span aria-hidden="true" className="hv-swatch" data-evidence={swatchFor(leg.durationBasis)} />
+                      <span className="type-meta !text-ink-muted">
+                        {state.word}
+                        {leg.trafficState === 'live' ? ' · live traffic' : leg.trafficState === 'typical' ? ' · typical traffic' : ''}
+                      </span>
+                    </span>
                   </span>
                 </li>
               );
@@ -290,9 +386,9 @@ export function TransportSection({ intel }: { intel: TravelIntelligence }) {
         </>
       ) : null}
       {t.options.length > 0 ? (
-        <details className="mt-4">
-          <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted hover:text-ink">Compare ways to make the big transfers</summary>
-          <ul className="mt-2 divide-y divide-rule text-sm" data-testid="hub-options">
+        <details className="mt-4 border-t border-rule">
+          <summary className="min-h-11 cursor-pointer py-2.5 text-sm text-ink-muted hover:text-ink">Compare ways to make the big transfers</summary>
+          <ul className="ruled mt-1 text-sm" data-testid="hub-options">
             {t.options.map((o) => (
               <li key={`${o.legId}:${o.mode}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5">
                 <span className="text-ink">
@@ -313,6 +409,14 @@ export function TransportSection({ intel }: { intel: TravelIntelligence }) {
   );
 }
 
+/** Which line the map draws for a leg of this basis. */
+function swatchFor(basis: string): 'measured' | 'estimated' | 'unmeasured' | 'scheduled' {
+  if (basis === 'unmeasured') return 'unmeasured';
+  if (basis === 'estimated' || basis === 'geo_estimate') return 'estimated';
+  if (basis === 'scheduled') return 'scheduled';
+  return 'measured';
+}
+
 /** The four words for what a leg's minutes are, shared with the Days view and the map legend. */
 function legDurationState(basis: string, unmeasuredReason?: string): { word: string; tone: BadgeTone } {
   if (basis === 'unmeasured') return unmeasuredReason === 'mode_not_road_routable' ? /* V11 §20 — the operator sets these hours; "road-routed" is our plumbing, not their concern. */
@@ -325,14 +429,25 @@ function legDurationState(basis: string, unmeasuredReason?: string): { word: str
 
 function TerminalCard({ title, edge, ok }: { title: string; edge: TravelIntelligence['transport']['terminal']['arrival']; ok: boolean }) {
   return (
-    <div className={cx('card p-5', ok ? '' : 'border-clay bg-clay-soft')} data-testid={`hub-terminal-${title.toLowerCase()}`}>
-      <p className="eyebrow">{title} · {edge.basis === 'booked' ? 'from your booking' : edge.basis === 'stated' ? 'from your trip setup' : edge.basis === 'band' ? 'a band, not a time' : 'time unknown'}</p>
-      <p className="mt-1.5 text-sm text-ink">{edge.note}</p>
-      <ul className="mt-2 space-y-0.5 text-sm text-ink-muted">
-        <li>{edge.bufferLabel}: {edge.bufferMinutes} min</li>
-        {edge.vehicleLabel ? <li>{edge.vehicleLabel}: {edge.vehicleMinutes} min</li> : null}
-        <li>{edge.transferLabel}</li>
-      </ul>
+    <div className={cx('min-w-0 p-5', ok ? 'bg-paper-raised' : 'bg-clay-soft shadow-[inset_3px_0_0_var(--color-clay)]')} data-testid={`hub-terminal-${title.toLowerCase()}`}>
+      <p className="sheet-label text-ink-muted">
+        {title === 'Arriving' ? 'In' : 'Out'} · {title}
+      </p>
+      <p className="eyebrow mt-2">{edge.basis === 'booked' ? 'from your booking' : edge.basis === 'stated' ? 'from your trip setup' : edge.basis === 'band' ? 'a band, not a time' : 'time unknown'}</p>
+      <p className="mt-1.5 font-display text-lg leading-snug text-ink">{edge.note}</p>
+      <dl className="ruled mt-3 text-sm">
+        <div className="flex items-baseline justify-between gap-4 py-1.5">
+          <dt className="text-ink-muted">{edge.bufferLabel}</dt>
+          <dd className="type-figure text-ink">{edge.bufferMinutes} min</dd>
+        </div>
+        {edge.vehicleLabel ? (
+          <div className="flex items-baseline justify-between gap-4 py-1.5">
+            <dt className="text-ink-muted">{edge.vehicleLabel}</dt>
+            <dd className="type-figure text-ink">{edge.vehicleMinutes} min</dd>
+          </div>
+        ) : null}
+        <div className="py-1.5 text-ink-muted">{edge.transferLabel}</div>
+      </dl>
     </div>
   );
 }
@@ -346,35 +461,83 @@ export function FoodSection({ intel, tripId, itinerary, coordinates = {} }: { in
     const stop = day.items.find((i) => i.kind === 'activity' && i.placeId && coordinates[i.placeId]);
     return stop?.placeId ? (coordinates[stop.placeId] ?? null) : null;
   };
+  const days = f.days.filter((day) => day.meals.some((m) => m.role !== 'skip') || day.provisioning.length > 0);
+  const SLOTS = ['breakfast', 'lunch', 'dinner'] as const;
   return (
-    <div className="mt-6" data-testid="hub-food">
-      <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {f.days.filter((day) => day.meals.some((m) => m.role !== 'skip') || day.provisioning.length > 0).map((day) => (
-          <li key={day.dayNumber} className={cx('card p-4', day.remote && 'border-amber bg-amber-soft/40')} data-testid="hub-food-day" data-remote={day.remote}>
-            <p className="font-display text-lg text-ink">
-              Day {day.dayNumber}
-              {day.remote ? <span className="ml-2 font-sans text-xs font-medium text-amber">remote</span> : null}
-              {f.specialOccasionDay === day.dayNumber ? <span className="ml-2 font-sans text-xs font-medium text-accent-strong">the special one</span> : null}
-            </p>
-            <ul className="mt-2 space-y-1 text-sm">
-              {day.meals.filter((m) => m.role !== 'skip').map((m) => (
-                <li key={m.slot} className="text-ink-muted">
-                  <span className="capitalize text-ink">{m.slot}</span> · {MEAL_ROLE_LABELS[m.role]}
-                  {m.venueName ? <span className="text-ink"> — {m.venueName}</span> : null}
-                  {m.reservation === 'required' || m.reservation === 'recommended' ? <span className="text-amber"> · book</span> : null}
-                </li>
-              ))}
-            </ul>
-            {tripId && day.meals.some((m) => m.venueStatus === 'unresolved') ? <DiscoverButton tripId={tripId} kind="food" near={nearDay(day.dayNumber)} label="Find somewhere for a meal near base" /> : null}
-            {day.provisioning.length > 0 ? (
-              <ul className="mt-2 space-y-0.5 text-sm text-ink-muted">
-                {day.provisioning.map((p) => (
-                  <li key={p}>• {p}</li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
+    <div className="mt-10" data-testid="hub-food">
+      {/*
+        SURVEY ATLAS — FOOD AS A RHYTHM ACROSS THE DAYS.
+
+        One row a day, one column a meal, so the shape of the eating is visible
+        down the page: a filled mark for a meal that is an event, an open one for
+        a meal that is fuel, a dotted one where nothing is planned. Snacks and
+        provisions sit in the last column, the "find somewhere" action with them.
+      */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b-[1.5px] border-ink pb-2">
+        <h3 className="type-section text-ink">Across the days</h3>
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 type-meta" aria-hidden="true">
+          <span className="hv-meal" data-weight="event">worth the trip</span>
+          <span className="hv-meal" data-weight="fuel">fuel</span>
+          <span className="hv-meal" data-weight="none">not planned</span>
+        </p>
+      </div>
+      <div aria-hidden="true" className="hv-rhythm hv-rhythm-head sheet-label text-ink-faint">
+        <span>Day</span>
+        {SLOTS.map((slot) => (
+          <span key={slot}>{slot}</span>
         ))}
+        <span className="hidden md:block">Also</span>
+      </div>
+      <ol>
+        {days.map((day) => {
+          const extra = day.meals.filter((m) => m.role !== 'skip' && !(SLOTS as readonly string[]).includes(m.slot));
+          const findFood = tripId && day.meals.some((m) => m.venueStatus === 'unresolved');
+          const hasExtra = extra.length > 0 || day.provisioning.length > 0 || findFood;
+          return (
+            <li key={day.dayNumber} className={cx('hv-rhythm hv-rhythm-row', day.remote && 'bg-amber-soft/40')} data-testid="hub-food-day" data-remote={day.remote}>
+              <p className="min-w-0">
+                <span className="hv-nights block !text-[1.75rem] md:!text-[2.25rem]">{String(day.dayNumber).padStart(2, '0')}</span>
+                <span className="sr-only">Day {day.dayNumber}</span>
+                {day.remote ? <span className="mt-1 block text-[10.5px] font-medium uppercase tracking-[0.08em] text-amber">remote</span> : null}
+                {f.specialOccasionDay === day.dayNumber ? <span className="mt-1 block text-[10.5px] font-medium uppercase tracking-[0.08em] text-accent-strong">special</span> : null}
+              </p>
+              {SLOTS.map((slot) => {
+                const m = day.meals.find((meal) => meal.slot === slot && meal.role !== 'skip');
+                const weight = !m ? 'none' : m.role === 'destination_meal' || m.role === 'special_occasion' ? 'event' : 'fuel';
+                return (
+                  <div key={slot} className="min-w-0">
+                    <p className="hv-meal" data-weight={weight}>
+                      <span className="min-w-0">
+                        <span className="sr-only">{slot}: </span>
+                        <span className={cx(m ? 'text-ink' : 'text-ink-faint')}>{m ? MEAL_ROLE_LABELS[m.role] : '—'}</span>
+                        {m?.venueName ? <span className="block text-ink-muted">{m.venueName}</span> : null}
+                        {m && (m.reservation === 'required' || m.reservation === 'recommended') ? <span className="block text-[10.5px] font-medium uppercase tracking-[0.08em] text-amber">book</span> : null}
+                      </span>
+                    </p>
+                  </div>
+                );
+              })}
+              <div className={cx('hv-rhythm-extra min-w-0 text-sm', !hasExtra && 'hidden md:block')}>
+                {extra.map((m) => (
+                  <p key={m.slot} className="hv-meal" data-weight="fuel">
+                    <span>
+                      <span className="capitalize text-ink">{m.slot}</span> · <span className="text-ink-muted">{MEAL_ROLE_LABELS[m.role]}</span>
+                      {m.venueName ? <span className="text-ink"> — {m.venueName}</span> : null}
+                    </span>
+                  </p>
+                ))}
+                {day.provisioning.length > 0 ? (
+                  <ul className="space-y-0.5 text-[0.8125rem] text-ink-muted">
+                    {day.provisioning.map((p) => (
+                      <li key={p}>• {p}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {findFood ? <DiscoverButton tripId={tripId!} kind="food" near={nearDay(day.dayNumber)} label="Find somewhere for a meal near base" /> : null}
+              </div>
+            </li>
+          );
+        })}
       </ol>
       <p className="mt-4 type-meta">{f.venueDataNote}</p>
     </div>
@@ -421,20 +584,29 @@ const BOOKING_GROUP_OF: Record<string, 'Transport' | 'Stays' | 'Experiences' | '
  * The window, deadline and cancellation terms the evidence carries render
  * here too; they used to be computed and shown to nobody.
  */
+/** A need's status in words, in a square mono box. */
+export function StatusWord({ status, skipped = false }: { status: TravelIntelligence['bookings']['items'][number]['status']; skipped?: boolean }) {
+  const tone = status === 'booked' ? 'booked' : status === 'soft_hold' ? 'held' : status === 'not_needed' ? 'quiet' : 'open';
+  return (
+    <span className="hv-status" data-tone={tone}>
+      {status === 'booked' ? 'Booked' : status === 'soft_hold' ? 'Tentative' : status === 'not_needed' ? (skipped ? 'Skipped' : 'Not needed') : 'Need to book'}
+    </span>
+  );
+}
+
 export function BookingRow({ b, members, elevated = false, tripId, resolutions = [], tripStart, tripEnd, testId = 'hub-booking' }: { b: TravelIntelligence['bookings']['items'][number]; members?: readonly TravelIntelligence['bookings']['items'][number][]; elevated?: boolean; tripId?: string; resolutions?: readonly BookingResolution[]; tripStart?: string; tripEnd?: string; testId?: string }) {
   const skipped = isSkipped(b, resolutions);
   const note = skipNote(b, resolutions);
   const terms = [b.bookingWindow, b.onSaleDate ? `On sale ${b.onSaleDate}` : undefined, b.deadline ? `Deadline ${b.deadline}` : undefined, b.cancellation].filter((t): t is string => Boolean(t));
   return (
-    <li className={cx('py-3.5 text-sm', elevated && 'pl-3 border-l-2 border-accent')} data-testid={testId} data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status} data-booking-id={b.id}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className={cx('font-medium text-ink', members && 'font-display text-lg font-normal')}>{b.title}</span>
-        <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-          <Badge tone={b.status === 'booked' ? 'pine' : b.status === 'soft_hold' ? 'blue' : b.status === 'not_needed' ? 'neutral' : 'amber'}>{b.status === 'booked' ? 'Booked' : b.status === 'soft_hold' ? 'Tentative' : b.status === 'not_needed' ? (skipped ? 'Skipped' : 'Not needed') : 'Need to book'}</Badge>
-          {b.date ? <span className="type-figure font-medium">{b.date}</span> : null}
-          {b.timeLabel ? <span className="type-figure font-medium">{b.timeLabel}</span> : null}
-        </span>
-      </div>
+    <li className="hv-bk text-sm" data-elevated={elevated ? 'true' : 'false'} data-testid={testId} data-kind={b.kind} data-group={b.group ?? ''} data-status={b.status} data-booking-id={b.id}>
+      {/* When it is for: the day as a figure, then the date and time the evidence carries. */}
+      <p className="hv-bk-when">
+        <b>{b.dayNumber ? `Day ${String(b.dayNumber).padStart(2, '0')}` : 'Whole trip'}</b>
+        {[b.date ? humanDate(b.date) : undefined, b.timeLabel].filter(Boolean).join(' · ')}
+      </p>
+      <div className="col-span-2 min-w-0 sm:col-span-1">
+      <p className={cx('hv-bk-title font-medium text-ink', members && 'font-display text-lg font-normal')}>{b.title}</p>
       <p className="mt-1 text-sm leading-snug text-ink-muted">{b.reason}</p>
       {terms.length > 0 ? <p className="mt-1 type-meta" data-testid="hub-booking-terms">{terms.join(' · ')}</p> : null}
       {skipped && note ? <p className="mt-1 text-sm text-ink-muted">You skipped this: {note}</p> : null}
@@ -452,14 +624,14 @@ export function BookingRow({ b, members, elevated = false, tripId, resolutions =
       {members && members.length > 0 ? (
         <details className="mt-1.5" data-testid="hub-stays-group">
           <summary className="min-h-11 cursor-pointer py-2 text-sm text-accent underline underline-offset-4">View bases</summary>
-          <ul className="mt-1 divide-y divide-rule">
+          <ul className="ruled mt-1 border-t border-rule">
             {members.map((m) => (
               <li key={m.id} className="py-2 text-sm" data-testid="hub-booking" data-kind={m.kind} data-status={m.status} data-booking-id={m.id}>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                   <span className="text-ink">{m.title}</span>
-                  <span className="text-ink-faint">
-                    {m.status === 'booked' ? 'Booked' : m.status === 'soft_hold' ? 'Tentative' : m.status === 'not_needed' ? (isSkipped(m, resolutions) ? 'Skipped' : 'Not needed') : 'Need to book'}
-                    {m.date ? ` · ${m.date}` : ''}
+                  <span className="flex items-center gap-2">
+                    {m.date ? <span className="type-figure text-xs text-ink-muted">{humanDate(m.date)}</span> : null}
+                    <StatusWord status={m.status} skipped={isSkipped(m, resolutions)} />
                   </span>
                 </div>
                 {tripId ? <BookingActions tripId={tripId} need={m} skipped={isSkipped(m, resolutions)} tripStart={tripStart ?? m.date ?? ''} tripEnd={tripEnd ?? m.date ?? ''} /> : null}
@@ -475,6 +647,10 @@ export function BookingRow({ b, members, elevated = false, tripId, resolutions =
           {b.officialSourceName ?? 'Official page'}
         </a>
       ) : null}
+      </div>
+      <p className="row-start-1 col-start-2 self-start justify-self-end sm:col-start-3">
+        <StatusWord status={b.status} skipped={skipped} />
+      </p>
     </li>
   );
 }
@@ -494,15 +670,19 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
     return (
       <section className="mt-14" aria-labelledby="bookings" data-testid="hub-bookings">
         <SectionHeader id="bookings" title="Bookings" blurb="Everything this trip needs arranged, by kind, with what you have already booked. The same list as Book first, in a different order." />
-        <BookingProgressLine intel={intel} />
-        <div className="mt-5 grid gap-6 lg:grid-cols-2">
+        <div className="mt-6">
+          <BookingProgressLine intel={intel} variant="strip" />
+        </div>
+        <div className="mt-8 grid gap-y-8">
           {groups.map((name) => {
             const inGroup = [...(name === 'Stays' && group ? [group] : []), ...standalone.filter((b) => BOOKING_GROUP_OF[b.kind] === name)];
             if (inGroup.length === 0) return null;
             return (
               <div key={name} data-testid={`hub-bookings-group-${name.toLowerCase()}`}>
-                <h3 className="font-display text-lg text-ink">{name}</h3>
-                <ul className="mt-1 divide-y divide-rule">
+                <h3 className="flex items-baseline justify-between border-b border-ink pb-2 font-display text-lg text-ink">
+                  {name} <span className="type-figure text-sm text-ink-muted">{String(inGroup.length).padStart(2, '0')}</span>
+                </h3>
+                <ul className="ruled">
                   {inGroup.map((b) => (
                     <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} {...rowProps} />
                   ))}
@@ -511,7 +691,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
             );
           })}
         </div>
-        <div className="card mt-8 p-5" data-testid="hub-booked">
+        <div className="mt-12 ruled-strong pt-5" data-testid="hub-booked">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h3 className="type-section text-ink">What you have booked</h3>
             {tripId ? <BookedItemForm tripId={tripId} startDate={itinerary.startDate} endDate={itinerary.endDate} /> : null}
@@ -520,7 +700,7 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
           {booked.length === 0 ? (
             <p className="mt-3 text-sm text-ink-faint">Nothing yet.</p>
           ) : (
-            <ul className="mt-2 divide-y divide-rule">
+            <ul className="ruled mt-2">
               {booked.map((item) => (tripId ? <BookedItemRow key={item.id} tripId={tripId} item={item} /> : <li key={item.id} className="py-2 text-sm text-ink">{item.title}</li>))}
             </ul>
           )}
@@ -544,56 +724,58 @@ export function BookFirstSection({ intel, tripId, booked, itinerary, honored, co
   }
 
   return (
-    <section className="mt-14" aria-labelledby="book-first" data-testid="hub-book-first">
-      <SectionHeader id="book-first" title="Book first" blurb="What could break this trip if it is not arranged. Priorities come from dependency, fixed times and lead times, not invented scarcity." />
-      <BookingProgressLine intel={intel} />
-      {BOOKING_PRIORITIES.map((priority) => {
-        const rows = open.filter((b) => b.priority === priority);
-        if (rows.length === 0) return null;
-        return (
-          <div key={priority} className="mt-5" data-testid={`hub-bookings-${priority}`}>
-            {priority === 'book_first' ? (
-              /*
-                No blurb: the section header two lines above already says what
-                Book first means, and the two sentences said it twice under one
-                heading. The other priorities are headed only by their own
-                title, so they keep theirs.
-              */
-              null
-            ) : (
-              <>
-                <h3 className="type-section text-ink">
-                  {BOOKING_PRIORITY_COPY[priority].title} <span className="type-figure text-sm text-accent">{rows.length}</span>
-                </h3>
-                <p className="mt-0.5 text-sm text-ink-muted">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
-              </>
-            )}
-            <ul className="mt-2 divide-y divide-rule">
-              {rows.map((b) => (
-                <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} elevated={priority === 'book_first'} {...rowProps} />
+    <section className="mt-16" aria-labelledby="book-first" data-testid="hub-book-first">
+      <RailSection index="Arrange" title="Book first" headingId="book-first" count={open.length} blurb="What could break this trip if it is not arranged. Priorities come from dependency, fixed times and lead times, not invented scarcity.">
+        <div className="pt-5">
+          <BookingProgressLine intel={intel} variant="strip" />
+        </div>
+        {BOOKING_PRIORITIES.map((priority) => {
+          const rows = open.filter((b) => b.priority === priority);
+          if (rows.length === 0) return null;
+          return (
+            <div key={priority} className="mt-6" data-testid={`hub-bookings-${priority}`}>
+              {priority === 'book_first' ? (
+                /*
+                  No blurb: the rail beside this already says what Book first
+                  means. The other priorities are headed only by their own
+                  title, so they keep theirs.
+                */
+                null
+              ) : (
+                <div className="flex flex-wrap items-baseline gap-x-3 border-b border-rule pb-2">
+                  <h3 className="sheet-label text-ink">
+                    {BOOKING_PRIORITY_COPY[priority].title} <span className="type-figure text-accent">{rows.length}</span>
+                  </h3>
+                  <p className="type-meta">{BOOKING_PRIORITY_COPY[priority].blurb}</p>
+                </div>
+              )}
+              <ul className="ruled">
+                {rows.map((b) => (
+                  <BookingRow key={b.id} b={b} {...(b.memberIds ? { members } : {})} elevated={priority === 'book_first'} {...rowProps} />
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+        {open.length === 0 ? <p className="mt-4 text-sm text-ink-muted">Nothing left to arrange from what Sidequest can see.</p> : null}
+        {verifyRequirement.length > 0 ? (
+          <div className="mt-6" data-testid="hub-verify-requirement">
+            <h3 className="sheet-label text-ink">Verify booking requirement</h3>
+            <p className="mt-1 type-meta">The plan is not sure these need booking at all. Check, then book only if they do.</p>
+            <ul className="ruled mt-2 text-sm">
+              {verifyRequirement.map((line) => (
+                <li key={line} className="py-2 text-ink-muted">
+                  {line}
+                </li>
               ))}
             </ul>
           </div>
-        );
-      })}
-      {open.length === 0 ? <p className="mt-4 text-sm text-ink-muted">Nothing left to arrange from what Sidequest can see.</p> : null}
-      {verifyRequirement.length > 0 ? (
-        <div className="mt-6" data-testid="hub-verify-requirement">
-          <h3 className="type-section text-ink">Verify booking requirement</h3>
-          <p className="mt-0.5 text-sm text-ink-muted">The plan is not sure these need booking at all. Check, then book only if they do.</p>
-          <ul className="mt-2 divide-y divide-rule text-sm">
-            {verifyRequirement.map((line) => (
-              <li key={line} className="py-2 text-ink-muted">
-                {line}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {done.length > 0 ? <p className="mt-4 type-meta">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
-      <p className="mt-3 type-meta">
-        Mark a need booked here, or add a confirmation under <a href="#book" className="text-accent underline underline-offset-4">Book</a>; the plan reshapes around it.
-      </p>
+        ) : null}
+        {done.length > 0 ? <p className="mt-4 type-meta">{done.length} of the things this trip depends on {done.length === 1 ? 'is' : 'are'} already covered by your bookings.</p> : null}
+        <p className="mt-3 type-meta">
+          Mark a need booked here, or add a confirmation under <a href="#book" className="text-accent underline underline-offset-4">Book</a>; the plan reshapes around it.
+        </p>
+      </RailSection>
     </section>
   );
 }
@@ -607,10 +789,10 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks, bo
         .filter((phase) => phase.items.length > 0)
     : intel.checklist.phases;
   return (
-    <section className="mt-14" aria-labelledby="before-you-go" data-testid="hub-before-you-go">
-      <SectionHeader id="before-you-go" title="Before you go" blurb={r.international === 'no' ? 'A domestic trip on what you told us. The practical layer still applies.' : r.international === 'yes' ? `An international trip. Sidequest names the questions and where the official answers live; it does not answer them from memory.` : 'Whether this trip crosses a border depends on your citizenship, which Sidequest never guesses.'} />
+    <section className="mt-16" aria-labelledby="before-you-go" data-testid="hub-before-you-go">
+      <RailSection index="Documents · order" title="Before you go" headingId="before-you-go" quiet blurb={r.international === 'no' ? 'A domestic trip on what you told us. The practical layer still applies.' : r.international === 'yes' ? `An international trip. Sidequest names the questions and where the official answers live; it does not answer them from memory.` : 'Whether this trip crosses a border depends on your citizenship, which Sidequest never guesses.'}>
       {tripId ? (
-        <div className="mt-4">
+        <div className="pt-5">
           <ReadinessProfileForm tripId={tripId} current={readinessProfile} drives={intel.destinationContext.drives} />
         </div>
       ) : null}
@@ -663,7 +845,7 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks, bo
       */}
       {phases.length > 0 ? (
         <>
-          <h3 className="mt-10 type-section text-ink" data-print="appendix">In order</h3>
+          <h3 className="mt-10 sheet-label text-ink" data-print="appendix">In order</h3>
           <p className="mt-1 type-small text-ink-muted" data-print="appendix">
             {bookingsListedAbove
               ? 'What waits for the week and the day before, once the booking above is done.'
@@ -671,14 +853,14 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks, bo
           </p>
         </>
       ) : null}
-      <div className="mt-4 grid gap-4 md:grid-cols-2" data-testid="hub-checklist" data-print="appendix">
+      <div className="mt-4 grid gap-x-10 gap-y-8 md:grid-cols-2" data-testid="hub-checklist" data-print="appendix">
         {phases.map((phase, phaseIndex) => (
-          <div key={phase.phase} className="card p-5" data-testid={`hub-phase-${phase.phase}`}>
-            <p className="flex items-baseline gap-2">
-              <span className="type-figure text-xs text-accent">{String(phaseIndex + 1).padStart(2, '0')}</span>
-              <span className="eyebrow text-accent">{phase.title}</span>
+          <div key={phase.phase} className="min-w-0" data-testid={`hub-phase-${phase.phase}`}>
+            <p className="flex items-baseline justify-between gap-2 border-b border-rule pb-1.5">
+              <span className="sheet-label text-ink">{phase.title}</span>
+              <span className="type-figure text-xs text-ink-faint">{String(phaseIndex + 1).padStart(2, '0')}</span>
             </p>
-            <ul className="mt-2 divide-y divide-rule/60">
+            <ul className="ruled mt-1">
               {/*
                 V8 — a row's title is what the row is about. Five rows headed
                 "Set this up before you fly." read as one row five times;
@@ -725,6 +907,7 @@ export function BeforeYouGoSection({ intel, tripId, readinessProfile, checks, bo
           </div>
         </details>
       ) : null}
+      </RailSection>
     </section>
   );
 }
@@ -733,17 +916,19 @@ export function PackSection({ intel, tripId, checks }: { intel: TravelIntelligen
   const checked = new Set(checks);
   const p = intel.packing;
   return (
-    <section className="mt-14" aria-labelledby="pack" data-testid="hub-pack">
-      <SectionHeader id="pack" title="Pack" blurb={p.basisNote} />
+    <section className="mt-16" aria-labelledby="pack" data-testid="hub-pack">
+      <RailSection index="Bag" title="Pack" headingId="pack" count={p.items.length} quiet blurb={p.basisNote}>
       <div data-testid="packing-list">
-      <div className="mt-5 columns-1 gap-6 sm:columns-2 lg:columns-3" data-testid="hub-packing-list">
+      <div className="hv-pack mt-5 columns-1 gap-8 sm:columns-2 lg:columns-3" data-testid="hub-packing-list">
         {PACKING_CATEGORIES.map((category) => {
           const items = p.items.filter((i) => i.category === category);
           if (items.length === 0) return null;
           return (
-            <div key={category} className="mb-6 break-inside-avoid">
-              <p className="eyebrow">{PACKING_CATEGORY_LABELS[category]}</p>
-              <ul className="mt-1">
+            <div key={category} className="mb-7 break-inside-avoid">
+              <p className="sheet-label flex justify-between border-b border-rule pb-1.5 text-ink">
+                {PACKING_CATEGORY_LABELS[category]} <span className="type-figure text-ink-faint">{items.length}</span>
+              </p>
+              <ul className="ruled mt-1">
                 {items.map((item) => (
                   <li key={item.id}>
                     <CheckBox tripId={tripId} list="packing" itemId={item.id} checked={checked.has(item.id)} label={item.optional ? `${item.label} (optional)` : item.label} hint={item.why} />
@@ -756,56 +941,82 @@ export function PackSection({ intel, tripId, checks }: { intel: TravelIntelligen
       </div>
       {p.modelSuggestions.length > 0 ? <p className="mt-2 type-meta">Also suggested for this trip: {p.modelSuggestions.join(', ')}.</p> : null}
       </div>
+      </RailSection>
     </section>
   );
 }
 
 export function BudgetSection({ intel }: { intel: TravelIntelligence }) {
   const b = intel.budget;
+  /* One scale for every range: the largest high figure among the lines. Party lines and per-person lines are labelled, never summed here. */
+  const scale = Math.max(1, ...b.lines.map((l) => l.high));
+  const pct = (n: number) => `${Math.round((n / scale) * 1000) / 10}%`;
   return (
     <section className="mt-14" aria-labelledby="budget" data-testid="hub-budget">
       <SectionHeader id="budget" title="Budget" blurb={b.precisionNote} />
-      <p className="card mt-5 p-5">
-        <span className="eyebrow block">Estimated total</span>
-        <span className="type-figure mt-1 block text-[1.75rem] leading-tight text-ink">
-          {b.currency} {b.total.low.toLocaleString()}–{b.total.high.toLocaleString()}
-        </span>
-        <span className="mt-1 block text-sm text-ink-muted">for {b.travellers} {b.travellers === 1 ? 'traveller' : 'travellers'} — a range, not a quote</span>
-        {b.converted && b.displayCurrency ? (
-          <span className="mt-1 block text-sm text-ink-muted" data-testid="hub-budget-local">
-            ≈ {b.displayCurrency} {b.converted.low.toLocaleString()}–{b.converted.high.toLocaleString()} in local currency
+      <div className="mt-6 grid gap-x-10 gap-y-6 border-t-[1.5px] border-ink pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <p className="min-w-0">
+          <span className="sheet-label block text-ink-muted">Estimated total</span>
+          <span className="mt-3 block font-display text-[clamp(2.25rem,1.6rem+2.4vw,3.5rem)] font-light leading-none tracking-[-0.03em] text-ink [font-variant-numeric:lining-nums_tabular-nums]">
+            <span className="type-meta mr-2 align-top font-sans !text-ink-muted">{b.currency}</span>
+            {b.total.low.toLocaleString()}–{b.total.high.toLocaleString()}
           </span>
-        ) : null}
-      </p>
-      {b.envelope ? (
-        <p className={cx('mt-1 text-sm', b.envelope.fit === 'over' ? 'text-clay' : b.envelope.fit === 'tight' ? 'text-amber' : b.envelope.fit === 'unknown' ? 'text-ink-muted' : 'text-pine')} data-testid="hub-budget-envelope">
-          {b.envelope.fit === 'unknown'
-            ? `Your ${b.envelope.currency ?? b.currency} ${b.envelope.amount.toLocaleString()} ${b.envelope.basis.replace(/_/g, ' ')} is not compared: no exchange rate was available to put it in ${b.currency}.`
-            : `Against your ${b.envelope.currency ?? b.currency} ${b.envelope.amount.toLocaleString()} ${b.envelope.basis.replace(/_/g, ' ')}: ${b.envelope.fit}.`}
+          <span className="mt-2 block text-sm text-ink-muted">for {b.travellers} {b.travellers === 1 ? 'traveller' : 'travellers'} — a range, not a quote</span>
+          {b.converted && b.displayCurrency ? (
+            <span className="mt-1 block text-sm text-ink-muted" data-testid="hub-budget-local">
+              ≈ {b.displayCurrency} {b.converted.low.toLocaleString()}–{b.converted.high.toLocaleString()} in local currency
+            </span>
+          ) : null}
+        </p>
+        <div className="min-w-0 self-end">
+          {b.envelope ? (
+            <p className={cx('text-sm', b.envelope.fit === 'over' ? 'text-clay' : b.envelope.fit === 'tight' ? 'text-amber' : b.envelope.fit === 'unknown' ? 'text-ink-muted' : 'text-pine')} data-testid="hub-budget-envelope">
+              {b.envelope.fit === 'unknown'
+                ? `Your ${b.envelope.currency ?? b.currency} ${b.envelope.amount.toLocaleString()} ${b.envelope.basis.replace(/_/g, ' ')} is not compared: no exchange rate was available to put it in ${b.currency}.`
+                : `Against your ${b.envelope.currency ?? b.currency} ${b.envelope.amount.toLocaleString()} ${b.envelope.basis.replace(/_/g, ' ')}: ${b.envelope.fit}.`}
+            </p>
+          ) : null}
+          {b.costIndex ? (
+            <p className="mt-2 type-meta" data-testid="hub-budget-cost-index">{b.costIndex.note}</p>
+          ) : null}
+        </div>
+      </div>
+      {/*
+        SURVEY ATLAS — A FIGURE TABLE, NEVER A SCORE.
+
+        Each line keeps its own low and high and says whether it is per person or
+        for the party; the bar draws that range on one scale shared by every
+        line, so the reader sees where the money goes without a pie or a total
+        being invented from figures that were never meant to add up.
+      */}
+      {b.lines.some((l) => l.perPerson) && b.lines.some((l) => !l.perPerson) ? (
+        <p className="mt-8 flex flex-wrap items-center justify-end gap-x-5 gap-y-1 type-meta" aria-hidden="true">
+          <span className="inline-flex items-center gap-2"><span className="hv-range inline-block w-8" data-basis="party"><i style={{ left: 0, width: '100%' }} /></span> for the party</span>
+          <span className="inline-flex items-center gap-2"><span className="hv-range inline-block w-8" data-basis="pp"><i style={{ left: 0, width: '100%' }} /></span> per person</span>
         </p>
       ) : null}
-      {b.costIndex ? (
-        <p className="mt-2 type-meta" data-testid="hub-budget-cost-index">{b.costIndex.note}</p>
-      ) : null}
-      <dl className="mt-4 divide-y divide-rule text-sm">
+      <dl className="ruled mt-3 border-t border-ink text-sm">
         {b.lines.map((line, index) => (
-          <div key={`${line.category}-${index}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-3">
+          <div key={`${line.category}-${index}`} className="hv-budget-row">
             <dt className="font-medium text-ink">{BUDGET_CATEGORY_LABELS[line.category]}</dt>
-            <dd className="type-figure text-ink">
-              {line.low.toLocaleString()}–{line.high.toLocaleString()} <span className="font-sans text-xs font-normal text-ink-muted">{line.perPerson ? 'per person' : 'for the party'}</span>
+            <dd className="type-figure text-right text-ink md:col-start-3">
+              {line.low.toLocaleString()}–{line.high.toLocaleString()} <span className="block font-sans text-xs font-normal text-ink-muted">{line.perPerson ? 'per person' : 'for the party'}</span>
             </dd>
-            <dd className="basis-full type-meta">{line.basis}{line.excludes.length > 0 ? ` · excludes ${line.excludes.join(', ').toLowerCase()}` : ''}</dd>
+            <dd aria-hidden="true" className="hv-range" data-basis={line.perPerson ? 'pp' : 'party'} style={{ ['--lo' as string]: pct(line.low), ['--hi' as string]: pct(line.high) }}>
+              <i />
+            </dd>
+            <dd className="col-span-full type-meta">{line.basis}{line.excludes.length > 0 ? ` · excludes ${line.excludes.join(', ').toLowerCase()}` : ''}</dd>
           </div>
         ))}
       </dl>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 text-sm">
-        <div className="card p-4">
-          <p className="eyebrow text-pine">Save here</p>
-          <ul className="mt-1.5 space-y-1 text-ink-muted">{b.strategy.saveHere.map((s) => <li key={s}>{s}</li>)}</ul>
+      <div className="mt-8 grid gap-x-10 gap-y-6 text-sm sm:grid-cols-2">
+        <div className="border-t border-ink pt-3">
+          <p className="sheet-label text-pine">Save here</p>
+          <ul className="ruled mt-2 text-ink-muted">{b.strategy.saveHere.map((x) => <li key={x} className="py-2">{x}</li>)}</ul>
         </div>
-        <div className="card p-4">
-          <p className="eyebrow text-accent-strong">Spend here</p>
-          <ul className="mt-1.5 space-y-1 text-ink-muted">{b.strategy.spendHere.map((s) => <li key={s}>{s}</li>)}</ul>
+        <div className="border-t border-ink pt-3">
+          <p className="sheet-label text-accent-strong">Spend here</p>
+          <ul className="ruled mt-2 text-ink-muted">{b.strategy.spendHere.map((x) => <li key={x} className="py-2">{x}</li>)}</ul>
         </div>
       </div>
       {b.booked.length > 0 ? (

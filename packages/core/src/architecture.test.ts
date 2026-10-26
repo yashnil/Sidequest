@@ -62,6 +62,13 @@ const ALLOWED_PATTERNS = [
   /packages\/core\/src\/data\//,
   /packages\/core\/src\/testing\//,
   /packages\/planner\/src\/testing\//,
+  /*
+   * The destination advisor's world catalog: ~230 travel destinations as data,
+   * one of which is the seed region's own corridor. It names places because it
+   * is a gazetteer; the rule this list enforces is about *code* naming one
+   * destination, and no code reads these rows by name.
+   */
+  /packages\/core\/src\/advisor\/catalog\/regions\//,
   /\.test\.ts$/,
 ];
 

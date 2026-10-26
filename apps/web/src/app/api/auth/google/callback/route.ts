@@ -3,7 +3,9 @@ import { authProviders } from '@/lib/auth/config';
 import { exchangeGoogleCode } from '@/lib/auth/google';
 import { redirectToPublicPath } from '@/lib/auth/redirects';
 import { signInUser } from '@/lib/auth/session';
+import { takeOAuthBinding } from '@/lib/auth/oauth-state';
 import { consumeAuthState, upsertUser } from '@/lib/db/auth-repository';
+import { presentedSessionToken } from '@/lib/net/caller';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,8 +22,12 @@ export async function GET(request: NextRequest): Promise<Response> {
   if (!authProviders().google) return back('unavailable');
   const params = request.nextUrl.searchParams;
   const state = params.get('state') ?? '';
+  /* Production pass — the state must come back to the browser it was handed to (login CSRF). One-time: the binding is cleared here whatever happens. */
+  const bound = await takeOAuthBinding(state);
   const stored = consumeAuthState(state);
-  if (!stored || stored.provider !== 'google') return back('state');
+  if (!stored || stored.provider !== 'google' || !bound) return back('state');
+  /* …and that browser must still be the one whose trips the claim offer will be about. */
+  if (stored.ownerToken && stored.ownerToken !== (await presentedSessionToken())) return back('state');
   if (params.get('error') || !params.get('code')) return back('denied');
   try {
     const identity = await exchangeGoogleCode({ code: params.get('code')!, codeVerifier: stored.codeVerifier });

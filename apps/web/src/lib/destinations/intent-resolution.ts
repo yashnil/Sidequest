@@ -4,6 +4,8 @@ import {
   DESTINATION_SEMANTICS_VERSION,
   assessConfidence,
   attachIntentResolutions,
+  collapseSameNamedContainers,
+  leaderIsProminent,
   envelopeOf,
   countryFacts,
   countryPointFor,
@@ -836,16 +838,19 @@ export function resolutionForGraph(outcome: GraphResolutionOutcome, query: strin
     const own = outcome.partResolutions.get(only.id);
     /* A resolver that says the words are not a place at all (the research path's explicit reading) is passed through: the gate has nothing to weigh. */
     if (own && own.ambiguityReasons.includes('query_is_not_a_place')) return own;
-    const approved = outcome.approved.get(only.id) ?? [];
+    /* A city and the same-named district around it are one reading, not two (production pass, "Lisbon"). */
+    const approved = collapseSameNamedContainers(outcome.approved.get(only.id) ?? []);
     if (own && approved.length > 0) {
       const candidates = approved.map((r) => r.candidate);
       const leading = candidates[0]!;
-      const identityDoubt = candidates.length > 1 && (own.ambiguityReasons.includes('multiple_matching_places') || own.ambiguityReasons.includes('providers_disagree'));
+      /* A namesake a tenth the size is not a question: "Lisbon" is Lisboa, not Lisbon, Iowa. Comparable namesakes are still asked about. */
+      const prominent = leaderIsProminent(approved);
+      const identityDoubt = candidates.length > 1 && !prominent && (own.ambiguityReasons.includes('multiple_matching_places') || own.ambiguityReasons.includes('providers_disagree'));
       const ambiguityReasons: DestinationResolution['ambiguityReasons'] = [];
       if (identityDoubt) ambiguityReasons.push('multiple_matching_places');
       if (leading.breadth === 'country' || leading.breadth === 'multi_country') ambiguityReasons.push('administrative_area_needs_subset');
       if (!leading.bounds) ambiguityReasons.push('no_boundary_available');
-      const unambiguous = candidates.length === 1 || approved[0]!.assessment.verdict === 'compatible' && approved.slice(1).every((r) => r.assessment.verdict === 'weak');
+      const unambiguous = candidates.length === 1 || prominent || approved[0]!.assessment.verdict === 'compatible' && approved.slice(1).every((r) => r.assessment.verdict === 'weak');
       return { ...base, candidates, ambiguityReasons, ...(unambiguous ? { unambiguousCandidateId: leading.id } : {}) };
     }
     /* The resolver drew a blank, or every row was refused; a country in the phrase still places it. */
@@ -901,7 +906,8 @@ export interface ConceptCache {
  * state whose settlement answer is itself stays a state (V1, 2026-10-06).
  * 3: a city's travel extent and a type-coherent scale (V1 correctness wave).
  */
-const CONCEPT_CACHE_EPOCH = 3;
+/* 4 — production pass: a bare name two cities answer reads the one ten times larger (`promoteProminentNamesake`). 5 — only own, English and untagged names are aliases (Paris was "Bali"). 6 — a tenfold-prominent leader is not a question, a city and its same-named district are one reading, and an English-name match is exact ("Lisbon"). 7 — candidates carry the geocoder's importance and Wikidata item; a famous city abroad settles over small namesakes of another country ("Florence"), and rows of one Wikidata item or a same-named island inside its province are one reading ("Paris", "Bali"). */
+const CONCEPT_CACHE_EPOCH = 7;
 
 /** The cache key: the phrase, normalised, plus the resolution and semantics versions so a shape change invalidates everything. */
 export function conceptCacheKeyFor(text: string): string {

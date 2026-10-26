@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { TRIP_THEMES, type TripTheme } from '@sidequest/core';
-import { DecisionComposer } from '@/components/DecisionComposer';
+import { destinationCatalog } from '@sidequest/core';
+import { AdvisorStart } from '@/components/advisor/AdvisorStart';
+import { WorldDots } from '@/components/advisor/WorldDots';
 import type { DecisionAnswersInput } from '@/lib/destinations/decision-answers';
-import { destinationIndexRelease } from '@/lib/db/destination-index-repository';
-import { isClimateEnabled } from '@/lib/providers/switches';
 import { seedDestinationIndexIfRequested } from '@/lib/destinations/seed';
 
 export const dynamic = 'force-dynamic';
@@ -71,52 +71,44 @@ export default async function DecidePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   /*
-   * Opt-in, idempotent, and a no-op everywhere it is not configured. See
-   * `lib/destinations/seed` for why an environment without a catalogue needs
-   * this at all — in short, a shortlist with no index can only be tested for
-   * how honestly it fails.
+   * Opt-in, idempotent, and a no-op everywhere it is not configured. The
+   * advisor no longer reads the place index, but the browser suites still seed
+   * their synthetic index through this page's render (`lib/destinations/seed`).
    */
   seedDestinationIndexIfRequested();
-  const release = destinationIndexRelease();
   const initial = prefillFrom(await searchParams);
+  /*
+   * The destination advisor reads its own catalog of travel destinations (see
+   * `@sidequest/core` → `advisor/catalog`), not the place index, so this screen
+   * no longer depends on an index having been built.
+   */
+  const catalog = destinationCatalog();
+  const regions = new Set(catalog.map((entry) => entry.worldRegion)).size;
+  const points = catalog.map((entry) => ({ id: entry.id, lat: entry.center.lat, lng: entry.center.lng }));
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-      <p className="eyebrow">Where should I go</p>
-      <h1 className="display-xl mt-3 text-ink">
-        Tell us when and what for. We will tell you where.
-      </h1>
-      {/*
-        Two sentences, because at 360 px the four-line version pushed the first
-        question below the fold on the screen whose whole point is that there is
-        only one question on it.
-      */}
-      <p className="measure mt-4 type-body text-lg text-ink-muted">
-        One question at a time, and we stop as soon as we can rank honestly. Real places against
-        climate records and what is actually there — then what each choice costs you.
-      </p>
-
-      {/*
-        The honest failure, before anybody spends four answers on it.
-
-        A deployment with no index cannot rank anything, and finding that out at
-        the end — as an empty list — would read as "nowhere suits you", which is
-        a claim about the world rather than about this build.
-      */}
-      {!release ? (
-        <div className="card mt-8 p-5">
-          <p className="type-body text-ink">
-            This build has no place index, so there is nothing for us to rank. That is a gap in us
-            rather than a statement about anywhere.{' '}
-            <Link href="/trips/new" className="underline underline-offset-4 hover:text-pine">
-              You can still plan a destination you already have in mind.
-            </Link>
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start lg:gap-14">
+        <div className="min-w-0">
+          <p className="sheet-label inline-flex items-center gap-2 text-accent">
+            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-flare" />
+            Help me choose
           </p>
+          <h1 className="mt-3 max-w-[18ch] font-display text-[clamp(2.4rem,1.5rem+3vw,4.4rem)] leading-[0.98] font-[340] tracking-[-0.035em] text-balance text-ink">
+            Not sure where? <span className="text-ink-muted italic">Tell us what you’re after.</span>
+          </h1>
+          <p className="measure mt-4 type-body text-ink-muted">We’ll ask a few questions that actually change the answer, then show three different places that fit, and say why.</p>
+          <div className="mt-10">
+            <AdvisorStart prefill={initial} />
+          </div>
         </div>
-      ) : null}
-
-      <div className="mt-10">
-        <DecisionComposer climateEnabled={isClimateEnabled()} indexReady={release !== null} initial={initial} />
+        <figure className="survey-night rounded-[var(--radius-card)] p-4 text-bone lg:mt-8">
+          <WorldDots points={points} highlighted={[]} tone="night" className="h-auto w-full" label={`World map of the ${catalog.length} destinations Sidequest compares`} />
+          <figcaption className="mt-3 text-sm text-bone/75">
+            {catalog.length} destinations across {regions} parts of the world — parks, ranges, coasts and islands people really travel to, each with a season, places to sleep and things to do.
+          </figcaption>
+          <p className="mt-2 text-[0.7rem] text-bone/45">Land: Natural Earth. Each dot is a real destination centre.</p>
+        </figure>
       </div>
 
       <p className="mt-14 rule-top pt-6 type-small text-ink-muted">

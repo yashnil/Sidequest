@@ -18,6 +18,9 @@ import { BOOKED_TYPE_FOR_KIND, PAID_WORD, REFUNDABLE_WORD } from './booking-copy
  */
 const FIELD = 'mt-1 min-h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine';
 const GHOST = buttonClass('ghost', 'sm');
+/* HUB-4 — the row's controls read as controls: the act that settles the need is solid, the alternatives outlined. */
+const PILL = 'pressable inline-flex min-h-10 items-center rounded-full border border-rule bg-paper px-3.5 text-[13px] font-medium text-ink transition-colors hover:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-60';
+const PILL_SOLID = 'pressable inline-flex min-h-10 items-center rounded-full bg-ink px-3.5 text-[13px] font-semibold text-paper transition-colors hover:bg-ink/85 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-60';
 
 type Mode = 'idle' | 'mark' | 'replace' | 'confirm';
 /** V9.1 §10 — which press is in flight, so that button alone says "Saving…". */
@@ -70,18 +73,18 @@ export function BookingActions({ tripId, need, skipped, tripStart, tripEnd }: Bo
 
   return (
     <div className="mt-2 print:hidden" data-testid="booking-actions" aria-busy={pending}>
-      <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+      <div className="flex flex-wrap items-center gap-1.5">
         {need.officialSourceUrl ? (
-          <a href={need.officialSourceUrl} target="_blank" rel="noreferrer noopener" className={GHOST} data-testid="booking-open-source">
+          <a href={need.officialSourceUrl} target="_blank" rel="noreferrer noopener" className={PILL} data-testid="booking-open-source">
             {need.officialSourceName ? `Open ${need.officialSourceName}` : 'Open official source'}
           </a>
         ) : null}
         {!isGroup && open ? (
           <>
-            <button type="button" disabled={pending} className={GHOST} aria-expanded={mode === 'mark'} onClick={() => setMode(mode === 'mark' ? 'idle' : 'mark')} data-testid="booking-mark-booked">
+            <button type="button" disabled={pending} className={PILL_SOLID} aria-expanded={mode === 'mark'} onClick={() => setMode(mode === 'mark' ? 'idle' : 'mark')} data-testid="booking-mark-booked">
               Mark booked
             </button>
-            <button type="button" disabled={pending} className={GHOST} aria-expanded={mode === 'replace'} onClick={() => setMode(mode === 'replace' ? 'idle' : 'replace')} data-testid="booking-replace">
+            <button type="button" disabled={pending} className={PILL} aria-expanded={mode === 'replace'} onClick={() => setMode(mode === 'replace' ? 'idle' : 'replace')} data-testid="booking-replace">
               Booked something else
             </button>
             {skipped ? (
@@ -89,14 +92,14 @@ export function BookingActions({ tripId, need, skipped, tripStart, tripEnd }: Bo
                 {busy('unskip') ? 'Saving…' : 'Put it back'}
               </button>
             ) : (
-              <button type="button" disabled={pending} aria-busy={busy('skip')} className={GHOST} onClick={() => run(() => skipBookingAction(tripId, need.id), 'skip')} data-testid="booking-skip">
+              <button type="button" disabled={pending} aria-busy={busy('skip')} className={cx(GHOST, 'text-ink-muted')} onClick={() => run(() => skipBookingAction(tripId, need.id), 'skip')} data-testid="booking-skip">
                 {busy('skip') ? 'Saving…' : 'Skip'}
               </button>
             )}
           </>
         ) : null}
         {booked ? (
-          <button type="button" disabled={pending} className={GHOST} aria-expanded={mode === 'confirm'} onClick={() => setMode(mode === 'confirm' ? 'idle' : 'confirm')} data-testid="booking-add-confirmation">
+          <button type="button" disabled={pending} className={PILL} aria-expanded={mode === 'confirm'} onClick={() => setMode(mode === 'confirm' ? 'idle' : 'confirm')} data-testid="booking-add-confirmation">
             Add confirmation
           </button>
         ) : null}

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Concept A — Living Atlas</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,100;1,9..144,300..700,100&family=Bricolage+Grotesque:opsz,wght@12..96,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --night:#0d1a1f; --night2:#13242b; --bone:#f1ebdf; --flare:#ff5a1f; --glacier:#7fd1e0; --mute:#8fa6a6; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--night); color:var(--bone); font-family:'Bricolage Grotesque',sans-serif; }
+  .frame { position:relative; width:1440px; height:900px; overflow:hidden; border-bottom:1px solid #000; }
+  .map { position:absolute; inset:0; }
+  .serif { font-family:'Fraunces',serif; font-variation-settings:'SOFT' 100; }
+  .mono { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; }
+  .chrome { position:absolute; top:28px; left:40px; right:40px; display:flex; justify-content:space-between; align-items:center; z-index:5; }
+  .wordmark { font-family:'Fraunces'; font-size:22px; font-weight:600; letter-spacing:-.02em; }
+  .vignette { position:absolute; inset:0; background:radial-gradient(120% 90% at 70% 50%, transparent 30%, rgba(13,26,31,.85) 80%); pointer-events:none; }
+  .scrimL { position:absolute; inset:0 auto 0 0; width:620px; background:linear-gradient(90deg, rgba(13,26,31,.96) 55%, transparent); pointer-events:none; }
+  /* home */
+  .hero h1 { position:absolute; left:40px; bottom:250px; font-size:188px; line-height:.82; font-weight:300; letter-spacing:-.045em; z-index:4; }
+  .hero h1 em { color:var(--flare); font-style:italic; font-weight:400; }
+  .coord { position:absolute; left:44px; bottom:120px; width:620px; z-index:4; }
+  .coord .line { display:flex; align-items:baseline; gap:18px; border-bottom:1px solid rgba(241,235,223,.35); padding-bottom:14px; }
+  .coord .typed { font-family:'Fraunces'; font-size:40px; font-style:italic; font-weight:300; }
+  .caret { display:inline-block; width:2px; height:36px; background:var(--flare); vertical-align:-6px; margin-left:4px; }
+  .go { margin-left:auto; background:var(--flare); color:var(--night); border-radius:999px; padding:14px 22px; font-weight:600; font-size:15px; }
+  .index { position:absolute; right:40px; top:180px; z-index:4; text-align:right; }
+  .index li { list-style:none; font-family:'Fraunces'; font-size:26px; font-weight:300; color:rgba(241,235,223,.45); padding:6px 0; }
+  .index li.on { color:var(--bone); }
+  .index li .mono { color:var(--glacier); margin-right:14px; font-size:10px; }
+  /* interview */
+  .q { position:absolute; left:40px; top:150px; width:640px; z-index:4; }
+  .q .step { color:var(--glacier); }
+  .q h2 { font-size:64px; line-height:1; font-weight:300; letter-spacing:-.03em; margin:18px 0 34px; }
+  .words { display:flex; flex-wrap:wrap; gap:4px 26px; }
+  .words span { font-family:'Fraunces'; font-size:40px; font-weight:300; color:rgba(241,235,223,.38); line-height:1.25; position:relative; }
+  .words span.on { color:var(--bone); }
+  .words span.on::after { content:''; position:absolute; left:0; right:0; bottom:4px; height:3px; background:var(--flare); }
+  .words sup { font-family:'JetBrains Mono'; font-size:10px; color:var(--flare); margin-left:4px; }
+  .manifest { position:absolute; right:40px; bottom:40px; width:330px; z-index:4; border-top:1px solid rgba(241,235,223,.25); padding-top:14px; }
+  .manifest div { display:flex; justify-content:space-between; padding:6px 0; font-size:14px; color:var(--mute); }
+  .manifest b { color:var(--bone); font-weight:500; }
+  .ring { position:absolute; z-index:3; border:1.5px dashed rgba(127,209,224,.7); border-radius:50%; }
+  /* board */
+  .list { position:absolute; left:0; top:0; bottom:0; width:470px; background:rgba(13,26,31,.92); backdrop-filter:blur(6px); z-index:4; padding:110px 0 0; overflow:hidden; border-right:1px solid rgba(241,235,223,.1); }
+  .list h3 { font-size:14px; padding:0 32px 10px; color:var(--glacier); }
+  .row { display:grid; grid-template-columns:28px 56px 1fr 34px; gap:14px; align-items:center; padding:10px 32px; border-top:1px solid rgba(241,235,223,.07); }
+  .row.focus { background:rgba(255,90,31,.08); }
+  .row img { width:56px; height:56px; object-fit:cover; border-radius:3px; filter:saturate(.9); }
+  .row .n { font-family:'JetBrains Mono'; font-size:11px; color:var(--mute); }
+  .row .nm { font-family:'Fraunces'; font-size:19px; line-height:1.1; }
+  .row .meta { font-size:12px; color:var(--mute); margin-top:3px; }
+  .tick { width:30px; height:30px; border-radius:50%; border:1.5px solid rgba(241,235,223,.3); }
+  .tick.on { background:var(--flare); border-color:var(--flare); }
+  .feature { position:absolute; z-index:5; width:360px; background:var(--bone); color:var(--night); border-radius:4px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.5); }
+  .feature img { width:100%; height:210px; object-fit:cover; display:block; }
+  .feature .b { padding:18px 20px 20px; }
+  .feature h4 { font-family:'Fraunces'; font-size:30px; font-weight:400; letter-spacing:-.02em; }
+  .feature p { font-size:14px; line-height:1.5; margin-top:8px; color:#3d4441; }
+  .bar { position:absolute; right:40px; bottom:36px; z-index:5; display:flex; gap:12px; align-items:center; }
+  .pill { border-radius:999px; padding:14px 22px; font-weight:600; font-size:15px; border:1px solid rgba(241,235,223,.4); }
+  .pill.f { background:var(--flare); color:var(--night); border:0; }
+  .pin { position:absolute; z-index:4; width:14px; height:14px; border-radius:50%; background:var(--night); border:2px solid var(--bone); transform:translate(-50%,-50%); }
+  .pin.on { background:var(--flare); border-color:var(--flare); }
+  .pin.big { width:22px; height:22px; box-shadow:0 0 0 8px rgba(255,90,31,.25); }
+  /* itinerary */
+  .daystrip { position:absolute; left:40px; right:40px; bottom:32px; z-index:5; display:flex; align-items:flex-end; gap:0; }
+  .daystrip .d { flex:1; border-top:2px solid rgba(241,235,223,.2); padding-top:12px; }
+  .daystrip .d.on { border-color:var(--flare); }
+  .daystrip .d b { font-family:'Fraunces'; font-size:28px; font-weight:300; display:block; }
+  .daystrip .d span { font-size:12px; color:var(--mute); }
+  .thread { position:absolute; left:40px; top:120px; width:420px; z-index:5; }
+  .thread h2 { font-size:76px; line-height:.9; font-weight:300; letter-spacing:-.04em; }
+  .thread .sub { color:var(--mute); margin:10px 0 26px; font-size:15px; }
+  .stop { display:grid; grid-template-columns:62px 18px 1fr; gap:12px; align-items:start; }
+  .stop .t { font-family:'JetBrains Mono'; font-size:13px; padding-top:3px; }
+  .stop .dot { width:12px; height:12px; border-radius:50%; background:var(--flare); margin-top:5px; position:relative; }
+  .stop .nm { font-family:'Fraunces'; font-size:22px; }
+  .leg { display:grid; grid-template-columns:62px 18px 1fr; gap:12px; height:38px; }
+  .leg .ln { width:2px; margin-left:5px; background:repeating-linear-gradient(var(--flare) 0 4px, transparent 4px 8px); }
+  .leg .m { font-size:12px; color:var(--mute); align-self:center; }
+</style>
+</head>
+<body>
+<section class="frame hero" id="f-home">
+  <div class="map" id="m-home"></div><div class="vignette"></div><div class="scrimL"></div>
+  <div class="chrome"><span class="wordmark">Sidequest</span><span class="mono" style="color:var(--mute)">Trips &nbsp;·&nbsp; Sign in</span></div>
+  <ol class="index">
+    <li class="on"><span class="mono">01</span>Lisbon, five days</li>
+    <li><span class="mono">02</span>The Iceland ring road</li>
+    <li><span class="mono">03</span>Ten days in Japan</li>
+    <li><span class="mono">04</span>Swiss Alps by train</li>
+  </ol>
+  <h1 class="serif">Take the<br><em>detour.</em></h1>
+  <div class="coord"><div class="mono" style="color:var(--glacier);margin-bottom:14px">Where to</div><div class="line"><span class="typed">Lisbon in November<span class="caret"></span></span><span class="go">Begin →</span></div></div>
+</section>
+
+<section class="frame" id="f-interview">
+  <div class="map" id="m-int"></div><div class="vignette"></div><div class="scrimL" style="width:820px"></div>
+  <div class="chrome"><span class="wordmark">Sidequest</span><span class="mono" style="color:var(--mute)">Lisbon · 10–14 Nov · 2 adults</span></div>
+  <div class="q">
+    <div class="mono step">02 / 07 &nbsp; What you love</div>
+    <h2 class="serif">What would make this trip worth taking?</h2>
+    <div class="words"><span class="on">Food<sup>01</sup></span><span>Museums</span><span class="on">Old neighbourhoods<sup>02</sup></span><span>Viewpoints</span><span>Hiking</span><span class="on">Markets<sup>03</sup></span><span>Beaches</span><span>Architecture</span><span>Night life</span></div>
+  </div>
+  <div class="manifest"><div>Pace<b>Two or three a day</b></div><div>Getting around<b>On foot, trams</b></div><div>Reach<b>30 min from base</b></div></div>
+</section>
+
+<section class="frame" id="f-board">
+  <div class="map" id="m-board"></div>
+  <div class="chrome" style="left:510px"><span></span><span class="mono" style="color:var(--mute)">Discovery · 23 places found · 10 chosen</span></div>
+  <div class="list" id="list"></div>
+  <div class="bar"><span class="pill">Choose for me</span><span class="pill f">Build my trip →</span></div>
+</section>
+
+<section class="frame" id="f-itin">
+  <div class="map" id="m-itin"></div><div class="scrimL" style="width:700px"></div>
+  <div class="thread" id="thread"></div>
+  <div class="daystrip" id="days"></div>
+</section>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="shared.js"></script>
+<script src="data.js"></script>
+<script>
+const D = DATA, P = D.places, byId = Object.fromEntries(P.map(p => [p.id, p]));
+function overlayPins(map, frame, pts, opts = {}) {
+  map.on('load', () => {
+    pts.forEach((p, i) => { const xy = map.project([p.lng, p.lat]); const el = document.createElement('div'); el.className = 'pin' + (p.on ? ' on' : '') + (p.big ? ' big' : ''); el.style.left = xy.x + 'px'; el.style.top = xy.y + 'px'; frame.appendChild(el); });
+    if (opts.route) {
+      map.addSource('r', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: opts.route } } });
+      map.addLayer({ id: 'r', type: 'line', source: 'r', paint: { 'line-color': '#ff5a1f', 'line-width': 3, 'line-dasharray': [2, 1.2] } });
+    }
+    if (opts.after) opts.after(map);
+  });
+}
+// home: Lisbon from altitude with the day loops
+const homeMap = new maplibregl.Map({ container: 'm-home', style: ATLAS.night, center: [-9.05, 38.7], zoom: 10.4, pitch: 52, bearing: -18, attributionControl: false, interactive: false });
+overlayPins(homeMap, document.getElementById('f-home'), P.slice(0, 12).map((p) => ({ ...p, on: true })), { route: P.slice(0, 8).map((p) => [p.lng, p.lat]) });
+// interview: the base and a reach ring
+const intMap = new maplibregl.Map({ container: 'm-int', style: ATLAS.night, center: [-9.25, 38.72], zoom: 11.6, attributionControl: false, interactive: false });
+intMap.on('load', () => { const c = intMap.project([D.base.lng, D.base.lat]); const r = 260; const el = document.createElement('div'); el.className = 'ring'; Object.assign(el.style, { left: c.x - r + 'px', top: c.y - r + 'px', width: 2 * r + 'px', height: 2 * r + 'px' }); document.getElementById('f-interview').appendChild(el); });
+// board
+const bm = makeMap('m-board', ATLAS.night, P, { padding: { left: 520, right: 80, top: 80, bottom: 120 }, interactive: false });
+const list = document.getElementById('list');
+list.innerHTML = '<h3 class="mono">Classics worth your time</h3>' + P.slice(0, 11).map((p, i) => `<div class="row ${i === 2 ? 'focus' : ''}"><span class="n">${String(i + 1).padStart(2, '0')}</span><img src="${p.img}"><div><div class="nm">${p.name}</div><div class="meta">${p.kind} · ${p.from ?? '—'} min from base</div></div><span class="tick ${i % 3 !== 1 ? 'on' : ''}"></span></div>`).join('');
+overlayPins(bm, document.getElementById('f-board'), P.map((p, i) => ({ ...p, on: i % 3 !== 1, big: i === 2 })), { after: (map) => { const p = P[2]; const xy = map.project([p.lng, p.lat]); const f = document.createElement('div'); f.className = 'feature'; f.style.left = xy.x + 30 + 'px'; f.style.top = Math.max(60, xy.y - 330) + 'px'; f.innerHTML = `<img src="${p.img}"><div class="b"><div class="mono" style="color:#a8360a">${p.kind} · ${p.mins} min</div><h4>${p.name}</h4><p>The monument on the river that the whole Belém waterfront is arranged around — ten minutes' walk from the tower.</p></div>`; document.getElementById('f-board').appendChild(f); } });
+// itinerary day 2
+const day = D.days[1]; const stops = day.items.filter((i) => i.kind === 'activity').map((i) => byId[i.place]).filter(Boolean);
+const im = makeMap('m-itin', ATLAS.night, stops.concat([D.base]), { padding: { left: 640, right: 120, top: 120, bottom: 180 }, interactive: false, maxZoom: 14 });
+overlayPins(im, document.getElementById('f-itin'), stops.map((p) => ({ ...p, on: true })), { route: [[D.base.lng, D.base.lat], ...stops.map((p) => [p.lng, p.lat]), [D.base.lng, D.base.lat]] });
+const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+document.getElementById('thread').innerHTML = `<div class="mono" style="color:var(--glacier)">Day 02 · Wed 11 Nov</div><h2 class="serif">Old masters &amp; the white dome</h2><p class="sub">Two museums, a hilltop church, back by six.</p>` + day.items.filter((i) => i.kind !== 'travel').slice(0, 7).map((i) => i.kind === 'activity' || i.kind === 'meal' ? `<div class="stop"><span class="t">${fmt(i.start)}</span><span class="dot" style="${i.kind === 'meal' ? 'background:var(--glacier)' : ''}"></span><span class="nm">${i.title.replace(/ — .*/, '')}</span></div><div class="leg"><span></span><span class="ln"></span><span class="m">12 min drive</span></div>` : '').join('');
+document.getElementById('days').innerHTML = D.days.map((d) => `<div class="d ${d.n === 2 ? 'on' : ''}"><b class="serif">${String(d.n).padStart(2, '0')}</b><span>${d.theme.slice(0, 34)}</span></div>`).join('');
+</script>
+</body>
+</html>

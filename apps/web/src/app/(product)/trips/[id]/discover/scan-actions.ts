@@ -7,7 +7,7 @@ import { scanView } from '@/lib/db/scan-repository';
 import { startDiscoveryScan } from '@/lib/discovery-scan/run';
 import { scanFailureCopy, travellerScanView, type ScanFailureCopy, type TravellerScanView } from '@/lib/discovery-scan/view';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
-import { callerKey, guardAction } from '@/lib/net/caller';
+import { callerKey, guardBilledAction } from '@/lib/net/caller';
 
 /**
  * V1 CONVERGENCE — "FIND PLACES FOR MY TRIP".
@@ -39,7 +39,7 @@ export async function startDiscoveryScanAction(tripId: string, options: { autoBu
   /* A press while a scan runs is the same scan: attach before the fence, which only charges new work. */
   if (scanView(tripId).state === 'running') return { ok: true, started: false, view: travellerScanView(tripId) };
 
-  const fence = await guardAction('scan_start');
+  const fence = await guardBilledAction('scan_start');
   if (fence) return { ok: false, error: fence };
   const caller = await callerKey();
   try {

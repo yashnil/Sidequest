@@ -1,0 +1,150 @@
+{
+  "pass": "Sidequest full product transformation & production readiness",
+  "started": "2026-10-24",
+  "milestones": [
+    {
+      "id": "M0",
+      "title": "Baseline and ledger",
+      "status": "done",
+      "acceptance": [
+        "fixture build passes",
+        "baseline walk screenshots in docs/production-pass/baseline",
+        "research notes in docs/production-pass/research"
+      ],
+      "evidence": [
+        "npm run build exit 0",
+        "walk.spec.ts desktop pass 29s, 0 page errors"
+      ]
+    },
+    {
+      "id": "M1",
+      "title": "Diagnose and repair the research / planner failures",
+      "status": "done_except_owner_actions",
+      "depends": [
+        "M0"
+      ],
+      "tasks": [
+        {
+          "id": "M1.1",
+          "title": "Root-cause the two screenshot failures",
+          "status": "done",
+          "evidence": "local ANTHROPIC_API_KEY returns 401 invalid x-api-key from GET /v1/models; both copies are provider_auth_failure (scan view.ts:60, build-failure.ts:87). Production log not read: railway CLI logged out."
+        },
+        {
+          "id": "M1.2",
+          "title": "Open-data discovery fallback when the proposal model is unavailable",
+          "status": "done",
+          "owner": "agent",
+          "acceptance": [
+            "auth/not_configured/quota/timeout/5xx \u2192 board from OSM+Wikidata, labelled",
+            "malformed output still fails honestly",
+            "fixture token exercises it with zero network"
+          ]
+        },
+        {
+          "id": "M1.3",
+          "title": "Credential health is visible to the operator before a traveller hits it (readiness probe, startup log)",
+          "status": "partial",
+          "note": "readiness probe exists (probe-cache); home now reads scanPreflight"
+        },
+        {
+          "id": "M1.4",
+          "title": "Rotate production ANTHROPIC_API_KEY",
+          "status": "blocked",
+          "blocker": "owner action: new key in Railway variables; cannot be done without approval/credential"
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "title": "Visual reinvention: brand, system, landing, journey",
+      "status": "done",
+      "depends": [
+        "M0"
+      ],
+      "tasks": [
+        {
+          "id": "M2.1",
+          "title": "Brand: logo directions, SVG mark + wordmark, favicon, app icon, light/dark",
+          "status": "done"
+        },
+        {
+          "id": "M2.2",
+          "title": "Design system: type (display serif + grotesk + mono), colour tokens light/dark, texture, motion rules",
+          "status": "done"
+        },
+        {
+          "id": "M2.3",
+          "title": "Landing: MapLibre globe/terrain hero with self-drawing route, static fallback, reduced motion",
+          "status": "done"
+        },
+        {
+          "id": "M2.4",
+          "title": "Setup + interview surfaces",
+          "status": "done"
+        },
+        {
+          "id": "M2.5",
+          "title": "Scan screen + Discovery Board",
+          "status": "done"
+        },
+        {
+          "id": "M2.6",
+          "title": "Build screen + itinerary hub",
+          "status": "done"
+        },
+        {
+          "id": "M2.7",
+          "title": "Footer, legal pages, error states",
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "Planning intelligence: improvement phase (ILS) over greedy construction",
+      "status": "done",
+      "owner": "agent",
+      "acceptance": [
+        "objective(greedy+ILS) >= objective(greedy) on bench inputs",
+        "Ireland replay failure matrix zero",
+        "deterministic"
+      ]
+    },
+    {
+      "id": "M4",
+      "title": "Latency instrumentation and measured budget",
+      "status": "partial",
+      "acceptance": [
+        "per-stage timings persisted",
+        "p50/p90/p95 report from a reproducible bench",
+        "live numbers blocked until a valid key exists"
+      ],
+      "note": "per-stage timings persisted; open-data path measured (p50 5.0 s, p95 15.5 s time-to-plan); model path unmeasured \u2014 dead key"
+    },
+    {
+      "id": "M5",
+      "title": "Production hardening (headers, rate limits, deletion, legal, PWA)",
+      "status": "done_with_followups",
+      "depends": [
+        "hardening audit"
+      ]
+    },
+    {
+      "id": "M6",
+      "title": "Evaluation suite: 30 trip profiles",
+      "status": "done",
+      "acceptance": [
+        "harness runs every profile end to end on fixtures",
+        "live mode ready; blocked on key"
+      ],
+      "note": "33 profiles live, 26/33 itineraries; report docs/production-pass/eval/report.md"
+    },
+    {
+      "id": "M7",
+      "title": "Final report with evidence",
+      "status": "done",
+      "note": "docs/production-pass/REPORT.md"
+    }
+  ]
+}

@@ -13,6 +13,8 @@ export default tseslint.config(
       '**/next-env.d.ts',
       'playwright-report/**',
       'test-results/**',
+      /* Design prototypes and screenshot scripts for the creative pass: browser globals and CommonJS, not product code. */
+      'docs/creative-reinvention/**',
       /*
        * The map renderer, copied verbatim out of node_modules by
        * `apps/web/scripts/vendor-maplibre.mjs` so its worker resolves at

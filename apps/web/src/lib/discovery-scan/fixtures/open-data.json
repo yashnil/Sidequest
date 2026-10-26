@@ -1,0 +1,23 @@
+{
+  "_comment": "Recorded open-data answer for the discovery scan's fallback under the fixture switches (typed token `opendata`). Offsets are degrees from the query box centre; `{d}` is the destination name; `sitelinks` is the Wikidata sitelink count the fixture answers. Synthetic by design.",
+  "elements": [
+    { "type": "node", "id": 9100001, "dLat": 0.004, "dLng": 0.006, "sitelinks": 84, "tags": { "tourism": "museum", "name": "{d} Museum of History", "wikidata": "Q9100001", "wikipedia": "en:{d} Museum of History" } },
+    { "type": "way", "id": 9100002, "dLat": -0.012, "dLng": 0.01, "sitelinks": 61, "tags": { "historic": "castle", "name": "{d} Castle", "wikidata": "Q9100002" } },
+    { "type": "node", "id": 9100003, "dLat": 0.02, "dLng": -0.015, "sitelinks": 12, "tags": { "tourism": "viewpoint", "name": "{d} Ridge Lookout", "wikidata": "Q9100003" } },
+    { "type": "node", "id": 9100004, "dLat": -0.03, "dLng": -0.02, "sitelinks": 9, "tags": { "natural": "waterfall", "name": "{d} Falls", "wikidata": "Q9100004" } },
+    { "type": "way", "id": 9100005, "dLat": 0.008, "dLng": -0.004, "sitelinks": 40, "tags": { "leisure": "garden", "name": "{d} Botanic Garden", "wikidata": "Q9100005" } },
+    { "type": "node", "id": 9100006, "dLat": -0.002, "dLng": 0.002, "sitelinks": 33, "tags": { "amenity": "marketplace", "name": "{d} Central Market", "wikidata": "Q9100006" } },
+    { "type": "way", "id": 9100007, "dLat": 0.003, "dLng": 0.012, "sitelinks": 52, "tags": { "amenity": "place_of_worship", "religion": "christian", "name": "{d} Cathedral", "wikidata": "Q9100007" } },
+    { "type": "node", "id": 9100008, "dLat": 0.015, "dLng": 0.02, "sitelinks": 18, "tags": { "amenity": "place_of_worship", "religion": "buddhist", "name": "寺院", "name:en": "{d} Hill Temple", "wikidata": "Q9100008" } },
+    { "type": "node", "id": 9100009, "dLat": -0.006, "dLng": 0.018, "sitelinks": 7, "tags": { "tourism": "gallery", "name": "{d} Print Gallery", "wikidata": "Q9100009" } },
+    { "type": "way", "id": 9100010, "dLat": 0.025, "dLng": 0.03, "sitelinks": 22, "tags": { "natural": "water", "water": "lake", "name": "{d} Lake", "wikidata": "Q9100010" } },
+    { "type": "node", "id": 9100011, "dLat": -0.018, "dLng": -0.006, "sitelinks": 5, "tags": { "historic": "ruins", "name": "{d} Abbey Ruins", "wikidata": "Q9100011" } },
+    { "type": "way", "id": 9100012, "dLat": 0.01, "dLng": 0.008, "sitelinks": 27, "tags": { "leisure": "park", "name": "{d} Riverside Park", "wikidata": "Q9100012" } },
+    { "type": "node", "id": 9100013, "dLat": 0.05, "dLng": -0.04, "sitelinks": 15, "tags": { "natural": "peak", "name": "{d} Summit", "wikidata": "Q9100013", "ele": "1210" } },
+    { "type": "node", "id": 9100014, "dLat": -0.009, "dLng": -0.011, "sitelinks": 11, "tags": { "historic": "monument", "name": "{d} Founders Monument", "wikidata": "Q9100014" } },
+    { "type": "node", "id": 9100015, "dLat": 0.006, "dLng": -0.019, "sitelinks": 3, "tags": { "tourism": "attraction", "name": "{d} Old Clock Tower", "wikidata": "Q9100015" } },
+    { "type": "way", "id": 9100016, "dLat": -0.04, "dLng": 0.035, "sitelinks": 8, "tags": { "leisure": "nature_reserve", "name": "{d} Marshes Reserve", "wikidata": "Q9100016" } },
+    { "type": "node", "id": 9100017, "dLat": 0.001, "dLng": 0.001, "tags": { "tourism": "attraction", "wikidata": "Q9100017" } },
+    { "type": "node", "id": 9100018, "dLat": -0.0119, "dLng": 0.0101, "sitelinks": 61, "tags": { "historic": "castle", "name": "{d} Castle", "wikidata": "Q9100002" } }
+  ]
+}

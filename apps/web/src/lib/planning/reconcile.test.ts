@@ -302,4 +302,31 @@ describe('the day itself', () => {
     expect(day.baseName).toBe('Town B');
     expect(day.warnings.some((w) => /move from Town A to Town B/.test(w))).toBe(true);
   });
+
+  it('a moving day moves by the day’s road mode, never by its first stop’s walk', async () => {
+    /*
+     * Production pass regression. The transfer to the next base inherited
+     * `anchors[0].transport`, which describes base → first stop. A first stop
+     * a short walk from last night's base made a 90 km base change on a car
+     * trip a "walk", which the walk check then refused, leaving the move with
+     * no figure and the trip "Needs a decision" — found when the planner's
+     * improvement phase put a walkable stop first on a moving day.
+     */
+    const world = fictionalWorld({ name: 'Moveland', center: { lat: 50, lng: 10 }, places: [{ name: 'Town A', lat: 50, lng: 10, entityType: 'city' }, { name: 'Town B', lat: 50.8, lng: 10.8, entityType: 'city' }, { name: 'Corner Chapel', lat: 50.003, lng: 10.003 }, { name: 'Halfway Falls', lat: 50.4, lng: 10.4 }], basics: { startDate: '2026-05-01', endDate: '2026-05-03' } });
+    const draft = draftOf({
+      bases: [{ id: 'a', name: 'Town A', nights: 1 }, { id: 'b', name: 'Town B', nights: 1 }],
+      days: [
+        { base: 'a', anchors: [] },
+        { base: 'b', relocation: true, anchors: [{ name: 'Corner Chapel', category: 'landmark', transport: 'walk' }, { name: 'Halfway Falls', category: 'water', transport: 'car' }] },
+        { base: 'b', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    const transfer = result.itinerary.days[1]!.items.find((i) => i.kind === 'travel' && i.travel?.role === 'transfer');
+    expect(transfer?.travel?.toName).toBe('Town B');
+    /* The move is a drive because the day drives — not a walk that geometry had to rescue (or, where a router answered for the walk, refuse). */
+    expect(transfer?.travel?.hint).toBe('car');
+    expect(transfer?.travel?.modeCorrectedFrom).toBeUndefined();
+    expect(transfer?.travel?.mode).toBe('drive');
+  });
 });

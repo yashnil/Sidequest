@@ -171,3 +171,101 @@ function firstStringClaim(claims: z.infer<typeof claimValueSchema>[] | undefined
   }
   return undefined;
 }
+
+const sitelinksResponseSchema = z.object({
+  entities: z
+    .record(
+      z.string(),
+      z.object({
+        missing: z.unknown().optional(),
+        sitelinks: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .optional(),
+});
+
+export interface WikidataSitelinkOptions {
+  fetchImpl?: typeof fetch;
+  /** At most this many ids are asked about, in the order given. Default 100 (two requests). */
+  maxIds?: number;
+  cache?: {
+    read: (key: string) => Record<string, number> | null;
+    write: (key: string, value: Record<string, number>) => void;
+  };
+}
+
+/**
+ * DISCOVERY SCAN FALLBACK — HOW MANY WIKIPEDIAS WRITE ABOUT A PLACE.
+ *
+ * The open-data proposal ranks mapped places by the number of Wikimedia
+ * sitelinks their Wikidata item has: how many language editions (and sister
+ * projects) found the place worth an article. It is a count of attention, not
+ * of quality, and it is used only to order things — never shown as a rating
+ * and never turned into a sentence about how good a place is.
+ *
+ * Bounded like `fetchWikidataFacts`: fifty ids per request, `maxIds` in all
+ * (two requests by default), a timeout per request, and never throws. An id
+ * whose request failed is simply absent from the answer, which the caller
+ * reads as "unknown", never as "nobody wrote about it".
+ */
+export async function fetchWikidataSitelinkCounts(
+  ids: readonly string[],
+  options: WikidataSitelinkOptions = {},
+): Promise<{ counts: Map<string, number>; calls: number; cacheHit: boolean }> {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const id of ids) {
+    const trimmed = id.trim();
+    if (!isWikidataId(trimmed) || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    ordered.push(trimmed);
+  }
+  const wanted = ordered.slice(0, Math.max(0, options.maxIds ?? 100));
+  const counts = new Map<string, number>();
+  if (wanted.length === 0) return { counts, calls: 0, cacheHit: false };
+
+  const cacheKey = `wikidata-sitelinks|v1|${[...wanted].sort().join(',')}`;
+  const cached = options.cache?.read(cacheKey);
+  if (cached) {
+    for (const [id, value] of Object.entries(cached)) counts.set(id, value);
+    return { counts, calls: 0, cacheHit: true };
+  }
+
+  const doFetch = options.fetchImpl ?? fetch;
+  let calls = 0;
+  let failed = false;
+  for (let offset = 0; offset < wanted.length; offset += MAX_IDS_PER_REQUEST) {
+    const batch = wanted.slice(offset, offset + MAX_IDS_PER_REQUEST);
+    const url = new URL(WIKIDATA_ENDPOINT);
+    url.searchParams.set('action', 'wbgetentities');
+    url.searchParams.set('ids', batch.join('|'));
+    url.searchParams.set('props', 'sitelinks');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
+    try {
+      calls += 1;
+      const response = await doFetch(url, {
+        headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        failed = true;
+        continue;
+      }
+      const parsed = sitelinksResponseSchema.safeParse(await response.json());
+      if (!parsed.success) {
+        failed = true;
+        continue;
+      }
+      for (const [id, entity] of Object.entries(parsed.data.entities ?? {})) {
+        if (entity.missing !== undefined) continue;
+        counts.set(id, Object.keys(entity.sitelinks ?? {}).length);
+      }
+    } catch {
+      failed = true;
+    }
+  }
+  /* Only a complete answer is cached, so one slow afternoon never freezes a ranking. */
+  if (!failed && counts.size > 0) options.cache?.write(cacheKey, Object.fromEntries(counts));
+  return { counts, calls, cacheHit: false };
+}

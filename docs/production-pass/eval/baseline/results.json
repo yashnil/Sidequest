@@ -1,0 +1,970 @@
+{
+  "generatedAt": "2026-10-25T05:51:52.007Z",
+  "db": "apps/web/data/eval-run1.db",
+  "environment": {
+    "model": "none (ANTHROPIC_API_KEY removed)",
+    "geocoder": "nominatim (public)",
+    "poi": "overpass (public) + wikidata",
+    "routing": "labelled estimates (no router configured)"
+  },
+  "runs": [
+    {
+      "id": "switzerland-rail",
+      "title": "Switzerland by train, 10 days, couple, July",
+      "destination": "Switzerland",
+      "categories": [
+        "country",
+        "transit_heavy"
+      ],
+      "tripId": "9a3d4945-151f-454d-a316-a7c2d5845863",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 43,
+        "resolve_ms": 3089,
+        "questionnaire_ms": 13,
+        "scan_total_ms": 166450,
+        "scan_propose_ms": 85832,
+        "scan_place_ms": 1,
+        "scan_time_ms": 4,
+        "scan_food_ms": 80490,
+        "scan_assemble_ms": 31,
+        "autopick_ms": 48,
+        "build_ms": 2342,
+        "total_ms": 172006
+      },
+      "resolution": {
+        "name": "Switzerland",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "CH"
+        ],
+        "center": {
+          "lat": 46.7985624,
+          "lng": 8.2319736
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 34,
+        "placed": 34,
+        "bases": 1,
+        "boardCandidates": 34,
+        "autoPicks": 14,
+        "foodVenues": 1,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates, openstreetmap"
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 11,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          1,
+          2,
+          1,
+          1,
+          1,
+          1,
+          2,
+          3,
+          2,
+          0
+        ],
+        "meanStopsPerDay": 1.3,
+        "travelMinutesPerDay": [
+          0,
+          150,
+          150,
+          130,
+          130,
+          130,
+          130,
+          130,
+          145,
+          80,
+          0
+        ],
+        "maxTravelMinutes": 150,
+        "meanTravelMinutes": 107,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 20,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Sigriswiler Rothorn",
+            "placeId": "scan-place-sigriswiler-rothorn",
+            "category": "viewpoint",
+            "lat": 46.7306919,
+            "lng": 7.7704094,
+            "kmFromCentre": 36,
+            "country": "CH"
+          },
+          {
+            "day": 3,
+            "title": "Dirrengrind",
+            "placeId": "scan-place-dirrengrind",
+            "category": "viewpoint",
+            "lat": 46.7794613,
+            "lng": 8.036079,
+            "kmFromCentre": 15,
+            "country": "CH"
+          },
+          {
+            "day": 3,
+            "title": "Freilichtmuseum Ballenberg",
+            "placeId": "scan-place-freilichtmuseum-ballenberg",
+            "category": "museum",
+            "lat": 46.7487621,
+            "lng": 8.084871,
+            "kmFromCentre": 12,
+            "country": "CH"
+          },
+          {
+            "day": 4,
+            "title": "Klein Titlis",
+            "placeId": "scan-place-klein-titlis",
+            "category": "viewpoint",
+            "lat": 46.7701325,
+            "lng": 8.4249497,
+            "kmFromCentre": 15,
+            "country": "CH"
+          },
+          {
+            "day": 5,
+            "title": "Oberberghorn",
+            "placeId": "scan-place-oberberghorn",
+            "category": "viewpoint",
+            "lat": 46.6591874,
+            "lng": 7.9137003,
+            "kmFromCentre": 29,
+            "country": "CH"
+          },
+          {
+            "day": 6,
+            "title": "Triftbrücke",
+            "placeId": "scan-place-triftbrucke",
+            "category": "historic_site",
+            "lat": 46.6944052,
+            "lng": 8.3573854,
+            "kmFromCentre": 15,
+            "country": "CH"
+          },
+          {
+            "day": 7,
+            "title": "Wildpark Brienz",
+            "placeId": "scan-place-wildpark-brienz",
+            "category": "wildlife_area",
+            "lat": 46.7563005,
+            "lng": 8.0442443,
+            "kmFromCentre": 15,
+            "country": "CH"
+          },
+          {
+            "day": 8,
+            "title": "Auguste Piccard (PX 8)",
+            "placeId": "scan-place-auguste-piccard-px-8",
+            "category": "historic_site",
+            "lat": 47.0520494,
+            "lng": 8.3370549,
+            "kmFromCentre": 29,
+            "country": "CH"
+          },
+          {
+            "day": 8,
+            "title": "Verkehrshaus der Schweiz",
+            "placeId": "scan-place-verkehrshaus-der-schweiz",
+            "category": "museum",
+            "lat": 47.0527941,
+            "lng": 8.3364824,
+            "kmFromCentre": 29,
+            "country": "CH"
+          },
+          {
+            "day": 9,
+            "title": "Kapellbrücke",
+            "placeId": "scan-place-kapellbrucke",
+            "category": "historic_site",
+            "lat": 47.0516344,
+            "lng": 8.3074122,
+            "kmFromCentre": 29,
+            "country": "CH"
+          },
+          {
+            "day": 9,
+            "title": "Alpineum museum",
+            "placeId": "scan-place-alpineum-museum",
+            "category": "historic_site",
+            "lat": 47.0579175,
+            "lng": 8.3104191,
+            "kmFromCentre": 29,
+            "country": "CH"
+          },
+          {
+            "day": 9,
+            "title": "Bourbaki Panorama",
+            "placeId": "scan-place-bourbaki-panorama",
+            "category": "museum",
+            "lat": 47.0569576,
+            "lng": 8.3112262,
+            "kmFromCentre": 29,
+            "country": "CH"
+          },
+          {
+            "day": 10,
+            "title": "Mittelpunkt der Schweiz",
+            "placeId": "scan-place-mittelpunkt-der-schweiz",
+            "category": "historic_site",
+            "lat": 46.7984983,
+            "lng": 8.2317843,
+            "kmFromCentre": 0,
+            "country": "CH"
+          },
+          {
+            "day": 10,
+            "title": "Aaresschlucht Westeingang",
+            "placeId": "scan-place-aaresschlucht-westeingang",
+            "category": "historic_site",
+            "lat": 46.7200856,
+            "lng": 8.2048151,
+            "kmFromCentre": 9,
+            "country": "CH"
+          }
+        ],
+        "maxKmFromCentre": 36,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 4,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 9,
+        "daysWithDinner": 10,
+        "namedMeals": 1,
+        "describedMeals": 18,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 260,
+          "perPersonPerDayHigh": 562,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "premium"
+        },
+        "planText": [
+          "D1 2027-07-05 @Switzerland [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Berggasthaus Aelggialp 60m",
+          "D2 2027-07-06 @Switzerland [540-1140]: 9:00 ~rail 75m/49km(geo_estimate) | 10:15 Sigriswiler Rothorn 45m | 11:00 [free_time] Free time 30m | 11:30 [meal] Lunch — Pack a lunch — food is thin out near Switzerland 45m | 12:15 ~public_bus 75m/49km(geo_estimate) | 13:30 [free_time] Free time 270m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D3 2027-07-07 @Switzerland [540-1140]: 9:00 ~rail 65m/20km(geo_estimate) | 10:05 Dirrengrind 45m | 10:50 ~rail 30m/7km(geo_estimate) | 11:20 Freilichtmuseum Ballenberg 120m | 13:20 [meal] Lunch — Pack a lunch — food is thin out near Hofstetten bei Brienz 45m | 14:05 ~public_bus 55m/17km(geo_estimate) | 15:00 [free_time] Free time 180m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D4 2027-07-08 @Switzerland [540-1140]: 9:00 ~rail 65m/20km(geo_estimate) | 10:05 Klein Titlis 45m | 10:50 [free_time] Free time 40m | 11:30 [meal] Lunch — Pack a lunch — food is thin out near Switzerland 45m | 12:15 ~public_bus 65m/20km(geo_estimate) | 13:20 [free_time] Free time 280m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D5 2027-07-09 @Switzerland [540-1140]: 9:00 ~rail 65m/39km(geo_estimate) | 10:05 Oberberghorn 45m | 10:50 [free_time] Free time 40m | 11:30 [meal] Lunch — Pack a lunch — food is thin out near Switzerland 45m | 12:15 ~public_bus 65m/39km(geo_estimate) | 13:20 [free_time] Free time 280m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D6 2027-07-10 @Switzerland [540-1140]: 9:00 ~rail 65m/20km(geo_estimate) | 10:05 Triftbrücke 75m | 11:30 [meal] Lunch — Casual lunch in Switzerland, near the midday stop 45m | 12:15 ~public_bus 65m/20km(geo_estimate) | 13:20 [free_time] Free time 280m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D7 2027-07-11 @Switzerland [540-1140]: 9:00 ~rail 65m/20km(geo_estimate) | 10:05 Wildpark Brienz 180m | 13:05 [meal] Lunch — Pack a lunch — food is thin out near Switzerland 45m | 13:50 ~public_bus 65m/20km(geo_estimate) | 14:55 [free_time] Free time 185m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D8 2027-07-12 @Switzerland [540-1140]: 9:00 ~rail 65m/40km(geo_estimate) | 10:05 Auguste Piccard (PX 8) 75m | 11:20 Verkehrshaus der Schweiz 120m | 13:20 [meal] Lunch — Casual lunch in Luzern, near the midday stop 45m | 14:05 ~public_bus 65m/40km(geo_estimate) | 15:10 [free_time] Free time 170m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D9 2027-07-13 @Switzerland [540-1140]: 9:00 ~rail 65m/39km(geo_estimate) | 10:05 Kapellbrücke 75m | 11:20 ~walk 15m/1km(geo_estimate) | 11:35 [meal] Lunch — Casual lunch in Switzerland, near the midday stop 45m | 12:20 Alpineum museum 75m | 13:35 Bourbaki Panorama 120m | 15:35 ~public_bus 65m/40km(geo_estimate) | 16:40 [free_time] Free time 80m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D10 2027-07-14 @Switzerland [540-1140]: 9:00 Mittelpunkt der Schweiz 75m | 10:15 ~rail 40m/12km(geo_estimate) | 10:55 Aaresschlucht Westeingang 75m | 12:10 [meal] Lunch — Casual lunch in Switzerland, near the midday stop 45m | 12:55 ~public_bus 40m/12km(geo_estimate) | 13:35 [free_time] Free time 265m | 18:00 [meal] Dinner — Dinner in Switzerland 60m",
+          "D11 2027-07-15 @Switzerland [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 14
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": []
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 107,
+          "freeMinutesPerDay": 210,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.82,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Switzerland (10n)"
+        ]
+      }
+    },
+    {
+      "id": "zurich-carfree-short",
+      "title": "Zurich weekend, car-free, solo, late arrival",
+      "destination": "Zurich",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "6bc19343-8dbf-4ba9-bc3f-5e1b8e9cb5dd",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 4,
+        "resolve_ms": 1697,
+        "questionnaire_ms": 6,
+        "scan_total_ms": 166172,
+        "scan_propose_ms": 84887,
+        "scan_place_ms": 0,
+        "scan_time_ms": 1,
+        "scan_food_ms": 81239,
+        "scan_assemble_ms": 3,
+        "autopick_ms": 26,
+        "build_ms": 2374,
+        "total_ms": 170290
+      },
+      "resolution": {
+        "name": "Zurich",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "CH"
+        ],
+        "center": {
+          "lat": 47.3744489,
+          "lng": 8.5410422
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 27,
+        "placed": 27,
+        "bases": 1,
+        "boardCandidates": 27,
+        "autoPicks": 6,
+        "foodVenues": 8,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates, openstreetmap"
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 3,
+        "emptyDays": 0,
+        "stopsPerDay": [
+          2,
+          3,
+          1
+        ],
+        "meanStopsPerDay": 2,
+        "travelMinutesPerDay": [
+          55,
+          90,
+          65
+        ],
+        "maxTravelMinutes": 90,
+        "meanTravelMinutes": 70,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 8,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 1,
+            "title": "Chinagarten Zürich",
+            "placeId": "scan-place-chinagarten-zurich",
+            "category": "historic_site",
+            "lat": 47.354972,
+            "lng": 8.5519914,
+            "kmFromCentre": 2,
+            "country": "CH"
+          },
+          {
+            "day": 1,
+            "title": "Karlsturm",
+            "placeId": "scan-place-karlsturm",
+            "category": "viewpoint",
+            "lat": 47.3701486,
+            "lng": 8.5436792,
+            "kmFromCentre": 1,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Volière",
+            "placeId": "scan-place-voliere",
+            "category": "wildlife_area",
+            "lat": 47.3623346,
+            "lng": 8.5356873,
+            "kmFromCentre": 1,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Kunsthalle Zürich",
+            "placeId": "scan-place-kunsthalle-zurich",
+            "category": "museum",
+            "lat": 47.3894008,
+            "lng": 8.5248893,
+            "kmFromCentre": 2,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Haus Konstruktiv",
+            "placeId": "scan-place-haus-konstruktiv",
+            "category": "museum",
+            "lat": 47.3891301,
+            "lng": 8.5252692,
+            "kmFromCentre": 2,
+            "country": "CH"
+          },
+          {
+            "day": 3,
+            "title": "Monte Diggelmann",
+            "placeId": "scan-place-monte-diggelmann",
+            "category": "viewpoint",
+            "lat": 47.3932559,
+            "lng": 8.5495392,
+            "kmFromCentre": 2,
+            "country": "CH"
+          }
+        ],
+        "maxKmFromCentre": 2,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 4,
+        "mealsPerDay": [
+          1,
+          2,
+          0
+        ],
+        "daysWithLunch": 1,
+        "daysWithDinner": 2,
+        "namedMeals": 3,
+        "describedMeals": 0,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 4,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 181,
+          "perPersonPerDayHigh": 421,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-03-12 @Zurich [960-1200]: 16:00 ~rail 25m/3km(geo_estimate) | 16:25 Chinagarten Zürich 75m | 17:40 ~rail 20m/2km(geo_estimate) | 18:00 Karlsturm 45m | 18:45 ~walk 10m/1km(geo_estimate) | 18:55 [meal] Dinner — James Joyce 60m",
+          "D2 2027-03-13 @Zurich [540-1200]: 9:00 ~walk 25m/1km(geo_estimate) | 9:25 Volière 180m | 12:25 ~rail 30m/4km(geo_estimate) | 12:55 [meal] Lunch — Taho Sushi 45m | 13:40 Kunsthalle Zürich 120m | 15:40 Haus Konstruktiv 120m | 17:40 ~walk 35m/2km(geo_estimate) | 18:15 [meal] Dinner — Antica Roma 60m | 19:15 [free_time] Free time 45m",
+          "D3 2027-03-14 @Zurich [540-690]: 9:00 ~rail 25m/3km(geo_estimate) | 9:25 Monte Diggelmann 45m | 10:10 ~walk 40m/2km(geo_estimate) | 10:50 [free_time] Free time 40m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 6
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "meals_present(warning)",
+            "backups_are_local(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "adequate",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "strong",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 70,
+          "freeMinutesPerDay": 28,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.33,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Zurich (2n)"
+        ]
+      }
+    },
+    {
+      "id": "zermatt-winter",
+      "title": "Zermatt in January, car-free, friends, winter sports",
+      "destination": "Zermatt",
+      "categories": [
+        "rural_remote",
+        "transit_heavy"
+      ],
+      "tripId": "407fb5dd-a263-4f0b-90d0-615c2826338b",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 0,
+        "resolve_ms": 2241,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 161756,
+        "scan_propose_ms": 81194,
+        "scan_place_ms": 0,
+        "scan_time_ms": 0,
+        "scan_food_ms": 80550,
+        "scan_assemble_ms": 4,
+        "autopick_ms": 8,
+        "build_ms": 2817,
+        "total_ms": 166829
+      },
+      "resolution": {
+        "name": "Zermatt",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "CH"
+        ],
+        "center": {
+          "lat": 46.0212076,
+          "lng": 7.749254
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 5,
+        "placed": 5,
+        "bases": 1,
+        "boardCandidates": 5,
+        "autoPicks": 4,
+        "foodVenues": 12,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates, openstreetmap"
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 5,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          2,
+          1,
+          1,
+          0
+        ],
+        "meanStopsPerDay": 0.8,
+        "travelMinutesPerDay": [
+          0,
+          65,
+          120,
+          90,
+          0
+        ],
+        "maxTravelMinutes": 120,
+        "meanTravelMinutes": 55,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 7,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Gornergrat",
+            "placeId": "scan-place-gornergrat",
+            "category": "viewpoint",
+            "lat": 45.9833098,
+            "lng": 7.78463,
+            "kmFromCentre": 5,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Matterhorn Museum",
+            "placeId": "scan-place-matterhorn-museum",
+            "category": "museum",
+            "lat": 46.0197686,
+            "lng": 7.7464574,
+            "kmFromCentre": 0,
+            "country": "CH"
+          },
+          {
+            "day": 3,
+            "title": "Roc de la Vache",
+            "placeId": "scan-place-roc-de-la-vache",
+            "category": "viewpoint",
+            "lat": 46.1189247,
+            "lng": 7.6451894,
+            "kmFromCentre": 14,
+            "country": "CH"
+          },
+          {
+            "day": 4,
+            "title": "Charles Kuonen Hängebrücke",
+            "placeId": "scan-place-charles-kuonen-hangebrucke",
+            "category": "historic_site",
+            "lat": 46.1013567,
+            "lng": 7.8023083,
+            "kmFromCentre": 10,
+            "country": "CH"
+          }
+        ],
+        "maxKmFromCentre": 14,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 3,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 3,
+        "daysWithDinner": 4,
+        "namedMeals": 3,
+        "describedMeals": 4,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 452,
+          "perPersonPerDayHigh": 1076,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "luxury"
+        },
+        "planText": [
+          "D1 2027-01-16 @Zermatt [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Grampi's 60m",
+          "D2 2027-01-17 @Zermatt [540-1140]: 9:00 ~rail 30m/7km(geo_estimate) | 9:30 Gornergrat 45m | 10:15 ~rail 30m/7km(geo_estimate) | 10:45 Matterhorn Museum 120m | 12:45 [meal] Lunch — Whymper-Stube 45m | 13:30 ~walk 5m/0km(geo_estimate) | 13:35 [free_time] Free time 265m | 18:00 [meal] Dinner — 1818 60m",
+          "D3 2027-01-18 @Zermatt [540-1140]: 9:00 ~rail 60m/18km(geo_estimate) | 10:00 Roc de la Vache 45m | 10:45 [free_time] Free time 45m | 11:30 [meal] Lunch — Pack a lunch — food is thin out near Zermatt 45m | 12:15 ~public_bus 60m/18km(geo_estimate) | 13:15 [free_time] Free time 285m | 18:00 [meal] Dinner — Dinner in Zermatt 60m",
+          "D4 2027-01-19 @Zermatt [540-1140]: 9:00 ~rail 45m/13km(geo_estimate) | 9:45 Charles Kuonen Hängebrücke 75m | 11:00 [free_time] Free time 30m | 11:30 [meal] Lunch — Casual lunch in Zermatt, near the midday stop 45m | 12:15 ~public_bus 45m/13km(geo_estimate) | 13:00 [free_time] Free time 300m | 18:00 [meal] Dinner — Dinner in Zermatt 60m",
+          "D5 2027-01-20 @Zermatt [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 4
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": []
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.75,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 55,
+          "freeMinutesPerDay": 227,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.6,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Zermatt (4n)"
+        ]
+      }
+    },
+    {
+      "id": "iceland-ring",
+      "title": "Iceland ring road, 12 days, friends, September, car",
+      "destination": "Iceland",
+      "categories": [
+        "country",
+        "road_trip"
+      ],
+      "tripId": "4246068e-b396-4fc0-ab03-568c6861ccd4",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2322,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 164561,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 166886
+      },
+      "resolution": {
+        "name": "Iceland",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "IS"
+        ],
+        "center": {
+          "lat": 64.9841821,
+          "lng": -18.1059013
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "metrics": null
+    },
+    {
+      "id": "reykjavik-winter",
+      "title": "Reykjavik in February, 4 days, couple, car-free",
+      "destination": "Reykjavik",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "cbf504cf-985e-48c3-8700-77d9ed1d6195",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2592,
+        "questionnaire_ms": 2,
+        "scan_total_ms": 162479,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 165076
+      },
+      "resolution": {
+        "name": "Reykjavik",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "IS"
+        ],
+        "center": {
+          "lat": 64.145981,
+          "lng": -21.9422367
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "metrics": null
+    },
+    {
+      "id": "japan-family",
+      "title": "Japan, 14 days, family with two kids, April, rail",
+      "destination": "Japan",
+      "categories": [
+        "country",
+        "transit_heavy"
+      ],
+      "tripId": "4e205b11-8f4f-408b-b93b-f25be5306058",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1671,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 140780,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 142455
+      },
+      "resolution": {
+        "name": "Japan",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "JP"
+        ],
+        "center": {
+          "lat": 36.5748441,
+          "lng": 139.2394179
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "metrics": null
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import {
   LABS_TOKEN_HEADER,
   labsAccess,
 } from '@/lib/net/billable-surface';
+import { REQUEST_ID_HEADER, newRequestId } from '@/lib/net/request-id';
 
 /**
  * THE SPENDING GATE ON THE `/labs` **PAGES**.
@@ -43,30 +44,56 @@ import {
  */
 export function proxy(request: NextRequest): NextResponse {
   /*
-   * `??` on a trimmed string is the wrong operator: an empty-but-present header
-   * is not nullish, so it short-circuited the cookie and refused an operator who
-   * had a valid one. Take the first value that is actually a value.
+   * PRODUCTION PASS — EVERY REQUEST GETS A CORRELATION ID.
+   *
+   * Minted here, never taken from the client (a client-chosen id is a way to
+   * write into somebody else's log line), forwarded to the app as a request
+   * header so `onRequestError` (`instrumentation.ts`) and server logs can name
+   * it, and returned as a response header so a traveller's error screen and an
+   * operator's log can be matched. The edge's own id (Railway's
+   * `x-railway-request-id`) is logged beside it when present.
    */
-  const header = request.headers.get(LABS_TOKEN_HEADER)?.trim() ?? '';
-  const cookie = request.cookies.get(LABS_TOKEN_COOKIE)?.value?.trim() ?? '';
+  const requestId = newRequestId();
+  const forwarded = new Headers(request.headers);
+  forwarded.set(REQUEST_ID_HEADER, requestId);
 
-  const decision = labsAccess(header !== '' ? header : cookie);
-  if (decision.allowed) return NextResponse.next();
+  if (isLabsPath(request.nextUrl.pathname)) {
+    /*
+     * `??` on a trimmed string is the wrong operator: an empty-but-present header
+     * is not nullish, so it short-circuited the cookie and refused an operator who
+     * had a valid one. Take the first value that is actually a value.
+     */
+    const header = request.headers.get(LABS_TOKEN_HEADER)?.trim() ?? '';
+    const cookie = request.cookies.get(LABS_TOKEN_COOKIE)?.value?.trim() ?? '';
 
-  return new NextResponse(decision.message, {
-    status: decision.status,
-    headers: { 'content-type': 'text/plain; charset=utf-8' },
-  });
+    const decision = labsAccess(header !== '' ? header : cookie);
+    if (!decision.allowed) {
+      return new NextResponse(decision.message, {
+        status: decision.status,
+        headers: { 'content-type': 'text/plain; charset=utf-8', [REQUEST_ID_HEADER]: requestId },
+      });
+    }
+  }
+
+  const response = NextResponse.next({ request: { headers: forwarded } });
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  return response;
+}
+
+/** The labs tree: the only paths the spending gate applies to. */
+export function isLabsPath(pathname: string): boolean {
+  return pathname === '/labs' || pathname.startsWith('/labs/');
 }
 
 export const config = {
   /**
-   * Only the labs tree. The customer journey is untouched by this file — and
-   * this constant is what decides whether the check above runs at all, so
-   * `proxy.test.ts` asserts the matcher itself rather than only the
-   * predicate behind it. A one-token typo here (or a future move to
-   * `/internal/labs`) would otherwise silently open the harness with the whole
-   * suite green.
+   * Production pass — every page, action and API route, so each carries a
+   * request id; static assets (anything under `_next/static` or `_next/image`,
+   * and any path ending in a file extension) are skipped because nothing on
+   * them can fail on the server. The labs gate inside still applies to the
+   * labs tree only — `proxy.test.ts` compiles this matcher with Next's own
+   * function and asserts both that the labs tree is matched and that a
+   * traveller page is let through untouched.
    */
-  matcher: ['/labs/:path*'],
+  matcher: ['/((?!_next/static|_next/image|.*\\.[A-Za-z0-9]+$).*)'],
 };

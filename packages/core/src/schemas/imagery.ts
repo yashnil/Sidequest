@@ -366,6 +366,8 @@ export const IMAGE_REJECTION_REASONS = [
   'model_selected_identity',
   /** The provider did not answer, or answered with something unparseable. */
   'provider_unavailable',
+  /** A logo, emblem, flag or coat of arms: a mark, not a picture of the place. */
+  'not_a_photograph',
 ] as const;
 export const imageRejectionReasonSchema = z.enum(IMAGE_REJECTION_REASONS);
 export type ImageRejectionReason = z.infer<typeof imageRejectionReasonSchema>;
@@ -379,6 +381,7 @@ export const IMAGE_REJECTION_LABELS: Record<ImageRejectionReason, string> = {
   unapproved_host: 'the file was not hosted where we accept images from',
   unsupported_media_type: 'the file was not an image we can show',
   unsupported_svg: 'the file was a scalable vector, which we do not accept',
+  not_a_photograph: 'the file was a logo or emblem, not a picture of the place',
   active_content: 'the description carried markup rather than text',
   malformed_metadata: 'the description could not be read',
   invalid_dimensions: 'the file did not state usable dimensions',
@@ -402,7 +405,20 @@ export const IMAGE_REJECTION_LABELS: Record<ImageRejectionReason, string> = {
  * and thumbnails live; `commons.wikimedia.org` is where the file description
  * page a reader can check lives. Nothing else, ever.
  */
-export const APPROVED_IMAGE_HOSTS = ['upload.wikimedia.org', 'commons.wikimedia.org'] as const;
+export const APPROVED_IMAGE_HOSTS = ['upload.wikimedia.org', 'commons.wikimedia.org', 'thumb.wikimedia.org'] as const;
+
+/**
+ * Hosts that serve every Wikimedia project, approved only under the Commons path.
+ *
+ * Commons moved its rendered thumbnails to `thumb.wikimedia.org` in 2026 — the
+ * imageinfo API answers `thumburl` there — and the gate, which approved only
+ * `upload.wikimedia.org`, then refused every new photograph as `unapproved_host`
+ * and every board fell back to drawn plates. The thumbnail host also serves the
+ * other wikis' files, including fair-use ones that are theirs and not ours, so it
+ * is accepted only for `/wikipedia/commons/` paths: the same Commons-only rule,
+ * stated as a path because the host no longer says it.
+ */
+export const COMMONS_ONLY_PATH_HOSTS: Record<string, string> = { 'thumb.wikimedia.org': '/wikipedia/commons/' };
 
 /** Media types we will render. Raster only; see `unsupported_svg`. */
 export const ACCEPTED_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;

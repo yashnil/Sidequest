@@ -36,8 +36,36 @@ const DEFAULT_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
+  /*
+   * Production pass — overpass.osm.ch left the default rotation: it serves
+   * Switzerland only and answers 200 with zero elements for anywhere else,
+   * which the callers rightly read as "nothing mapped here". A 30-trip
+   * evaluation (2026-10-25) failed every non-Swiss scan on exactly that.
+   */
 ];
+
+/**
+ * Production pass — ENDPOINTS THAT JUST FAILED ARE LEFT ALONE FOR A WHILE.
+ *
+ * Failures were counted per request group, so every group (and then the food
+ * step) waited out the same 25 s timeout on the same hung public instance —
+ * 50–75 s per group against a 75 s stage budget. One module-level cooldown,
+ * shared by every caller in the process, skips an endpoint for ten minutes
+ * after it times out or says "not now".
+ */
+const ENDPOINT_COOLDOWN_MS = 10 * 60_000;
+const coolingUntil = new Map<string, number>();
+function coolDown(endpoint: string): void {
+  coolingUntil.set(endpoint, Date.now() + ENDPOINT_COOLDOWN_MS);
+}
+function isCooling(endpoint: string): boolean {
+  const until = coolingUntil.get(endpoint);
+  return until !== undefined && until > Date.now();
+}
+/** Test hook: forget every cooldown. */
+export function resetOverpassCooldowns(): void {
+  coolingUntil.clear();
+}
 const REQUEST_TIMEOUT_MS = 25_000;
 const MAX_RESPONSE_BYTES = 8_000_000;
 /** Server-side query timeout, so a heavy query is refused rather than queued. */
@@ -194,10 +222,24 @@ export function clampBoundingBox(box: BoundingBox): BoundingBox {
  * without the geometry, which is the difference between a usable response and a
  * refusal. `qt` sorts by quadtile, which is cheaper than sorting by id.
  */
+/**
+ * How a query narrows beyond its selectors. `require` adds a tag that must be
+ * present (the notable sweep asks for `wikidata`); `wayAreaLimitDeg2` raises
+ * or lowers the area above which ways are left out, because a sweep that also
+ * requires `wikidata` returns a small fraction of the ways an unfiltered one
+ * does and can afford them over a wider box. Absent, the query is exactly the
+ * one every existing caller sends.
+ */
+export interface QueryShape {
+  require?: readonly string[];
+  wayAreaLimitDeg2?: number;
+}
+
 export function buildQuery(
   box: BoundingBox,
   limit: number,
   only?: readonly (typeof POI_SELECTORS)[number][],
+  shape: QueryShape = {},
 ): string {
   const bbox = `${box.south.toFixed(5)},${box.west.toFixed(5)},${box.north.toFixed(5)},${box.east.toFixed(5)}`;
   /**
@@ -205,7 +247,8 @@ export function buildQuery(
    * Relations never — the same geometry cost, an order of magnitude worse.
    * See `WAY_QUERY_AREA_LIMIT_DEG2`.
    */
-  const elements = boxAreaDeg2(box) <= WAY_QUERY_AREA_LIMIT_DEG2 ? ['node', 'way'] : ['node'];
+  const elements = boxAreaDeg2(box) <= (shape.wayAreaLimitDeg2 ?? WAY_QUERY_AREA_LIMIT_DEG2) ? ['node', 'way'] : ['node'];
+  const required = (shape.require ?? []).map((key) => `["${key}"]`).join('');
   /**
    * One clause per exact tag value, rather than one regex over all of them.
    *
@@ -222,7 +265,7 @@ export function buildQuery(
     .flatMap((selector) =>
       elements.flatMap((element) =>
         selector.values.map(
-          (value) => `${element}["${selector.key}"="${value}"]["name"](${bbox});`,
+          (value) => `${element}["${selector.key}"="${value}"]["name"]${required}(${bbox});`,
         ),
       ),
     )
@@ -409,11 +452,32 @@ export async function fetchSettlements(
   return fetchTagged(box, [SETTLEMENT_SELECTOR], 'settlement', options);
 }
 
+/**
+ * DISCOVERY SCAN FALLBACK — NOTABLE, MAPPED PLACES, ONE SELECTOR GROUP.
+ *
+ * The open-data proposal (`discovery-scan/open-data-proposal.ts`) asks for
+ * things that carry a `wikidata` tag: somebody linked the map object to a
+ * knowledge-base item, which is the cheapest honest significance signal the
+ * open map has, and it shrinks a city's answer from every named park bench to
+ * the places a guidebook would mention. One group per call so each can use the
+ * full element limit (a union truncates the later groups); its own `kind` so
+ * it never shares a cache entry with the unfiltered sweeps.
+ */
+export async function fetchNotablePois(
+  box: BoundingBox,
+  selector: (typeof POI_SELECTORS)[number],
+  options: OverpassOptions = {},
+  wayAreaLimitDeg2?: number,
+): Promise<OverpassResult> {
+  return fetchTagged(box, [selector], 'notable-wikidata', options, { require: ['wikidata'], ...(wayAreaLimitDeg2 !== undefined ? { wayAreaLimitDeg2 } : {}) });
+}
+
 async function fetchTagged(
   box: BoundingBox,
   selectors: readonly (typeof POI_SELECTORS)[number][],
   kind: string,
   options: OverpassOptions = {},
+  shape: QueryShape = {},
 ): Promise<OverpassResult> {
   const limit = Math.min(400, Math.max(1, options.limit ?? 200));
   const bounded = clampBoundingBox(box);
@@ -469,7 +533,7 @@ async function fetchTagged(
       continue;
     }
     try {
-      let group = await fetchGroup(bounded, perGroup, selector, options, failures);
+      let group = await fetchGroup(bounded, perGroup, selector, options, failures, shape);
       calls += group.calls;
       bytes += group.bytes;
 
@@ -498,6 +562,7 @@ async function fetchTagged(
               { ...selector, values: half },
               options,
               failures,
+              shape,
             );
             calls += part.calls;
             bytes += part.bytes;
@@ -570,11 +635,12 @@ async function fetchGroup(
   selector: (typeof POI_SELECTORS)[number],
   options: OverpassOptions,
   failures: Map<string, number> = new Map(),
+  shape: QueryShape = {},
 ): Promise<OverpassResult> {
-  const query = buildQuery(box, limit, [selector]);
+  const query = buildQuery(box, limit, [selector], shape);
   const MAX_FAILURES = 2;
   const endpoints = overpassEndpoints().filter(
-    (endpoint) => (failures.get(endpoint) ?? 0) < MAX_FAILURES,
+    (endpoint) => (failures.get(endpoint) ?? 0) < MAX_FAILURES && !isCooling(endpoint),
   );
   if (endpoints.length === 0) {
     throw new OverpassError('rate_limited', 'Every map data endpoint has already refused twice.');
@@ -609,7 +675,7 @@ async function fetchGroup(
       if ([406, 429, 502, 503, 504].includes(response.status)) {
         lastError = new OverpassError('rate_limited', 'The map data service is busy.');
         failures.set(endpoint, (failures.get(endpoint) ?? 0) + 1);
-        await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
+        coolDown(endpoint);
         continue;
       }
       if (!response.ok) {
@@ -647,6 +713,7 @@ async function fetchGroup(
       }
       lastError = new OverpassError('request_failed', 'The map data service did not answer.');
       failures.set(endpoint, (failures.get(endpoint) ?? 0) + 1);
+      coolDown(endpoint);
     }
   }
 

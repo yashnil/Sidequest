@@ -1,0 +1,2958 @@
+[
+  {
+    "id": "original-summer-outdoors",
+    "title": "The original failure: broad summer outdoors, no other detail",
+    "text": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.",
+    "before": {
+      "ms": 823,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 358,
+      "asked": [
+        "budget",
+        "lead",
+        "climate",
+        "adventure",
+        "novelty"
+      ],
+      "skipped": [
+        "budget",
+        "lead",
+        "climate",
+        "adventure",
+        "novelty"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Bay of Kotor & Durmitor, Montenegro",
+          "kind": "country_circuit",
+          "score": 0.741,
+          "coverage": 0.52,
+          "signature": "kayaks and boats and coastal scenery"
+        },
+        {
+          "name": "Banff & Jasper, Canadian Rockies, Alberta",
+          "kind": "mountain_range",
+          "score": 0.739,
+          "coverage": 0.52,
+          "signature": "wildlife and glaciers and ice"
+        },
+        {
+          "name": "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan",
+          "kind": "lake_district",
+          "score": 0.704,
+          "coverage": 0.52,
+          "signature": "multi-day trekking and day hiking"
+        }
+      ],
+      "alternates": [
+        "Queenstown & Wānaka",
+        "The Engadin",
+        "Scottish Highlands & Skye"
+      ],
+      "checks": [
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 6/7/8"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on hiking or mountains"
+        },
+        {
+          "kind": "spread",
+          "pass": true,
+          "detail": "3 regions"
+        },
+        {
+          "kind": "max_questions",
+          "pass": true,
+          "detail": "5 asked"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Bay of Kotor & Durmitor for kayaks and boats and coastal scenery; Banff & Jasper for wildlife and glaciers and ice; Issyk-Kul & Karakol for multi-day trekking and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "original-wildlife-led",
+    "title": "Original request, wildlife leads, moderate budget",
+    "text": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.",
+    "before": {
+      "ms": 262,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 321,
+      "asked": [
+        "budget",
+        "lead",
+        "wildlife_kind",
+        "mountain_style",
+        "region"
+      ],
+      "skipped": [
+        "mountain_style",
+        "region"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Transylvania & the Carpathians, Romania",
+          "kind": "travel_region",
+          "score": 0.767,
+          "coverage": 0.64,
+          "signature": "wildlife and day hiking"
+        },
+        {
+          "name": "Sabah, Borneo, Malaysian Borneo",
+          "kind": "travel_region",
+          "score": 0.713,
+          "coverage": 0.64,
+          "signature": "wildlife and birds"
+        },
+        {
+          "name": "Kruger & Sabi Sand, Northeast South Africa",
+          "kind": "national_park",
+          "score": 0.674,
+          "coverage": 0.64,
+          "signature": "safari and birds"
+        }
+      ],
+      "alternates": [
+        "Wind River Range",
+        "The Azores",
+        "Almaty & the Northern Tian Shan"
+      ],
+      "checks": [
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 6/7/8"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on wildlife"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Transylvania & the Carpathians for wildlife and day hiking; Sabah, Borneo for wildlife and birds; Kruger & Sabi Sand for safari and birds.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "original-mountains-rugged",
+    "title": "Original request, mountains lead, rugged hut-to-hut, from London",
+    "text": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration. I'm based in London.",
+    "before": {
+      "ms": 264,
+      "picks": [
+        {
+          "name": "Nouvelle-Aquitaine, France",
+          "type": "region",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        },
+        {
+          "name": "North Brabant, Netherlands",
+          "type": "region",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        },
+        {
+          "name": "Lower Saxony, Germany",
+          "type": "region",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        }
+      ],
+      "distinctScores": 2,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 359,
+      "asked": [
+        "budget",
+        "lead",
+        "adventure",
+        "novelty",
+        "climate"
+      ],
+      "skipped": [
+        "budget",
+        "novelty",
+        "climate"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "North Cascades, Washington State",
+          "kind": "national_park",
+          "score": 0.84,
+          "coverage": 0.62,
+          "signature": "glaciers and ice and high mountains"
+        },
+        {
+          "name": "Corsica, Mediterranean France",
+          "kind": "island",
+          "score": 0.809,
+          "coverage": 0.62,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan",
+          "kind": "lake_district",
+          "score": 0.828,
+          "coverage": 0.62,
+          "signature": "high mountains and multi-day trekking"
+        }
+      ],
+      "alternates": [
+        "Swedish Lapland",
+        "High Atlas",
+        "Jotunheimen"
+      ],
+      "checks": [
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 6/7/8"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on mountains and trekking"
+        },
+        {
+          "kind": "min_challenge_typical",
+          "pass": true,
+          "detail": "all typical challenge ≥ 2"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — North Cascades for glaciers and ice and high mountains; Corsica for multi-day trekking and day hiking; Issyk-Kul & Karakol for high mountains and multi-day trekking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "original-beach-led-warm",
+    "title": "Original request, swimming in a warm sea leads",
+    "text": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.",
+    "before": {
+      "ms": 268,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 261,
+      "asked": [
+        "budget",
+        "lead",
+        "novelty",
+        "climate",
+        "region"
+      ],
+      "skipped": [
+        "budget",
+        "novelty",
+        "region"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Corsica, Mediterranean France",
+          "kind": "island",
+          "score": 0.837,
+          "coverage": 0.6,
+          "signature": "beaches and swimming and coastal scenery"
+        },
+        {
+          "name": "Rio de Janeiro & Costa Verde, Southeast Brazil",
+          "kind": "city_and_surroundings",
+          "score": 0.715,
+          "coverage": 0.6,
+          "signature": "beaches and swimming and coastal scenery"
+        },
+        {
+          "name": "Lycian Coast, Southwest Turkey",
+          "kind": "coast",
+          "score": 0.766,
+          "coverage": 0.6,
+          "signature": "beaches and swimming and coastal scenery"
+        }
+      ],
+      "alternates": [
+        "North Cascades",
+        "Issyk-Kul & Karakol",
+        "Bay of Kotor & Durmitor"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on swimming beaches"
+        },
+        {
+          "kind": "warmth",
+          "pass": true,
+          "detail": "all within the temperature bound"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Corsica for beaches and swimming and coastal scenery; Rio de Janeiro & Costa Verde for beaches and swimming and coastal scenery; Lycian Coast for beaches and swimming and coastal scenery.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "alpine-trekking-july",
+    "title": "Two weeks trekking in July, anywhere, moderate budget",
+    "text": "Two weeks of trekking in July, anywhere in the world, moderate budget.",
+    "before": {
+      "ms": 252,
+      "picks": [
+        {
+          "name": "Lisbon, Portugal",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2982
+        },
+        {
+          "name": "Lima Province, Lima",
+          "type": "county",
+          "score": 100,
+          "coverage": 0.2982
+        },
+        {
+          "name": "Copenhagen Municipality, Capital Region of Denmark",
+          "type": "county",
+          "score": 100,
+          "coverage": 0.2982
+        }
+      ],
+      "distinctScores": 3,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 85,
+      "asked": [
+        "mountain_style",
+        "adventure",
+        "novelty",
+        "climate"
+      ],
+      "skipped": [
+        "novelty",
+        "climate"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Cordillera Blanca, Huaraz, Peruvian Andes",
+          "kind": "mountain_range",
+          "score": 0.974,
+          "coverage": 0.79,
+          "signature": "high mountains and multi-day trekking"
+        },
+        {
+          "name": "West MacDonnell Ranges, Alice Springs, Australia",
+          "kind": "mountain_range",
+          "score": 0.942,
+          "coverage": 0.79,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Corsica, Mediterranean France",
+          "kind": "island",
+          "score": 0.896,
+          "coverage": 0.79,
+          "signature": "multi-day trekking and day hiking"
+        }
+      ],
+      "alternates": [
+        "Issyk-Kul & Karakol",
+        "Réunion",
+        "Swedish Lapland"
+      ],
+      "checks": [
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 7"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on multi-day trekking"
+        },
+        {
+          "kind": "max_cost",
+          "pass": true,
+          "detail": "all cost ≤ 3"
+        },
+        {
+          "kind": "fits_nights",
+          "pass": true,
+          "detail": "all doable in 14 nights"
+        },
+        {
+          "kind": "max_questions",
+          "pass": true,
+          "detail": "4 asked"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Cordillera Blanca for high mountains and multi-day trekking; West MacDonnell Ranges for multi-day trekking and day hiking; Corsica for multi-day trekking and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "safari-first-timer",
+    "title": "First safari, August, comfortable budget",
+    "text": "I want to see lions and elephants on safari in August. Comfortable budget, about 10 days.",
+    "before": {
+      "ms": 250,
+      "picks": [
+        {
+          "name": "Mixco, Guatemala Department",
+          "type": "county",
+          "score": 100,
+          "coverage": 0.2982
+        },
+        {
+          "name": "Zagreb County, Croatia",
+          "type": "region",
+          "score": 97,
+          "coverage": 0.5254
+        },
+        {
+          "name": "Gyeonggi, South Korea",
+          "type": "region",
+          "score": 96,
+          "coverage": 0.5254
+        }
+      ],
+      "distinctScores": 4,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 21,
+      "asked": [
+        "region"
+      ],
+      "skipped": [
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Kruger & Sabi Sand, Northeast South Africa",
+          "kind": "national_park",
+          "score": 0.983,
+          "coverage": 0.68,
+          "signature": "safari and wildlife"
+        },
+        {
+          "name": "Maasai Mara, Southwest Kenya",
+          "kind": "national_park",
+          "score": 0.954,
+          "coverage": 0.68,
+          "signature": "safari and wildlife"
+        },
+        {
+          "name": "South Luangwa, Eastern Zambia",
+          "kind": "national_park",
+          "score": 0.953,
+          "coverage": 0.68,
+          "signature": "safari and wildlife"
+        }
+      ],
+      "alternates": [
+        "Pantanal",
+        "Okavango Delta",
+        "Serengeti"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on safari"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 8"
+        }
+      ],
+      "regions": 2,
+      "spread": "Kruger & Sabi Sand for safari and wildlife; Maasai Mara for safari and wildlife; South Luangwa for safari and wildlife.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "tropical-biodiversity",
+    "title": "Rainforest and birds, flexible timing",
+    "text": "Rainforest, monkeys and birds, a jungle lodge or two. Any time of year.",
+    "before": {
+      "ms": 248,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 102,
+      "asked": [
+        "wildlife_kind",
+        "region",
+        "adventure"
+      ],
+      "skipped": [
+        "wildlife_kind",
+        "region",
+        "adventure"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Osa Peninsula, Southern Costa Rica",
+          "kind": "travel_region",
+          "score": 0.918,
+          "coverage": 0.52,
+          "signature": "whales, seals and sea life and birds"
+        },
+        {
+          "name": "Madagascar's RN7, Southern Highlands, Madagascar",
+          "kind": "country_circuit",
+          "score": 0.891,
+          "coverage": 0.52,
+          "signature": "wildlife and rainforest"
+        },
+        {
+          "name": "Sabah, Borneo, Malaysian Borneo",
+          "kind": "travel_region",
+          "score": 0.891,
+          "coverage": 0.52,
+          "signature": "wildlife and rainforest"
+        }
+      ],
+      "alternates": [
+        "Loango",
+        "Tambopata & Manu",
+        "Bwindi Impenetrable Forest"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on rainforest"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Osa Peninsula for whales, seals and sea life and birds; Madagascar's RN7 for wildlife and rainforest; Sabah, Borneo for wildlife and rainforest.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "coastal-adventure",
+    "title": "Coastal adventure: sea kayaking and coastal hikes, September",
+    "text": "Sea kayaking and coastal hikes in September, active but not extreme.",
+    "before": {
+      "ms": 251,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 36,
+      "asked": [
+        "region"
+      ],
+      "skipped": [
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Crete, Greece",
+          "kind": "island",
+          "score": 0.975,
+          "coverage": 0.61,
+          "signature": "day hiking and beaches and swimming"
+        },
+        {
+          "name": "Corsica, Mediterranean France",
+          "kind": "island",
+          "score": 0.973,
+          "coverage": 0.61,
+          "signature": "day hiking and multi-day trekking"
+        },
+        {
+          "name": "Lycian Coast, Southwest Turkey",
+          "kind": "coast",
+          "score": 0.952,
+          "coverage": 0.61,
+          "signature": "multi-day trekking and beaches and swimming"
+        }
+      ],
+      "alternates": [
+        "Rio de Janeiro & Costa Verde",
+        "Gulf of Orosei & Supramonte",
+        "Bay of Kotor & Durmitor"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on coast or paddling"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 9"
+        }
+      ],
+      "regions": 2,
+      "spread": "Crete for day hiking and beaches and swimming; Corsica for day hiking and multi-day trekking; Lycian Coast for multi-day trekking and beaches and swimming.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "family-nature",
+    "title": "Family nature trip with young kids, summer, from Chicago",
+    "text": "Family trip with two kids (6 and 9) in July from Chicago. Nature, lakes, easy hikes, wildlife.",
+    "before": {
+      "ms": 247,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 164,
+      "asked": [
+        "budget",
+        "lead",
+        "novelty",
+        "region",
+        "climate"
+      ],
+      "skipped": [
+        "budget",
+        "lead",
+        "novelty",
+        "region",
+        "climate"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Banff & Jasper, Canadian Rockies, Alberta",
+          "kind": "mountain_range",
+          "score": 0.843,
+          "coverage": 0.65,
+          "signature": "wildlife and day hiking"
+        },
+        {
+          "name": "The Azores, Mid-Atlantic, Portugal",
+          "kind": "island_group",
+          "score": 0.793,
+          "coverage": 0.65,
+          "signature": "whales, seals and sea life and day hiking"
+        },
+        {
+          "name": "Julian Alps, Slovenia",
+          "kind": "national_park",
+          "score": 0.81,
+          "coverage": 0.65,
+          "signature": "kayaks and boats and day hiking"
+        }
+      ],
+      "alternates": [
+        "Almaty & the Northern Tian Shan",
+        "Queenstown & Wānaka",
+        "Adirondacks"
+      ],
+      "checks": [
+        {
+          "kind": "family",
+          "pass": true,
+          "detail": "all family ≥ 2"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 7"
+        },
+        {
+          "kind": "max_challenge_easiest",
+          "pass": true,
+          "detail": "all easiest version ≤ 1"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Banff & Jasper for wildlife and day hiking; The Azores for whales, seals and sea life and day hiking; Julian Alps for kayaks and boats and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "budget-hiking",
+    "title": "Budget hiking, shoulder season, backpacker",
+    "text": "Cheap backpacking trip with lots of hiking in September. Hostels are fine.",
+    "before": {
+      "ms": 250,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 61,
+      "asked": [
+        "novelty",
+        "region"
+      ],
+      "skipped": [
+        "novelty",
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "High Atlas, Central Morocco",
+          "kind": "mountain_range",
+          "score": 0.982,
+          "coverage": 0.64,
+          "signature": "day hiking and multi-day trekking"
+        },
+        {
+          "name": "Avenue of the Volcanoes, Ecuadorian Andes",
+          "kind": "travel_region",
+          "score": 0.962,
+          "coverage": 0.64,
+          "signature": "day hiking and multi-day trekking"
+        },
+        {
+          "name": "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan",
+          "kind": "lake_district",
+          "score": 0.965,
+          "coverage": 0.64,
+          "signature": "day hiking and multi-day trekking"
+        }
+      ],
+      "alternates": [
+        "Rila & Pirin Mountains",
+        "Kazbegi",
+        "Chapada Diamantina"
+      ],
+      "checks": [
+        {
+          "kind": "max_cost",
+          "pass": true,
+          "detail": "all cost ≤ 2"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on hiking"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 9"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — High Atlas for day hiking and multi-day trekking; Avenue of the Volcanoes for day hiking and multi-day trekking; Issyk-Kul & Karakol for day hiking and multi-day trekking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "winter-nature-escape",
+    "title": "Winter nature escape: snow and northern lights",
+    "text": "Snow, northern lights and a bit of wildlife in February.",
+    "before": {
+      "ms": 253,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 108,
+      "asked": [
+        "wildlife_kind",
+        "lead",
+        "budget",
+        "novelty",
+        "climate"
+      ],
+      "skipped": [
+        "wildlife_kind",
+        "lead",
+        "budget",
+        "novelty",
+        "climate"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Shiretoko, Eastern Hokkaido, Japan",
+          "kind": "national_park",
+          "score": 0.842,
+          "coverage": 0.52,
+          "signature": "whales, seals and sea life and wildlife"
+        },
+        {
+          "name": "Swedish Lapland, Arctic Sweden",
+          "kind": "wilderness",
+          "score": 0.729,
+          "coverage": 0.52,
+          "signature": "snow and winter and wildlife"
+        },
+        {
+          "name": "Svalbard, High Arctic, Norway",
+          "kind": "island_group",
+          "score": 0.714,
+          "coverage": 0.52,
+          "signature": "wildlife and snow and winter"
+        }
+      ],
+      "alternates": [
+        "The Engadin",
+        "Tromsø & the Lyngen Alps",
+        "Finnish Lapland"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on snow or night skies"
+        },
+        {
+          "kind": "warmth",
+          "pass": true,
+          "detail": "all within the temperature bound"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Shiretoko for whales, seals and sea life and wildlife; Swedish Lapland for snow and winter and wildlife; Svalbard for wildlife and snow and winter.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "warm-december",
+    "title": "Warm-weather December escape from New York",
+    "text": "Escape the cold in December from New York. Warm, beaches, some nature.",
+    "before": {
+      "ms": 248,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 67,
+      "asked": [
+        "budget",
+        "novelty",
+        "region"
+      ],
+      "skipped": [
+        "budget",
+        "novelty",
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Turks & Caicos, Caribbean",
+          "kind": "island_group",
+          "score": 0.983,
+          "coverage": 0.6,
+          "signature": "snorkelling and diving and beaches and swimming"
+        },
+        {
+          "name": "Sydney & the Blue Mountains, New South Wales, Australia",
+          "kind": "city_and_surroundings",
+          "score": 0.934,
+          "coverage": 0.6,
+          "signature": "beaches and swimming and coastal scenery"
+        },
+        {
+          "name": "Krabi & the Andaman Coast, Southern Thailand",
+          "kind": "coast",
+          "score": 0.966,
+          "coverage": 0.6,
+          "signature": "beaches and swimming and coastal scenery"
+        }
+      ],
+      "alternates": [
+        "Maldives",
+        "Mauritius",
+        "Guadeloupe"
+      ],
+      "checks": [
+        {
+          "kind": "warmth",
+          "pass": true,
+          "detail": "all within the temperature bound"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 12"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Turks & Caicos for snorkelling and diving and beaches and swimming; Sydney & the Blue Mountains for beaches and swimming and coastal scenery; Krabi & the Andaman Coast for beaches and swimming and coastal scenery.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "multi-generational",
+    "title": "Multi-generational: grandparents and grandchildren, scenic and gentle",
+    "text": "Trip with my parents (in their 70s) and our kids in June. Scenery, lakes, gentle walks, no long hikes.",
+    "before": {
+      "ms": 252,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 57,
+      "asked": [
+        "region",
+        "budget"
+      ],
+      "skipped": [
+        "region",
+        "budget"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Julian Alps, Slovenia",
+          "kind": "national_park",
+          "score": 0.956,
+          "coverage": 0.65,
+          "signature": "kayaks and boats and multi-day trekking"
+        },
+        {
+          "name": "The Azores, Mid-Atlantic, Portugal",
+          "kind": "island_group",
+          "score": 0.897,
+          "coverage": 0.65,
+          "signature": "day hiking and lakes"
+        },
+        {
+          "name": "Almaty & the Northern Tian Shan, Southeast Kazakhstan",
+          "kind": "city_and_surroundings",
+          "score": 0.897,
+          "coverage": 0.65,
+          "signature": "day hiking and lakes"
+        }
+      ],
+      "alternates": [
+        "Olympic Peninsula",
+        "Queenstown & Wānaka",
+        "The Lake District"
+      ],
+      "checks": [
+        {
+          "kind": "family",
+          "pass": true,
+          "detail": "all family ≥ 2"
+        },
+        {
+          "kind": "max_challenge_easiest",
+          "pass": true,
+          "detail": "all easiest version ≤ 1"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 6"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Julian Alps for kayaks and boats and multi-day trekking; The Azores for day hiking and lakes; Almaty & the Northern Tian Shan for day hiking and lakes.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "limited-mobility",
+    "title": "Limited mobility, scenic nature",
+    "text": "My husband uses a walking aid. We love scenery, wildlife and lakes. October.",
+    "before": {
+      "ms": 254,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 173,
+      "asked": [
+        "wildlife_kind",
+        "budget",
+        "climate",
+        "getting_around",
+        "lead"
+      ],
+      "skipped": [
+        "wildlife_kind",
+        "budget",
+        "climate",
+        "getting_around",
+        "lead"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Kruger & Sabi Sand, Northeast South Africa",
+          "kind": "national_park",
+          "score": 0.692,
+          "coverage": 0.58,
+          "signature": "safari and birds"
+        },
+        {
+          "name": "The Engadin, Graubünden, Switzerland",
+          "kind": "travel_region",
+          "score": 0.682,
+          "coverage": 0.58,
+          "signature": "lakes and wildlife"
+        },
+        {
+          "name": "Yellowstone & Grand Teton, Wyoming and Montana",
+          "kind": "national_park",
+          "score": 0.675,
+          "coverage": 0.58,
+          "signature": "wildlife and lakes"
+        }
+      ],
+      "alternates": [
+        "Kangaroo Island",
+        "Lake Malawi",
+        "Pantanal"
+      ],
+      "checks": [
+        {
+          "kind": "low_mobility",
+          "pass": true,
+          "detail": "all low-mobility ≥ 2"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 10"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Kruger & Sabi Sand for safari and birds; The Engadin for lakes and wildlife; Yellowstone & Grand Teton for wildlife and lakes.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "no-car",
+    "title": "No car: mountains by train",
+    "text": "Mountains and hiking by train in August, no car.",
+    "before": {
+      "ms": 261,
+      "picks": [
+        {
+          "name": "Lima Province, Lima",
+          "type": "county",
+          "score": 100,
+          "coverage": 0.1988
+        },
+        {
+          "name": "Fier County, Albania",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1988
+        },
+        {
+          "name": "Ile-de-France, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1988
+        }
+      ],
+      "distinctScores": 2,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 116,
+      "asked": [
+        "budget",
+        "novelty",
+        "region",
+        "climate"
+      ],
+      "skipped": [
+        "budget",
+        "novelty",
+        "region",
+        "climate"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Chamonix & Mont Blanc, French Alps",
+          "kind": "mountain_range",
+          "score": 1,
+          "coverage": 0.56,
+          "signature": "day hiking and multi-day trekking"
+        },
+        {
+          "name": "Japanese Alps: Kamikochi & Takayama, Chubu, Japan",
+          "kind": "mountain_range",
+          "score": 0.949,
+          "coverage": 0.56,
+          "signature": "day hiking and high mountains"
+        },
+        {
+          "name": "Cordillera Blanca, Huaraz, Peruvian Andes",
+          "kind": "mountain_range",
+          "score": 0.95,
+          "coverage": 0.56,
+          "signature": "day hiking and multi-day trekking"
+        }
+      ],
+      "alternates": [
+        "Queenstown & Wānaka",
+        "Réunion",
+        "Kazbegi"
+      ],
+      "checks": [
+        {
+          "kind": "no_car",
+          "pass": true,
+          "detail": "all doable without a car"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on mountains or hiking"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Chamonix & Mont Blanc for day hiking and multi-day trekking; Japanese Alps: Kamikochi & Takayama for day hiking and high mountains; Cordillera Blanca for day hiking and multi-day trekking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "short-weekend-london",
+    "title": "Long weekend from London, outdoors",
+    "text": "A long weekend of hiking and coast from London in May.",
+    "before": {
+      "ms": 256,
+      "picks": [
+        {
+          "name": "North Holland, Netherlands",
+          "type": "region",
+          "score": 92,
+          "coverage": 0.6154
+        },
+        {
+          "name": "Ile-de-France, France",
+          "type": "region",
+          "score": 92,
+          "coverage": 0.6154
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 91,
+          "coverage": 0.6154
+        }
+      ],
+      "distinctScores": 2,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 65,
+      "asked": [
+        "region",
+        "novelty",
+        "getting_around"
+      ],
+      "skipped": [
+        "region",
+        "novelty",
+        "getting_around"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Gulf of Orosei & Supramonte, East Sardinia",
+          "kind": "coast",
+          "score": 0.938,
+          "coverage": 0.61,
+          "signature": "coastal scenery and snorkelling and diving"
+        },
+        {
+          "name": "High Atlas, Central Morocco",
+          "kind": "mountain_range",
+          "score": 0.737,
+          "coverage": 0.61,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Peneda-Gerês, Northern Portugal",
+          "kind": "national_park",
+          "score": 0.731,
+          "coverage": 0.61,
+          "signature": "day hiking and beaches and swimming"
+        }
+      ],
+      "alternates": [
+        "Saxon & Bohemian Switzerland",
+        "Julian Alps",
+        "Picos de Europa"
+      ],
+      "checks": [
+        {
+          "kind": "fits_nights",
+          "pass": true,
+          "detail": "all doable in 3 nights"
+        },
+        {
+          "kind": "within_km",
+          "pass": true,
+          "detail": "all within 2600 km of London"
+        }
+      ],
+      "regions": 2,
+      "spread": "Gulf of Orosei & Supramonte for coastal scenery and snorkelling and diving; High Atlas for multi-day trekking and day hiking; Peneda-Gerês for day hiking and beaches and swimming.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "short-weekend-sf",
+    "title": "Long weekend from San Francisco, mountains and lakes",
+    "text": "Long weekend from San Francisco in September: mountains and lakes.",
+    "before": {
+      "ms": 258,
+      "picks": [
+        {
+          "name": "British Columbia, Canada",
+          "type": "region",
+          "score": 88,
+          "coverage": 0.6154
+        },
+        {
+          "name": "State of Mexico, Mexico",
+          "type": "region",
+          "score": 88,
+          "coverage": 0.3882
+        },
+        {
+          "name": "Mixco, Guatemala Department",
+          "type": "county",
+          "score": 87,
+          "coverage": 0.3882
+        }
+      ],
+      "distinctScores": 7,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 44,
+      "asked": [
+        "region"
+      ],
+      "skipped": [
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "North Cascades, Washington State",
+          "kind": "national_park",
+          "score": 0.972,
+          "coverage": 0.61,
+          "signature": "multi-day trekking and high mountains"
+        },
+        {
+          "name": "Banff & Jasper, Canadian Rockies, Alberta",
+          "kind": "mountain_range",
+          "score": 0.959,
+          "coverage": 0.61,
+          "signature": "high mountains and day hiking"
+        },
+        {
+          "name": "Mammoth Lakes & the Eastern Sierra, California",
+          "kind": "travel_region",
+          "score": 0.943,
+          "coverage": 0.61,
+          "signature": "high mountains and day hiking"
+        }
+      ],
+      "alternates": [
+        "Olympic Peninsula",
+        "Yellowknife & Great Slave Lake",
+        "Yosemite"
+      ],
+      "checks": [
+        {
+          "kind": "fits_nights",
+          "pass": true,
+          "detail": "all doable in 3 nights"
+        },
+        {
+          "kind": "within_km",
+          "pass": true,
+          "detail": "all within 2600 km of San Francisco"
+        }
+      ],
+      "regions": 1,
+      "spread": "North Cascades for multi-day trekking and high mountains; Banff & Jasper for high mountains and day hiking; Mammoth Lakes & the Eastern Sierra for high mountains and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "long-international",
+    "title": "Three weeks, international, mixed nature and culture",
+    "text": "Three weeks in October, somewhere far away. Mountains, culture and food.",
+    "before": {
+      "ms": 262,
+      "picks": [
+        {
+          "name": "Ho Chi Minh City, Vietnam",
+          "type": "region",
+          "score": 92,
+          "coverage": 0.5254
+        },
+        {
+          "name": "Lisbon, Portugal",
+          "type": "region",
+          "score": 90,
+          "coverage": 0.5254
+        },
+        {
+          "name": "Ile-de-France, France",
+          "type": "region",
+          "score": 89,
+          "coverage": 0.5254
+        }
+      ],
+      "distinctScores": 3,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 56,
+      "asked": [
+        "region",
+        "climate"
+      ],
+      "skipped": [
+        "region",
+        "climate"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Annapurna Region, Central Nepal",
+          "kind": "mountain_range",
+          "score": 0.925,
+          "coverage": 0.62,
+          "signature": "high mountains and multi-day trekking"
+        },
+        {
+          "name": "Transylvania & the Carpathians, Romania",
+          "kind": "travel_region",
+          "score": 0.805,
+          "coverage": 0.62,
+          "signature": "villages and culture and food"
+        },
+        {
+          "name": "Réunion, French Indian Ocean",
+          "kind": "island",
+          "score": 0.777,
+          "coverage": 0.62,
+          "signature": "day hiking and multi-day trekking"
+        }
+      ],
+      "alternates": [
+        "Yunnan: Lijiang & Tiger Leaping Gorge",
+        "High Atlas",
+        "Everest Region (Khumbu)"
+      ],
+      "checks": [
+        {
+          "kind": "fits_nights",
+          "pass": true,
+          "detail": "all doable in 21 nights"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 10"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Annapurna Region for high mountains and multi-day trekking; Transylvania & the Carpathians for villages and culture and food; Réunion for day hiking and multi-day trekking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "flexible-worldwide",
+    "title": "Fully flexible: anywhere, any time, surprise me",
+    "text": "Anywhere in the world, any time. Surprise me with something outdoors and unusual.",
+    "before": {
+      "ms": 250,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2104
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2104
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2104
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 180,
+      "asked": [
+        "focus",
+        "lead",
+        "budget",
+        "wildlife_kind",
+        "mountain_style"
+      ],
+      "skipped": [
+        "lead",
+        "budget",
+        "wildlife_kind",
+        "mountain_style"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Damaraland & Kaokoland, Northwest Namibia",
+          "kind": "wilderness",
+          "score": 0.739,
+          "coverage": 0.61,
+          "signature": "wildlife and desert"
+        },
+        {
+          "name": "Rila & Pirin Mountains, Southwest Bulgaria",
+          "kind": "mountain_range",
+          "score": 0.63,
+          "coverage": 0.61,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Spiti Valley, Himachal Pradesh, India",
+          "kind": "travel_region",
+          "score": 0.72,
+          "coverage": 0.61,
+          "signature": "high mountains and night skies"
+        }
+      ],
+      "alternates": [
+        "Shiretoko",
+        "Sabah, Borneo",
+        "Wind River Range"
+      ],
+      "checks": [
+        {
+          "kind": "unusual",
+          "pass": true,
+          "detail": "3 little-known"
+        },
+        {
+          "kind": "spread",
+          "pass": true,
+          "detail": "3 regions"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Damaraland & Kaokoland for wildlife and desert; Rila & Pirin Mountains for multi-day trekking and day hiking; Spiti Valley for high mountains and night skies.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "region-balkans",
+    "title": "Region restricted: the Balkans, hiking and lakes",
+    "text": "Hiking and lakes in the Balkans in June.",
+    "before": {
+      "ms": 247,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 20,
+      "asked": [],
+      "skipped": [],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Julian Alps, Slovenia",
+          "kind": "national_park",
+          "score": 0.964,
+          "coverage": 0.52,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Bay of Kotor & Durmitor, Montenegro",
+          "kind": "country_circuit",
+          "score": 0.896,
+          "coverage": 0.52,
+          "signature": "day hiking and kayaks and boats"
+        },
+        {
+          "name": "Lake Ohrid, North Macedonia & Albania",
+          "kind": "lake_district",
+          "score": 0.772,
+          "coverage": 0.52,
+          "signature": "lakes and day hiking"
+        }
+      ],
+      "alternates": [
+        "Rila & Pirin Mountains",
+        "Zagori & the Vikos Gorge",
+        "Crete"
+      ],
+      "checks": [
+        {
+          "kind": "in_countries",
+          "pass": true,
+          "detail": "all in the requested countries"
+        }
+      ],
+      "regions": 2,
+      "spread": "All in the part of the world you asked for: Julian Alps for multi-day trekking and day hiking; Bay of Kotor & Durmitor for day hiking and kayaks and boats; Lake Ohrid for lakes and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "region-southeast-asia",
+    "title": "Region restricted: Southeast Asia, beaches and jungle, February",
+    "text": "Southeast Asia in February: beaches, snorkelling and some jungle.",
+    "before": {
+      "ms": 250,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 17,
+      "asked": [],
+      "skipped": [],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Krabi & the Andaman Coast, Southern Thailand",
+          "kind": "coast",
+          "score": 0.652,
+          "coverage": 0.52,
+          "signature": "beaches and swimming and coastal scenery"
+        },
+        {
+          "name": "Khao Sok, Southern Thailand",
+          "kind": "national_park",
+          "score": 0.649,
+          "coverage": 0.52,
+          "signature": "rainforest and wildlife"
+        },
+        {
+          "name": "Raja Ampat, West Papua, Indonesia",
+          "kind": "island_group",
+          "score": 0.631,
+          "coverage": 0.52,
+          "signature": "snorkelling and diving and coastal scenery"
+        }
+      ],
+      "alternates": [
+        "Palawan: El Nido & Coron",
+        "Sabah, Borneo",
+        "Taman Negara"
+      ],
+      "checks": [
+        {
+          "kind": "in_regions",
+          "pass": true,
+          "detail": "all in the requested regions"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 2"
+        }
+      ],
+      "regions": 1,
+      "spread": "All in the part of the world you asked for: Krabi & the Andaman Coast for beaches and swimming and coastal scenery; Khao Sok for rainforest and wildlife; Raja Ampat for snorkelling and diving and coastal scenery.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "region-europe-classic",
+    "title": "Europe, first time, classic mountains",
+    "text": "First time in Europe, iconic mountains and lakes in July.",
+    "before": {
+      "ms": 245,
+      "picks": [
+        {
+          "name": "Republika Srpska, Bosnia and Herzegovina",
+          "type": "region",
+          "score": 92,
+          "coverage": 0.4376
+        },
+        {
+          "name": "Municipality of Staro Nagorichane, North Macedonia",
+          "type": "region",
+          "score": 92,
+          "coverage": 0.4376
+        },
+        {
+          "name": "Varna, Bulgaria",
+          "type": "county",
+          "score": 92,
+          "coverage": 0.4376
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 66,
+      "asked": [
+        "budget",
+        "mountain_style",
+        "lead"
+      ],
+      "skipped": [
+        "budget",
+        "mountain_style",
+        "lead"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Bernese Oberland, Swiss Alps",
+          "kind": "mountain_range",
+          "score": 0.879,
+          "coverage": 0.61,
+          "signature": "glaciers and ice and high mountains"
+        },
+        {
+          "name": "The Dolomites, Northern Italy",
+          "kind": "mountain_range",
+          "score": 0.863,
+          "coverage": 0.61,
+          "signature": "multi-day trekking and high mountains"
+        },
+        {
+          "name": "Julian Alps, Slovenia",
+          "kind": "national_park",
+          "score": 0.841,
+          "coverage": 0.61,
+          "signature": "kayaks and boats and lakes"
+        }
+      ],
+      "alternates": [
+        "The Engadin",
+        "Bay of Kotor & Durmitor",
+        "Picos de Europa"
+      ],
+      "checks": [
+        {
+          "kind": "in_regions",
+          "pass": true,
+          "detail": "all in the requested regions"
+        },
+        {
+          "kind": "classic",
+          "pass": true,
+          "detail": "2 well-known"
+        }
+      ],
+      "regions": 3,
+      "spread": "All in the part of the world you asked for: Bernese Oberland for glaciers and ice and high mountains; The Dolomites for multi-day trekking and high mountains; Julian Alps for kayaks and boats and lakes.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "remote-adventure",
+    "title": "Remote expedition-style adventure",
+    "text": "Remote, expedition-style trekking far from anyone. August, about three weeks.",
+    "before": {
+      "ms": 245,
+      "picks": [
+        {
+          "name": "Ile-de-France, France",
+          "type": "region",
+          "score": 90,
+          "coverage": 0.5254
+        },
+        {
+          "name": "Lisbon, Portugal",
+          "type": "region",
+          "score": 89,
+          "coverage": 0.5254
+        },
+        {
+          "name": "North Brabant, Netherlands",
+          "type": "region",
+          "score": 89,
+          "coverage": 0.2982
+        }
+      ],
+      "distinctScores": 2,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 65,
+      "asked": [
+        "budget",
+        "region",
+        "novelty"
+      ],
+      "skipped": [
+        "budget",
+        "region",
+        "novelty"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Cordillera Blanca, Huaraz, Peruvian Andes",
+          "kind": "mountain_range",
+          "score": 0.943,
+          "coverage": 0.7,
+          "signature": "glaciers and ice and high mountains"
+        },
+        {
+          "name": "Corsica, Mediterranean France",
+          "kind": "island",
+          "score": 0.867,
+          "coverage": 0.7,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Réunion, French Indian Ocean",
+          "kind": "island",
+          "score": 0.822,
+          "coverage": 0.7,
+          "signature": "multi-day trekking and day hiking"
+        }
+      ],
+      "alternates": [
+        "Issyk-Kul & Karakol",
+        "The Dolomites",
+        "Avenue of the Volcanoes"
+      ],
+      "checks": [
+        {
+          "kind": "min_challenge_typical",
+          "pass": true,
+          "detail": "all typical challenge ≥ 2"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 8"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Cordillera Blanca for glaciers and ice and high mountains; Corsica for multi-day trekking and day hiking; Réunion for multi-day trekking and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "relaxed-nature",
+    "title": "Relaxed nature vacation: lakes and gentle walks",
+    "text": "Something relaxing: lakes, gentle walks and good food, late September.",
+    "before": {
+      "ms": 244,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 52,
+      "asked": [
+        "budget",
+        "region"
+      ],
+      "skipped": [
+        "budget",
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "The Italian Lakes, Lombardy & Garda, Italy",
+          "kind": "lake_district",
+          "score": 0.977,
+          "coverage": 0.61,
+          "signature": "lakes and villages and culture"
+        },
+        {
+          "name": "Dilijan & Lake Sevan, Northern Armenia",
+          "kind": "travel_region",
+          "score": 0.846,
+          "coverage": 0.61,
+          "signature": "villages and culture and food"
+        },
+        {
+          "name": "Salzkammergut, Upper Austria",
+          "kind": "lake_district",
+          "score": 0.962,
+          "coverage": 0.61,
+          "signature": "lakes and villages and culture"
+        }
+      ],
+      "alternates": [
+        "Lake Ohrid",
+        "Provence & the Verdon",
+        "Julian Alps"
+      ],
+      "checks": [
+        {
+          "kind": "max_challenge_easiest",
+          "pass": true,
+          "detail": "all easiest version ≤ 1"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 9"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — The Italian Lakes for lakes and villages and culture; Dilijan & Lake Sevan for villages and culture and food; Salzkammergut for lakes and villages and culture.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "luxury-wildlife",
+    "title": "Luxury wildlife trip",
+    "text": "Luxury wildlife trip in September, five-star lodges.",
+    "before": {
+      "ms": 248,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 61,
+      "asked": [
+        "adventure",
+        "wildlife_kind",
+        "region"
+      ],
+      "skipped": [
+        "adventure",
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Kruger & Sabi Sand, Northeast South Africa",
+          "kind": "national_park",
+          "score": 0.98,
+          "coverage": 0.61,
+          "signature": "safari and wildlife"
+        },
+        {
+          "name": "Laikipia & Samburu, Central Kenya",
+          "kind": "wilderness",
+          "score": 0.98,
+          "coverage": 0.61,
+          "signature": "safari and wildlife"
+        },
+        {
+          "name": "Okavango Delta, Northern Botswana",
+          "kind": "wilderness",
+          "score": 0.96,
+          "coverage": 0.61,
+          "signature": "safari and wildlife"
+        }
+      ],
+      "alternates": [
+        "South Luangwa",
+        "Serengeti",
+        "Pantanal"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on wildlife"
+        }
+      ],
+      "regions": 2,
+      "spread": "Kruger & Sabi Sand for safari and wildlife; Laikipia & Samburu for safari and wildlife; Okavango Delta for safari and wildlife.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "budget-beach-winter",
+    "title": "Budget beach trip in January from Europe",
+    "text": "Cheap beach and snorkelling trip in January, from Berlin.",
+    "before": {
+      "ms": 249,
+      "picks": [
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        },
+        {
+          "name": "Tyrol, Austria",
+          "type": "region",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        },
+        {
+          "name": "North Brabant, Netherlands",
+          "type": "region",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 54,
+      "asked": [
+        "region",
+        "reach",
+        "novelty"
+      ],
+      "skipped": [
+        "region",
+        "reach",
+        "novelty"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Oaxaca Coast, Pacific Mexico",
+          "kind": "coast",
+          "score": 0.925,
+          "coverage": 0.65,
+          "signature": "beaches and swimming and coastal scenery"
+        },
+        {
+          "name": "Palawan: El Nido & Coron, Philippines",
+          "kind": "island_group",
+          "score": 0.858,
+          "coverage": 0.65,
+          "signature": "coastal scenery and snorkelling and diving"
+        },
+        {
+          "name": "Zanzibar, Tanzania",
+          "kind": "island",
+          "score": 0.848,
+          "coverage": 0.65,
+          "signature": "beaches and swimming and coastal scenery"
+        }
+      ],
+      "alternates": [
+        "Sri Lanka South Coast",
+        "Jamaica",
+        "Krabi & the Andaman Coast"
+      ],
+      "checks": [
+        {
+          "kind": "max_cost",
+          "pass": true,
+          "detail": "all cost ≤ 2"
+        },
+        {
+          "kind": "warmth",
+          "pass": true,
+          "detail": "all within the temperature bound"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Oaxaca Coast for beaches and swimming and coastal scenery; Palawan: El Nido & Coron for coastal scenery and snorkelling and diving; Zanzibar for beaches and swimming and coastal scenery.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "from-sydney-summer",
+    "title": "Southern-hemisphere traveller: summer holiday from Sydney",
+    "text": "Summer holidays from Sydney, hiking and beaches.",
+    "before": {
+      "ms": 249,
+      "picks": [
+        {
+          "name": "City of Moreton Bay, Queensland",
+          "type": "county",
+          "score": 99,
+          "coverage": 0.26039999999999996
+        },
+        {
+          "name": "Auckland, New Zealand",
+          "type": "region",
+          "score": 95,
+          "coverage": 0.48760000000000003
+        },
+        {
+          "name": "Central Java, Indonesia",
+          "type": "region",
+          "score": 91,
+          "coverage": 0.26039999999999996
+        }
+      ],
+      "distinctScores": 7,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 137,
+      "asked": [
+        "reach",
+        "region",
+        "novelty",
+        "budget",
+        "lead"
+      ],
+      "skipped": [
+        "reach",
+        "region",
+        "novelty",
+        "budget",
+        "lead"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Tayrona & the Sierra Nevada Coast, Caribbean Colombia",
+          "kind": "coast",
+          "score": 0.856,
+          "coverage": 0.54,
+          "signature": "multi-day trekking and coastal scenery"
+        },
+        {
+          "name": "Sydney & the Blue Mountains, New South Wales, Australia",
+          "kind": "city_and_surroundings",
+          "score": 0.826,
+          "coverage": 0.54,
+          "signature": "beaches and swimming and coastal scenery"
+        },
+        {
+          "name": "Wild Coast, Eastern Cape, South Africa",
+          "kind": "coast",
+          "score": 0.846,
+          "coverage": 0.54,
+          "signature": "day hiking and coastal scenery"
+        }
+      ],
+      "alternates": [
+        "Mauritius",
+        "Guadeloupe",
+        "Jamaica"
+      ],
+      "checks": [
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 12/1/2"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Tayrona & the Sierra Nevada Coast for multi-day trekking and coastal scenery; Sydney & the Blue Mountains for beaches and swimming and coastal scenery; Wild Coast for day hiking and coastal scenery.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "from-delhi-mountains",
+    "title": "Mountains from Delhi, May, close to home",
+    "text": "Mountains and hiking in May from Delhi, not too far.",
+    "before": {
+      "ms": 247,
+      "picks": [
+        {
+          "name": "Sindhupalchowk, Bagamati Province",
+          "type": "county",
+          "score": 85,
+          "coverage": 0.48760000000000003
+        },
+        {
+          "name": "Jharkhand, India",
+          "type": "region",
+          "score": 83,
+          "coverage": 0.48760000000000003
+        },
+        {
+          "name": "Balochistan, Pakistan",
+          "type": "region",
+          "score": 82,
+          "coverage": 0.48760000000000003
+        }
+      ],
+      "distinctScores": 7,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 43,
+      "asked": [
+        "region"
+      ],
+      "skipped": [
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Yunnan: Lijiang & Tiger Leaping Gorge, Northwest Yunnan, China",
+          "kind": "travel_region",
+          "score": 0.936,
+          "coverage": 0.54,
+          "signature": "multi-day trekking and high mountains"
+        },
+        {
+          "name": "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan",
+          "kind": "lake_district",
+          "score": 0.879,
+          "coverage": 0.54,
+          "signature": "day hiking and multi-day trekking"
+        },
+        {
+          "name": "Everest Region (Khumbu), Eastern Nepal",
+          "kind": "national_park",
+          "score": 0.847,
+          "coverage": 0.54,
+          "signature": "glaciers and ice and multi-day trekking"
+        }
+      ],
+      "alternates": [
+        "Bhutan",
+        "Annapurna Region",
+        "Langtang Valley"
+      ],
+      "checks": [
+        {
+          "kind": "within_km",
+          "pass": true,
+          "detail": "all within 3200 km of Delhi"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 5"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Yunnan: Lijiang & Tiger Leaping Gorge for multi-day trekking and high mountains; Issyk-Kul & Karakol for day hiking and multi-day trekking; Everest Region (Khumbu) for glaciers and ice and multi-day trekking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "desert-volcano",
+    "title": "Deserts and volcanoes, November",
+    "text": "Deserts, volcanoes and starry skies in November.",
+    "before": {
+      "ms": 254,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 38,
+      "asked": [
+        "region",
+        "budget"
+      ],
+      "skipped": [
+        "region",
+        "budget"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Tongariro & Rotorua, Central North Island, New Zealand",
+          "kind": "travel_region",
+          "score": 0.977,
+          "coverage": 0.52,
+          "signature": "hot springs and volcanoes and hot ground"
+        },
+        {
+          "name": "Tenerife & La Gomera, Canary Islands, Spain",
+          "kind": "island_group",
+          "score": 0.943,
+          "coverage": 0.52,
+          "signature": "volcanoes and hot ground"
+        },
+        {
+          "name": "Atacama Desert, Northern Chile",
+          "kind": "desert",
+          "score": 0.935,
+          "coverage": 0.52,
+          "signature": "volcanoes and hot ground and hot springs"
+        }
+      ],
+      "alternates": [
+        "Jeju Island",
+        "Lake Atitlán & Antigua",
+        "Réunion"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on desert, volcanoes or stars"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 11"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Tongariro & Rotorua for hot springs and volcanoes and hot ground; Tenerife & La Gomera for volcanoes and hot ground; Atacama Desert for volcanoes and hot ground and hot springs.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "road-trip-americas",
+    "title": "Scenic road trip in the Americas, autumn",
+    "text": "A scenic road trip in the Americas in October, happy to drive.",
+    "before": {
+      "ms": 250,
+      "picks": [
+        {
+          "name": "City of Belgrade, Central Serbia",
+          "type": "county",
+          "score": 100,
+          "coverage": 0.1988
+        },
+        {
+          "name": "Nouvelle-Aquitaine, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1988
+        },
+        {
+          "name": "Jalisco, Mexico",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1988
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 12,
+      "asked": [],
+      "skipped": [],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Great Smoky Mountains & Blue Ridge, Tennessee and North Carolina",
+          "kind": "national_park",
+          "score": 0.979,
+          "coverage": 0.56,
+          "signature": "scenic drives"
+        },
+        {
+          "name": "Utah Canyon Country, Southern Utah",
+          "kind": "desert",
+          "score": 0.979,
+          "coverage": 0.56,
+          "signature": "scenic drives"
+        },
+        {
+          "name": "Salta & Jujuy, Northwest Argentina",
+          "kind": "travel_region",
+          "score": 0.957,
+          "coverage": 0.56,
+          "signature": "scenic drives"
+        }
+      ],
+      "alternates": [
+        "Cape Breton & the Cabot Trail",
+        "Salar de Uyuni & the Lípez",
+        "Bariloche & the Seven Lakes"
+      ],
+      "checks": [
+        {
+          "kind": "in_regions",
+          "pass": true,
+          "detail": "all in the requested regions"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on scenic driving"
+        }
+      ],
+      "regions": 3,
+      "spread": "All in the part of the world you asked for: Great Smoky Mountains & Blue Ridge for scenic drives; Utah Canyon Country for scenic drives; Salta & Jujuy for scenic drives.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "culture-food-asia",
+    "title": "Culture and food in Asia with some nature, March",
+    "text": "Food, culture and a bit of nature in Asia in March, mid-range budget.",
+    "before": {
+      "ms": 248,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 47,
+      "asked": [
+        "novelty",
+        "length",
+        "climate"
+      ],
+      "skipped": [
+        "novelty",
+        "length",
+        "climate"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Hoi An & Central Vietnam, Hue to Hoi An, Vietnam",
+          "kind": "travel_region",
+          "score": 0.982,
+          "coverage": 0.64,
+          "signature": "villages and culture and food"
+        },
+        {
+          "name": "Yunnan: Lijiang & Tiger Leaping Gorge, Northwest Yunnan, China",
+          "kind": "travel_region",
+          "score": 0.939,
+          "coverage": 0.64,
+          "signature": "villages and culture and food"
+        },
+        {
+          "name": "Istanbul, Turkey",
+          "kind": "city_and_surroundings",
+          "score": 0.925,
+          "coverage": 0.64,
+          "signature": "villages and culture and food"
+        }
+      ],
+      "alternates": [
+        "Oman's Hajar Mountains",
+        "Annapurna Region",
+        "Kyoto & Nara"
+      ],
+      "checks": [
+        {
+          "kind": "in_regions",
+          "pass": true,
+          "detail": "all in the requested regions"
+        },
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on food or culture"
+        }
+      ],
+      "regions": 3,
+      "spread": "All in the part of the world you asked for: Hoi An & Central Vietnam for villages and culture and food; Yunnan: Lijiang & Tiger Leaping Gorge for villages and culture and food; Istanbul for villages and culture and food.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "marine-wildlife",
+    "title": "Whales and marine life, June",
+    "text": "Whale watching, seals and puffins in June.",
+    "before": {
+      "ms": 259,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.1704
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 78,
+      "asked": [
+        "climate",
+        "budget",
+        "region",
+        "novelty",
+        "crowds"
+      ],
+      "skipped": [
+        "climate",
+        "budget",
+        "region",
+        "novelty",
+        "crowds"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Great Barrier Reef & Daintree, Tropical North Queensland, Australia",
+          "kind": "coast",
+          "score": 0.977,
+          "coverage": 0.52,
+          "signature": "snorkelling and diving and whales, seals and sea life"
+        },
+        {
+          "name": "The Azores, Mid-Atlantic, Portugal",
+          "kind": "island_group",
+          "score": 0.931,
+          "coverage": 0.52,
+          "signature": "whales, seals and sea life"
+        },
+        {
+          "name": "Kenai Peninsula, Southcentral Alaska",
+          "kind": "travel_region",
+          "score": 0.885,
+          "coverage": 0.52,
+          "signature": "whales, seals and sea life"
+        }
+      ],
+      "alternates": [
+        "Komodo & Flores",
+        "Vava’u",
+        "Ningaloo Coast"
+      ],
+      "checks": [
+        {
+          "kind": "primaries_offer",
+          "pass": true,
+          "detail": "all strong on marine wildlife"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Great Barrier Reef & Daintree for snorkelling and diving and whales, seals and sea life; The Azores for whales, seals and sea life; Kenai Peninsula for whales, seals and sea life.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "avoid-crowds-hidden",
+    "title": "Hidden gems, avoid crowds, mountains, September",
+    "text": "Hidden gems with mountains and lakes in September, avoid crowds.",
+    "before": {
+      "ms": 273,
+      "picks": [
+        {
+          "name": "Auvergne-Rhône-Alpes, France",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2104
+        },
+        {
+          "name": "Baden-Württemberg, Germany",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2104
+        },
+        {
+          "name": "Silesian Voivodeship, Poland",
+          "type": "region",
+          "score": 100,
+          "coverage": 0.2104
+        }
+      ],
+      "distinctScores": 1,
+      "picksShown": 8
+    },
+    "after": {
+      "ms": 118,
+      "asked": [
+        "budget",
+        "adventure",
+        "mountain_style",
+        "climate",
+        "region"
+      ],
+      "skipped": [
+        "budget",
+        "adventure",
+        "mountain_style",
+        "climate",
+        "region"
+      ],
+      "stop": "enough_asked",
+      "picks": [
+        {
+          "name": "Fann Mountains, Western Tajikistan",
+          "kind": "mountain_range",
+          "score": 0.907,
+          "coverage": 0.65,
+          "signature": "high mountains and multi-day trekking"
+        },
+        {
+          "name": "North Cascades, Washington State",
+          "kind": "national_park",
+          "score": 0.885,
+          "coverage": 0.65,
+          "signature": "high mountains and multi-day trekking"
+        },
+        {
+          "name": "The Engadin, Graubünden, Switzerland",
+          "kind": "travel_region",
+          "score": 0.846,
+          "coverage": 0.65,
+          "signature": "high mountains and day hiking"
+        }
+      ],
+      "alternates": [
+        "Rila & Pirin Mountains",
+        "Altai Tavan Bogd",
+        "Kluane & the Southern Yukon"
+      ],
+      "checks": [
+        {
+          "kind": "unusual",
+          "pass": true,
+          "detail": "3 little-known"
+        },
+        {
+          "kind": "in_season",
+          "pass": true,
+          "detail": "all in season in 9"
+        }
+      ],
+      "regions": 3,
+      "spread": "Three different answers — Fann Mountains for high mountains and multi-day trekking; North Cascades for high mountains and multi-day trekking; The Engadin for high mountains and day hiking.",
+      "relaxation": null
+    }
+  },
+  {
+    "id": "domestic-us",
+    "title": "Domestic only, from Denver, hiking in June",
+    "text": "Hiking and lakes in June, domestic, from Denver.",
+    "before": {
+      "ms": 255,
+      "picks": [
+        {
+          "name": "Pennsylvania, United States",
+          "type": "region",
+          "score": 92,
+          "coverage": 0.48760000000000003
+        },
+        {
+          "name": "California, United States",
+          "type": "region",
+          "score": 80,
+          "coverage": 0.48760000000000003
+        },
+        {
+          "name": "Virginia, United States",
+          "type": "region",
+          "score": 79,
+          "coverage": 0.48760000000000003
+        }
+      ],
+      "distinctScores": 3,
+      "picksShown": 3
+    },
+    "after": {
+      "ms": 45,
+      "asked": [
+        "region"
+      ],
+      "skipped": [
+        "region"
+      ],
+      "stop": "low_value",
+      "picks": [
+        {
+          "name": "Adirondacks, Upstate New York",
+          "kind": "mountain_range",
+          "score": 0.877,
+          "coverage": 0.54,
+          "signature": "kayaks and boats and day hiking"
+        },
+        {
+          "name": "North Cascades, Washington State",
+          "kind": "national_park",
+          "score": 0.874,
+          "coverage": 0.54,
+          "signature": "multi-day trekking and day hiking"
+        },
+        {
+          "name": "Mammoth Lakes & the Eastern Sierra, California",
+          "kind": "travel_region",
+          "score": 0.843,
+          "coverage": 0.54,
+          "signature": "day hiking and lakes"
+        }
+      ],
+      "alternates": [
+        "Olympic Peninsula",
+        "Yosemite",
+        "Yellowstone & Grand Teton"
+      ],
+      "checks": [
+        {
+          "kind": "in_regions",
+          "pass": true,
+          "detail": "all in the requested regions"
+        }
+      ],
+      "regions": 2,
+      "spread": "All in the part of the world you asked for: Adirondacks for kayaks and boats and day hiking; North Cascades for multi-day trekking and day hiking; Mammoth Lakes & the Eastern Sierra for day hiking and lakes.",
+      "relaxation": null
+    }
+  }
+]

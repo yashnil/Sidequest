@@ -102,14 +102,19 @@ export type MapBasemap = (MapTileSource & { kind?: 'raster' }) | VectorBasemap;
 
 export const MAP_PROVIDER_ENV = 'SIDEQUEST_MAP_PROVIDER';
 export const OPENFREEMAP_STYLE_ENV = 'SIDEQUEST_MAP_STYLE';
-/** OpenFreeMap's light style — a quiet ground under ink marks. */
-export const OPENFREEMAP_DEFAULT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+/**
+ * Sidequest's own survey ground (`atlas/atlas-style.ts`), drawn from OpenFreeMap's
+ * vector tiles. It replaced the stock "positron" street style, which made every
+ * trip map look like somebody else's product under a night-atlas landing page.
+ * `SIDEQUEST_MAP_STYLE` may still name one of OpenFreeMap's hosted styles.
+ */
+export const OPENFREEMAP_DEFAULT_STYLE = 'sidequest:survey';
 export const OPENFREEMAP_ATTRIBUTION = '© OpenFreeMap · © OpenMapTiles · Data © OpenStreetMap contributors';
 
 export function resolveVectorBasemap(env: TileEnvironment): VectorBasemap | null {
   if (env[MAP_PROVIDER_ENV]?.trim().toLowerCase() !== 'openfreemap') return null;
   const style = env[OPENFREEMAP_STYLE_ENV]?.trim() || OPENFREEMAP_DEFAULT_STYLE;
-  if (!/^https:\/\/tiles\.openfreemap\.org\//.test(style)) return null;
+  if (style !== 'sidequest:survey' && style !== 'sidequest:night' && !/^https:\/\/tiles\.openfreemap\.org\//.test(style)) return null;
   return { kind: 'vector', provider: 'openfreemap', styleUrl: style, attribution: OPENFREEMAP_ATTRIBUTION, maxZoom: 18 };
 }
 

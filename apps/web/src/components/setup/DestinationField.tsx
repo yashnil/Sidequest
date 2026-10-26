@@ -192,7 +192,7 @@ export function DestinationField({
         traveller edits. It is the answer to "did that click register?".
       */}
       {chosen ? (
-        <p className="rise mt-3 inline-flex min-h-9 items-center gap-2 rounded-full border border-pine/40 bg-pine-soft px-3 py-1 text-sm text-pine-strong" data-testid="destination-chosen">
+        <p className="rise mt-3 inline-flex min-h-9 items-center gap-2 border-l-[3px] border-pine py-1 pl-3 text-sm text-pine-strong" data-testid="destination-chosen">
           <span aria-hidden="true">✓</span>
           {chosen.qualifiedName}
           <button
@@ -210,7 +210,7 @@ export function DestinationField({
 
       {showSuggestions ? (
         <div className="rise mt-4" data-testid="destination-suggestions">
-          <p className="type-small text-ink-faint">Did you mean — optional, and you can ignore it entirely:</p>
+          <p className="sheet-label text-ink-muted">Did you mean — optional</p>
           <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Suggested destinations">
             {suggestions.map((suggestion, index) => (
               <button
@@ -229,7 +229,7 @@ export function DestinationField({
                     else document.getElementById(`${inputId}-suggestion-${index - 1}`)?.focus();
                   }
                 }}
-                className={cx('pressable inline-flex min-h-11 items-center gap-2 rounded-full border border-rule bg-paper-raised px-3.5 text-left text-sm text-ink transition-colors hover:border-ink-faint', FOCUS_RING)}
+                className={cx('ob-tag text-left', FOCUS_RING)}
                 data-testid={`destination-suggestion-${index}`}
               >
                 <span className="font-medium">{suggestion.displayName}</span>

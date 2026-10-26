@@ -7,6 +7,11 @@ import type { GeoPoint } from '../map-projection';
 import { cameraFrameFor, type MapMode } from '../map-camera';
 import { cx } from '../ui';
 import { usePlaceSheet, type PlaceSheetDetail } from './PlaceSheet';
+import { AtlasMap } from '../atlas/AtlasMap';
+import { planToAtlas } from '../atlas/atlas-model';
+import { JourneyExplorer } from '../journey/JourneyExplorer';
+import type { JourneyModel } from '@/lib/journey/model';
+import type { DestinationImage as ImageRecord } from '@sidequest/core';
 
 /**
  * EXPERIENCE V2 — THE MAP VIEW IS A WORKSPACE, NOT A PICTURE.
@@ -49,7 +54,12 @@ export function MapWorkspace({
   summary,
   sheets = {},
   frames = {},
+  journey = null,
+  photos = {},
 }: {
+  /** The journey, projected from the itinerary on the server: when present with a vector basemap, the view is the Journey Explorer. */
+  journey?: JourneyModel | null;
+  photos?: Record<string, ImageRecord>;
   /** Every placed stop on the trip, with the day it belongs to. */
   markers: readonly (MapMarker & { dayNumber: number })[];
   /** The moves between bases. */
@@ -197,6 +207,113 @@ export function MapWorkspace({
     if (marker) window.location.hash = `day-${marker.dayNumber}`;
   };
 
+  const captionText =
+    view.mode === 'overview'
+      ? 'Where you arrive, where you sleep and what the trip is built around.'
+      : view.mode === 'explore'
+        ? 'Everything on this trip; press a place for its details.'
+        : `Day ${day}: stops numbered in order; press one for its details.`;
+  const figure = (
+    <InteractiveMap
+      testId="trip-overview-map"
+      mode={view.mode}
+      markers={drawn.markers}
+      faded={drawn.faded}
+      connectors={drawn.connectors}
+      base={drawn.base}
+      focusedId={focusedId}
+      onFocus={open}
+      tiles={tiles}
+      width={1120}
+      height={640}
+      /*
+       * The camera's own answer, not this component's. `fitPoints` are the
+       * points the frame has to contain and `minSpanKm` is how much ground it
+       * must cover — the two halves of the founder's bad frame.
+       */
+      fitPoints={frame.ok ? frame.points : []}
+      {...(frame.ok ? { minSpanKm: frame.minSpanKm } : {})}
+      summary={drawn.summary}
+      pinLabel={(marker) => `${marker.name}${'dayNumber' in marker ? `, day ${(marker as MapMarker & { dayNumber?: number }).dayNumber}` : ''}`}
+      caption={
+        <span>
+          {view.mode === 'overview'
+            ? 'Where you arrive, where you sleep and what the trip is built around.'
+            : view.mode === 'explore'
+              ? 'Everything on this trip; press a place for its details.'
+              : `Day ${day}: stops numbered in order; press one for its details.`}
+        </span>
+      }
+    />
+  );
+
+  /*
+   * THE ATLAS, WHERE A VECTOR BASEMAP IS CONFIGURED.
+   *
+   * The same three modes on the night atlas, the height of the screen: the
+   * camera travels between the whole trip and a day, the day's legs draw in,
+   * the rest of the trip stays as faded dots that never move the frame, and a
+   * pressed pin opens the same place sheet. Drawn from the same model as the
+   * SVG figure, which remains the fallback.
+   */
+  const stage =
+    tiles?.kind === 'vector'
+      ? (() => {
+          const active = planToAtlas({
+            marks: drawn.markers,
+            connectors: drawn.connectors,
+            base: drawn.base,
+            label: (mark) => ('dayNumber' in mark ? `${mark.name}, day ${(mark as MapMarker & { dayNumber?: number }).dayNumber}` : mark.name),
+          });
+          const faded = drawn.faded.map((mark) => ({ id: `faded-${mark.id}`, lat: mark.coordinates.lat, lng: mark.coordinates.lng, label: mark.name, state: 'muted' as const }));
+          return (
+            <AtlasMap
+              className="absolute inset-0"
+              testId="trip-map-atlas"
+              ground="night"
+              points={[...faded, ...active.points]}
+              lines={view.mode === 'day' ? active.lines : active.lines.filter((line) => line.style !== 'estimated' && line.style !== 'unmeasured')}
+              focusId={focusedId}
+              {...(frame.ok && frame.minSpanKm ? { minSpanKm: frame.minSpanKm } : {})}
+              onSelect={(id) => (id === 'base' || id.startsWith('faded-') ? undefined : open(id))}
+              fitKey={`${view.mode}-${view.day ?? 'all'}-${kindFilter}`}
+              {...(frame.ok && frame.points.length > 0 ? { fitPoints: frame.points } : {})}
+              padding={{ top: 72, right: 72, bottom: 80, left: 72 }}
+              ariaLabel={drawn.summary}
+              fallback={figure}
+            />
+          );
+        })()
+      : null;
+
+  /*
+   * THE JOURNEY VIEW — route first.
+   *
+   * With a real map available this tab is the Journey Explorer at full size:
+   * the whole trip to begin with, a stay, a day, a stop, the route ribbon as the
+   * navigation, 3D terrain and Replay My Day. A pressed stop opens the same
+   * place sheet the timeline opens. The three-mode SVG workspace below remains
+   * the drawing wherever there is no map.
+   */
+  if (tiles?.kind === 'vector' && journey && journey.days.some((d) => d.stops.length > 0)) {
+    return (
+      <div className="relative" data-testid="map-workspace" data-map-mode="journey">
+        <div className="relative -mx-5 h-[calc(100dvh_-_var(--chrome-height)_-_7.5rem)] min-h-[520px] overflow-hidden sm:mx-0" data-testid="map-workspace-stage">
+          <JourneyExplorer
+            model={journey}
+            photos={photos}
+            variant="full"
+            styleId={tiles.styleUrl}
+            onSelectStop={(stop) => {
+              if (stop.placeId && sheets[stop.placeId]) open(stop.placeId);
+            }}
+            testId="trip-journey"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative" data-testid="map-workspace" data-day={String(day)} data-map-mode={view.mode} data-camera-basis={frame.ok ? frame.basis : 'nothing_placed'}>
       <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0" role="tablist" aria-label="What to draw">
@@ -245,45 +362,22 @@ export function MapWorkspace({
         </div>
       ) : null}
 
-      <InteractiveMap
-        testId="trip-overview-map"
-        mode={view.mode}
-        markers={drawn.markers}
-        faded={drawn.faded}
-        connectors={drawn.connectors}
-        base={drawn.base}
-        focusedId={focusedId}
-        onFocus={open}
-        tiles={tiles}
-        width={1120}
-        height={640}
-        /*
-         * The camera's own answer, not this component's. `fitPoints` are the
-         * points the frame has to contain and `minSpanKm` is how much ground it
-         * must cover — the two halves of the founder's bad frame.
-         */
-        fitPoints={frame.ok ? frame.points : []}
-        {...(frame.ok ? { minSpanKm: frame.minSpanKm } : {})}
-        summary={drawn.summary}
-        pinLabel={(marker) => `${marker.name}${'dayNumber' in marker ? `, day ${(marker as MapMarker & { dayNumber?: number }).dayNumber}` : ''}`}
-        caption={
-          <span>
-            {view.mode === 'overview'
-              ? 'Where you arrive, where you sleep and what the trip is built around.'
-              : view.mode === 'explore'
-                ? 'Everything on this trip; press a place for its details.'
-                : `Day ${day}: stops numbered in order; press one for its details.`}
-          </span>
-        }
-      />
+      {stage ? (
+        <div className="relative -mx-5 h-[calc(100dvh_-_var(--chrome-height)_-_8.5rem)] min-h-[460px] overflow-hidden sm:mx-0" data-testid="map-workspace-stage">
+          {stage}
+          <p className="pointer-events-none absolute bottom-10 left-4 z-10 max-w-[44ch] text-xs text-bone/70">{captionText}</p>
+        </div>
+      ) : (
+        figure
+      )}
     </div>
   );
 }
 
 function chip(on: boolean): string {
   return cx(
-    'pressable inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine',
-    on ? 'border-ink bg-ink text-paper shadow-[var(--shadow-card)]' : 'border-rule bg-paper-raised text-ink-muted hover:border-ink-faint hover:text-ink',
+    'pressable inline-flex min-h-11 shrink-0 items-center gap-2 rounded-[2px] border px-3.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine',
+    on ? 'border-ink bg-ink text-paper' : 'border-ink/20 bg-paper-raised text-ink-muted hover:border-ink hover:text-ink',
   );
 }
 

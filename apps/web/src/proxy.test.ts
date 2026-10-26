@@ -185,14 +185,28 @@ describe('the matcher that decides whether the gate runs at all', () => {
     expect(matches('/labs/benchmark/some-run/detail')).toBe(true);
   });
 
-  it('leaves the traveller journey alone, which is why the matcher is narrow', () => {
+  it('lets the traveller journey through the gate untouched, with a request id', () => {
     /**
-     * The other half of the property. A matcher wide enough to catch `/labs`
-     * by catching everything would put an edge function in front of every
-     * page in the product, and the file's own header promises it does not.
+     * Production pass — the matcher is wide now (every page carries a request
+     * id), so the property that matters moved inside: the labs gate refuses
+     * only labs paths. Static assets are still skipped by the matcher.
      */
-    expect(matches('/')).toBe(false);
-    expect(matches('/trips/a-trip-id/plan')).toBe(false);
-    expect(matches('/decide')).toBe(false);
+    expect(matches('/')).toBe(true);
+    expect(matches('/trips/a-trip-id/plan')).toBe(true);
+    expect(matches('/_next/static/chunks/app.js')).toBe(false);
+    expect(matches('/trip-offline-sw.js')).toBe(false);
+    process.env.SIDEQUEST_BENCHMARK_MODE = 'live';
+    process.env.SIDEQUEST_BENCHMARK_BUDGET_USD = '5.00';
+    process.env.SIDEQUEST_LABS_TOKEN = 'a-secret';
+    const traveller = proxy(new NextRequest('http://localhost:4200/trips/a-trip-id/plan'));
+    expect(traveller.status).toBe(200);
+    expect(traveller.headers.get('x-request-id')).toMatch(/^[a-f0-9]{16}$/);
+    expect(proxy(new NextRequest('http://localhost:4200/labs-and-more')).status).toBe(200);
+    expect(proxy(new NextRequest('http://localhost:4200/labs')).status).toBe(401);
+  });
+
+  it('never adopts a request id the client chose', () => {
+    const response = proxy(new NextRequest('http://localhost:4200/', { headers: { 'x-request-id': 'attacker-chosen-id' } }));
+    expect(response.headers.get('x-request-id')).not.toBe('attacker-chosen-id');
   });
 });

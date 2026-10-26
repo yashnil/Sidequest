@@ -62,7 +62,7 @@ import { generateSidequestPlanForTrip } from '@/lib/planning/production-plan';
 import { ensurePreflightAction, proposeScopeAction } from '@/app/(product)/trips/[id]/plan/actions';
 import { unansweredRequired } from '@sidequest/core';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
-import { callerKey, chargeAction, checkAction, guardAction } from '@/lib/net/caller';
+import { callerKey, chargeAction, checkAction, guardAction, guardBilledAction } from '@/lib/net/caller';
 import { dailySpendGate, recordDailySpend } from '@/lib/compiler/daily-ceiling';
 import { STALE_ANSWERS_MESSAGE } from '@/lib/interview/messages';
 
@@ -274,7 +274,7 @@ export async function completeQuestionnaireAction(
    */
   if (destination === 'research') redirect(`/trips/${tripId}/plan`);
   if (!boardIsUsable && (destination === 'scan' || destination === 'scan_and_build') && scanView(tripId).state !== 'running') {
-    const fence = await guardAction('scan_start');
+    const fence = await guardBilledAction('scan_start');
     if (fence) return { ok: false, error: fence };
     const caller = await callerKey();
     const started = startDiscoveryScan(tripId, { autoBuild: destination === 'scan_and_build', caller: caller ?? 'interview_scan_action' });
@@ -391,6 +391,9 @@ export async function startBuildAction(tripId: string, answers: QuestionnaireAns
   /* V1 convergence — the answers are saved either way; a build that cannot run is refused here, not discovered by a failed run. */
   const preflight = buildPreflight(tripId, { caller: caller ?? 'interview_build_action' });
   if (!preflight.ok) return { ...refusedByPreflight(tripId, preflight, 'build'), revision: saved.revision ?? null };
+  /* Production pass — only a model-composed build bills; a planner build is free and is never charged here. */
+  const billed = preflight.path === 'model_composer' ? await guardAction('billed_hourly') : null;
+  if (billed) return { ok: false, error: billed, revision: saved.revision ?? null };
   const run = startBuildRun({ tripId, buildKey, caller: caller ?? 'interview_build_action', mode: 'full' });
   return { ok: true, buildKey, view: run.view, revision: saved.revision ?? null };
 }
@@ -419,6 +422,8 @@ export async function retryBuildAction(tripId: string, buildKey: string): Promis
   const { reuseStoredDraft } = retryPlanFor(current);
   const preflight = buildPreflight(tripId, { caller: caller ?? 'interview_retry_action', reuseStoredDraft });
   if (!preflight.ok) return refusedByPreflight(tripId, preflight, 'retry');
+  const billed = preflight.path === 'model_composer' ? await guardAction('billed_hourly') : null;
+  if (billed) return { ok: false, error: billed };
   const run = startBuildRun({ tripId, buildKey, caller: caller ?? 'interview_retry_action', mode: 'full', reuseStoredDraft });
   return { ok: true, buildKey, view: run.view, revision: answersRevision(tripId) };
 }

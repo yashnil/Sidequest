@@ -8,7 +8,8 @@ import { DASHBOARD_V3_SECTIONS, dashboardRowsFor, lastTouched } from '@/lib/trip
 import { renderInstant } from '@/lib/clock';
 import { buttonClass } from '@/components/ui';
 import { ClaimBanner } from './ClaimBanner';
-import { TripDashboard, type DashboardCardRow } from './TripDashboard';
+import { CollectionDashboard } from '@/components/collection/CollectionDashboard';
+import type { DashboardCardRow } from './TripCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,10 @@ export const metadata: Metadata = {
  * component rendered on the server and again on hydration, and "3 days ago"
  * from `Date.now()` in both places is a hydration error waiting for midnight.
  * See `lastTouched` in `lib/trips/dashboard.ts`.
+ *
+ * SURVEY ATLAS (2026-10) — the page is a collection now (`CollectionDashboard`):
+ * the next trip as a cover, every trip as a numbered, stamped entry. The
+ * behaviour, the sections and every test id are `TripDashboard`'s.
  */
 export default async function TripsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
@@ -47,14 +52,28 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const sort = params.sort === 'changed' ? 'changed' : 'date';
   const filter = typeof params.status === 'string' ? params.status : 'all';
 
+  const signedInName = user ? (user.displayName ? `${user.displayName}’s trips` : 'Your trips') : rows.length > 0 ? 'Your trips · on this browser' : 'Your trips';
+
   return (
     <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14" data-testid="trips-dashboard">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+      <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-5">
         <div className="min-w-0">
-          <p className="eyebrow">{user ? (user.displayName ? `${user.displayName}’s trips` : 'Your trips') : 'Trips on this browser'}</p>
-          <h1 className="display-hero mt-3 text-ink">Where next?</h1>
+          <p className="sheet-label text-ink-muted">
+            {signedInName} <span className="text-ink-faint">·</span> {rows.length === 0 ? 'none yet' : `${rows.length} ${rows.length === 1 ? 'trip' : 'trips'}`}
+          </p>
+          <h1 className="mt-3 font-display text-[clamp(3rem,2rem+4vw,5.75rem)] leading-[0.92] font-[320] tracking-[-0.04em] text-ink">
+            <span className="mask-rise">
+              <span>Where</span>
+            </span>{' '}
+            <span className="mask-rise">
+              <span className="italic" style={{ ['--d' as string]: '90ms' }}>
+                next?
+              </span>
+            </span>
+          </h1>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {/* An empty collection carries its own start (`dashboard-empty`); the header does not repeat the flare action above it. */}
+        <div className={rows.length === 0 ? 'hidden' : 'flex min-w-0 flex-wrap items-center gap-2'}>
           <Link href="/decide" className={buttonClass('secondary')}>
             Help me decide
           </Link>
@@ -75,7 +94,7 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
         </p>
       ) : null}
 
-      <TripDashboard rows={rows} sections={DASHBOARD_V3_SECTIONS} query={query} sort={sort} filter={filter} signedIn={Boolean(user)} />
+      <CollectionDashboard rows={rows} sections={DASHBOARD_V3_SECTIONS} query={query} sort={sort} filter={filter} signedIn={Boolean(user)} today={now.toISOString().slice(0, 10)} />
     </div>
   );
 }

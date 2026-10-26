@@ -174,3 +174,53 @@ describe('the caller key the daily ledger charges', () => {
     expect(await callerKey()).toBe('ip:203.0.113.9');
   });
 });
+
+describe('the key a day\'s spend is charged to', () => {
+  it('is the signed-in account first, then the trusted address, then the signed cookie', async () => {
+    const { upsertUser, createSession } = await import('../db/auth-repository');
+    const { mintSessionToken } = await import('./session-signature');
+    const { callerKey, SESSION_COOKIE } = await import('./caller');
+
+    jar.set(SESSION_COOKIE, mintSessionToken('browser-random'));
+    expect(await callerKey()).toMatch(/^session:browser-random\./);
+
+    process.env.SIDEQUEST_TRUSTED_PROXY_HOPS = '1';
+    sent.set('x-forwarded-for', '1.2.3.4, 203.0.113.9');
+    expect(await callerKey()).toBe('ip:203.0.113.9');
+
+    const user = upsertUser({ provider: 'fixture', subject: 'a@example.com', email: 'a@example.com' });
+    const { token } = createSession(user.id);
+    jar.set('sidequest_auth', token);
+    expect(await callerKey()).toBe(`user:${user.id}`);
+  });
+
+  it('never reads a rotated cookie as a new identity when an address is trusted', async () => {
+    process.env.SIDEQUEST_TRUSTED_PROXY_HOPS = '1';
+    sent.set('x-forwarded-for', '203.0.113.9');
+    const { mintSessionToken } = await import('./session-signature');
+    const { callerKey, SESSION_COOKIE } = await import('./caller');
+    const keys = new Set<string | null>();
+    for (let index = 0; index < 5; index += 1) {
+      jar.set(SESSION_COOKIE, mintSessionToken(`farmed-${index}`));
+      keys.add(await callerKey());
+    }
+    expect([...keys]).toEqual(['ip:203.0.113.9']);
+  });
+});
+
+describe('the billed fence', () => {
+  it('bounds billed presses across doors per identity over an hour', async () => {
+    process.env.SIDEQUEST_TRUSTED_PROXY_HOPS = '1';
+    sent.set('x-forwarded-for', '203.0.113.9');
+    const { ACTION_RATE_RULES } = await import('./rate-limit');
+    const { guardBilledAction } = await import('./caller');
+    let allowed = 0;
+    // Alternating doors buys nothing: scans and refinements draw from the same hourly bucket.
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const refusal = await guardBilledAction(attempt % 2 === 0 ? 'scan_start' : 'refine');
+      if (refusal === null) allowed += 1;
+    }
+    expect(allowed).toBeLessThanOrEqual(ACTION_RATE_RULES.billed_hourly.capacity);
+    expect(allowed).toBeGreaterThan(0);
+  });
+});

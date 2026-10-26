@@ -186,3 +186,44 @@ describe('named must-dos', () => {
     expect(matchNamedMustDos(['Arches National Park'], places)).toEqual(['b']);
   });
 });
+
+describe('the open-data fallback (production finding: a rejected key left travellers with no board)', () => {
+  it('the typed token `opendata` builds a labelled open-data board through the unchanged pipeline, then plans on the planner', async () => {
+    const tripId = await dynamicTrip('opendata harbour');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 150 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(scanView(tripId).state).toBe('ready');
+    const diagnostics = getScanProposalExtras(tripId)?.diagnostics;
+    expect(diagnostics?.proposalSource).toBe('open_data');
+    expect(diagnostics?.fallbackReason).toBe('provider_auth_failure');
+    expect(diagnostics?.openData?.source).toBe('fixture-open-data');
+    // No supplement: that would be a second model call to the model that was unavailable.
+    expect(diagnostics?.recovery.attempted).toBe(false);
+
+    const { getTrip } = await import('@/lib/db/repository');
+    const { resolveTripRegion } = await import('@/lib/region');
+    const resolved = await resolveTripRegion(getTrip(tripId)!);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.context.compiled.coverage.summary).toMatch(/OpenStreetMap and ranked with Wikidata/);
+    expect(resolved.context.compiled.places.every((p) => /OpenStreetMap/.test(p.source.name))).toBe(true);
+
+    const { generateSidequestPlanForTrip } = await import('@/lib/planning/production-plan');
+    const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW });
+    expect(result.ok, result.error).toBe(true);
+    expect(result.result!.itinerary.package?.planning?.mode).toBe('planner');
+  }, 60_000);
+
+  it('a model-proposed scan is recorded as such and never consults open data', async () => {
+    const tripId = await dynamicTrip('Testmouth');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 100 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    const diagnostics = getScanProposalExtras(tripId)?.diagnostics;
+    expect(diagnostics?.proposalSource).toBe('fixture');
+    expect(diagnostics?.openData).toBeUndefined();
+  });
+});

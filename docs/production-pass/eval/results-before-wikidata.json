@@ -1,0 +1,4854 @@
+{
+  "generatedAt": "2026-10-25T08:09:29.806Z",
+  "db": "apps/web/data/eval-run5.db",
+  "environment": {
+    "model": "none (ANTHROPIC_API_KEY removed)",
+    "geocoder": "nominatim (public)",
+    "poi": "overpass (public, default endpoint rotation) + wikidata",
+    "routing": "labelled estimates (no router configured)"
+  },
+  "runs": [
+    {
+      "id": "switzerland-rail",
+      "title": "Switzerland by train, 10 days, couple, July",
+      "destination": "Switzerland",
+      "categories": [
+        "country",
+        "transit_heavy"
+      ],
+      "tripId": "b1d1b9e2-d673-4e46-a0ba-e8d52e6f265b",
+      "outcome": "failed",
+      "failedStage": "build",
+      "failureDetail": "build: Your Discovery Board doesn’t have enough places to fill every day. Nothing was lost — your answers are saved — include a few more places, rescan, or shorten the trip.",
+      "stages": {
+        "create_ms": 44,
+        "resolve_ms": 2110,
+        "questionnaire_ms": 7,
+        "scan_total_ms": 163434,
+        "scan_propose_ms": 82813,
+        "scan_place_ms": 1,
+        "scan_time_ms": 1,
+        "scan_food_ms": 80538,
+        "scan_assemble_ms": 32,
+        "autopick_ms": 17,
+        "build_ms": 1554,
+        "total_ms": 167179
+      },
+      "resolution": {
+        "name": "Switzerland",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "CH"
+        ],
+        "center": {
+          "lat": 46.7985624,
+          "lng": 8.2319736
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 9,
+        "placed": 9,
+        "bases": 1,
+        "boardCandidates": 9,
+        "autoPicks": 8,
+        "foodVenues": 8,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates, openstreetmap"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 40,
+        "groups": 7,
+        "failedGroups": [
+          "tourism",
+          "historic",
+          "natural",
+          "leisure",
+          "waterway",
+          "amenity"
+        ],
+        "elements": 214,
+        "usable": 212,
+        "sitelinksAsked": 22,
+        "sitelinksAnswered": 22,
+        "settlements": 214,
+        "kept": 9,
+        "bases": 2
+      },
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for b1d1b9e2-d673-4e46-a0ba-e8d52e6f265b: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for b1d1b9e2-d673-4e46-a0ba-e8d52e6f265b (open data): 9 returned, 9 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: partial, 8 venues from 1 boxes (0 failed, 1 calls, 0 beyond a door walk).",
+        "Discovery scan ready for b1d1b9e2-d673-4e46-a0ba-e8d52e6f265b in 163s: 9 places, 1 bases, matrix estimated (0/110)."
+      ]
+    },
+    {
+      "id": "zurich-carfree-short",
+      "title": "Zurich weekend, car-free, solo, late arrival",
+      "destination": "Zurich",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "bc0059fe-6c88-4273-9a7a-592f1d94c77a",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 2725,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 166054,
+        "scan_propose_ms": 84513,
+        "scan_place_ms": 1,
+        "scan_time_ms": 2,
+        "scan_food_ms": 81493,
+        "scan_assemble_ms": 4,
+        "autopick_ms": 32,
+        "build_ms": 3242,
+        "total_ms": 172072
+      },
+      "resolution": {
+        "name": "Zurich",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "CH"
+        ],
+        "center": {
+          "lat": 47.3744489,
+          "lng": 8.5410422
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 25,
+        "placed": 25,
+        "bases": 1,
+        "boardCandidates": 25,
+        "autoPicks": 6,
+        "foodVenues": 8,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates, openstreetmap"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 12,
+        "groups": 6,
+        "failedGroups": [
+          "historic",
+          "natural",
+          "leisure",
+          "waterway",
+          "amenity"
+        ],
+        "elements": 68,
+        "usable": 68,
+        "sitelinksAsked": 47,
+        "sitelinksAnswered": 47,
+        "settlements": 0,
+        "kept": 25,
+        "bases": 1
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 3,
+        "emptyDays": 0,
+        "stopsPerDay": [
+          2,
+          3,
+          1
+        ],
+        "meanStopsPerDay": 2,
+        "travelMinutesPerDay": [
+          55,
+          90,
+          65
+        ],
+        "maxTravelMinutes": 90,
+        "meanTravelMinutes": 70,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 8,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 1,
+            "title": "Chinagarten Zürich",
+            "placeId": "scan-place-chinagarten-zurich",
+            "category": "historic_site",
+            "lat": 47.354972,
+            "lng": 8.5519914,
+            "kmFromCentre": 2,
+            "country": "CH"
+          },
+          {
+            "day": 1,
+            "title": "Karlsturm",
+            "placeId": "scan-place-karlsturm",
+            "category": "viewpoint",
+            "lat": 47.3701486,
+            "lng": 8.5436792,
+            "kmFromCentre": 1,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Volière",
+            "placeId": "scan-place-voliere",
+            "category": "wildlife_area",
+            "lat": 47.3623346,
+            "lng": 8.5356873,
+            "kmFromCentre": 1,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Kunsthalle Zürich",
+            "placeId": "scan-place-kunsthalle-zurich",
+            "category": "museum",
+            "lat": 47.3894008,
+            "lng": 8.5248893,
+            "kmFromCentre": 2,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Haus Konstruktiv",
+            "placeId": "scan-place-haus-konstruktiv",
+            "category": "museum",
+            "lat": 47.3891301,
+            "lng": 8.5252692,
+            "kmFromCentre": 2,
+            "country": "CH"
+          },
+          {
+            "day": 3,
+            "title": "Monte Diggelmann",
+            "placeId": "scan-place-monte-diggelmann",
+            "category": "viewpoint",
+            "lat": 47.3932559,
+            "lng": 8.5495392,
+            "kmFromCentre": 2,
+            "country": "CH"
+          }
+        ],
+        "maxKmFromCentre": 2,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 4,
+        "mealsPerDay": [
+          1,
+          2,
+          0
+        ],
+        "daysWithLunch": 1,
+        "daysWithDinner": 2,
+        "namedMeals": 3,
+        "describedMeals": 0,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 4,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 181,
+          "perPersonPerDayHigh": 421,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-03-12 @Zurich [960-1200]: 16:00 ~rail 25m/3km(geo_estimate) | 16:25 Chinagarten Zürich 75m | 17:40 ~rail 20m/2km(geo_estimate) | 18:00 Karlsturm 45m | 18:45 ~walk 10m/1km(geo_estimate) | 18:55 [meal] Dinner — James Joyce 60m",
+          "D2 2027-03-13 @Zurich [540-1200]: 9:00 ~walk 25m/1km(geo_estimate) | 9:25 Volière 180m | 12:25 ~rail 30m/4km(geo_estimate) | 12:55 [meal] Lunch — Taho Sushi 45m | 13:40 Kunsthalle Zürich 120m | 15:40 Haus Konstruktiv 120m | 17:40 ~walk 35m/2km(geo_estimate) | 18:15 [meal] Dinner — Antica Roma 60m | 19:15 [free_time] Free time 45m",
+          "D3 2027-03-14 @Zurich [540-690]: 9:00 ~rail 25m/3km(geo_estimate) | 9:25 Monte Diggelmann 45m | 10:10 ~walk 40m/2km(geo_estimate) | 10:50 [free_time] Free time 40m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 6
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "meals_present(warning)",
+            "backups_are_local(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "adequate",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "strong",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 70,
+          "freeMinutesPerDay": 28,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.33,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Zurich (2n)"
+        ]
+      },
+      "scanLog": [
+        "Discovery scan for bc0059fe-6c88-4273-9a7a-592f1d94c77a: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for bc0059fe-6c88-4273-9a7a-592f1d94c77a (open data): 25 returned, 25 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: partial, 8 venues from 1 boxes (0 failed, 1 calls, 0 beyond a door walk).",
+        "Discovery scan ready for bc0059fe-6c88-4273-9a7a-592f1d94c77a in 166s: 25 places, 1 bases, matrix estimated (0/650)."
+      ]
+    },
+    {
+      "id": "zermatt-winter",
+      "title": "Zermatt in January, car-free, friends, winter sports",
+      "destination": "Zermatt",
+      "categories": [
+        "rural_remote",
+        "transit_heavy"
+      ],
+      "tripId": "097f3476-0fd9-4499-bb8e-e8e5dbb0f966",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2071,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 219873,
+        "scan_propose_ms": 139258,
+        "scan_place_ms": 1,
+        "scan_time_ms": 0,
+        "scan_food_ms": 80584,
+        "scan_assemble_ms": 7,
+        "autopick_ms": 19,
+        "build_ms": 2454,
+        "total_ms": 224435
+      },
+      "resolution": {
+        "name": "Zermatt",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "CH"
+        ],
+        "center": {
+          "lat": 46.0212076,
+          "lng": 7.749254
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 5,
+        "placed": 5,
+        "bases": 1,
+        "boardCandidates": 5,
+        "autoPicks": 4,
+        "foodVenues": 12,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates, openstreetmap"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 12,
+        "groups": 6,
+        "failedGroups": [
+          "natural",
+          "leisure",
+          "waterway",
+          "amenity"
+        ],
+        "elements": 6,
+        "usable": 5,
+        "sitelinksAsked": 5,
+        "sitelinksAnswered": 5,
+        "settlements": 0,
+        "kept": 5,
+        "bases": 1
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 5,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          2,
+          1,
+          1,
+          0
+        ],
+        "meanStopsPerDay": 0.8,
+        "travelMinutesPerDay": [
+          0,
+          65,
+          120,
+          90,
+          0
+        ],
+        "maxTravelMinutes": 120,
+        "meanTravelMinutes": 55,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 7,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Gornergrat",
+            "placeId": "scan-place-gornergrat",
+            "category": "viewpoint",
+            "lat": 45.9833098,
+            "lng": 7.78463,
+            "kmFromCentre": 5,
+            "country": "CH"
+          },
+          {
+            "day": 2,
+            "title": "Matterhorn Museum",
+            "placeId": "scan-place-matterhorn-museum",
+            "category": "museum",
+            "lat": 46.0197686,
+            "lng": 7.7464574,
+            "kmFromCentre": 0,
+            "country": "CH"
+          },
+          {
+            "day": 3,
+            "title": "Roc de la Vache",
+            "placeId": "scan-place-roc-de-la-vache",
+            "category": "viewpoint",
+            "lat": 46.1189247,
+            "lng": 7.6451894,
+            "kmFromCentre": 14,
+            "country": "CH"
+          },
+          {
+            "day": 4,
+            "title": "Charles Kuonen Hängebrücke",
+            "placeId": "scan-place-charles-kuonen-hangebrucke",
+            "category": "historic_site",
+            "lat": 46.1013567,
+            "lng": 7.8023083,
+            "kmFromCentre": 10,
+            "country": "CH"
+          }
+        ],
+        "maxKmFromCentre": 14,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 3,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 3,
+        "daysWithDinner": 4,
+        "namedMeals": 3,
+        "describedMeals": 4,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 452,
+          "perPersonPerDayHigh": 1076,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "luxury"
+        },
+        "planText": [
+          "D1 2027-01-16 @Zermatt [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Grampi's 60m",
+          "D2 2027-01-17 @Zermatt [540-1140]: 9:00 ~rail 30m/7km(geo_estimate) | 9:30 Gornergrat 45m | 10:15 ~rail 30m/7km(geo_estimate) | 10:45 Matterhorn Museum 120m | 12:45 [meal] Lunch — Whymper-Stube 45m | 13:30 ~walk 5m/0km(geo_estimate) | 13:35 [free_time] Free time 265m | 18:00 [meal] Dinner — 1818 60m",
+          "D3 2027-01-18 @Zermatt [540-1140]: 9:00 ~rail 60m/18km(geo_estimate) | 10:00 Roc de la Vache 45m | 10:45 [free_time] Free time 45m | 11:30 [meal] Lunch — Pack a lunch — food is thin out near Zermatt 45m | 12:15 ~public_bus 60m/18km(geo_estimate) | 13:15 [free_time] Free time 285m | 18:00 [meal] Dinner — Dinner in Zermatt 60m",
+          "D4 2027-01-19 @Zermatt [540-1140]: 9:00 ~rail 45m/13km(geo_estimate) | 9:45 Charles Kuonen Hängebrücke 75m | 11:00 [free_time] Free time 30m | 11:30 [meal] Lunch — Casual lunch in Zermatt, near the midday stop 45m | 12:15 ~public_bus 45m/13km(geo_estimate) | 13:00 [free_time] Free time 300m | 18:00 [meal] Dinner — Dinner in Zermatt 60m",
+          "D5 2027-01-20 @Zermatt [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 4
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": []
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.75,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 55,
+          "freeMinutesPerDay": 227,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.6,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Zermatt (4n)"
+        ]
+      },
+      "scanLog": [
+        "Discovery scan for 097f3476-0fd9-4499-bb8e-e8e5dbb0f966: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for 097f3476-0fd9-4499-bb8e-e8e5dbb0f966 (open data): 5 returned, 5 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: partial, 12 venues from 1 boxes (0 failed, 1 calls, 0 beyond a door walk).",
+        "Discovery scan ready for 097f3476-0fd9-4499-bb8e-e8e5dbb0f966 in 220s: 5 places, 1 bases, matrix estimated (0/30)."
+      ]
+    },
+    {
+      "id": "reykjavik-winter",
+      "title": "Reykjavik in February, 4 days, couple, car-free",
+      "destination": "Reykjavik",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "08f0d54a-1e29-4a21-9e36-e355562ba8cb",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1976,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 162854,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 164833
+      },
+      "resolution": {
+        "name": "Reykjavik",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "IS"
+        ],
+        "center": {
+          "lat": 64.145981,
+          "lng": -21.9422367
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 08f0d54a-1e29-4a21-9e36-e355562ba8cb: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref e7d4d8c6] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Reykjavik)"
+      ]
+    },
+    {
+      "id": "japan-family",
+      "title": "Japan, 14 days, family with two kids, April, rail",
+      "destination": "Japan",
+      "categories": [
+        "country",
+        "transit_heavy"
+      ],
+      "tripId": "57a47e13-06d3-4c6b-9435-587eee4937ed",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1912,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 162297,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 164213
+      },
+      "resolution": {
+        "name": "Japan",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "JP"
+        ],
+        "center": {
+          "lat": 36.5748441,
+          "lng": 139.2394179
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 57a47e13-06d3-4c6b-9435-587eee4937ed: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref e6a52efb] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Japan)"
+      ]
+    },
+    {
+      "id": "kyoto-temples",
+      "title": "Kyoto, 4 days, seniors, car-free, temples, November",
+      "destination": "Kyoto",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "291ffee1-c4fe-4246-9cf7-f15793b37046",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 3,
+        "resolve_ms": 1979,
+        "questionnaire_ms": 4,
+        "scan_total_ms": 163645,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 165633
+      },
+      "resolution": {
+        "name": "Kyoto",
+        "scale": "district",
+        "type": "settlement",
+        "countries": [
+          "JP"
+        ],
+        "center": {
+          "lat": 35.0115754,
+          "lng": 135.7681441
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 291ffee1-c4fe-4246-9cf7-f15793b37046: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref b7fbec56] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Kyoto)"
+      ]
+    },
+    {
+      "id": "mexico-city-food",
+      "title": "Mexico City, 6 days, solo foodie, March",
+      "destination": "Mexico City",
+      "categories": [
+        "urban"
+      ],
+      "tripId": "51f22a4b-4ebd-47d7-b383-241bc41ac6d8",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2034,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 162509,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 164547
+      },
+      "resolution": {
+        "name": "Mexico City",
+        "scale": "district",
+        "type": "city_region",
+        "countries": [
+          "MX"
+        ],
+        "center": {
+          "lat": 19.3207722,
+          "lng": -99.1514677
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 51f22a4b-4ebd-47d7-b383-241bc41ac6d8: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 7097ac51] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Mexico City)"
+      ]
+    },
+    {
+      "id": "istanbul-early-dep",
+      "title": "Istanbul, 4 days, couple, April, 07:00 departure",
+      "destination": "Istanbul",
+      "categories": [
+        "urban"
+      ],
+      "tripId": "d3984dfc-786a-4291-b112-a998151aef67",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 2048,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 139726,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 141779
+      },
+      "resolution": {
+        "name": "Istanbul",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "TR"
+        ],
+        "center": {
+          "lat": 41.006381,
+          "lng": 28.9758715
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for d3984dfc-786a-4291-b112-a998151aef67: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 07b75ad8] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Istanbul)"
+      ]
+    },
+    {
+      "id": "patagonia-long",
+      "title": "Patagonia, 16 days, couple, January, hiking, car",
+      "destination": "Patagonia",
+      "categories": [
+        "multi_country",
+        "rural_remote",
+        "park"
+      ],
+      "tripId": "6a2e6708-911e-4f9f-abb5-d92c4f3d0845",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1811,
+        "questionnaire_ms": 4,
+        "scan_total_ms": 164886,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 166703
+      },
+      "resolution": {
+        "name": "Patagonia",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "CO"
+        ],
+        "center": {
+          "lat": 3.2684853,
+          "lng": -75.7999455
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 6a2e6708-911e-4f9f-abb5-d92c4f3d0845: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref f0a9b7ca] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Patagonia)"
+      ]
+    },
+    {
+      "id": "faroe-islands",
+      "title": "Faroe Islands, 5 days, friends, July, hiking, car",
+      "destination": "Faroe Islands",
+      "categories": [
+        "island",
+        "rural_remote"
+      ],
+      "tripId": "91815daf-ab6f-442a-b7d4-9fe2b054c88a",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 1936,
+        "questionnaire_ms": 2,
+        "scan_total_ms": 140845,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 142786
+      },
+      "resolution": {
+        "name": "Faroe Islands",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "FO"
+        ],
+        "center": {
+          "lat": 62.0282362,
+          "lng": -6.8819254
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 91815daf-ab6f-442a-b7d4-9fe2b054c88a: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref bf347174] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Faroe Islands)"
+      ]
+    },
+    {
+      "id": "atacama",
+      "title": "Atacama Desert, 6 days, couple, November, stargazing, car",
+      "destination": "Atacama Desert",
+      "categories": [
+        "rural_remote"
+      ],
+      "tripId": "b54bda46-118d-4297-bc92-6c8dab909419",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1900,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 139925,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 141829
+      },
+      "resolution": {
+        "name": "Atacama Desert",
+        "scale": "district",
+        "type": "natural_region",
+        "countries": [
+          "CL"
+        ],
+        "center": {
+          "lat": -24.5563029,
+          "lng": -69.4226479
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for b54bda46-118d-4297-bc92-6c8dab909419: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref f38d6281] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Atacama Desert)"
+      ]
+    },
+    {
+      "id": "vienna-wheelchair",
+      "title": "Vienna, 4 days, wheelchair user, car-free, May",
+      "destination": "Vienna",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "2647e0dd-3856-409f-90e5-6a880d0b735a",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1613,
+        "questionnaire_ms": 2,
+        "scan_total_ms": 162667,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 164284
+      },
+      "resolution": {
+        "name": "Vienna",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "AT"
+        ],
+        "center": {
+          "lat": 48.2083537,
+          "lng": 16.3725042
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 2647e0dd-3856-409f-90e5-6a880d0b735a: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 34a78624] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Vienna)"
+      ]
+    },
+    {
+      "id": "alaska",
+      "title": "Alaska, 10 days, couple, August, wildlife, car",
+      "destination": "Alaska",
+      "categories": [
+        "rural_remote",
+        "road_trip",
+        "park"
+      ],
+      "tripId": "1ed013a5-a839-4800-baf1-5cea6d2161c0",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 3562,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 140831,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 144397
+      },
+      "resolution": {
+        "name": "Alaska",
+        "scale": "country",
+        "type": "admin_area",
+        "countries": [
+          "US"
+        ],
+        "center": {
+          "lat": 64.4459613,
+          "lng": -149.680909
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 1ed013a5-a839-4800-baf1-5cea6d2161c0: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 1a28d3ec] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Alaska)"
+      ]
+    },
+    {
+      "id": "canadian-rockies",
+      "title": "Canadian Rockies, 7 days, family, September, car",
+      "destination": "the Canadian Rockies",
+      "categories": [
+        "park",
+        "road_trip"
+      ],
+      "tripId": "9e0eae71-68ff-4065-9f88-f429cee4c7b3",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 3892,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 148881,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 152777
+      },
+      "resolution": {
+        "name": "the Canadian Rockies",
+        "scale": "district",
+        "type": "mountain_region",
+        "countries": [
+          "CA"
+        ],
+        "center": {
+          "lat": 54.3754573,
+          "lng": -121.2493863
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 9e0eae71-68ff-4065-9f88-f429cee4c7b3: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 543c0e92] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near the Canadian Rockies)"
+      ]
+    },
+    {
+      "id": "rome-48h",
+      "title": "Rome, 2 days, late arrival and early departure",
+      "destination": "Rome",
+      "categories": [
+        "urban"
+      ],
+      "tripId": "cba4b04f-323e-4ed2-a4a8-5919cfc1d34c",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2085,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 104097,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 106185
+      },
+      "resolution": {
+        "name": "Rome",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "US"
+        ],
+        "center": {
+          "lat": 34.257038,
+          "lng": -85.1646726
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for cba4b04f-323e-4ed2-a4a8-5919cfc1d34c: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 088085b2] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Rome)"
+      ]
+    },
+    {
+      "id": "costa-rica-family",
+      "title": "Costa Rica, 9 days, family with kids, December, car",
+      "destination": "Costa Rica",
+      "categories": [
+        "country",
+        "rural_remote"
+      ],
+      "tripId": "2b4853e2-12d1-48b3-b282-5ebed28f091f",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2080,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 163203,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 165287
+      },
+      "resolution": {
+        "name": "Costa Rica",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "CR"
+        ],
+        "center": {
+          "lat": 10.2735633,
+          "lng": -84.0739102
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 2b4853e2-12d1-48b3-b282-5ebed28f091f: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 2b10975c] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Costa Rica)"
+      ]
+    },
+    {
+      "id": "marrakech",
+      "title": "Marrakech, 4 days, couple, March, markets",
+      "destination": "Marrakech",
+      "categories": [
+        "urban"
+      ],
+      "tripId": "789f4eeb-3280-40b3-a5a4-85767ca9e3a2",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1897,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 163088,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 164989
+      },
+      "resolution": {
+        "name": "Marrakesh",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "MA"
+        ],
+        "center": {
+          "lat": 31.6258257,
+          "lng": -7.9891608
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 789f4eeb-3280-40b3-a5a4-85767ca9e3a2: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 5cd3c248] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Marrakech)"
+      ]
+    },
+    {
+      "id": "norway-fjords",
+      "title": "Norwegian fjords, 8 days, couple, June, car",
+      "destination": "Norwegian fjords",
+      "categories": [
+        "rural_remote",
+        "road_trip"
+      ],
+      "tripId": "dad844b7-8559-4dcb-929d-339ee9632070",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 3974,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 163789,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 167767
+      },
+      "resolution": {
+        "name": "Norwegian fjords",
+        "scale": "region",
+        "type": "natural_region",
+        "countries": [
+          "NO"
+        ],
+        "center": {
+          "lat": 59.91,
+          "lng": 10.75
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for dad844b7-8559-4dcb-929d-339ee9632070: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref c19e7347] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Norwegian fjords)"
+      ]
+    },
+    {
+      "id": "lake-district-seniors",
+      "title": "Lake District, 5 days, seniors, May, gentle walks, car",
+      "destination": "Lake District",
+      "categories": [
+        "rural_remote",
+        "park"
+      ],
+      "tripId": "7d58db7b-c155-4862-a3ef-9ae2aab56392",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2386,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 164189,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 166580
+      },
+      "resolution": {
+        "name": "Lake District",
+        "scale": "district",
+        "type": "natural_region",
+        "countries": [
+          "GB"
+        ],
+        "center": {
+          "lat": 54.4785304,
+          "lng": -3.0655331
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 7d58db7b-c155-4862-a3ef-9ae2aab56392: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref f6f7c868] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Lake District National Park)"
+      ]
+    },
+    {
+      "id": "amalfi-carfree",
+      "title": "Amalfi Coast, 5 days, couple, September, car-free",
+      "destination": "Amalfi Coast",
+      "categories": [
+        "rural_remote",
+        "transit_heavy"
+      ],
+      "tripId": "2a16395e-81f1-4113-a706-960b2ab9eeeb",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2290,
+        "questionnaire_ms": 2,
+        "scan_total_ms": 164451,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 166745
+      },
+      "resolution": {
+        "name": "Amalfi Coast",
+        "scale": "settlement",
+        "type": "coast",
+        "countries": [
+          "IT"
+        ],
+        "center": {
+          "lat": 40.6646536,
+          "lng": 14.6364481
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "scanLog": [
+        "Discovery scan for 2a16395e-81f1-4113-a706-960b2ab9eeeb: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 31c4446e] composer_not_configured: no composition model is configured | open-data fallback failed: too_few_places (only 0 notable mapped places near Amalfi Coast)"
+      ]
+    },
+    {
+      "id": "mammoth-lakes",
+      "title": "Mammoth Lakes, 4 days, couple, August, car",
+      "destination": "Mammoth Lakes",
+      "categories": [
+        "park",
+        "rural_remote"
+      ],
+      "tripId": "d77f0ed8-c4b4-4b36-9c0c-0217d08e33d4",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 10,
+        "resolve_ms": null,
+        "questionnaire_ms": 69,
+        "scan_total_ms": null,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": 27,
+        "build_ms": 11766,
+        "total_ms": 11884
+      },
+      "resolution": {
+        "name": null,
+        "scale": null,
+        "type": null,
+        "countries": [],
+        "center": null
+      },
+      "scan": {
+        "state": "authored_region",
+        "failureKind": null,
+        "proposalSource": "authored",
+        "candidates": 0,
+        "placed": 0,
+        "bases": 1,
+        "boardCandidates": 23,
+        "autoPicks": 11,
+        "foodVenues": 20,
+        "routing": "sidequest-authored-fixture"
+      },
+      "openData": null,
+      "metrics": {
+        "itineraryStatus": "needs_decision",
+        "feasibility": "unresolved_major_dependency",
+        "days": 5,
+        "emptyDays": 0,
+        "stopsPerDay": [
+          1,
+          3,
+          2,
+          4,
+          1
+        ],
+        "meanStopsPerDay": 2.2,
+        "travelMinutesPerDay": [
+          30,
+          60,
+          50,
+          170,
+          16
+        ],
+        "maxTravelMinutes": 170,
+        "meanTravelMinutes": 65,
+        "legs": {
+          "measured": 16,
+          "scheduled": 0,
+          "geo_estimate": 0,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 1,
+            "title": "Minaret Vista",
+            "placeId": "minaret-vista",
+            "category": "viewpoint",
+            "lat": 37.6497,
+            "lng": -119.0839,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 2,
+            "title": "Convict Lake",
+            "placeId": "convict-lake",
+            "category": "lake",
+            "lat": 37.5906,
+            "lng": -118.8583,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 2,
+            "title": "McGee Creek Canyon",
+            "placeId": "mcgee-creek-canyon",
+            "category": "day_hike",
+            "lat": 37.5497,
+            "lng": -118.8003,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 2,
+            "title": "The Village at Mammoth",
+            "placeId": "the-village-at-mammoth",
+            "category": "town_and_food",
+            "lat": 37.6512,
+            "lng": -118.9793,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 3,
+            "title": "Mammoth Lakes Basin",
+            "placeId": "mammoth-lakes-basin",
+            "category": "lake",
+            "lat": 37.5972,
+            "lng": -118.9997,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 3,
+            "title": "Sherwin Lakes Trail",
+            "placeId": "sherwin-lakes-trail",
+            "category": "day_hike",
+            "lat": 37.6222,
+            "lng": -118.9506,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "Mono Lake South Tufa",
+            "placeId": "mono-lake-south-tufa",
+            "category": "easy_walk",
+            "lat": 37.9375,
+            "lng": -119.0264,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "June Lake Loop",
+            "placeId": "june-lake-loop",
+            "category": "scenic_drive",
+            "lat": 37.7811,
+            "lng": -119.0764,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "Inyo Craters",
+            "placeId": "inyo-craters",
+            "category": "easy_walk",
+            "lat": 37.6919,
+            "lng": -119.0247,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "Panorama Gondola",
+            "placeId": "panorama-gondola",
+            "category": "gondola_or_tram",
+            "lat": 37.6308,
+            "lng": -119.0326,
+            "kmFromCentre": null,
+            "country": "US"
+          },
+          {
+            "day": 5,
+            "title": "Earthquake Fault",
+            "placeId": "earthquake-fault",
+            "category": "easy_walk",
+            "lat": 37.6531,
+            "lng": -119.0261,
+            "kmFromCentre": null,
+            "country": "US"
+          }
+        ],
+        "maxKmFromCentre": null,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 7,
+        "mealsPerDay": [
+          1,
+          1,
+          3,
+          3,
+          0
+        ],
+        "daysWithLunch": 2,
+        "daysWithDinner": 4,
+        "namedMeals": 5,
+        "describedMeals": 3,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 119,
+          "perPersonPerDayHigh": 252,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-08-19 @Mammoth Lakes [1020-1200]: 17:00 ~drive 15m/12km(measured) | 17:15 Minaret Vista 60m | 18:15 ~drive 15m/12km(measured) | 18:30 [meal] Dinner — Mammoth Brewing Company 60m | 19:30 [free_time] Free time 30m",
+          "D2 2027-08-20 @Mammoth Lakes [540-1140]: 9:00 ~drive 20m/20km(measured) | 9:20 Convict Lake 120m | 11:20 ~drive 9m/8km(measured) | 11:29 McGee Creek Canyon 210m | 14:59 ~drive 28m/25km(measured) | 15:27 The Village at Mammoth 90m | 16:57 ~drive 3m/1km(measured) | 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Roberto's Cafe 60m",
+          "D3 2027-08-21 @Mammoth Lakes [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Mammoth Lakes before heading out 30m | 9:30 ~drive 10m/6km(measured) | 9:40 Mammoth Lakes Basin 150m | 12:10 ~drive 25m/16km(measured) | 12:35 [meal] Lunch — The Stove 45m | 13:20 Sherwin Lakes Trail 240m | 17:20 ~drive 15m/10km(measured) | 18:00 [meal] Dinner — Roberto's Cafe 60m",
+          "D4 2027-08-22 @Mammoth Lakes [330-1140]: 5:30 [meal] Breakfast — Early breakfast in Mammoth Lakes before heading out 30m | 6:00 ~drive 50m/55km(measured) | 6:50 Mono Lake South Tufa 90m | 8:20 ~drive 35m/41.3km(measured) | 8:55 June Lake Loop 180m | 11:55 ~drive 36m/32.6km(measured) | 12:31 [meal] Lunch — Pack a lunch — food is thin out near Inyo National Forest 45m | 13:16 Inyo Craters 75m | 14:31 ~drive 37m/23km(measured) | 15:08 Panorama Gondola 120m | 17:08 ~drive 12m/7km(measured) | 17:20 [free_time] Free time 40m | 18:00 [meal] Dinner — Mammoth Brewing Company 60m",
+          "D5 2027-08-23 @Mammoth Lakes [540-690]: 9:00 ~drive 8m/5km(measured) | 9:08 Earthquake Fault 30m | 9:38 ~drive 8m/5km(measured) | 9:46 [free_time] Free time 104m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 11
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "frequency_honoured(warning)",
+            "meals_present(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 9,
+          "notRun": 7,
+          "failed": [
+            "route_order_coherent(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "adequate",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "strong",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "strong",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "adequate"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.58,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 65,
+          "freeMinutesPerDay": 47,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.4,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 1,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Mammoth Lakes (4n)"
+        ]
+      },
+      "authoredRegion": true
+    },
+    {
+      "id": "iceland-ring",
+      "title": "Iceland ring road, 12 days, friends, September, car",
+      "destination": "Iceland",
+      "categories": [
+        "country",
+        "road_trip"
+      ],
+      "tripId": "c6d7314c-c970-45f9-b151-d5562c7c2105",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 40,
+        "resolve_ms": 2405,
+        "questionnaire_ms": 9,
+        "scan_total_ms": 79398,
+        "scan_propose_ms": 79230,
+        "scan_place_ms": 3,
+        "scan_time_ms": 5,
+        "scan_food_ms": 2,
+        "scan_assemble_ms": 27,
+        "autopick_ms": 82,
+        "build_ms": 3099,
+        "total_ms": 85055
+      },
+      "resolution": {
+        "name": "Iceland",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "IS"
+        ],
+        "center": {
+          "lat": 64.9841821,
+          "lng": -18.1059013
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 40,
+        "placed": 40,
+        "bases": 3,
+        "boardCandidates": 40,
+        "autoPicks": 14,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 150,
+        "groups": 7,
+        "failedGroups": [],
+        "elements": 117,
+        "usable": 108,
+        "sitelinksAsked": 98,
+        "sitelinksAnswered": 98,
+        "settlements": 20,
+        "kept": 40,
+        "bases": 3
+      },
+      "metrics": {
+        "itineraryStatus": "needs_decision",
+        "feasibility": "unresolved_major_dependency",
+        "days": 13,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          1,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          0
+        ],
+        "meanStopsPerDay": 1.1,
+        "travelMinutesPerDay": [
+          0,
+          130,
+          225,
+          180,
+          190,
+          120,
+          190,
+          190,
+          110,
+          255,
+          145,
+          200,
+          0
+        ],
+        "maxTravelMinutes": 255,
+        "meanTravelMinutes": 149,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 25,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Bárðarbunga",
+            "placeId": "scan-place-bar-arbunga",
+            "category": "day_hike",
+            "lat": 64.640833333,
+            "lng": -17.527777777,
+            "kmFromCentre": 47,
+            "country": "IS"
+          },
+          {
+            "day": 3,
+            "title": "Dyngjujökull",
+            "placeId": "scan-place-dyngjujokull",
+            "category": "viewpoint",
+            "lat": 64.76666667,
+            "lng": -16.88333333,
+            "kmFromCentre": 63,
+            "country": "IS"
+          },
+          {
+            "day": 3,
+            "title": "Kverkfjöll",
+            "placeId": "scan-place-kverkfjoll",
+            "category": "historic_site",
+            "lat": 64.661112247,
+            "lng": -16.665428258,
+            "kmFromCentre": 77,
+            "country": "IS"
+          },
+          {
+            "day": 4,
+            "title": "Askja",
+            "placeId": "scan-place-askja",
+            "category": "easy_walk",
+            "lat": 65.03,
+            "lng": -16.75,
+            "kmFromCentre": 64,
+            "country": "IS"
+          },
+          {
+            "day": 5,
+            "title": "Hveravellir",
+            "placeId": "scan-place-hveravellir",
+            "category": "hot_spring",
+            "lat": 64.865296,
+            "lng": -19.556676,
+            "kmFromCentre": 70,
+            "country": "IS"
+          },
+          {
+            "day": 6,
+            "title": "Trölladyngja",
+            "placeId": "scan-place-trolladyngja",
+            "category": "day_hike",
+            "lat": 64.89444,
+            "lng": -17.24981,
+            "kmFromCentre": 42,
+            "country": "IS"
+          },
+          {
+            "day": 7,
+            "title": "Ólafsfjörður",
+            "placeId": "scan-place-olafsfjor-ur",
+            "category": "town_and_food",
+            "lat": 66.071466666,
+            "lng": -18.653833333,
+            "kmFromCentre": 124,
+            "country": "IS"
+          },
+          {
+            "day": 8,
+            "title": "Grjótagjá",
+            "placeId": "scan-place-grjotagja",
+            "category": "historic_site",
+            "lat": 65.62716,
+            "lng": -16.88168,
+            "kmFromCentre": 91,
+            "country": "IS"
+          },
+          {
+            "day": 9,
+            "title": "Súlur",
+            "placeId": "scan-place-sulur",
+            "category": "day_hike",
+            "lat": 65.609760358,
+            "lng": -18.193960006,
+            "kmFromCentre": 70,
+            "country": "IS"
+          },
+          {
+            "day": 10,
+            "title": "Gullfoss",
+            "placeId": "scan-place-gullfoss",
+            "category": "viewpoint",
+            "lat": 64.327330041,
+            "lng": -20.119399731,
+            "kmFromCentre": 120,
+            "country": "IS"
+          },
+          {
+            "day": 11,
+            "title": "Okjökull",
+            "placeId": "scan-place-okjokull",
+            "category": "viewpoint",
+            "lat": 64.604430435,
+            "lng": -20.882244934,
+            "kmFromCentre": 138,
+            "country": "IS"
+          },
+          {
+            "day": 11,
+            "title": "Geitlandsjökull",
+            "placeId": "scan-place-geitlandsjokull",
+            "category": "viewpoint",
+            "lat": 64.6,
+            "lng": -20.6,
+            "kmFromCentre": 126,
+            "country": "IS"
+          },
+          {
+            "day": 12,
+            "title": "Hekla",
+            "placeId": "scan-place-hekla",
+            "category": "historic_site",
+            "lat": 63.992222222,
+            "lng": -19.665833333,
+            "kmFromCentre": 133,
+            "country": "IS"
+          },
+          {
+            "day": 12,
+            "title": "Landmannahellir",
+            "placeId": "scan-place-landmannahellir",
+            "category": "historic_site",
+            "lat": 64.054469971,
+            "lng": -19.214924503,
+            "kmFromCentre": 116,
+            "country": "IS"
+          }
+        ],
+        "maxKmFromCentre": 138,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 6,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          2,
+          2,
+          3,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 8,
+        "daysWithDinner": 12,
+        "namedMeals": 0,
+        "describedMeals": 25,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 123,
+          "perPersonPerDayHigh": 266,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-09-03 @Iceland [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Dinner in Iceland 60m",
+          "D2 2027-09-04 @Iceland [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Iceland before heading out 30m | 9:30 ~drive 65m/47km(geo_estimate) | 10:35 Bárðarbunga 300m | 15:35 ~drive 65m/47km(geo_estimate) | 16:40 [free_time] Free time 80m | 18:00 [meal] Dinner — Dinner in Iceland 60m",
+          "D3 2027-09-05 @Iceland [540-1140]: 9:00 ~drive 85m/63km(geo_estimate) | 10:25 Dyngjujökull 120m | 12:25 ~drive 35m/16km(geo_estimate) | 13:00 [meal] Lunch — Pack a lunch — food is thin out near Iceland 45m | 13:45 Kverkfjöll 120m | 15:45 ~drive 105m/77km(geo_estimate) | 17:30 [free_time] Free time 30m | 18:00 [meal] Dinner — Dinner in Iceland 60m",
+          "D4 2027-09-06 @Iceland [540-1140]: 9:00 ~drive 90m/64km(geo_estimate) | 10:30 Askja 120m | 12:30 [meal] Lunch — Pack a lunch — food is thin out near Iceland 45m | 13:15 ~drive 90m/64km(geo_estimate) | 14:45 [free_time] Free time 195m | 18:00 [meal] Dinner — Dinner in Iceland 60m",
+          "D5 2027-09-07 @Iceland [540-1140]: 9:00 ~drive 95m/70km(geo_estimate) | 10:35 Hveravellir 120m | 12:35 [meal] Lunch — Casual lunch in Iceland, near the midday stop 45m | 13:20 ~drive 95m/70km(geo_estimate) | 14:55 [free_time] Free time 185m | 18:00 [meal] Dinner — Dinner in Iceland 60m",
+          "D6 2027-09-08 @Iceland [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Iceland before heading out 30m | 9:30 ~drive 60m/42km(geo_estimate) | 10:30 Trölladyngja 300m | 15:30 ~drive 60m/42km(geo_estimate) | 16:30 [free_time] Free time 90m | 18:00 [meal] Dinner — Dinner in Iceland 60m",
+          "D7 2027-09-09 @Grenivík [540-1140]: 9:00 [meal] Breakfast — Breakfast in Iceland before heading out 30m | 9:30 ~drive 140m/124km(geo_estimate) | 11:50 [meal] Lunch — Casual lunch in Ólafsfjörður, near the midday stop 45m | 12:35 Ólafsfjörður 120m | 14:35 ~drive 50m/25km(geo_estimate) | 15:25 [free_time] Free time 155m | 18:00 [meal] Dinner — Dinner in Grenivík 60m",
+          "D8 2027-09-10 @Grenivík [540-1140]: 9:00 ~drive 95m/69km(geo_estimate) | 10:35 Grjótagjá 90m | 12:05 [meal] Lunch — Casual lunch in Iceland, near the midday stop 45m | 12:50 ~drive 95m/69km(geo_estimate) | 14:25 [free_time] Free time 215m | 18:00 [meal] Dinner — Dinner in Grenivík 60m",
+          "D9 2027-09-11 @Grenivík [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Grenivík before heading out 30m | 9:30 ~drive 55m/37km(geo_estimate) | 10:25 Súlur 300m | 15:25 ~drive 55m/37km(geo_estimate) | 16:20 [free_time] Free time 100m | 18:00 [meal] Dinner — Dinner in Grenivík 60m",
+          "D10 2027-09-12 @Bláskógabyggð [540-1140]: 9:00 [meal] Breakfast — Breakfast in Grenivík before heading out 30m | 9:30 ~drive 225m/201km(geo_estimate) | 13:15 [meal] Lunch — Casual lunch in Iceland, near the midday stop 45m | 14:00 Gullfoss 60m | 15:00 ~drive 30m/15km(geo_estimate) | 15:30 [free_time] Free time 150m | 18:00 [meal] Dinner — Dinner in Bláskógabyggð 60m",
+          "D11 2027-09-13 @Bláskógabyggð [540-1140]: 9:00 ~drive 60m/43km(geo_estimate) | 10:00 Okjökull 120m | 12:00 ~drive 30m/14km(geo_estimate) | 12:30 [meal] Lunch — Pack a lunch — food is thin out near Iceland 45m | 13:15 Geitlandsjökull 120m | 15:15 ~drive 55m/37km(geo_estimate) | 16:10 [free_time] Free time 110m | 18:00 [meal] Dinner — Dinner in Bláskógabyggð 60m",
+          "D12 2027-09-14 @Bláskógabyggð [540-1140]: 9:00 ~drive 70m/48km(geo_estimate) | 10:10 Hekla 120m | 12:10 ~drive 45m/23km(geo_estimate) | 12:55 [meal] Lunch — Pack a lunch — food is thin out near Iceland 45m | 13:40 Landmannahellir 90m | 15:10 ~drive 85m/63km(geo_estimate) | 16:35 [free_time] Free time 85m | 18:00 [meal] Dinner — Dinner in Bláskógabyggð 60m",
+          "D13 2027-09-15 @Bláskógabyggð [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 14
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "frequency_honoured(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 13,
+          "notRun": 3,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "strong",
+          "baseEfficiency": "strong",
+          "activityDensity": "adequate",
+          "chapterRhythm": "strong",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "strong",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "strong",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "adequate"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.62,
+          "hotelChurn": 2,
+          "travelBurdenMinutesPerDay": 149,
+          "freeMinutesPerDay": 123,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.85,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 1,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Iceland (6n)",
+          "Grenivík (3n)",
+          "Bláskógabyggð (3n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for c6d7314c-c970-45f9-b151-d5562c7c2105: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for c6d7314c-c970-45f9-b151-d5562c7c2105 (open data): 40 returned, 40 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for c6d7314c-c970-45f9-b151-d5562c7c2105 in 79s: 40 places, 3 bases, matrix estimated (0/1806)."
+      ]
+    },
+    {
+      "id": "tokyo-carfree",
+      "title": "Tokyo, 5 days, solo, car-free, food and neighbourhoods",
+      "destination": "Tokyo",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "26197842-32cc-41ef-b790-11d38101d069",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 4001,
+        "questionnaire_ms": 3,
+        "scan_total_ms": 5923,
+        "scan_propose_ms": 5568,
+        "scan_place_ms": 1,
+        "scan_time_ms": 1,
+        "scan_food_ms": 0,
+        "scan_assemble_ms": 3,
+        "autopick_ms": 334,
+        "build_ms": 2548,
+        "total_ms": 12818
+      },
+      "resolution": {
+        "name": "Tokyo",
+        "scale": "country",
+        "type": "admin_area",
+        "countries": [
+          "JP"
+        ],
+        "center": {
+          "lat": 35.6768601,
+          "lng": 139.7638947
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 34,
+        "placed": 34,
+        "bases": 2,
+        "boardCandidates": 34,
+        "autoPicks": 15,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 40,
+        "groups": 7,
+        "failedGroups": [],
+        "elements": 138,
+        "usable": 71,
+        "sitelinksAsked": 71,
+        "sitelinksAnswered": 71,
+        "settlements": 68,
+        "kept": 34,
+        "bases": 2
+      },
+      "metrics": {
+        "itineraryStatus": "needs_decision",
+        "feasibility": "unresolved_major_dependency",
+        "days": 6,
+        "emptyDays": 1,
+        "stopsPerDay": [
+          1,
+          4,
+          4,
+          4,
+          2,
+          0
+        ],
+        "meanStopsPerDay": 2.5,
+        "travelMinutesPerDay": [
+          50,
+          130,
+          150,
+          125,
+          155,
+          0
+        ],
+        "maxTravelMinutes": 155,
+        "meanTravelMinutes": 102,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 19,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 1,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 1,
+            "title": "Meiji Jingū",
+            "placeId": "scan-place-meiji-jingu",
+            "category": "historic_site",
+            "lat": 35.676111111,
+            "lng": 139.699166666,
+            "kmFromCentre": 6,
+            "country": "JP"
+          },
+          {
+            "day": 2,
+            "title": "Tokyo Tower",
+            "placeId": "scan-place-tokyo-tower",
+            "category": "viewpoint",
+            "lat": 35.658611111,
+            "lng": 139.745555555,
+            "kmFromCentre": 3,
+            "country": "JP"
+          },
+          {
+            "day": 2,
+            "title": "National Art Center, Tokyo",
+            "placeId": "scan-place-national-art-center-tokyo",
+            "category": "museum",
+            "lat": 35.66528,
+            "lng": 139.72634,
+            "kmFromCentre": 4,
+            "country": "JP"
+          },
+          {
+            "day": 2,
+            "title": "Shimokitazawa",
+            "placeId": "scan-place-shimokitazawa",
+            "category": "town_and_food",
+            "lat": 35.661605555,
+            "lng": 139.666561111,
+            "kmFromCentre": 9,
+            "country": "JP"
+          },
+          {
+            "day": 2,
+            "title": "Tokyo Mosque",
+            "placeId": "scan-place-tokyo-mosque",
+            "category": "historic_site",
+            "lat": 35.66813889,
+            "lng": 139.6765,
+            "kmFromCentre": 8,
+            "country": "JP"
+          },
+          {
+            "day": 3,
+            "title": "Tokyo Skytree",
+            "placeId": "scan-place-tokyo-skytree",
+            "category": "viewpoint",
+            "lat": 35.710055555,
+            "lng": 139.810722222,
+            "kmFromCentre": 6,
+            "country": "JP"
+          },
+          {
+            "day": 3,
+            "title": "Sensō-ji Temple",
+            "placeId": "scan-place-senso-ji-temple",
+            "category": "historic_site",
+            "lat": 35.714555555,
+            "lng": 139.796638888,
+            "kmFromCentre": 5,
+            "country": "JP"
+          },
+          {
+            "day": 3,
+            "title": "Ueno Zoo",
+            "placeId": "scan-place-ueno-zoo",
+            "category": "wildlife_area",
+            "lat": 35.7175,
+            "lng": 139.771388888,
+            "kmFromCentre": 5,
+            "country": "JP"
+          },
+          {
+            "day": 3,
+            "title": "National Museum of Western Art",
+            "placeId": "scan-place-national-museum-of-western-art",
+            "category": "museum",
+            "lat": 35.7153567,
+            "lng": 139.7758498,
+            "kmFromCentre": 4,
+            "country": "JP"
+          },
+          {
+            "day": 4,
+            "title": "Shinjuku Gyoen",
+            "placeId": "scan-place-shinjuku-gyoen",
+            "category": "easy_walk",
+            "lat": 35.687169444,
+            "lng": 139.710644444,
+            "kmFromCentre": 5,
+            "country": "JP"
+          },
+          {
+            "day": 4,
+            "title": "St. Mary's Cathedral",
+            "placeId": "scan-place-st-mary-s-cathedral",
+            "category": "historic_site",
+            "lat": 35.714167,
+            "lng": 139.726667,
+            "kmFromCentre": 5,
+            "country": "JP"
+          },
+          {
+            "day": 4,
+            "title": "Yasukuni Shrine",
+            "placeId": "scan-place-yasukuni-shrine",
+            "category": "historic_site",
+            "lat": 35.693958333,
+            "lng": 139.742691666,
+            "kmFromCentre": 3,
+            "country": "JP"
+          },
+          {
+            "day": 4,
+            "title": "The National Museum of Modern Art",
+            "placeId": "scan-place-the-national-museum-of-modern-art",
+            "category": "museum",
+            "lat": 35.690553,
+            "lng": 139.754642,
+            "kmFromCentre": 2,
+            "country": "JP"
+          },
+          {
+            "day": 5,
+            "title": "Tsurugaoka Hachimangū",
+            "placeId": "scan-place-tsurugaoka-hachimangu",
+            "category": "historic_site",
+            "lat": 35.32608056,
+            "lng": 139.55641667,
+            "kmFromCentre": 43,
+            "country": "JP"
+          },
+          {
+            "day": 5,
+            "title": "Kōtoku-in Temple",
+            "placeId": "scan-place-kotoku-in-temple",
+            "category": "historic_site",
+            "lat": 35.316861111,
+            "lng": 139.535722222,
+            "kmFromCentre": 45,
+            "country": "JP"
+          }
+        ],
+        "maxKmFromCentre": 45,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 6,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          3,
+          0
+        ],
+        "daysWithLunch": 4,
+        "daysWithDinner": 5,
+        "namedMeals": 0,
+        "describedMeals": 10,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 4,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 105,
+          "perPersonPerDayHigh": 245,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-11-08 @Tokyo [1020-1200]: 17:00 ~rail 20m/2km(geo_estimate) | 17:20 Meiji Jingū 45m | 18:05 ~walk 30m/2km(geo_estimate) | 18:35 [meal] Dinner — Dinner in Tokyo 60m",
+          "D2 2027-11-09 @Tokyo [540-1200]: 9:00 ~rail 30m/8km(geo_estimate) | 9:30 Tokyo Tower 45m | 10:15 ~rail 25m/3km(geo_estimate) | 10:40 National Art Center, Tokyo 120m | 12:40 ~rail 30m/7km(geo_estimate) | 13:10 [meal] Lunch — Casual lunch in Tokyo, near the midday stop 45m | 13:55 Shimokitazawa 150m | 16:25 ~walk 20m/1km(geo_estimate) | 16:45 Tokyo Mosque 45m | 17:30 ~walk ?m/?km(unknown) | 18:00 [meal] Dinner — Dinner in Tokyo 60m | 19:00 [free_time] Free time 60m",
+          "D3 2027-11-10 @Tokyo [540-1200]: 9:00 ~rail 50m/15km(geo_estimate) | 9:50 Tokyo Skytree 45m | 10:35 ~walk 25m/1km(geo_estimate) | 11:00 Sensō-ji Temple 45m | 11:45 ~rail 25m/3km(geo_estimate) | 12:10 [meal] Lunch — Pack a lunch — food is thin out near Tokyo 45m | 12:55 Ueno Zoo 180m | 15:55 ~walk 10m/1km(geo_estimate) | 16:05 National Museum of Western Art 120m | 18:05 ~public_bus 40m/11km(geo_estimate) | 18:45 [meal] Dinner — Dinner in Tokyo 60m",
+          "D4 2027-11-11 @Tokyo [540-1200]: 9:00 ~rail 20m/2km(geo_estimate) | 9:20 Shinjuku Gyoen 75m | 10:35 ~rail 30m/4km(geo_estimate) | 11:05 St. Mary's Cathedral 45m | 11:50 ~rail 25m/4km(geo_estimate) | 12:15 [meal] Lunch — Casual lunch in Tokyo, near the midday stop 45m | 13:00 Yasukuni Shrine 45m | 13:45 ~walk 20m/1km(geo_estimate) | 14:05 The National Museum of Modern Art 120m | 16:05 ~public_bus 30m/8km(geo_estimate) | 16:35 [free_time] Free time 85m | 18:00 [meal] Dinner — Dinner in Tokyo 60m | 19:00 [free_time] Free time 60m",
+          "D5 2027-11-12 @Fujisawa [540-1200]: 9:00 [meal] Breakfast — Breakfast in Tokyo before heading out 30m | 9:30 ~rail 90m/57km(geo_estimate) | 11:00 Tsurugaoka Hachimangū 45m | 11:45 ~rail 25m/3km(geo_estimate) | 12:10 [meal] Lunch — Casual lunch in Kamakura, near the midday stop 45m | 12:55 Kōtoku-in Temple 45m | 13:40 ~rail 40m/6km(geo_estimate) | 14:20 [free_time] Free time 220m | 18:00 [meal] Dinner — Dinner in Fujisawa 60m | 19:00 [free_time] Free time 60m",
+          "D6 2027-11-13 @Fujisawa [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 15
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "frequency_honoured(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 13,
+          "notRun": 3,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {
+          "base_not_returned": 1
+        },
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "strong",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "adequate"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.83,
+          "hotelChurn": 1,
+          "travelBurdenMinutesPerDay": 102,
+          "freeMinutesPerDay": 106,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.67,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 1,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Tokyo (4n)",
+          "Fujisawa (1n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for 26197842-32cc-41ef-b790-11d38101d069: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for 26197842-32cc-41ef-b790-11d38101d069 (open data): 34 returned, 34 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for 26197842-32cc-41ef-b790-11d38101d069 in 6s: 34 places, 2 bases, matrix estimated (0/1260)."
+      ]
+    },
+    {
+      "id": "kyrgyzstan-trek",
+      "title": "Kyrgyzstan, 12 days, friends, August, hiking, car",
+      "destination": "Kyrgyzstan",
+      "categories": [
+        "country",
+        "rural_remote"
+      ],
+      "tripId": "d7171a3a-7c91-471d-9c63-c2fd70c81f85",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 1408,
+        "questionnaire_ms": 3,
+        "scan_total_ms": 796,
+        "scan_propose_ms": 749,
+        "scan_place_ms": 1,
+        "scan_time_ms": 0,
+        "scan_food_ms": 1,
+        "scan_assemble_ms": 5,
+        "autopick_ms": 31,
+        "build_ms": 2308,
+        "total_ms": 4559
+      },
+      "resolution": {
+        "name": "Kyrgyzstan",
+        "scale": "country",
+        "type": "country",
+        "countries": [
+          "KG"
+        ],
+        "center": {
+          "lat": 41.5089324,
+          "lng": 74.724091
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 32,
+        "placed": 32,
+        "bases": 3,
+        "boardCandidates": 32,
+        "autoPicks": 14,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 150,
+        "groups": 7,
+        "failedGroups": [],
+        "elements": 116,
+        "usable": 114,
+        "sitelinksAsked": 48,
+        "sitelinksAnswered": 48,
+        "settlements": 93,
+        "kept": 32,
+        "bases": 3
+      },
+      "metrics": {
+        "itineraryStatus": "needs_decision",
+        "feasibility": "unresolved_major_dependency",
+        "days": 13,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          1,
+          1,
+          1,
+          2,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          0
+        ],
+        "meanStopsPerDay": 1.1,
+        "travelMinutesPerDay": [
+          0,
+          60,
+          100,
+          180,
+          200,
+          270,
+          125,
+          120,
+          60,
+          140,
+          290,
+          230,
+          0
+        ],
+        "maxTravelMinutes": 290,
+        "meanTravelMinutes": 137,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 24,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Moldo Too",
+            "placeId": "scan-place-moldo-too",
+            "category": "day_hike",
+            "lat": 41.58,
+            "lng": 74.67,
+            "kmFromCentre": 9,
+            "country": "KG"
+          },
+          {
+            "day": 3,
+            "title": "Baetov",
+            "placeId": "scan-place-baetov",
+            "category": "town_and_food",
+            "lat": 41.263888888,
+            "lng": 74.954166666,
+            "kmFromCentre": 33,
+            "country": "KG"
+          },
+          {
+            "day": 4,
+            "title": "Gory Dzhamantau",
+            "placeId": "scan-place-gory-dzhamantau",
+            "category": "day_hike",
+            "lat": 40.91666668,
+            "lng": 74.58333334,
+            "kmFromCentre": 67,
+            "country": "KG"
+          },
+          {
+            "day": 5,
+            "title": "Song Kol Lake",
+            "placeId": "scan-place-song-kol-lake",
+            "category": "lake",
+            "lat": 41.85,
+            "lng": 75.15,
+            "kmFromCentre": 52,
+            "country": "KG"
+          },
+          {
+            "day": 5,
+            "title": "Karatal-Japyryk State Nature Reserve",
+            "placeId": "scan-place-karatal-japyryk-state-nature-reserve",
+            "category": "easy_walk",
+            "lat": 41.69753,
+            "lng": 75.3495,
+            "kmFromCentre": 56,
+            "country": "KG"
+          },
+          {
+            "day": 6,
+            "title": "Chatyr-Kul",
+            "placeId": "scan-place-chatyr-kul",
+            "category": "lake",
+            "lat": 40.633333333,
+            "lng": 75.283333333,
+            "kmFromCentre": 108,
+            "country": "KG"
+          },
+          {
+            "day": 6,
+            "title": "Tash Rabat",
+            "placeId": "scan-place-tash-rabat",
+            "category": "historic_site",
+            "lat": 40.823055555,
+            "lng": 75.288888888,
+            "kmFromCentre": 90,
+            "country": "KG"
+          },
+          {
+            "day": 7,
+            "title": "Aigyr-Zhal 2",
+            "placeId": "scan-place-aigyr-zhal-2",
+            "category": "historic_site",
+            "lat": 41.433333333,
+            "lng": 76,
+            "kmFromCentre": 107,
+            "country": "KG"
+          },
+          {
+            "day": 8,
+            "title": "Gory Naryntau",
+            "placeId": "scan-place-gory-naryntau",
+            "category": "day_hike",
+            "lat": 41.359415,
+            "lng": 76.471226,
+            "kmFromCentre": 147,
+            "country": "KG"
+          },
+          {
+            "day": 9,
+            "title": "Emgekchil",
+            "placeId": "scan-place-emgekchil",
+            "category": "town_and_food",
+            "lat": 41.555278,
+            "lng": 75.971667,
+            "kmFromCentre": 104,
+            "country": "KG"
+          },
+          {
+            "day": 10,
+            "title": "Khrebet Atbashi",
+            "placeId": "scan-place-khrebet-atbashi",
+            "category": "day_hike",
+            "lat": 40.998946,
+            "lng": 75.882298,
+            "kmFromCentre": 112,
+            "country": "KG"
+          },
+          {
+            "day": 11,
+            "title": "Kuturgan",
+            "placeId": "scan-place-kuturgan",
+            "category": "town_and_food",
+            "lat": 40.93,
+            "lng": 73.46,
+            "kmFromCentre": 124,
+            "country": "KG"
+          },
+          {
+            "day": 12,
+            "title": "Kapka Tash Lake",
+            "placeId": "scan-place-kapka-tash-lake",
+            "category": "lake",
+            "lat": 41.521388888,
+            "lng": 73.335277777,
+            "kmFromCentre": 116,
+            "country": "KG"
+          },
+          {
+            "day": 12,
+            "title": "Kara-Suu Lake",
+            "placeId": "scan-place-kara-suu-lake",
+            "category": "lake",
+            "lat": 41.55777778,
+            "lng": 73.25833333,
+            "kmFromCentre": 122,
+            "country": "KG"
+          }
+        ],
+        "maxKmFromCentre": 147,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 5,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          2,
+          2,
+          2,
+          3,
+          2,
+          0
+        ],
+        "daysWithLunch": 7,
+        "daysWithDinner": 12,
+        "namedMeals": 0,
+        "describedMeals": 25,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 25,
+          "perPersonPerDayHigh": 57,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "budget"
+        },
+        "planText": [
+          "D1 2027-08-02 @Kyrgyzstan [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Dinner in Kyrgyzstan 60m",
+          "D2 2027-08-03 @Kyrgyzstan [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Kyrgyzstan before heading out 30m | 9:30 ~drive 30m/9km(geo_estimate) | 10:00 Moldo Too 300m | 15:00 ~drive 30m/9km(geo_estimate) | 15:30 [free_time] Free time 150m | 18:00 [meal] Dinner — Dinner in Kyrgyzstan 60m",
+          "D3 2027-08-04 @Kyrgyzstan [540-1140]: 9:00 ~drive 50m/33km(geo_estimate) | 9:50 Baetov 120m | 11:50 [meal] Lunch — Casual lunch in Baetov, near the midday stop 45m | 12:35 ~drive 50m/33km(geo_estimate) | 13:25 [free_time] Free time 275m | 18:00 [meal] Dinner — Dinner in Kyrgyzstan 60m",
+          "D4 2027-08-05 @Kyrgyzstan [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Kyrgyzstan before heading out 30m | 9:30 ~drive 90m/67km(geo_estimate) | 11:00 Gory Dzhamantau 300m | 16:00 ~drive 90m/67km(geo_estimate) | 17:30 [free_time] Free time 30m | 18:00 [meal] Dinner — Dinner in Kyrgyzstan 60m",
+          "D5 2027-08-06 @Kyrgyzstan [540-1140]: 9:00 ~drive 75m/52km(geo_estimate) | 10:15 Song Kol Lake 90m | 11:45 ~drive 45m/24km(geo_estimate) | 12:30 [meal] Lunch — Pack a lunch — food is thin out near Kyrgyzstan 45m | 13:15 Karatal-Japyryk State Nature Reserve 120m | 15:15 ~drive 80m/56km(geo_estimate) | 16:35 [free_time] Free time 85m | 18:00 [meal] Dinner — Dinner in Kyrgyzstan 60m",
+          "D6 2027-08-07 @Kyrgyzstan [540-1140]: 9:00 ~drive 125m/108km(geo_estimate) | 11:05 Chatyr-Kul 90m | 12:35 ~drive 40m/21km(geo_estimate) | 13:15 [meal] Lunch — Pack a lunch — food is thin out near Kyrgyzstan 45m | 14:00 Tash Rabat 90m | 15:30 ~drive 105m/90km(geo_estimate) | 17:15 [free_time] Free time 45m | 18:00 [meal] Dinner — Dinner in Kyrgyzstan 60m",
+          "D7 2027-08-08 @Naryn [540-1140]: 9:00 [meal] Breakfast — Breakfast in Kyrgyzstan before heading out 30m | 9:30 ~drive 125m/107km(geo_estimate) | 11:35 [meal] Lunch — Casual lunch in Naryn, near the midday stop 45m | 12:20 Aigyr-Zhal 2 90m | 13:50 [free_time] Free time 250m | 18:00 [meal] Dinner — Dinner in Naryn 60m",
+          "D8 2027-08-09 @Naryn [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Naryn before heading out 30m | 9:30 ~drive 60m/40km(geo_estimate) | 10:30 Gory Naryntau 300m | 15:30 ~drive 60m/40km(geo_estimate) | 16:30 [free_time] Free time 90m | 18:00 [meal] Dinner — Dinner in Naryn 60m",
+          "D9 2027-08-10 @Naryn [540-1140]: 9:00 ~drive 30m/14km(geo_estimate) | 9:30 Emgekchil 120m | 11:30 [meal] Lunch — Casual lunch in Emgekchil, near the midday stop 45m | 12:15 ~drive 30m/14km(geo_estimate) | 12:45 [free_time] Free time 315m | 18:00 [meal] Dinner — Dinner in Naryn 60m",
+          "D10 2027-08-11 @Naryn [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Naryn before heading out 30m | 9:30 ~drive 70m/49km(geo_estimate) | 10:40 Khrebet Atbashi 300m | 15:40 ~drive 70m/49km(geo_estimate) | 16:50 [free_time] Free time 70m | 18:00 [meal] Dinner — Dinner in Naryn 60m",
+          "D11 2027-08-12 @Özgön [540-1140]: 9:00 [meal] Breakfast — Breakfast in Naryn before heading out 30m | 9:30 ~drive 245m/220km(geo_estimate) | 13:35 [meal] Lunch — Casual lunch in Kuturgan, near the midday stop 45m | 14:20 Kuturgan 120m | 16:20 ~drive 45m/23km(geo_estimate) | 17:05 [free_time] Free time 55m | 18:00 [meal] Dinner — Dinner in Özgön 60m",
+          "D12 2027-08-13 @Özgön [540-1140]: 9:00 ~drive 100m/84km(geo_estimate) | 10:40 Kapka Tash Lake 90m | 12:10 ~drive 25m/8km(geo_estimate) | 12:35 [meal] Lunch — Pack a lunch — food is thin out near Ak-Jar 45m | 13:20 Kara-Suu Lake 90m | 14:50 ~drive 105m/88km(geo_estimate) | 16:35 [free_time] Free time 85m | 18:00 [meal] Dinner — Dinner in Özgön 60m",
+          "D13 2027-08-14 @Özgön [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 14
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": []
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "strong",
+          "baseEfficiency": "strong",
+          "activityDensity": "adequate",
+          "chapterRhythm": "strong",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "strong",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "adequate"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 2,
+          "travelBurdenMinutesPerDay": 137,
+          "freeMinutesPerDay": 128,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.85,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 1,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Kyrgyzstan (6n)",
+          "Naryn (4n)",
+          "Özgön (2n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for d7171a3a-7c91-471d-9c63-c2fd70c81f85: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for d7171a3a-7c91-471d-9c63-c2fd70c81f85 (open data): 32 returned, 32 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for d7171a3a-7c91-471d-9c63-c2fd70c81f85 in 1s: 32 places, 3 bases, matrix estimated (0/1190)."
+      ]
+    },
+    {
+      "id": "kenya-tanzania",
+      "title": "Kenya and Tanzania safari, 14 days, couple, July",
+      "destination": "Kenya and Tanzania",
+      "categories": [
+        "multi_country",
+        "rural_remote"
+      ],
+      "tripId": "723dc854-d893-4c11-89e1-b6750e95a152",
+      "outcome": "failed",
+      "failedStage": "build",
+      "failureDetail": "build: Your Discovery Board doesn’t have enough places to fill every day. Nothing was lost — your answers are saved — include a few more places, rescan, or shorten the trip.",
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 3273,
+        "questionnaire_ms": 3,
+        "scan_total_ms": 535,
+        "scan_propose_ms": 494,
+        "scan_place_ms": 1,
+        "scan_time_ms": 2,
+        "scan_food_ms": 0,
+        "scan_assemble_ms": 8,
+        "autopick_ms": 18,
+        "build_ms": 1915,
+        "total_ms": 5757
+      },
+      "resolution": {
+        "name": "Kenya and Tanzania",
+        "scale": "country",
+        "type": "multi_country",
+        "countries": [
+          "KE",
+          "TZ"
+        ],
+        "center": {
+          "lat": -3.90735615,
+          "lng": 36.3039219
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 28,
+        "placed": 28,
+        "bases": 3,
+        "boardCandidates": 28,
+        "autoPicks": 7,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 120,
+        "groups": 7,
+        "failedGroups": [],
+        "elements": 31,
+        "usable": 28,
+        "sitelinksAsked": 28,
+        "sitelinksAnswered": 28,
+        "settlements": 4,
+        "kept": 28,
+        "bases": 3
+      },
+      "metrics": null,
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for 723dc854-d893-4c11-89e1-b6750e95a152: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for 723dc854-d893-4c11-89e1-b6750e95a152 (open data): 28 returned, 28 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for 723dc854-d893-4c11-89e1-b6750e95a152 in 1s: 28 places, 3 bases, matrix estimated (0/930)."
+      ]
+    },
+    {
+      "id": "california-roadtrip",
+      "title": "California road trip, 14 days, couple, May",
+      "destination": "California",
+      "categories": [
+        "road_trip",
+        "park"
+      ],
+      "tripId": "898812cd-778f-4cda-8855-401b5a749ded",
+      "outcome": "failed",
+      "failedStage": "scan",
+      "failureDetail": "scan failed: composer_not_configured",
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 2555,
+        "questionnaire_ms": 3,
+        "scan_total_ms": 25021,
+        "scan_propose_ms": null,
+        "scan_place_ms": null,
+        "scan_time_ms": null,
+        "scan_food_ms": null,
+        "scan_assemble_ms": null,
+        "autopick_ms": null,
+        "build_ms": null,
+        "total_ms": 27584
+      },
+      "resolution": {
+        "name": "California",
+        "scale": "region",
+        "type": "admin_area",
+        "countries": [
+          "US"
+        ],
+        "center": {
+          "lat": 36.7014631,
+          "lng": -118.755997
+        }
+      },
+      "scan": {
+        "state": "failed",
+        "failureKind": "composer_not_configured",
+        "proposalSource": null,
+        "candidates": 0,
+        "placed": 0,
+        "bases": 0,
+        "boardCandidates": 0,
+        "autoPicks": 0,
+        "foodVenues": null,
+        "routing": null
+      },
+      "openData": null,
+      "metrics": null,
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for 898812cd-778f-4cda-8855-401b5a749ded: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan failed [ref 78e50cd8] composer_not_configured: no composition model is configured | open-data fallback failed: map_data_unavailable (every map data request was refused)"
+      ]
+    },
+    {
+      "id": "paris-seniors",
+      "title": "Paris, 5 days, seniors with limited walking, October",
+      "destination": "Paris",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "b5374bae-1037-4823-bb0e-8cd42546dec4",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 2,
+        "resolve_ms": 1881,
+        "questionnaire_ms": 3,
+        "scan_total_ms": 4187,
+        "scan_propose_ms": 4106,
+        "scan_place_ms": 1,
+        "scan_time_ms": 0,
+        "scan_food_ms": 1,
+        "scan_assemble_ms": 3,
+        "autopick_ms": 60,
+        "build_ms": 2161,
+        "total_ms": 8299
+      },
+      "resolution": {
+        "name": "Paris",
+        "scale": "settlement",
+        "type": "settlement",
+        "countries": [
+          "FR"
+        ],
+        "center": {
+          "lat": 48.8534951,
+          "lng": 2.3483915
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 30,
+        "placed": 28,
+        "bases": 1,
+        "boardCandidates": 28,
+        "autoPicks": 8,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 12,
+        "groups": 6,
+        "failedGroups": [],
+        "elements": 120,
+        "usable": 120,
+        "sitelinksAsked": 72,
+        "sitelinksAnswered": 72,
+        "settlements": 0,
+        "kept": 30,
+        "bases": 1
+      },
+      "metrics": {
+        "itineraryStatus": "ready_with_cautions",
+        "feasibility": "feasible_with_cautions",
+        "days": 6,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          2,
+          2,
+          2,
+          2,
+          0
+        ],
+        "meanStopsPerDay": 1.3,
+        "travelMinutesPerDay": [
+          0,
+          60,
+          85,
+          50,
+          75,
+          0
+        ],
+        "maxTravelMinutes": 85,
+        "meanTravelMinutes": 45,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 10,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 2,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Grand Mosque of Paris",
+            "placeId": "scan-place-grand-mosque-of-paris",
+            "category": "historic_site",
+            "lat": 48.841944444,
+            "lng": 2.355,
+            "kmFromCentre": 1,
+            "country": "FR"
+          },
+          {
+            "day": 2,
+            "title": "Bastille",
+            "placeId": "scan-place-bastille",
+            "category": "historic_site",
+            "lat": 48.853333,
+            "lng": 2.369167,
+            "kmFromCentre": 2,
+            "country": "FR"
+          },
+          {
+            "day": 3,
+            "title": "Luxembourg Palace",
+            "placeId": "scan-place-luxembourg-palace",
+            "category": "historic_site",
+            "lat": 48.848333333,
+            "lng": 2.3375,
+            "kmFromCentre": 1,
+            "country": "FR"
+          },
+          {
+            "day": 3,
+            "title": "Eiffel Tower",
+            "placeId": "scan-place-eiffel-tower",
+            "category": "viewpoint",
+            "lat": 48.858296,
+            "lng": 2.294479,
+            "kmFromCentre": 4,
+            "country": "FR"
+          },
+          {
+            "day": 4,
+            "title": "Tuileries Garden",
+            "placeId": "scan-place-tuileries-garden",
+            "category": "easy_walk",
+            "lat": 48.863888888,
+            "lng": 2.326111111,
+            "kmFromCentre": 2,
+            "country": "FR"
+          },
+          {
+            "day": 4,
+            "title": "Musée d'Orsay",
+            "placeId": "scan-place-musee-d-orsay",
+            "category": "museum",
+            "lat": 48.859972,
+            "lng": 2.326527,
+            "kmFromCentre": 2,
+            "country": "FR"
+          },
+          {
+            "day": 5,
+            "title": "Paris Zoological Park",
+            "placeId": "scan-place-paris-zoological-park",
+            "category": "wildlife_area",
+            "lat": 48.83222222,
+            "lng": 2.41861111,
+            "kmFromCentre": 6,
+            "country": "FR"
+          },
+          {
+            "day": 5,
+            "title": "Panthéon",
+            "placeId": "scan-place-pantheon",
+            "category": "historic_site",
+            "lat": 48.846198,
+            "lng": 2.3461054,
+            "kmFromCentre": 1,
+            "country": "FR"
+          }
+        ],
+        "maxKmFromCentre": 6,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 5,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 4,
+        "daysWithDinner": 5,
+        "namedMeals": 0,
+        "describedMeals": 9,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 1.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 160,
+          "perPersonPerDayHigh": 352,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "premium"
+        },
+        "planText": [
+          "D1 2027-10-04 @Paris [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Dinner in Paris 60m",
+          "D2 2027-10-05 @Paris [540-1140]: 9:00 ~walk 25m/1km(geo_estimate) | 9:25 Grand Mosque of Paris 45m | 10:10 ~rail 20m/2km(geo_estimate) | 10:30 Bastille 120m | 12:30 [meal] Lunch — Casual lunch in Paris, near the midday stop 45m | 13:15 ~walk ?m/?km(unknown) | 13:30 [free_time] Free time 270m | 18:00 [meal] Dinner — Dinner in Paris 60m",
+          "D3 2027-10-06 @Paris [540-1140]: 9:00 ~walk 20m/1km(geo_estimate) | 9:20 Luxembourg Palace 120m | 11:20 ~rail 30m/5km(geo_estimate) | 11:50 [meal] Lunch — Casual lunch in Paris, near the midday stop 45m | 12:35 Eiffel Tower 45m | 13:20 ~public_bus 35m/5km(geo_estimate) | 13:55 [free_time] Free time 245m | 18:00 [meal] Dinner — Dinner in Paris 60m",
+          "D4 2027-10-07 @Paris [540-1140]: 9:00 ~rail 25m/3km(geo_estimate) | 9:25 Tuileries Garden 75m | 10:40 ~walk 10m/0km(geo_estimate) | 10:50 Musée d'Orsay 120m | 12:50 [meal] Lunch — Casual lunch in Paris, near the midday stop 45m | 13:35 ~walk ?m/?km(unknown) | 13:50 [free_time] Free time 250m | 18:00 [meal] Dinner — Dinner in Paris 60m",
+          "D5 2027-10-08 @Paris [540-1140]: 9:00 ~rail 30m/8km(geo_estimate) | 9:30 Paris Zoological Park 180m | 12:30 ~rail 30m/7km(geo_estimate) | 13:00 [meal] Lunch — Casual lunch in Paris, near the midday stop 45m | 13:45 Panthéon 45m | 14:30 ~walk 15m/1km(geo_estimate) | 14:45 [free_time] Free time 195m | 18:00 [meal] Dinner — Dinner in Paris 60m",
+          "D6 2027-10-09 @Paris [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 8
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": []
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 45,
+          "freeMinutesPerDay": 195,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.67,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Paris (5n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for b5374bae-1037-4823-bb0e-8cd42546dec4: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for b5374bae-1037-4823-bb0e-8cd42546dec4 (open data): 30 returned, 30 kept, 0 dropped, stop=n/a out=n/a",
+        "Discovery scan unplaced for b5374bae-1037-4823-bb0e-8cd42546dec4: Louvre Museum [duplicate]; Musée Carnavalet [duplicate]",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for b5374bae-1037-4823-bb0e-8cd42546dec4 in 4s: 28 places, 1 bases, matrix estimated (0/812)."
+      ]
+    },
+    {
+      "id": "nyc-family",
+      "title": "New York City, 5 days, family with kids, December",
+      "destination": "New York City",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "e1491c9e-36d1-4b46-aae7-d271d8d2a35e",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1975,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 1954,
+        "scan_propose_ms": 1872,
+        "scan_place_ms": 1,
+        "scan_time_ms": 1,
+        "scan_food_ms": 1,
+        "scan_assemble_ms": 4,
+        "autopick_ms": 56,
+        "build_ms": 2118,
+        "total_ms": 6109
+      },
+      "resolution": {
+        "name": "New York",
+        "scale": "district",
+        "type": "settlement",
+        "countries": [
+          "US"
+        ],
+        "center": {
+          "lat": 40.7127281,
+          "lng": -74.0060152
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 34,
+        "placed": 34,
+        "bases": 1,
+        "boardCandidates": 34,
+        "autoPicks": 13,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 12,
+        "groups": 6,
+        "failedGroups": [],
+        "elements": 61,
+        "usable": 61,
+        "sitelinksAsked": 60,
+        "sitelinksAnswered": 60,
+        "settlements": 0,
+        "kept": 34,
+        "bases": 1
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 6,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          3,
+          3,
+          3,
+          3,
+          0
+        ],
+        "meanStopsPerDay": 2,
+        "travelMinutesPerDay": [
+          0,
+          35,
+          25,
+          90,
+          145,
+          0
+        ],
+        "maxTravelMinutes": 145,
+        "meanTravelMinutes": 49,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 14,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Liberty Park",
+            "placeId": "scan-place-liberty-park",
+            "category": "easy_walk",
+            "lat": 40.71025,
+            "lng": -74.01353,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 2,
+            "title": "Trinity Church",
+            "placeId": "scan-place-trinity-church",
+            "category": "historic_site",
+            "lat": 40.70801,
+            "lng": -74.01221,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 2,
+            "title": "Zuccotti Park",
+            "placeId": "scan-place-zuccotti-park",
+            "category": "historic_site",
+            "lat": 40.709166666,
+            "lng": -74.011111111,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 3,
+            "title": "World Trade Center cross",
+            "placeId": "scan-place-world-trade-center-cross",
+            "category": "historic_site",
+            "lat": 40.71138889,
+            "lng": -74.01222222,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 3,
+            "title": "National September 11 Memorial & Museum",
+            "placeId": "scan-place-national-september-11-memorial-museum",
+            "category": "museum",
+            "lat": 40.711388888,
+            "lng": -74.013611111,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 3,
+            "title": "St. Nicholas Greek Orthodox Church",
+            "placeId": "scan-place-st-nicholas-greek-orthodox-church",
+            "category": "historic_site",
+            "lat": 40.71013,
+            "lng": -74.01322,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "Fort Amsterdam",
+            "placeId": "scan-place-fort-amsterdam",
+            "category": "historic_site",
+            "lat": 40.704,
+            "lng": -74.0137,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "Castle Clinton",
+            "placeId": "scan-place-castle-clinton",
+            "category": "wildlife_area",
+            "lat": 40.703611,
+            "lng": -74.016667,
+            "kmFromCentre": 1,
+            "country": "US"
+          },
+          {
+            "day": 4,
+            "title": "Statue of Liberty",
+            "placeId": "scan-place-statue-of-liberty",
+            "category": "viewpoint",
+            "lat": 40.689209166,
+            "lng": -74.044425277,
+            "kmFromCentre": 4,
+            "country": "US"
+          },
+          {
+            "day": 5,
+            "title": "Columbus Circle",
+            "placeId": "scan-place-columbus-circle",
+            "category": "historic_site",
+            "lat": 40.768055555,
+            "lng": -73.981944444,
+            "kmFromCentre": 6,
+            "country": "US"
+          },
+          {
+            "day": 5,
+            "title": "Riverside Church",
+            "placeId": "scan-place-riverside-church",
+            "category": "historic_site",
+            "lat": 40.81178,
+            "lng": -73.96307,
+            "kmFromCentre": 12,
+            "country": "US"
+          },
+          {
+            "day": 5,
+            "title": "Powers Street Mosque",
+            "placeId": "scan-place-powers-street-mosque",
+            "category": "historic_site",
+            "lat": 40.711944444,
+            "lng": -73.946666666,
+            "kmFromCentre": 5,
+            "country": "US"
+          }
+        ],
+        "maxKmFromCentre": 12,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 5,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 4,
+        "daysWithDinner": 5,
+        "namedMeals": 0,
+        "describedMeals": 9,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 2.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 90,
+          "perPersonPerDayHigh": 246,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-12-18 @New York [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Dinner in New York 60m",
+          "D2 2027-12-19 @New York [540-1140]: 9:00 ~walk 15m/1km(geo_estimate) | 9:15 Liberty Park 75m | 10:30 ~walk 5m/0km(geo_estimate) | 10:35 Trinity Church 45m | 11:20 ~walk 5m/0km(geo_estimate) | 11:25 Zuccotti Park 75m | 12:40 [meal] Lunch — Casual lunch in New York, near the midday stop 45m | 13:25 ~walk 10m/1km(geo_estimate) | 13:35 [free_time] Free time 265m | 18:00 [meal] Dinner — Dinner in New York 60m",
+          "D3 2027-12-20 @New York [540-1140]: 9:00 ~walk 10m/1km(geo_estimate) | 9:10 World Trade Center cross 30m | 9:40 National September 11 Memorial & Museum 120m | 11:40 [meal] Lunch — Casual lunch in New York, near the midday stop 45m | 12:25 St. Nicholas Greek Orthodox Church 45m | 13:10 ~walk 15m/1km(geo_estimate) | 13:25 [free_time] Free time 275m | 18:00 [meal] Dinner — Dinner in New York 60m",
+          "D4 2027-12-21 @New York [540-1140]: 9:00 ~walk 20m/1km(geo_estimate) | 9:20 Fort Amsterdam 90m | 10:50 ~walk 5m/0km(geo_estimate) | 10:55 Castle Clinton 120m | 12:55 ~rail 30m/4km(geo_estimate) | 13:25 [meal] Lunch — Casual lunch in New York, near the midday stop 45m | 14:10 Statue of Liberty 45m | 14:55 ~public_bus 35m/6km(geo_estimate) | 15:30 [free_time] Free time 150m | 18:00 [meal] Dinner — Dinner in New York 60m",
+          "D5 2027-12-22 @New York [540-1140]: 9:00 ~rail 35m/9km(geo_estimate) | 9:35 Columbus Circle 30m | 10:05 ~rail 30m/7km(geo_estimate) | 10:35 Riverside Church 45m | 11:20 ~rail 50m/15km(geo_estimate) | 12:10 [meal] Lunch — Casual lunch in New York, near the midday stop 45m | 12:55 Powers Street Mosque 45m | 13:40 ~public_bus 30m/7km(geo_estimate) | 14:10 [free_time] Free time 230m | 18:00 [meal] Dinner — Dinner in New York 60m",
+          "D6 2027-12-23 @New York [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 12
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": []
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.56,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 49,
+          "freeMinutesPerDay": 188,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.67,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "New York (5n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for e1491c9e-36d1-4b46-aae7-d271d8d2a35e: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for e1491c9e-36d1-4b46-aae7-d271d8d2a35e (open data): 34 returned, 34 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for e1491c9e-36d1-4b46-aae7-d271d8d2a35e in 2s: 34 places, 1 bases, matrix estimated (0/1190)."
+      ]
+    },
+    {
+      "id": "seoul-friends",
+      "title": "Seoul, 5 days, friends, October, nightlife",
+      "destination": "Seoul",
+      "categories": [
+        "urban",
+        "transit_heavy"
+      ],
+      "tripId": "a95cb3cb-3184-477a-99e3-cd6442b10ca3",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1353,
+        "questionnaire_ms": 1,
+        "scan_total_ms": 1013,
+        "scan_propose_ms": 882,
+        "scan_place_ms": 0,
+        "scan_time_ms": 1,
+        "scan_food_ms": 0,
+        "scan_assemble_ms": 4,
+        "autopick_ms": 108,
+        "build_ms": 2215,
+        "total_ms": 4695
+      },
+      "resolution": {
+        "name": "Seoul",
+        "scale": "district",
+        "type": "settlement",
+        "countries": [
+          "KR"
+        ],
+        "center": {
+          "lat": 37.5666791,
+          "lng": 126.9782914
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 26,
+        "placed": 26,
+        "bases": 1,
+        "boardCandidates": 26,
+        "autoPicks": 16,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 12,
+        "groups": 6,
+        "failedGroups": [],
+        "elements": 26,
+        "usable": 26,
+        "sitelinksAsked": 26,
+        "sitelinksAnswered": 26,
+        "settlements": 0,
+        "kept": 26,
+        "bases": 1
+      },
+      "metrics": {
+        "itineraryStatus": "ready",
+        "feasibility": "feasible",
+        "days": 6,
+        "emptyDays": 0,
+        "stopsPerDay": [
+          1,
+          2,
+          4,
+          4,
+          4,
+          1
+        ],
+        "meanStopsPerDay": 2.7,
+        "travelMinutesPerDay": [
+          10,
+          95,
+          75,
+          150,
+          145,
+          0
+        ],
+        "maxTravelMinutes": 150,
+        "meanTravelMinutes": 79,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 20,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 1,
+            "title": "Deoksugung",
+            "placeId": "scan-place-deoksugung",
+            "category": "historic_site",
+            "lat": 37.566111111,
+            "lng": 126.975,
+            "kmFromCentre": 0,
+            "country": "KR"
+          },
+          {
+            "day": 2,
+            "title": "Namsan",
+            "placeId": "scan-place-namsan",
+            "category": "day_hike",
+            "lat": 37.54968111,
+            "lng": 126.99191083,
+            "kmFromCentre": 2,
+            "country": "KR"
+          },
+          {
+            "day": 2,
+            "title": "Yoido Full Gospel Church",
+            "placeId": "scan-place-yoido-full-gospel-church",
+            "category": "historic_site",
+            "lat": 37.531044,
+            "lng": 126.923265,
+            "kmFromCentre": 6,
+            "country": "KR"
+          },
+          {
+            "day": 3,
+            "title": "Gyeonghuigung",
+            "placeId": "scan-place-gyeonghuigung",
+            "category": "historic_site",
+            "lat": 37.571444444,
+            "lng": 126.968138888,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 3,
+            "title": "Gyeongbokgung",
+            "placeId": "scan-place-gyeongbokgung",
+            "category": "historic_site",
+            "lat": 37.5798841,
+            "lng": 126.9767996,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 3,
+            "title": "National Museum of Modern and Contemporary Art, South Korea",
+            "placeId": "scan-place-national-museum-of-modern-and-contemporary-art-s",
+            "category": "museum",
+            "lat": 37.5785,
+            "lng": 126.98,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 3,
+            "title": "Gwanghwamun Plaza",
+            "placeId": "scan-place-gwanghwamun-plaza",
+            "category": "historic_site",
+            "lat": 37.57277778,
+            "lng": 126.97666667,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 4,
+            "title": "COEX Aquarium",
+            "placeId": "scan-place-coex-aquarium",
+            "category": "wildlife_area",
+            "lat": 37.512619,
+            "lng": 127.058812,
+            "kmFromCentre": 9,
+            "country": "KR"
+          },
+          {
+            "day": 4,
+            "title": "Seoul Central Mosque",
+            "placeId": "scan-place-seoul-central-mosque",
+            "category": "historic_site",
+            "lat": 37.533333333,
+            "lng": 126.9975,
+            "kmFromCentre": 4,
+            "country": "KR"
+          },
+          {
+            "day": 4,
+            "title": "Changgyeonggung",
+            "placeId": "scan-place-changgyeonggung",
+            "category": "historic_site",
+            "lat": 37.578430555,
+            "lng": 126.995980555,
+            "kmFromCentre": 2,
+            "country": "KR"
+          },
+          {
+            "day": 4,
+            "title": "Changdeokgung",
+            "placeId": "scan-place-changdeokgung",
+            "category": "historic_site",
+            "lat": 37.579444444,
+            "lng": 126.991666666,
+            "kmFromCentre": 2,
+            "country": "KR"
+          },
+          {
+            "day": 5,
+            "title": "Bukhansan National Park",
+            "placeId": "scan-place-bukhansan-national-park",
+            "category": "easy_walk",
+            "lat": 37.675,
+            "lng": 126.982,
+            "kmFromCentre": 12,
+            "country": "KR"
+          },
+          {
+            "day": 5,
+            "title": "Unhyeongung",
+            "placeId": "scan-place-unhyeongung",
+            "category": "historic_site",
+            "lat": 37.5761,
+            "lng": 126.987,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 5,
+            "title": "Tapgol Park",
+            "placeId": "scan-place-tapgol-park",
+            "category": "easy_walk",
+            "lat": 37.5711,
+            "lng": 126.988,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 5,
+            "title": "Myeongdong Cathedral",
+            "placeId": "scan-place-myeongdong-cathedral",
+            "category": "historic_site",
+            "lat": 37.563333333,
+            "lng": 126.987222222,
+            "kmFromCentre": 1,
+            "country": "KR"
+          },
+          {
+            "day": 6,
+            "title": "Seoul Plaza",
+            "placeId": "scan-place-seoul-plaza",
+            "category": "historic_site",
+            "lat": 37.565577,
+            "lng": 126.978082,
+            "kmFromCentre": 0,
+            "country": "KR"
+          }
+        ],
+        "maxKmFromCentre": 12,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 5,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          0
+        ],
+        "daysWithLunch": 3,
+        "daysWithDinner": 5,
+        "namedMeals": 0,
+        "describedMeals": 9,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 4,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 82,
+          "perPersonPerDayHigh": 197,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-10-14 @Seoul [1020-1210]: 17:00 ~walk 5m/0km(geo_estimate) | 17:05 Deoksugung 120m | 19:05 ~walk 5m/0km(geo_estimate) | 19:10 [meal] Dinner — Dinner in Seoul 60m",
+          "D2 2027-10-15 @Seoul [540-1200]: 9:00 [meal] Breakfast — Early breakfast in Seoul before heading out 30m | 9:30 ~rail 25m/3km(geo_estimate) | 9:55 Namsan 300m | 14:55 ~rail 35m/9km(geo_estimate) | 15:30 Yoido Full Gospel Church 45m | 16:15 ~public_bus 35m/8km(geo_estimate) | 16:50 [free_time] Free time 70m | 18:00 [meal] Dinner — Dinner in Seoul 60m | 19:00 [free_time] Free time 60m",
+          "D3 2027-10-16 @Seoul [540-1200]: 9:00 ~walk 20m/1km(geo_estimate) | 9:20 Gyeonghuigung 120m | 11:20 ~walk 20m/1km(geo_estimate) | 11:40 [meal] Lunch — Casual lunch in Seoul, near the midday stop 45m | 12:25 Gyeongbokgung 120m | 14:25 ~walk 5m/0km(geo_estimate) | 14:30 National Museum of Modern and Contemporary Art, South Korea 120m | 16:30 ~walk 15m/1km(geo_estimate) | 16:45 Gwanghwamun Plaza 75m | 18:00 ~walk 15m/1km(geo_estimate) | 18:15 [meal] Dinner — Dinner in Seoul 60m | 19:15 [free_time] Free time 45m",
+          "D4 2027-10-17 @Seoul [540-1200]: 9:00 ~rail 45m/13km(geo_estimate) | 9:45 COEX Aquarium 120m | 11:45 ~rail 30m/8km(geo_estimate) | 12:15 [meal] Lunch — Casual lunch in Seoul, near the midday stop 45m | 13:00 Seoul Central Mosque 45m | 13:45 ~rail 30m/7km(geo_estimate) | 14:15 Changgyeonggung 120m | 16:15 ~walk 10m/0km(geo_estimate) | 16:25 Changdeokgung 120m | 18:25 ~walk 35m/2km(geo_estimate) | 19:00 [meal] Dinner — Dinner in Seoul 60m",
+          "D5 2027-10-18 @Seoul [540-1200]: 9:00 ~rail 55m/16km(geo_estimate) | 9:55 Bukhansan National Park 120m | 11:55 ~rail 50m/15km(geo_estimate) | 12:45 [meal] Lunch — Pack a lunch — food is thin out near Seoul 45m | 13:30 Unhyeongung 120m | 15:30 ~walk 10m/1km(geo_estimate) | 15:40 Tapgol Park 75m | 16:55 ~walk 15m/1km(geo_estimate) | 17:10 Myeongdong Cathedral 45m | 17:55 ~walk 15m/1km(geo_estimate) | 18:10 [meal] Dinner — Dinner in Seoul 60m | 19:10 [free_time] Free time 50m",
+          "D6 2027-10-19 @Seoul [540-690]: 9:00 Seoul Plaza 75m | 10:15 [free_time] Free time 75m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 16
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "meals_present(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "unknown",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "adequate",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "strong"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.54,
+          "hotelChurn": 0,
+          "travelBurdenMinutesPerDay": 79,
+          "freeMinutesPerDay": 50,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.67,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 0,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Seoul (5n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for a95cb3cb-3184-477a-99e3-cd6442b10ca3: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for a95cb3cb-3184-477a-99e3-cd6442b10ca3 (open data): 26 returned, 26 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for a95cb3cb-3184-477a-99e3-cd6442b10ca3 in 1s: 26 places, 1 bases, matrix estimated (0/702)."
+      ]
+    },
+    {
+      "id": "scottish-highlands",
+      "title": "Scottish Highlands, 8 days, couple, June, car",
+      "destination": "Scottish Highlands",
+      "categories": [
+        "rural_remote",
+        "road_trip"
+      ],
+      "tripId": "d44bb59c-ede3-4a66-a7ce-449ab9386420",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 4,
+        "resolve_ms": 4121,
+        "questionnaire_ms": 5,
+        "scan_total_ms": 941,
+        "scan_propose_ms": 868,
+        "scan_place_ms": 1,
+        "scan_time_ms": 2,
+        "scan_food_ms": 0,
+        "scan_assemble_ms": 6,
+        "autopick_ms": 37,
+        "build_ms": 2327,
+        "total_ms": 7444
+      },
+      "resolution": {
+        "name": "Scottish Highlands",
+        "scale": "district",
+        "type": "mountain_region",
+        "countries": [
+          "GB"
+        ],
+        "center": {
+          "lat": 56.8,
+          "lng": -5
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 38,
+        "placed": 38,
+        "bases": 3,
+        "boardCandidates": 38,
+        "autoPicks": 16,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 50,
+        "groups": 7,
+        "failedGroups": [],
+        "elements": 347,
+        "usable": 347,
+        "sitelinksAsked": 100,
+        "sitelinksAnswered": 100,
+        "settlements": 66,
+        "kept": 38,
+        "bases": 3
+      },
+      "metrics": {
+        "itineraryStatus": "needs_decision",
+        "feasibility": "unresolved_major_dependency",
+        "days": 9,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          3,
+          3,
+          2,
+          2,
+          3,
+          2,
+          2,
+          0
+        ],
+        "meanStopsPerDay": 1.9,
+        "travelMinutesPerDay": [
+          0,
+          140,
+          150,
+          70,
+          115,
+          75,
+          195,
+          115,
+          0
+        ],
+        "maxTravelMinutes": 195,
+        "meanTravelMinutes": 96,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 24,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Loch Oich",
+            "placeId": "scan-place-loch-oich",
+            "category": "lake",
+            "lat": 57.069478,
+            "lng": -4.770802,
+            "kmFromCentre": 33,
+            "country": "GB"
+          },
+          {
+            "day": 2,
+            "title": "Loch Lochy",
+            "placeId": "scan-place-loch-lochy",
+            "category": "lake",
+            "lat": 56.968611111,
+            "lng": -4.910555555,
+            "kmFromCentre": 20,
+            "country": "GB"
+          },
+          {
+            "day": 2,
+            "title": "Commando Memorial",
+            "placeId": "scan-place-commando-memorial",
+            "category": "historic_site",
+            "lat": 56.897894,
+            "lng": -4.944031,
+            "kmFromCentre": 11,
+            "country": "GB"
+          },
+          {
+            "day": 3,
+            "title": "Loch Garry",
+            "placeId": "scan-place-loch-garry",
+            "category": "lake",
+            "lat": 57.076546,
+            "lng": -4.917525,
+            "kmFromCentre": 31,
+            "country": "GB"
+          },
+          {
+            "day": 3,
+            "title": "Loch Cluanie",
+            "placeId": "scan-place-loch-cluanie",
+            "category": "lake",
+            "lat": 57.13961,
+            "lng": -5.088876,
+            "kmFromCentre": 38,
+            "country": "GB"
+          },
+          {
+            "day": 3,
+            "title": "Loch Arkaig",
+            "placeId": "scan-place-loch-arkaig",
+            "category": "lake",
+            "lat": 56.971989,
+            "lng": -5.158376,
+            "kmFromCentre": 21,
+            "country": "GB"
+          },
+          {
+            "day": 4,
+            "title": "Steall Waterfall",
+            "placeId": "scan-place-steall-waterfall",
+            "category": "viewpoint",
+            "lat": 56.770223,
+            "lng": -4.979481,
+            "kmFromCentre": 4,
+            "country": "GB"
+          },
+          {
+            "day": 4,
+            "title": "Ben Nevis",
+            "placeId": "scan-place-ben-nevis",
+            "category": "day_hike",
+            "lat": 56.796891,
+            "lng": -5.003675,
+            "kmFromCentre": 0,
+            "country": "GB"
+          },
+          {
+            "day": 5,
+            "title": "St Moluag's Cathedral, Lismore",
+            "placeId": "scan-place-st-moluag-s-cathedral-lismore",
+            "category": "historic_site",
+            "lat": 56.5347,
+            "lng": -5.4805,
+            "kmFromCentre": 42,
+            "country": "GB"
+          },
+          {
+            "day": 5,
+            "title": "Duart Castle",
+            "placeId": "scan-place-duart-castle",
+            "category": "historic_site",
+            "lat": 56.456162394,
+            "lng": -5.654941042,
+            "kmFromCentre": 55,
+            "country": "GB"
+          },
+          {
+            "day": 6,
+            "title": "St Columba's Cathedral",
+            "placeId": "scan-place-st-columba-s-cathedral",
+            "category": "historic_site",
+            "lat": 56.4195,
+            "lng": -5.47883,
+            "kmFromCentre": 51,
+            "country": "GB"
+          },
+          {
+            "day": 6,
+            "title": "Dunollie Castle",
+            "placeId": "scan-place-dunollie-castle",
+            "category": "historic_site",
+            "lat": 56.426388888,
+            "lng": -5.484722222,
+            "kmFromCentre": 51,
+            "country": "GB"
+          },
+          {
+            "day": 6,
+            "title": "Dunstaffnage Castle",
+            "placeId": "scan-place-dunstaffnage-castle",
+            "category": "historic_site",
+            "lat": 56.454652777,
+            "lng": -5.436936111,
+            "kmFromCentre": 47,
+            "country": "GB"
+          },
+          {
+            "day": 7,
+            "title": "Falls of Bruar",
+            "placeId": "scan-place-falls-of-bruar",
+            "category": "viewpoint",
+            "lat": 56.775684,
+            "lng": -3.9340475,
+            "kmFromCentre": 65,
+            "country": "GB"
+          },
+          {
+            "day": 7,
+            "title": "Blair Castle",
+            "placeId": "scan-place-blair-castle",
+            "category": "historic_site",
+            "lat": 56.7734,
+            "lng": -3.85754,
+            "kmFromCentre": 70,
+            "country": "GB"
+          },
+          {
+            "day": 8,
+            "title": "Newtonmore",
+            "placeId": "scan-place-newtonmore",
+            "category": "town_and_food",
+            "lat": 57.0692,
+            "lng": -4.1188,
+            "kmFromCentre": 61,
+            "country": "GB"
+          },
+          {
+            "day": 8,
+            "title": "Loch Ericht",
+            "placeId": "scan-place-loch-ericht",
+            "category": "lake",
+            "lat": 56.8323,
+            "lng": -4.3741,
+            "kmFromCentre": 38,
+            "country": "GB"
+          }
+        ],
+        "maxKmFromCentre": 70,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 5,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          3,
+          2,
+          3,
+          2,
+          0
+        ],
+        "daysWithLunch": 6,
+        "daysWithDinner": 8,
+        "namedMeals": 0,
+        "describedMeals": 17,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 118,
+          "perPersonPerDayHigh": 259,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-06-12 @Fort William [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Dinner in Fort William 60m",
+          "D2 2027-06-13 @Fort William [540-1140]: 9:00 ~drive 50m/35km(geo_estimate) | 9:50 Loch Oich 90m | 11:20 ~drive 30m/14km(geo_estimate) | 11:50 [meal] Lunch — Pack a lunch — food is thin out near Spean Bridge 45m | 12:35 Loch Lochy 90m | 14:05 ~drive 30m/8km(geo_estimate) | 14:35 Commando Memorial 30m | 15:05 ~drive 30m/14km(geo_estimate) | 15:35 [free_time] Free time 145m | 18:00 [meal] Dinner — Dinner in Fort William 60m",
+          "D3 2027-06-14 @Fort William [540-1140]: 9:00 ~drive 45m/31km(geo_estimate) | 9:45 Loch Garry 90m | 11:15 ~drive 30m/13km(geo_estimate) | 11:45 [meal] Lunch — Pack a lunch — food is thin out near Scottish Highlands 45m | 12:30 Loch Cluanie 90m | 14:00 ~drive 40m/19km(geo_estimate) | 14:40 Loch Arkaig 90m | 16:10 ~drive 35m/18km(geo_estimate) | 16:45 [free_time] Free time 75m | 18:00 [meal] Dinner — Dinner in Fort William 60m",
+          "D4 2027-06-15 @Fort William [540-1140]: 9:00 [meal] Breakfast — Early breakfast in Fort William before heading out 30m | 9:30 ~drive 30m/10km(geo_estimate) | 10:00 Steall Waterfall 60m | 11:00 ~drive 15m/3km(geo_estimate) | 11:15 Ben Nevis 300m | 16:15 ~drive 25m/7km(geo_estimate) | 16:40 [free_time] Free time 80m | 18:00 [meal] Dinner — Dinner in Fort William 60m",
+          "D5 2027-06-16 @Oban [540-1140]: 9:00 [meal] Breakfast — Breakfast in Fort William before heading out 30m | 9:30 ~drive 55m/39km(geo_estimate) | 10:25 St Moluag's Cathedral, Lismore 45m | 11:10 ~drive 30m/14km(geo_estimate) | 11:40 [meal] Lunch — Casual lunch in Craignure, near the midday stop 45m | 12:25 Duart Castle 120m | 14:25 ~drive 30m/12km(geo_estimate) | 14:55 [free_time] Free time 185m | 18:00 [meal] Dinner — Dinner in Oban 60m",
+          "D6 2027-06-17 @Oban [540-1140]: 9:00 ~walk 20m/1km(geo_estimate) | 9:20 St Columba's Cathedral 45m | 10:05 ~walk 15m/1km(geo_estimate) | 10:20 Dunollie Castle 120m | 12:20 ~drive 20m/4km(geo_estimate) | 12:40 [meal] Lunch — Casual lunch in Dunbeg, near the midday stop 45m | 13:25 Dunstaffnage Castle 120m | 15:25 ~drive 20m/6km(geo_estimate) | 15:45 [free_time] Free time 135m | 18:00 [meal] Dinner — Dinner in Oban 60m",
+          "D7 2027-06-18 @Kingussie [540-1140]: 9:00 [meal] Breakfast — Breakfast in Oban before heading out 30m | 9:30 ~drive 120m/103km(geo_estimate) | 11:30 [meal] Lunch — Pack a lunch — food is thin out near Blair Atholl 45m | 12:15 Falls of Bruar 60m | 13:15 ~drive 20m/5km(geo_estimate) | 13:35 Blair Castle 120m | 15:35 ~drive 55m/36km(geo_estimate) | 16:30 [free_time] Free time 90m | 18:00 [meal] Dinner — Dinner in Kingussie 60m",
+          "D8 2027-06-19 @Kingussie [540-1140]: 9:00 ~drive 20m/4km(geo_estimate) | 9:20 Newtonmore 120m | 11:20 ~drive 45m/31km(geo_estimate) | 12:05 [meal] Lunch — Pack a lunch — food is thin out near Scottish Highlands 45m | 12:50 Loch Ericht 90m | 14:20 ~drive 50m/34km(geo_estimate) | 15:10 [free_time] Free time 170m | 18:00 [meal] Dinner — Dinner in Kingussie 60m",
+          "D9 2027-06-20 @Kingussie [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 17
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "frequency_honoured(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "strong",
+          "baseEfficiency": "strong",
+          "activityDensity": "adequate",
+          "chapterRhythm": "adequate",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "strong",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "adequate"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 2,
+          "travelBurdenMinutesPerDay": 96,
+          "freeMinutesPerDay": 121,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.78,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 1,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "Fort William (4n)",
+          "Oban (2n)",
+          "Kingussie (2n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for d44bb59c-ede3-4a66-a7ce-449ab9386420: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for d44bb59c-ede3-4a66-a7ce-449ab9386420 (open data): 38 returned, 38 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for d44bb59c-ede3-4a66-a7ce-449ab9386420 in 1s: 38 places, 3 bases, matrix estimated (0/1640)."
+      ]
+    },
+    {
+      "id": "nz-south-island",
+      "title": "South Island New Zealand, 15 days, friends, February, car",
+      "destination": "South Island, New Zealand",
+      "categories": [
+        "island",
+        "road_trip"
+      ],
+      "tripId": "9a9edcb4-9298-4a40-87e4-db08c7599247",
+      "outcome": "complete",
+      "failedStage": null,
+      "failureDetail": null,
+      "stages": {
+        "create_ms": 1,
+        "resolve_ms": 1451,
+        "questionnaire_ms": 3,
+        "scan_total_ms": 514,
+        "scan_propose_ms": 456,
+        "scan_place_ms": 1,
+        "scan_time_ms": 1,
+        "scan_food_ms": 0,
+        "scan_assemble_ms": 6,
+        "autopick_ms": 18,
+        "build_ms": 2345,
+        "total_ms": 4340
+      },
+      "resolution": {
+        "name": "South Island",
+        "scale": "region",
+        "type": "natural_region",
+        "countries": [
+          "NZ"
+        ],
+        "center": {
+          "lat": -43.586562,
+          "lng": 171.2123294
+        }
+      },
+      "scan": {
+        "state": "ready",
+        "failureKind": null,
+        "proposalSource": "open_data",
+        "candidates": 14,
+        "placed": 14,
+        "bases": 3,
+        "boardCandidates": 14,
+        "autoPicks": 14,
+        "foodVenues": null,
+        "routing": "openstreetmap+wikidata, openstreetmap, distance estimates"
+      },
+      "openData": {
+        "source": "openstreetmap+wikidata",
+        "boxHalfKm": 50,
+        "groups": 7,
+        "failedGroups": [],
+        "elements": 16,
+        "usable": 16,
+        "sitelinksAsked": 16,
+        "sitelinksAnswered": 16,
+        "settlements": 6,
+        "kept": 14,
+        "bases": 3
+      },
+      "metrics": {
+        "itineraryStatus": "needs_decision",
+        "feasibility": "unresolved_major_dependency",
+        "days": 16,
+        "emptyDays": 2,
+        "stopsPerDay": [
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        "meanStopsPerDay": 0.9,
+        "travelMinutesPerDay": [
+          0,
+          110,
+          120,
+          100,
+          170,
+          180,
+          180,
+          180,
+          60,
+          60,
+          90,
+          90,
+          110,
+          155,
+          170,
+          0
+        ],
+        "maxTravelMinutes": 180,
+        "meanTravelMinutes": 111,
+        "legs": {
+          "measured": 0,
+          "scheduled": 0,
+          "geo_estimate": 28,
+          "model_estimate": 0,
+          "modelled": 0,
+          "unknown": 0,
+          "zeroWithDistance": 0
+        },
+        "carLegsOnCarFreeTrip": 0,
+        "longestCarLegOnCarFreeTrip": null,
+        "hoursConflicts": 0,
+        "hoursConflictDetails": [],
+        "stops": [
+          {
+            "day": 2,
+            "title": "Mount Hutt",
+            "placeId": "scan-place-mount-hutt",
+            "category": "day_hike",
+            "lat": -43.466666666,
+            "lng": 171.533333333,
+            "kmFromCentre": 29,
+            "country": "NZ"
+          },
+          {
+            "day": 3,
+            "title": "Lake Coleridge",
+            "placeId": "scan-place-lake-coleridge",
+            "category": "lake",
+            "lat": -43.291,
+            "lng": 171.499,
+            "kmFromCentre": 40,
+            "country": "NZ"
+          },
+          {
+            "day": 4,
+            "title": "Mount Potts",
+            "placeId": "scan-place-mount-potts",
+            "category": "day_hike",
+            "lat": -43.503,
+            "lng": 170.925,
+            "kmFromCentre": 25,
+            "country": "NZ"
+          },
+          {
+            "day": 5,
+            "title": "Cave Stream",
+            "placeId": "scan-place-cave-stream",
+            "category": "historic_site",
+            "lat": -43.1967,
+            "lng": 171.7425,
+            "kmFromCentre": 61,
+            "country": "NZ"
+          },
+          {
+            "day": 6,
+            "title": "Mount Adams",
+            "placeId": "scan-place-mount-adams",
+            "category": "day_hike",
+            "lat": -43.268,
+            "lng": 170.527,
+            "kmFromCentre": 66,
+            "country": "NZ"
+          },
+          {
+            "day": 7,
+            "title": "Murchison Glacier",
+            "placeId": "scan-place-murchison-glacier",
+            "category": "viewpoint",
+            "lat": -43.512,
+            "lng": 170.391,
+            "kmFromCentre": 67,
+            "country": "NZ"
+          },
+          {
+            "day": 8,
+            "title": "Mount Murchison",
+            "placeId": "scan-place-mount-murchison",
+            "category": "day_hike",
+            "lat": -43.0039,
+            "lng": 171.378,
+            "kmFromCentre": 66,
+            "country": "NZ"
+          },
+          {
+            "day": 9,
+            "title": "Lake Clearwater",
+            "placeId": "scan-place-lake-clearwater",
+            "category": "lake",
+            "lat": -43.6033,
+            "lng": 171.044,
+            "kmFromCentre": 14,
+            "country": "NZ"
+          },
+          {
+            "day": 10,
+            "title": "Lake Heron",
+            "placeId": "scan-place-lake-heron",
+            "category": "lake",
+            "lat": -43.479166666,
+            "lng": 171.171944444,
+            "kmFromCentre": 12,
+            "country": "NZ"
+          },
+          {
+            "day": 11,
+            "title": "Tinwald",
+            "placeId": "scan-place-tinwald",
+            "category": "town_and_food",
+            "lat": -43.92,
+            "lng": 171.721,
+            "kmFromCentre": 55,
+            "country": "NZ"
+          },
+          {
+            "day": 12,
+            "title": "Methven",
+            "placeId": "scan-place-methven",
+            "category": "town_and_food",
+            "lat": -43.633333333,
+            "lng": 171.65,
+            "kmFromCentre": 36,
+            "country": "NZ"
+          },
+          {
+            "day": 13,
+            "title": "Rakaia",
+            "placeId": "scan-place-rakaia",
+            "category": "town_and_food",
+            "lat": -43.75,
+            "lng": 172.016666666,
+            "kmFromCentre": 67,
+            "country": "NZ"
+          },
+          {
+            "day": 14,
+            "title": "Fairlie",
+            "placeId": "scan-place-fairlie",
+            "category": "town_and_food",
+            "lat": -44.1,
+            "lng": 170.833333333,
+            "kmFromCentre": 65,
+            "country": "NZ"
+          },
+          {
+            "day": 15,
+            "title": "Lake Tekapo",
+            "placeId": "scan-place-lake-tekapo",
+            "category": "lake",
+            "lat": -43.9,
+            "lng": 170.525,
+            "kmFromCentre": 65,
+            "country": "NZ"
+          }
+        ],
+        "maxKmFromCentre": 67,
+        "stopsBeyondReach": 0,
+        "wrongCountryStops": 0,
+        "unknownCountryStops": 0,
+        "duplicateStops": [],
+        "distinctCategories": 5,
+        "mealsPerDay": [
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          2,
+          2,
+          3,
+          2,
+          0
+        ],
+        "daysWithLunch": 10,
+        "daysWithDinner": 15,
+        "namedMeals": 0,
+        "describedMeals": 31,
+        "overpackedDays": 0,
+        "overrunDays": 0,
+        "slotsPerDay": 3.5,
+        "budget": {
+          "present": true,
+          "detail": null,
+          "perPersonPerDayLow": 98,
+          "perPersonPerDayHigh": 208,
+          "currency": "USD",
+          "envelopeFit": null,
+          "style": "midrange"
+        },
+        "planText": [
+          "D1 2027-02-06 @South Island [1020-1140]: 17:00 [free_time] Free time 60m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D2 2027-02-07 @South Island [540-1140]: 9:00 [meal] Breakfast — Early breakfast in South Island before heading out 30m | 9:30 ~drive 55m/29km(geo_estimate) | 10:25 Mount Hutt 300m | 15:25 ~drive 55m/29km(geo_estimate) | 16:20 [free_time] Free time 100m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D3 2027-02-08 @South Island [540-1140]: 9:00 ~drive 60m/40km(geo_estimate) | 10:00 Lake Coleridge 90m | 11:30 [meal] Lunch — Pack a lunch — food is thin out near South Island 45m | 12:15 ~drive 60m/40km(geo_estimate) | 13:15 [free_time] Free time 285m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D4 2027-02-09 @South Island [540-1140]: 9:00 [meal] Breakfast — Early breakfast in South Island before heading out 30m | 9:30 ~drive 50m/25km(geo_estimate) | 10:20 Mount Potts 300m | 15:20 ~drive 50m/25km(geo_estimate) | 16:10 [free_time] Free time 110m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D5 2027-02-10 @South Island [540-1140]: 9:00 ~drive 85m/61km(geo_estimate) | 10:25 Cave Stream 90m | 11:55 [meal] Lunch — Casual lunch in South Island, near the midday stop 45m | 12:40 ~drive 85m/61km(geo_estimate) | 14:05 [free_time] Free time 235m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D6 2027-02-11 @South Island [540-1140]: 9:00 [meal] Breakfast — Early breakfast in South Island before heading out 30m | 9:30 ~drive 90m/66km(geo_estimate) | 11:00 Mount Adams 300m | 16:00 ~drive 90m/66km(geo_estimate) | 17:30 [free_time] Free time 30m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D7 2027-02-12 @South Island [540-1140]: 9:00 ~drive 90m/67km(geo_estimate) | 10:30 Murchison Glacier 120m | 12:30 [meal] Lunch — Pack a lunch — food is thin out near South Island 45m | 13:15 ~drive 90m/67km(geo_estimate) | 14:45 [free_time] Free time 195m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D8 2027-02-13 @South Island [540-1140]: 9:00 [meal] Breakfast — Early breakfast in South Island before heading out 30m | 9:30 ~drive 90m/66km(geo_estimate) | 11:00 Mount Murchison 300m | 16:00 ~drive 90m/66km(geo_estimate) | 17:30 [free_time] Free time 30m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D9 2027-02-14 @South Island [540-1140]: 9:00 ~drive 30m/14km(geo_estimate) | 9:30 Lake Clearwater 90m | 11:00 [free_time] Free time 30m | 11:30 [meal] Lunch — Casual lunch in South Island, near the midday stop 45m | 12:15 ~drive 30m/14km(geo_estimate) | 12:45 [free_time] Free time 315m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D10 2027-02-15 @South Island [540-1140]: 9:00 ~drive 30m/12km(geo_estimate) | 9:30 Lake Heron 90m | 11:00 [free_time] Free time 30m | 11:30 [meal] Lunch — Casual lunch in South Island, near the midday stop 45m | 12:15 ~drive 30m/12km(geo_estimate) | 12:45 [free_time] Free time 315m | 18:00 [meal] Dinner — Dinner in South Island 60m",
+          "D11 2027-02-16 @Ashburton [540-1140]: 9:00 [meal] Breakfast — Breakfast in South Island before heading out 30m | 9:30 ~drive 75m/55km(geo_estimate) | 10:45 Tinwald 150m | 13:15 [meal] Lunch — Casual lunch in Tinwald, near the midday stop 45m | 14:00 ~drive 15m/3km(geo_estimate) | 14:15 [free_time] Free time 225m | 18:00 [meal] Dinner — Dinner in Ashburton 60m",
+          "D12 2027-02-17 @Ashburton [540-1140]: 9:00 ~drive 45m/31km(geo_estimate) | 9:45 Methven 150m | 12:15 [meal] Lunch — Casual lunch in Methven, near the midday stop 45m | 13:00 ~drive 45m/31km(geo_estimate) | 13:45 [free_time] Free time 255m | 18:00 [meal] Dinner — Dinner in Ashburton 60m",
+          "D13 2027-02-18 @Ashburton [540-1140]: 9:00 ~drive 55m/28km(geo_estimate) | 9:55 Rakaia 150m | 12:25 [meal] Lunch — Casual lunch in Rakaia, near the midday stop 45m | 13:10 ~drive 55m/28km(geo_estimate) | 14:05 [free_time] Free time 235m | 18:00 [meal] Dinner — Dinner in Ashburton 60m",
+          "D14 2027-02-19 @Geraldine [540-1140]: 9:00 [meal] Breakfast — Breakfast in Ashburton before heading out 30m | 9:30 ~drive 105m/76km(geo_estimate) | 11:15 Fairlie 120m | 13:15 [meal] Lunch — Casual lunch in Fairlie, near the midday stop 45m | 14:00 ~drive 50m/33km(geo_estimate) | 14:50 [free_time] Free time 190m | 18:00 [meal] Dinner — Dinner in Geraldine 60m",
+          "D15 2027-02-20 @Geraldine [540-1140]: 9:00 ~drive 85m/61km(geo_estimate) | 10:25 Lake Tekapo 90m | 11:55 [meal] Lunch — Pack a lunch — food is thin out near South Island 45m | 12:40 ~drive 85m/61km(geo_estimate) | 14:05 [free_time] Free time 235m | 18:00 [meal] Dinner — Dinner in Geraldine 60m",
+          "D16 2027-02-21 @Geraldine [540-690]: 9:00 [free_time] Free time 150m"
+        ],
+        "silentAnchorLoss": 0,
+        "anchors": {
+          "preserved_with_verified_facts": 14
+        },
+        "unscheduled": 0,
+        "qualityAudit": {
+          "checks": 41,
+          "failed": [
+            "frequency_honoured(warning)"
+          ]
+        },
+        "qualityCompiler": {
+          "ran": 11,
+          "notRun": 5,
+          "failed": [
+            "route_completeness(corrected)"
+          ]
+        },
+        "issues": {},
+        "tripQuality": {
+          "routeCoherence": "strong",
+          "geographicProgression": "strong",
+          "baseEfficiency": "strong",
+          "activityDensity": "weak",
+          "chapterRhythm": "weak",
+          "recoveryPlacement": "unknown",
+          "signatureStrength": "adequate",
+          "experientialDiversity": "unknown",
+          "transportConsistency": "strong",
+          "measurementIntegrity": "strong",
+          "routeCriticalPlacement": "strong",
+          "temporalFeasibility": "unknown",
+          "uncertaintyBurden": "adequate"
+        },
+        "packageMetrics": {
+          "lockedFactViolations": 0,
+          "hardConstraintViolations": 0,
+          "unmeasuredMajorTransfers": 0,
+          "routeDiscontinuities": 0,
+          "timeWindowViolations": 0,
+          "daylightViolations": 0,
+          "partyHardFails": 0,
+          "averagePartyFit": null,
+          "minimumPartyFit": null,
+          "activityDiversity": 0.67,
+          "hotelChurn": 2,
+          "travelBurdenMinutesPerDay": 111,
+          "freeMinutesPerDay": 189,
+          "signatureCoverage": 1,
+          "mealCoverage": 0.88,
+          "bookedFactPreservation": null,
+          "unverifiedCriticalDependencies": 1,
+          "transfersAsStops": 0,
+          "silentAnchorLoss": 0
+        },
+        "bases": [
+          "South Island (10n)",
+          "Ashburton (3n)",
+          "Geraldine (2n)"
+        ]
+      },
+      "authoredRegion": false,
+      "scanLog": [
+        "Discovery scan for 9a9edcb4-9298-4a40-87e4-db08c7599247: the proposal model is unavailable (composer_not_configured); proposing from open data.",
+        "Discovery scan proposal for 9a9edcb4-9298-4a40-87e4-db08c7599247 (open data): 14 returned, 14 kept, 0 dropped, stop=n/a out=n/a",
+        "Scan food: unavailable, 0 venues from 2 boxes (2 failed, 0 calls, 0 beyond a door walk).",
+        "Discovery scan ready for 9a9edcb4-9298-4a40-87e4-db08c7599247 in 1s: 14 places, 3 bases, matrix estimated (0/272)."
+      ]
+    }
+  ]
+}

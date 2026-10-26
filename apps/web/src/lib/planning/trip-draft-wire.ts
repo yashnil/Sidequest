@@ -435,9 +435,13 @@ export function abandonedDraftIssues(draft: TripDraft): WireIssue[] {
   /*
    * One empty day is legitimate — a departure morning, a rest day the traveller
    * asked for. Two or more, or an empty day that is not at an edge, is a draft
-   * that ran out of effort rather than one making a choice.
+   * that ran out of effort rather than one making a choice. A day that moves
+   * base is the journey itself (Lisbon to the Azores is the day), so an empty
+   * relocation day is a choice too — but only where the base really changes,
+   * so a stub cannot call itself a move.
    */
-  const interiorEmpty = empty.filter((day) => day.dayNumber !== 1 && day.dayNumber !== draft.days.length);
+  const moves = (day: TripDraft['days'][number]) => day.relocation === true && draft.days.find((d) => d.dayNumber === day.dayNumber - 1)?.baseId !== day.baseId;
+  const interiorEmpty = empty.filter((day) => day.dayNumber !== 1 && day.dayNumber !== draft.days.length && !moves(day));
   if (interiorEmpty.length > 0) {
     issues.push({
       path: 'days',

@@ -2,7 +2,7 @@ import 'server-only';
 import { loadTripIntelligence } from '@/lib/intelligence/load';
 import { renderInstant } from '@/lib/clock';
 import { providerRegistry } from '@/lib/providers/registry';
-import { buildRecheckManifest, buildTodayView, type RecheckManifest, type TodayView } from '@sidequest/core';
+import { buildRecheckManifest, buildTodayView, descriptionAboutThePlace, type RecheckManifest, type TodayView } from '@sidequest/core';
 import { buildLedger, buildNextActions, buildPreflight, buildTripStateGraph, deriveDecisions, readLifecycle, summariseObservations, volatileFacts, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { listDecisions, listObservations, listPendingImports, type BookingImport } from '@/lib/db/execution-repository';
 import { destinationTimeZone } from '@/lib/execution/destination-zone';
@@ -528,7 +528,19 @@ export function stopRationaleFor(
 ): Record<string, StopRationale> {
   const rationale: Record<string, StopRationale> = {};
   for (const candidate of candidates) {
-    const why = candidate.fit.reasons.find((reason) => !used.has(reason)) ?? candidate.fit.reasons[0];
+    /*
+     * A reason no stop above has used; else what the place *is* (its own
+     * description, under the same stub gate the board uses); only then the
+     * repeat. Repeating a neighbour's reason put one sentence on many rows and
+     * on the signature spread while the stop's own description sat unused.
+     */
+    const described = descriptionAboutThePlace(candidate.place.shortDescription);
+    const why =
+      candidate.fit.reasons.find((reason) => !used.has(reason)) ??
+      (described && !used.has(described) ? described : undefined) ??
+      candidate.fit.reasons[0] ??
+      described ??
+      undefined;
     if (why) used.add(why);
     rationale[candidate.place.id] = {
       /*

@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { PREFLIGHT_CATEGORY_LABELS, PREPARE_GROUPS, PREPARE_GROUP_LABELS, groupPreflight, type Preflight, type PreflightItem, type PrepareGroup } from '@sidequest/core';
 import { setCheckAction } from '@/app/(product)/trips/[id]/itinerary/actions';
 import { buttonClass, cx } from '../ui';
+import { FigureRow, RailSection } from './views/ViewHead';
 
 /**
  * V9 §7 — "AM I READY TO ACTUALLY TAKE THIS TRIP?"
@@ -82,33 +83,63 @@ export function PreflightView({ preflight, tripId, bookingsListedBelow = false }
   );
   return (
     <section aria-labelledby="preflight-heading" data-testid="preflight" data-verdict={preflight.verdict}>
+      {/*
+        SURVEY ATLAS — THE VERDICT IS THE HEAD OF THE SHEET.
+
+        The answer set large, how far away the trip is as the one giant figure,
+        and the four sections as boxed counts that jump to their rail. The
+        counts are the lists' own lengths; nothing here is a score.
+      */}
       <motion.div
-        className={cx('card-raised border p-5', verdict.tone)}
+        className="hv-head"
         data-testid="prepare-top"
-        initial={reduced ? false : { opacity: 0, scale: 0.985 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: reduced ? 0 : 0.26, ease: [0.2, 0.7, 0.2, 1] }}
+        initial={reduced ? false : { opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reduced ? 0 : 0.32, ease: [0.2, 0.7, 0.2, 1] }}
       >
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p className="eyebrow">Ready to go?</p>
-          <p className="type-figure text-sm text-ink-muted" data-testid="preflight-days">
-            {awayWord(preflight.daysUntilTrip)}
+        <p className="sheet-label text-ink-muted">Sheet R · Ready to go?</p>
+        <div className="hv-verdict mt-3">
+          <div className="min-w-0">
+            <h2 id="preflight-heading" className="hv-title flex items-start gap-3 !text-[clamp(2rem,1.4rem+2.2vw,3.25rem)] !leading-[1.02]" data-testid="preflight-verdict" data-verdict={preflight.verdict}>
+              <span aria-hidden="true" className={cx('hv-dot mt-[0.45em]', verdict.dot)} />
+              <span className="min-w-0">{preflight.headline}</span>
+            </h2>
+            <p className="hv-lede">{preflight.verdict === 'ready' ? 'Everything the trip depends on is arranged or ticked.' : preflight.verdict === 'nearly' ? 'A few things before you go, none of them big.' : 'Some of these the plan cannot do without.'}</p>
+          </div>
+          <p className="flex items-end gap-3 md:block md:text-right">
+            {preflight.daysUntilTrip > 0 ? (
+              <span aria-hidden="true" className="hv-away block">
+                {preflight.daysUntilTrip}
+              </span>
+            ) : null}
+            {/* The figure above carries the number; the words keep it for anyone not seeing the figure. */}
+            <span className="sheet-label mt-2 block text-ink-muted" data-testid="preflight-days">
+              {preflight.daysUntilTrip > 1 ? (
+                <>
+                  <span className="sr-only">{preflight.daysUntilTrip} </span>days away
+                </>
+              ) : (
+                awayWord(preflight.daysUntilTrip)
+              )}
+            </span>
           </p>
         </div>
-        <h2 id="preflight-heading" className="mt-1 flex items-center gap-2.5 font-display text-2xl leading-tight text-ink" data-testid="preflight-verdict" data-verdict={preflight.verdict}>
-          <span aria-hidden="true" className={cx('inline-block h-2.5 w-2.5 shrink-0 rounded-full', verdict.dot)} />
-          {preflight.headline}
-        </h2>
-        <p className="mt-1.5 type-small text-ink-muted">
-          {preflight.verdict === 'ready' ? 'Everything the trip depends on is arranged or ticked.' : preflight.verdict === 'nearly' ? 'A few things before you go, none of them big.' : 'Some of these the plan cannot do without.'}
-        </p>
+        <FigureRow
+          className="mt-6"
+          figures={PREPARE_GROUPS.map((group) => ({
+            label: PREPARE_GROUP_LABELS[group].title,
+            href: `#${GROUP_TEST_ID[group]}-rail`,
+            value: <span className={cx('type-figure', group === 'needs_attention' && groups[group].length > 0 && 'text-clay', group === 'ready' && 'text-pine')}>{String(groups[group].length).padStart(2, '0')}</span>,
+          }))}
+        />
       </motion.div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2" data-testid="readiness-list">
-        {PREPARE_GROUPS.map((group) => (
+      <div className="mt-12" data-testid="readiness-list">
+        {PREPARE_GROUPS.map((group, index) => (
           <Bucket
             key={group}
             id={GROUP_TEST_ID[group]}
+            index={index}
             group={group}
             items={groups[group]}
             /* The two a traveller scrolls past on a phone fold there and open from `lg`. */
@@ -140,43 +171,53 @@ const EMPTY_WORD: Record<PrepareGroup, string> = {
   ready: 'Nothing ticked yet.',
 };
 
-function Bucket({ id, group, items, tripId, collapsible = false }: { id: string; group: PrepareGroup; items: readonly PreflightItem[]; tripId?: string; collapsible?: boolean }) {
+const RAIL_WORD: Record<PrepareGroup, string> = {
+  needs_attention: 'now',
+  before_you_leave: 'before you leave',
+  closer_to_the_trip: 'closer to the day',
+  ready: 'done',
+};
+
+function Bucket({ id, index, group, items, tripId, collapsible = false }: { id: string; index: number; group: PrepareGroup; items: readonly PreflightItem[]; tripId?: string; collapsible?: boolean }) {
   const { title, blurb } = PREPARE_GROUP_LABELS[group];
   /* Folded on phones only; `lg:block` on the list keeps it open on a wide screen without a script. */
   const [expanded, setExpanded] = useState(false);
   const folded = collapsible && !expanded && items.length > 0;
+  /* HUB-4 — what is already done folds on every width: it is a record, not a to-do, and it was a screen of ticked rows on a desktop. */
+  const foldEverywhere = group === 'ready';
   const listId = `${id}-list`;
   return (
-    <div data-testid={id} data-count={items.length} {...(collapsible ? { 'data-collapsed': folded ? 'true' : 'false' } : {})}>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h3 className="type-section text-ink">{title}</h3>
-        <span className="type-figure text-sm text-ink-faint">{items.length}</span>
-        {/*
-          V11 §N — ONE TESTID PER BUTTON, NOT PER KIND OF BUTTON.
-
-          Two buckets fold on a phone and both carried `preflight-later-toggle`,
-          so a spec asking whether that button is visible got a strict-mode
-          violation, swallowed it with the `.catch(() => false)` beside it, and
-          silently went on to assert against a list that was still folded. The
-          name is derived from the bucket, which keeps this one exactly as it was
-          and gives the other its own.
-        */}
-        {collapsible && items.length > 0 ? (
-          <button type="button" className={cx(buttonClass('ghost', 'sm'), 'ml-auto lg:hidden')} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)} data-testid={`${id}-toggle`}>
-            {expanded ? 'Hide' : `Show ${items.length}`}
-          </button>
-        ) : null}
-      </div>
-      <p className="type-meta">{blurb}</p>
-      {items.length === 0 ? (
-        <p className="mt-3 type-small text-ink-faint">{EMPTY_WORD[group]}</p>
-      ) : (
-        <ol id={listId} className={cx('mt-3 divide-y divide-rule rounded-[var(--radius-card)] border border-rule bg-paper-raised', folded && 'hidden lg:block')}>
-          {items.map((item) => (
-            <PreflightRow key={item.id} item={item} group={group} {...(tripId ? { tripId } : {})} />
-          ))}
-        </ol>
-      )}
+    <div id={`${id}-rail`} className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]">
+      <RailSection
+        index={`${String(index + 1).padStart(2, '0')} · ${RAIL_WORD[group]}`}
+        title={title}
+        count={items.length}
+        blurb={blurb}
+        quiet={group === 'ready' || group === 'closer_to_the_trip'}
+        testId={id}
+        attrs={{ 'data-count': String(items.length), ...(collapsible ? { 'data-collapsed': folded ? 'true' : 'false' } : {}) }}
+        aside={
+          /*
+            V11 §N — ONE TESTID PER BUTTON, NOT PER KIND OF BUTTON. The name is
+            derived from the bucket, so each folding list has its own.
+          */
+          collapsible && items.length > 0 ? (
+            <button type="button" className={cx(buttonClass('ghost', 'sm'), 'mt-2 -ml-3', !foldEverywhere && 'lg:hidden')} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)} data-testid={`${id}-toggle`}>
+              {expanded ? 'Hide' : foldEverywhere ? `Show the ${items.length} done` : `Show ${items.length}`}
+            </button>
+          ) : null
+        }
+      >
+        {items.length === 0 ? (
+          <p className="py-4 type-small text-ink-faint">{EMPTY_WORD[group]}</p>
+        ) : (
+          <ol id={listId} className={cx('ruled', folded && (foldEverywhere ? 'hidden' : 'hidden lg:block'))}>
+            {items.map((item) => (
+              <PreflightRow key={item.id} item={item} group={group} {...(tripId ? { tripId } : {})} />
+            ))}
+          </ol>
+        )}
+      </RailSection>
     </div>
   );
 }
@@ -187,7 +228,7 @@ function PreflightRow({ item, group, tripId }: { item: PreflightItem; group: Pre
   const tickable = Boolean(tripId && item.checkId);
   return (
     <li
-      className="flex items-start gap-3 px-3.5 py-3"
+      className="hv-check"
       data-testid="preflight-item"
       data-category={item.category}
       data-bucket={item.bucket}
@@ -226,7 +267,7 @@ function PreflightRow({ item, group, tripId }: { item: PreflightItem; group: Pre
           }}
           className={cx('mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-control)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine', pending && 'opacity-60')}
         >
-          <span aria-hidden="true" className={cx('inline-flex h-5 w-5 items-center justify-center rounded-[4px] border text-xs leading-none', ticked ? 'border-pine bg-pine text-paper' : 'border-ink-faint bg-paper')}>
+          <span aria-hidden="true" className={cx('inline-flex h-5 w-5 items-center justify-center border-[1.5px] text-xs leading-none', ticked ? 'border-pine bg-pine text-paper' : 'border-ink bg-paper-raised')}>
             {ticked ? '✓' : ''}
           </span>
           <span className="sr-only" aria-live="polite">
@@ -234,9 +275,15 @@ function PreflightRow({ item, group, tripId }: { item: PreflightItem; group: Pre
           </span>
         </button>
       ) : (
-        <span aria-hidden="true" className={cx('mt-3 inline-block h-2 w-2 shrink-0 rounded-full', group === 'ready' ? 'bg-pine' : group === 'needs_attention' ? 'bg-amber' : 'bg-ink-faint')} />
+        <span aria-hidden="true" className="inline-flex h-11 w-11 items-center justify-center">
+          <span className={cx('inline-block h-2 w-2 shrink-0', group === 'ready' ? 'bg-pine' : group === 'needs_attention' ? 'bg-clay' : 'border border-ink-faint')} />
+        </span>
       )}
-      <span className="min-w-0 flex-1 py-1.5">
+      {/* The subject column: what kind of thing this is — documents, money, connectivity, packing — as a register's margin. */}
+      <span aria-hidden="true" className="hv-check-cat sheet-label !text-[10px] text-ink-faint">
+        {PREFLIGHT_CATEGORY_LABELS[item.category]}
+      </span>
+      <span className="min-w-0 flex-1 py-2">
         <a href={item.href} className={cx('block text-sm font-medium text-ink underline-offset-4 hover:underline', ticked && group !== 'ready' && 'text-ink-muted line-through')}>
           {item.title}
         </a>
@@ -249,8 +296,16 @@ function PreflightRow({ item, group, tripId }: { item: PreflightItem; group: Pre
         */}
         {(() => {
           const category = PREFLIGHT_CATEGORY_LABELS[item.category];
-          const parts = [category.toLowerCase() === item.title.toLowerCase().replace(/\.$/, '') ? null : category, item.sourceName ?? null, item.readAt ?? null].filter(Boolean);
-          return parts.length > 0 ? <span className="mt-0.5 block type-meta">{parts.join(' · ')}</span> : null;
+          const own = category.toLowerCase() === item.title.toLowerCase().replace(/\.$/, '') ? null : category;
+          const rest = [item.sourceName ?? null, item.readAt ?? null].filter(Boolean);
+          if (!own && rest.length === 0) return null;
+          /* On a wide sheet the category is the register's margin column, so the line keeps only the source. */
+          return (
+            <span className="mt-0.5 block type-meta">
+              {own ? <span className="min-[900px]:hidden">{own}{rest.length > 0 ? ' · ' : ''}</span> : null}
+              {rest.join(' · ')}
+            </span>
+          );
         })()}
         {item.detail ? <span className="mt-1 block type-small text-ink-muted">{item.detail}</span> : null}
         {/*

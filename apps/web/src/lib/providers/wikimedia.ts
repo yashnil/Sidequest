@@ -1018,19 +1018,31 @@ export async function resolveImagery(
  */
 export async function resolveImageryForSubjects(
   subjects: readonly ImageSubject[],
-  options: ResolveImageOptions & { limit?: number } = {},
+  options: ResolveImageOptions & { limit?: number; pauseMs?: number } = {},
 ): Promise<{ resolved: number; accepted: number; calls: number }> {
   const limit = options.limit ?? 12;
   let resolved = 0;
   let accepted = 0;
   let calls = 0;
 
-  for (const subject of subjects.slice(0, limit)) {
+  const pauseMs = options.pauseMs ?? 250;
+  for (const [index, subject] of subjects.slice(0, limit).entries()) {
+    /*
+     * A VOLUNTEER SERVICE IS ASKED POLITELY, AND TOLD NOTHING WHEN IT SAYS STOP.
+     *
+     * Commons answers a burst of lookups with "You are making too many
+     * requests" — a live Lisbon board got four photographs and then four
+     * refusals in one pass. So the subjects are spaced, and the first
+     * "unavailable" ends the pass: the rest are still unresolved (a transient
+     * refusal is never stored) and the next visit asks for them.
+     */
+    if (index > 0 && pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
     try {
       const result = await resolveImagery(subject, options);
       resolved += 1;
       calls += result.calls;
       if (result.outcome.status === 'accepted') accepted += 1;
+      if (result.outcome.status === 'rejected' && result.outcome.rejection.reason === 'provider_unavailable') break;
     } catch (error) {
       // The name only. A provider SDK error routinely carries the request that
       // produced it — the outbound headers among them — and a server log is not

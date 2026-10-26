@@ -55,6 +55,18 @@
     "olympic national park": "olympic-national-park.json",
     "mount rainier national park": "mount-rainier-national-park.json",
     "maun, botswana": "maun-botswana.json",
-    "moremi game reserve, botswana": "moremi-game-reserve-botswana.json"
+    "moremi game reserve, botswana": "moremi-game-reserve-botswana.json",
+    "lisbon": "lisbon.json",
+    "florence": "florence.json",
+    "rome": "rome.json",
+    "paris": "paris.json",
+    "bali": "bali.json",
+    "georgia": "georgia.json",
+    "cambridge": "cambridge.json",
+    "victoria": "victoria.json",
+    "santiago": "santiago.json",
+    "valencia": "valencia.json",
+    "kingston": "kingston.json",
+    "alexandria": "alexandria.json"
   }
 }

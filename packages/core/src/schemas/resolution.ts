@@ -127,6 +127,14 @@ export const destinationCandidateSchema = z.object({
       rank: z.number().int().min(0).max(40).optional(),
       /** The population the record publishes, when it does: evidence for how large a city's practical footprint can be. */
       population: z.number().int().nonnegative().optional(),
+      /**
+       * The geocoder's own prominence for the row (Nominatim `importance`, 0–1,
+       * derived from how much Wikipedia links to the place). Read only to tell
+       * an internationally known place from its small namesakes; never shown.
+       */
+      importance: z.number().min(0).max(1).optional(),
+      /** The row's Wikidata item, when it publishes one: two rows naming the same item are one place. */
+      wikidata: z.string().regex(/^Q\d+$/).optional(),
     })
     .optional(),
 });

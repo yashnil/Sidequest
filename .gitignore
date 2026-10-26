@@ -76,3 +76,11 @@ sidequest_master_prompt.md
 # Founder benchmark exports: multi-megabyte PDFs of real trip comparisons.
 # Regenerable, and not something a public remote should carry.
 benchmarks/**/*.pdf
+
+# Working evidence from the 2026-10 passes: screenshot rounds (≈900 MB, some of
+# them third-party reference captures), scan polling dumps and progress logs.
+# The reports that cite them stay tracked; the captures stay local.
+docs/**/*.png
+docs/**/*.log
+docs/**/polls.jsonl
+docs/**/url.txt

@@ -240,7 +240,12 @@ function fitView(points: readonly GeoPoint[], width: number, height: number, flo
 function viewportFor(view: View, width: number, height: number): MapViewport {
   const project = (point: GeoPoint) => {
     const world = toWorld(point);
-    return { x: width / 2 + (world.x - view.cx) * view.scale, y: height / 2 + (world.y - view.cy) * view.scale };
+    /*
+     * Rounded to a hundredth of a pixel. Server and browser Math libraries differ
+     * in the last bits of `Math.log`/`Math.tan`, and an SVG attribute printed to
+     * sixteen digits made every map a hydration mismatch React refuses to patch.
+     */
+    return { x: Math.round((width / 2 + (world.x - view.cx) * view.scale) * 100) / 100, y: Math.round((height / 2 + (world.y - view.cy) * view.scale) * 100) / 100 };
   };
   const centreLatitude = (2 * Math.atan(Math.exp((0.5 - view.cy) * 2 * Math.PI)) - Math.PI / 2) / (Math.PI / 180);
   return {
@@ -620,7 +625,7 @@ export function InteractiveMap({
             {ring ? (
               <>
                 <path d={ring.path} fill="none" stroke="var(--color-ink-faint)" strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
-                <text x={baseAt ? baseAt.x : width / 2} y={baseAt ? baseAt.y - ring.km / viewport.kmPerPixelAt(base!.coordinates.lat) - 4 : 12} textAnchor="middle" fontSize={9} fill="var(--color-ink-faint)" stroke="var(--color-paper-sunk)" strokeWidth={2.5} paintOrder="stroke">
+                <text x={baseAt ? baseAt.x : width / 2} y={baseAt ? Math.round((baseAt.y - ring.km / viewport.kmPerPixelAt(base!.coordinates.lat) - 4) * 100) / 100 : 12} textAnchor="middle" fontSize={9} fill="var(--color-ink-faint)" stroke="var(--color-paper-sunk)" strokeWidth={2.5} paintOrder="stroke">
                   {ring.km} km
                 </text>
               </>
@@ -978,7 +983,7 @@ export function InteractiveMap({
 
 function MapButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} className="pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-control)] border border-rule bg-paper-raised px-2 text-sm font-medium text-ink shadow-[var(--shadow-card)] hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2">
+    <button type="button" aria-label={label} title={label} onClick={onClick} className="pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-rule bg-paper-raised px-3 text-sm font-medium text-ink shadow-[var(--shadow-card)] hover:border-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2">
       {children}
     </button>
   );

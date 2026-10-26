@@ -71,7 +71,7 @@ import { compileQualitySafely } from './quality-compiler';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
-import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, type PlannerComposition } from './planner-composer';
+import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, plannerUnscheduledPicks, type PlannerComposition } from './planner-composer';
 import { getScanProposalExtras } from '../db/scan-repository';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
@@ -1149,9 +1149,12 @@ export async function generateSidequestPlanForTrip(
     remainingBudgetAfterCompositionMs: budgetPolicy.remainingMs,
     ...(budgetPolicy.verify ? (degraded ? { verificationDegradedReason: 'verification stopped at its deadline; the trip was returned with what had verified' } : {}) : { verificationDegradedReason: budgetPolicy.reason }),
   };
+  /* Production pass — the traveller's picks the planner could not place are unscheduled places, never only prose (`plannerUnscheduledPicks`). */
+  const plannerPicksUnscheduled = plannerComposition ? plannerUnscheduledPicks(plannerComposition).filter((u) => !applied.itinerary.unscheduled.some((existing) => existing.placeId === u.placeId)) : [];
   const itinerary = applied.itinerary.package
     ? {
         ...applied.itinerary,
+        ...(plannerPicksUnscheduled.length > 0 ? { unscheduled: [...applied.itinerary.unscheduled, ...plannerPicksUnscheduled] } : {}),
         status: itineraryStatusForVerdict(feasibility.verdict),
         package: {
           ...applied.itinerary.package,

@@ -1,3 +1,4 @@
+import { advisorAnswersSchema } from '../advisor/answers';
 import { z } from 'zod';
 import { freeTimeAppetiteSchema, isoDateSchema, isoTimeSchema } from './common';
 import { selectedDestinationSchema } from './destination-index';
@@ -443,6 +444,14 @@ export const tripComposerAnswersSchema = z.object({
   budgetIncludesFlights: z.boolean().optional(),
   /** The country the traveller is departing from, ISO 3166-1 alpha-2, when known. Decides what "domestic" means. */
   originCountry: z.string().length(2).optional(),
+
+  /**
+   * What the destination advisor learned that nothing above holds: the kind of
+   * outdoors, adventure up to expedition, the parts of the world in scope, and
+   * the conversation's memory. Present only on a trip that began with "help me
+   * choose"; it travels into the trip with everything else.
+   */
+  discovery: advisorAnswersSchema.optional(),
 
   /** Which questions have been shown and dismissed, so they are not re-asked. */
   skipped: z.array(z.string().min(1)).default([]),

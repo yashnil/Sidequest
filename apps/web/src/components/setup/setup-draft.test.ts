@@ -11,6 +11,7 @@ import {
   summaryOf,
   type SetupDraft,
   advanceDraft,
+  humanRange,
 } from './setup-draft';
 
 /**
@@ -173,5 +174,22 @@ describe('advanceDraft', () => {
   it('is idempotent on an already-answered step', () => {
     const once = advanceDraft(draft({ destinationText: 'Hokkaido' }), 'where');
     expect(advanceDraft(once, 'where').answered).toEqual(once.answered);
+  });
+});
+
+describe('the summary writes dates the way a person does', () => {
+  it('collapses a shared month and year, and keeps a year boundary explicit', () => {
+    expect(humanRange('2026-12-10', '2026-12-15')).toBe('10 – 15 Dec 2026');
+    expect(humanRange('2026-11-28', '2026-12-03')).toBe('28 Nov – 3 Dec 2026');
+    expect(humanRange('2026-12-28', '2027-01-03')).toBe('28 Dec 2026 – 3 Jan 2027');
+  });
+
+  it('shows anything malformed as typed rather than guessing', () => {
+    expect(humanRange('soon', '2026-12-15')).toBe('soon → 2026-12-15');
+  });
+
+  it('never prints an ISO date in the When line', () => {
+    const line = summaryOf(draft({ destinationText: 'Lisbon', dateMode: 'exact', startDate: '2026-12-10', endDate: '2026-12-15', answered: ['where', 'when'] })).lines.find((entry) => entry.label === 'When');
+    expect(line?.value).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });

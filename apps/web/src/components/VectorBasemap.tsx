@@ -5,6 +5,7 @@ import type * as MapLibre from 'maplibre-gl';
 import type { GeoPoint } from './map-projection';
 import type { VectorBasemap as VectorBasemapSource } from './map-adapter';
 import { MAPLIBRE_MODULE_URL, ensureMaplibreStylesheet } from './map-vendor';
+import { resolveAtlasStyle } from './atlas/atlas-style';
 
 /**
  * THE VECTOR BASEMAP UNDER THE ATLAS FIGURE.
@@ -161,10 +162,29 @@ export function VectorBasemapLayer({
     quietLabelsRef.current = quietLabels;
   }, [onHealth, displayScale, quietLabels]);
 
+  /*
+   * NO MAP UNTIL ITS FRAME IS ON SCREEN.
+   *
+   * Every basemap is a WebGL context and a tile download, and an itinerary
+   * mounts one per day inside disclosures and hidden views: six live contexts
+   * on a page that shows one. The renderer starts the first time the frame is
+   * both visible and non-empty, and never before.
+   */
+  const [visible, setVisible] = useState(() => typeof window !== 'undefined' && typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const element = wrapper.current;
+    if (!element || visible || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting && entry.boundingClientRect.width > 0 && entry.boundingClientRect.height > 0)) setVisible(true);
+    }, { rootMargin: '200px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible]);
+
   useEffect(() => {
     let cancelled = false;
     const element = container.current;
-    if (!element) return;
+    if (!element || !visible) return;
     const settle = (next: MapHealth, reason?: string) => {
       if (cancelled) return;
       setHealth(next);
@@ -187,7 +207,7 @@ export function VectorBasemapLayer({
       if (cancelled || !container.current) return;
       const instance = new maplibre.Map({
         container: container.current,
-        style: source.styleUrl,
+        style: resolveAtlasStyle(source.styleUrl) as unknown as string,
         center: [centre.lng, centre.lat],
         zoom: zoomFor(scale * displayScaleRef.current, source.maxZoom),
         interactive: false,
@@ -254,7 +274,7 @@ export function VectorBasemapLayer({
     };
     // The style and container are fixed for the life of the layer; camera moves are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source.styleUrl]);
+  }, [source.styleUrl, visible]);
 
   useEffect(() => {
     const element = wrapper.current;

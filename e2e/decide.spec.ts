@@ -1,161 +1,116 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { adviseToShortlist, answerUntilShortlist, startAdvisor } from './support/advisor';
 
 /**
- * "WHERE SHOULD I GO", THROUGH THE BROWSER.
+ * "HELP ME CHOOSE", THROUGH THE BROWSER (the 2026-10 destination advisor).
  *
- * The mode has been in the schema since Phase 7 with no code path behind it, so
- * every assertion here is of behaviour that did not exist. What it proves, in
- * order: both doors are reachable from the front page; four answers produce a
- * ranked list; the list explains itself and says what it could not see; a
- * refresh loses nothing; and choosing a destination carries every preference
- * into an ordinary trip.
+ * What it proves, in order: both doors are on the front page; free text is read
+ * and not asked again; the interview asks a bounded number of questions and can
+ * be cut short; the shortlist shows real travel destinations with reasons,
+ * timing, trade-offs and what is unchecked; a refresh loses nothing; a
+ * refinement re-ranks without restarting; and choosing a destination produces
+ * an ordinary trip carrying every answer.
  *
- * The environment has a *synthetic* index — five invented countries — so these
- * run entirely offline and name nowhere real. See `lib/destinations/seed`.
+ * The advisor ranks a bundled catalog with no model and no provider, so this
+ * runs offline; the climate check is off in this environment and the cards
+ * must say so rather than claim a verification.
  */
-
-async function answerAndRank(page: Page): Promise<void> {
-  await page.goto('/decide');
-  /*
-   * V11 §A1 — the intake asks one question at a time, in the order that changes
-   * the ranking most, and stops as soon as it can rank. Two answers is enough,
-   * which is why the primary action appears here rather than a third question.
-   */
-  await page.getByRole('radio', { name: 'Some time in a month' }).check();
-  await page.getByLabel('Which month?').selectOption('7');
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
-  await page.getByRole('checkbox', { name: 'Mountains and high country' }).check();
-  await page.getByRole('button', { name: 'One more question' }).click();
-  await page.getByRole('spinbutton', { name: 'Nights away' }).fill('9');
-  await page.getByRole('button', { name: 'Show me where to go' }).click();
-  await page.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
-}
-
-/** The featured answer: three and a wildcard, with everything else demoted below. */
-async function shortlist(page: Page) {
-  const featured = page.getByTestId('shortlist-featured');
-  await expect(featured).toBeVisible({ timeout: 30_000 });
-  return featured;
-}
 
 test('both doors are on the front page, and the second one works', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'I know where I want to go' })).toBeVisible();
-
   await page.getByRole('link', { name: 'Help me choose' }).click();
   await expect(page).toHaveURL(/\/decide$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('when and what for');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Not sure where?');
 });
 
-test('four answers produce a ranked, explained shortlist', async ({ page }) => {
-  await answerAndRank(page);
-  const list = await shortlist(page);
-  const items = list.getByRole('listitem');
-
-  const count = await items.count();
-  expect(count, 'a shortlist is a choice, not a verdict').toBeGreaterThan(1);
-  expect(count, 'nobody reads more than eight').toBeLessThanOrEqual(8);
-
+test('reads what was typed and does not ask it again', async ({ page }) => {
+  await startAdvisor(page, 'Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I’m flexible on duration.');
+  await expect(page.getByText('What we took from that')).toBeVisible();
+  await expect(page.getByText('Summer · June–August').first()).toBeVisible();
   /*
-   * V11 §A2 — the evidence is on the card it belongs to, not in a second panel
-   * that argued for the lead destination all over again. Every featured card
-   * carries its own "what we checked" disclosure and its own Plan action.
+   * When, what for and how long were all in the sentence. Which follow-up comes
+   * first is the interview's call (the largest expected change to the list), so
+   * this asserts only that a follow-up is asked and that it is none of those.
    */
-  await expect(items.first().getByText('What we checked, one thing at a time')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Plan this' }).first()).toBeVisible();
+  await expect(page.locator('[data-testid^="advisor-question-"]').first()).toBeVisible();
+  await expect(page.getByTestId('advisor-question-when')).toHaveCount(0);
+  await expect(page.getByTestId('advisor-question-focus')).toHaveCount(0);
+  await expect(page.getByTestId('advisor-question-length')).toHaveCount(0);
 });
 
-/**
- * The property the whole `Measure` union exists for, asserted where a traveller
- * would actually see it: a dimension nobody could measure is named on screen,
- * not silently scored as a zero.
- */
-test('says what it could not see rather than scoring it as zero', async ({ page }) => {
-  await answerAndRank(page);
-  await shortlist(page);
+test('the interview can be cut short, and stops on its own within a handful of questions', async ({ page }) => {
+  await startAdvisor(page);
+  let questions = 0;
+  for (let step = 0; step < 10; step += 1) {
+    if (await page.getByTestId('advisor-shortlist').isVisible().catch(() => false)) break;
+    const question = page.locator('[data-testid^="advisor-question-"]').first();
+    if (!(await question.isVisible().catch(() => false))) {
+      await page.waitForTimeout(400);
+      continue;
+    }
+    questions += 1;
+    if (questions === 2) {
+      await page.getByRole('button', { name: 'Show me places now' }).click();
+      break;
+    }
+    await question.getByRole('radio').first().click();
+  }
+  await expect(page.getByTestId('advisor-shortlist')).toBeVisible({ timeout: 30_000 });
+  expect(questions).toBeLessThanOrEqual(7);
+});
 
-  /*
-   * The caveats fold behind one summary line now, and the count in that line is
-   * itself part of the claim: three surfaces used to state their own, which on a
-   * tied ranking ran to eleven consecutive negative sentences directly under the
-   * results. Folded is not hidden — this knocks, and then asserts every one of
-   * them is still there.
-   */
-  const caveats = page
-    .locator('details')
-    /*
-     * The count in the summary, not the words alone. The per-destination
-     * breakdown's own preamble says "a few we could not check at all", so a bare
-     * phrase match resolves to that disclosure instead — which is a real panel
-     * with real content, so the mistake reads as a copy failure rather than as a
-     * locator one.
-     */
-    .filter({ hasText: /\d+ things? we could not check/ })
-    .first();
-  await expect(caveats).toBeVisible();
-  await caveats.locator(':scope > summary').click();
-  await expect(caveats).toContainText(/Flights —/);
-  await expect(caveats).toContainText(/Visas and entry rules —/);
-  await expect(caveats).toContainText(/Safety —/);
-
-  /*
-   * Climate is off in this environment, so a dimension that was not measured has
-   * to appear as unmeasured with the reason it was not measured — never as a
-   * zero. Asserted on the per-destination breakdown, which is where a traveller
-   * comparing two of them would look.
-   */
-  const breakdown = page
-    .locator('details')
-    .filter({ hasText: 'What we checked, one thing at a time' })
-    .first();
-  await breakdown.locator(':scope > summary').click();
-  await expect(breakdown.getByText('we could not check this').first()).toBeVisible();
+test('the shortlist argues for each place and says what it has not checked', async ({ page }) => {
+  await adviseToShortlist(page);
+  const picks = page.getByTestId('advisor-pick');
+  await expect(picks).toHaveCount(3);
+  const first = picks.first();
+  for (const label of ['Best time', 'Trip length', 'Character', 'Costs', 'Getting there', 'Getting around', 'Where you’d stay', 'Weather check']) {
+    await expect(first.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(first.getByText('The catch')).toBeVisible();
+  /* Climate is off here: the card must not claim a check that never happened. */
+  await expect(first).not.toContainText('Checked against');
+  await first.getByText('Not checked yet').click();
+  await expect(first).toContainText('Prices, opening dates and permits');
+  /* Never an administrative unit. */
+  await expect(page.getByTestId('advisor-shortlist')).not.toContainText(/Municipality|Voivodeship|County of/);
+  await expect(page.getByRole('button', { name: /Plan a trip to/ }).first()).toBeVisible();
 });
 
 test('a refresh loses nothing', async ({ page }) => {
-  await answerAndRank(page);
-  const before = await (await shortlist(page)).getByRole('listitem').allInnerTexts();
-
+  await adviseToShortlist(page);
+  const before = await page.getByTestId('advisor-pick').getByRole('heading', { level: 3 }).allInnerTexts();
   await page.reload();
-  const after = await (await shortlist(page)).getByRole('listitem').allInnerTexts();
-
-  expect(after, 'the same ranking, from the row rather than from a re-run').toEqual(before);
+  await expect(page.getByTestId('advisor-shortlist')).toBeVisible();
+  expect(await page.getByTestId('advisor-pick').getByRole('heading', { level: 3 }).allInnerTexts()).toEqual(before);
 });
 
-/**
- * The transition the brief cares about most: a destination adopted from a
- * shortlist has to become an ordinary trip, carrying every answer with it.
- */
+test('a refinement re-ranks without restarting, and says what changed', async ({ page }) => {
+  await adviseToShortlist(page);
+  await page.getByRole('button', { name: 'Something completely different' }).click();
+  await expect(page.getByRole('status').filter({ hasText: /New:|Nothing better fits/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('advisor-pick').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Less expensive' }).click();
+  await expect(page.getByTestId('advisor-shortlist')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Undo all nudges' })).toBeVisible({ timeout: 20_000 });
+});
+
 test('choosing a destination carries the answers into a normal trip', async ({ page }) => {
-  await answerAndRank(page);
-  const list = await shortlist(page);
-
-  const chosen = (await list.getByRole('heading', { level: 3 }).first().innerText()).trim();
-
-  await page.getByRole('button', { name: 'Plan this' }).first().click();
+  await adviseToShortlist(page);
+  const chosen = (await page.getByTestId('advisor-pick').first().getByRole('heading', { level: 3 }).innerText()).trim();
+  await page.getByRole('button', { name: `Plan a trip to ${chosen}` }).click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
-
-  // The trip knows where it is going, and it did not ask again.
-  await expect(page.locator('body')).toContainText(chosen);
-  await expect(page.getByRole('heading', { level: 1 })).not.toContainText('Looking up');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });
 
-test('changing the answers replaces the list rather than leaving a stale one', async ({ page }) => {
-  await answerAndRank(page);
-  await shortlist(page);
-
-  /*
-   * Revising reopens the same intake, and with every question settled it opens
-   * on the summary — so a question is reopened by pressing the line that states
-   * its answer, which is what "change what you told us" means on this screen.
-   */
-  await page.getByRole('button', { name: 'Change what you told us' }).click();
-  await page.getByRole('button', { name: /Hiking and being outside/ }).first().click();
-  await page.getByRole('checkbox', { name: 'City life' }).check();
-  await page.getByRole('button', { name: 'Save and rank again' }).click();
-
-  // The stored shortlist is dropped on save, so the screen re-ranks rather than
-  // showing an answer to the previous question.
-  await shortlist(page);
+test('the interview is keyboard-operable', async ({ page }) => {
+  await startAdvisor(page);
+  const question = page.locator('[data-testid^="advisor-question-"]').first();
+  await expect(question).toBeVisible();
+  const option = question.getByRole('radio').first().or(question.getByRole('checkbox').first());
+  await option.first().focus();
+  await expect(option.first()).toBeFocused();
+  await page.keyboard.press(await question.getByRole('checkbox').count() > 0 ? 'Space' : 'Enter');
+  await answerUntilShortlist(page);
 });

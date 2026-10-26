@@ -239,7 +239,7 @@ test('the build button stays enabled with nothing included', async ({ page }) =>
 
   await expect(page.getByTestId('board-summary')).toContainText(/^0 chosen/);
   await expect(page.getByRole('button', { name: /Build my trip/ })).toBeEnabled();
-  await expect(page.getByText(/Nothing picked yet is fine/)).toBeVisible();
+  await expect(page.getByText(/Nothing picked yet\? That’s fine/)).toBeVisible();
 });
 
 test('the itinerary is reachable and readable by keyboard', async ({ page }, testInfo) => {

@@ -1,9 +1,9 @@
-import { estimateLegMinutes, haversineKm, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type WeatherDataset } from '@sidequest/core';
+import { estimateLegMinutes, haversineKm, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
 import type { ScanProposalExtras } from '../db/scan-repository';
-import { archetypeFor, planStructure, transportFor, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
+import { archetypeFor, planStructure, transportFor, type DropReason, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type AnchorCategory, type DraftAnchor, type DraftDay, type TripDraft } from './trip-draft';
 
 /**
@@ -62,6 +62,12 @@ function tagValue(tags: readonly string[], key: string): string | undefined {
   return tags.find((t) => t.startsWith(`${key}:`))?.slice(key.length + 1);
 }
 
+/** Categories where food really is thin on the ground (`outdoorHeavy`). */
+const WILD_GROUND: ReadonlySet<AnchorCategory> = new Set(['hike', 'nature', 'water', 'scenic_drive', 'viewpoint', 'geothermal']);
+
+/** Whose choice a left-out place was, for the order the omissions are told in. */
+const OWNERSHIP_RANK: Record<PlannerStatus, number> = { must: 0, maybe: 1, recommended: 2, candidate: 3 };
+
 /** What a forecast day does to planning. Climate normals never move a stop: they describe a month, not a day. */
 export function plannerWeatherFor(dataset: WeatherDataset | null, locationIdForDate: (date: string) => string | null, dates: readonly string[]): PlannerDayWeather[] {
   if (!dataset) return [];
@@ -96,6 +102,15 @@ export interface PlannerComposeInput {
   maxDailyDriveMinutes?: number;
   /** Stops the traveller locked to a day on the itinerary; they plan as the traveller's own includes, held to that day. */
   locks?: readonly { placeId: string; dayNumber: number }[];
+}
+
+/**
+ * The planner's improvement phase (`structure-improve.ts`) is on unless
+ * `SIDEQUEST_PLANNER_IMPROVE=off`, which returns greedy construction exactly —
+ * for comparing the two on the same board, never a traveller-facing choice.
+ */
+export function plannerImproveEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.SIDEQUEST_PLANNER_IMPROVE?.trim().toLowerCase() !== 'off';
 }
 
 export function composeWithPlanner(input: PlannerComposeInput): PlannerComposition {
@@ -152,7 +167,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
       ...(tagValue(place.tags, 'zone') ? { zone: tagValue(place.tags, 'zone')! } : {}),
       ...(lockedDay.has(place.id) ? { pinnedDay: lockedDay.get(place.id)! } : {}),
       ...(closedDatesOf(board).length > 0 ? { closedDates: closedDatesOf(board) } : {}),
-      ...(board.fit.blockers.length > 0 ? { blocked: board.fit.blockers[0]!.message } : {}),
+      ...(board.fit.blockers.length > 0 ? { blocked: board.fit.blockers[0]!.message, blockedCode: board.fit.blockers[0]!.code } : {}),
     };
     pool.push(candidate);
     provenanceOf.set(place.id, status);
@@ -229,6 +244,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     weather,
     foodAreas,
     ...edgeTransfersFor(),
+    improve: plannerImproveEnabled(),
   };
   const plan = planStructure(plannerInput);
 
@@ -285,7 +301,14 @@ function draftFromPlan(args: {
       } as DraftAnchor;
     });
     const name = baseName.get(day.baseId) ?? input.destinationName;
-    const outdoorHeavy = day.stops.some((s) => s.candidate.exposure === 'outdoor' && s.candidate.intensity !== 'none' && (args.minutes(day.baseId, s.candidate.id) ?? 0) > 45);
+    /*
+     * "Pack a lunch — food is thin out there" is advice for wild ground: a
+     * trailhead, a lake, a scenic drive. Production pass — a 30-trip evaluation
+     * printed it on a car-free Tokyo day because Ueno Zoo is outdoors and more
+     * than 45 minutes by train from the base; a zoo, a park or a shrine in a
+     * city has food at the gate.
+     */
+    const outdoorHeavy = day.stops.some((s) => WILD_GROUND.has(s.candidate.category) && s.candidate.exposure === 'outdoor' && s.candidate.intensity !== 'none' && (args.minutes(day.baseId, s.candidate.id) ?? 0) > 45);
     const early = day.stops.some((s) => s.slot === 'sunrise' || s.candidate.intensity === 'strenuous');
     const lunch = day.lunchFoodArea
       ? `Lunch around ${day.lunchFoodArea.name}${day.lunchFoodArea.specialty ? ` — ${day.lunchFoodArea.specialty}` : ''}`
@@ -333,7 +356,14 @@ function draftFromPlan(args: {
     }));
   const leftOut = plan.dropped
     .filter((d) => d.reason !== 'excluded' && (d.candidate.status !== 'candidate' || d.candidate.fit >= 70))
-    .sort((a, b) => b.candidate.fit - a.candidate.fit)
+    /*
+     * The traveller's own picks first, then Sidequest's, then by fit. Sorting
+     * by fit alone let six high-fit places a car-free trip cannot reach push a
+     * hand-picked, equally unreachable stop off the end of the list — and an
+     * include that is neither scheduled nor explained is the silent loss the
+     * preservation rules forbid.
+     */
+    .sort((a, b) => OWNERSHIP_RANK[a.candidate.status] - OWNERSHIP_RANK[b.candidate.status] || b.candidate.fit - a.candidate.fit)
     .slice(0, 6)
     .map((d) => ({ name: clip(d.candidate.name, 60), reason: clip(d.detail, DRAFT_SOFT_PROSE_CAPS.omissionReason) }));
   const deliberate = (extras?.skipped ?? []).slice(0, Math.max(0, 8 - leftOut.length)).map((s) => ({ name: clip(s.name, 60), reason: clip(`Sidequest's research: ${s.reason}`, DRAFT_SOFT_PROSE_CAPS.omissionReason) }));
@@ -510,8 +540,17 @@ export type PlannerFallbackReason = 'insufficient_candidates' | 'insufficient_pl
  * own fit floor and frequency preferences to fill it, never the traveller's
  * limits, so what remains is a fact about the pool or the constraints.
  */
+/** Under this much free time a day holds no stop, so its emptiness is not a shortage of candidates. */
+const MIN_STOP_WINDOW_MINUTES = 60;
+
 export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFallbackReason | null {
-  const interior = composed.plan.days.slice(1, -1);
+  /*
+   * A day the journey itself fills — a base move that leaves no window for a
+   * stop (Lisbon to the Azores) — is a travel day, not a thin board: its empty
+   * stop list is the honest plan, and falling back to composition for it
+   * replaced a working plan with a failed one whenever the model was away.
+   */
+  const interior = composed.plan.days.slice(1, -1).filter((day) => day.capacityMinutes >= MIN_STOP_WINDOW_MINUTES);
   if (!interior.some((day) => day.stops.length === 0)) return null;
   if (composed.poolSize === 0) return 'insufficient_placed_candidates';
   /* Everything plannable was either scheduled or left out for a reason other than the day being full: nothing remains to put on the empty day. */
@@ -519,4 +558,72 @@ export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFa
   if (spare.length === 0) return 'insufficient_candidates';
   if (composed.plan.mustConflicts.length > 0 && spare.every((d) => d.candidate.status === 'must')) return 'required_user_places_unplaceable';
   return 'no_feasible_day_assignment';
+}
+
+/**
+ * PRODUCTION PASS — THE TRAVELLER'S PICKS THE PLANNER COULD NOT PLACE, AS UNSCHEDULED PLACES.
+ *
+ * The reconciler builds `itinerary.unscheduled` from the draft's anchors, and
+ * the planner never makes an anchor of a pick it cannot place (a car-free trip
+ * and a trailhead only a car reaches), so on the planner path such a pick
+ * reached the draft's `unresolved` prose and nowhere a traveller acts on — the
+ * "Could not be scheduled" list, with its "Change how you are getting around"
+ * remedy, stayed empty. Every include either appears on a day or appears here.
+ */
+export function plannerUnscheduledPicks(composition: Pick<PlannerComposition, 'plan'>): UnscheduledPlace[] {
+  const byId = new Map(composition.plan.dropped.map((d) => [d.candidate.id, d.candidate]));
+  return composition.plan.mustConflicts.map((conflict) => {
+    const candidate = byId.get(conflict.candidateId);
+    const reasonCode = unscheduledCodeFor(conflict.reason, candidate?.blockedCode);
+    const transport = reasonCode === 'transport_mode_unavailable';
+    return {
+      placeId: conflict.candidateId,
+      name: conflict.name,
+      wasManual: true,
+      reasonCode,
+      reason: conflict.reason === 'not_workable' ? `You chose this, but it is not workable on this trip as you are travelling: ${conflict.detail}` : `You chose this, and it did not fit: ${conflict.detail}`,
+      suggestedRemedy: transport ? 'Change how you are getting around, or what is on the board, and build again.' : 'Change the dates or what is on the board, and build again.',
+    };
+  });
+}
+
+function unscheduledCodeFor(reason: DropReason, blockedCode: string | undefined): UnscheduledReasonCode {
+  if (reason === 'not_workable') {
+    switch (blockedCode) {
+      case 'needs_car':
+      case 'mode_declined':
+        return 'transport_mode_unavailable';
+      case 'service_unavailable':
+        return 'service_not_operating';
+      case 'closed_on_your_dates':
+        return 'closed_on_trip_dates';
+      case 'no_open_hours':
+        return 'hours_do_not_fit';
+      case 'exceeds_daily_travel':
+        return 'exceeds_daily_travel';
+      case 'too_strenuous':
+      case 'mobility':
+        return 'exceeds_intensity';
+      case 'no_way_in':
+        return 'access_unavailable';
+      default:
+        return 'not_feasible';
+    }
+  }
+  switch (reason) {
+    case 'out_of_season':
+      return 'seasonally_closed';
+    case 'closed':
+      return 'closed_on_trip_dates';
+    case 'too_strenuous':
+      return 'exceeds_intensity';
+    case 'too_far':
+      return 'exceeds_daily_travel';
+    case 'frequency':
+      return 'frequency_reached';
+    case 'weather':
+      return 'weather_incompatible';
+    default:
+      return 'no_time_left';
+  }
 }

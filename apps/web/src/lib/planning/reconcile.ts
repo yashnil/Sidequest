@@ -74,6 +74,7 @@ import {
   lookupPriorityFor,
   mealSlotOf,
   estimateLegMinutes,
+  MAX_GEO_ESTIMATE_DRIVE_KM,
   COLOCATED_KM,
   TIMELINE_MINUTE_LIMIT,
   plausibleModeFor,
@@ -151,6 +152,9 @@ import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRo
 /** A place identity a dedicated places provider (Google Places identity level, Overture, OSM) resolved — never a geocoder guess. */
 /** How many identity lookups run at once. Small: providers rate-limit, and the budget counts every call. */
 const ANCHOR_RESOLUTION_CONCURRENCY = 4;
+/** The day-drive shape pass: at most this many direct route requests per build, a few at a time. */
+const DAY_SHAPE_LIMIT = 24;
+const DAY_SHAPE_CONCURRENCY = 4;
 /** Bases resolve a few at a time as well; the geocoder's own rate gate still serialises the wire. */
 const BASE_RESOLUTION_CONCURRENCY = 3;
 /** A landmark that resolved for a locality base is trusted for position only when it sits inside the town it names. */
@@ -2112,6 +2116,42 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     days.push(laid.day);
   }
 
+  /*
+   * THE SHAPE OF A DAY'S DRIVES.
+   *
+   * A matrix times a day leg without a shape, so the map could only draw a
+   * chord between two stops — honest (it is drawn as a straight line and says
+   * so) but not the road. Each measured drive within a day earns one direct,
+   * memoized route request on the trip's own profile, bounded and stopped by
+   * the deadline, exactly like the base moves above. Only the shape is taken:
+   * the leg's measured time stays the matrix's, so time and shape keep their
+   * own provenance, and a failure leaves the chord where it was. A walk on a
+   * car-profile trip is never given a road shape.
+   */
+  if (context.confirmRoute && context.matrix.mode === 'car') {
+    const coordinatesById = new Map<string, { lat: number; lng: number }>();
+    for (const anchor of anchors) if (anchor.identity) coordinatesById.set(anchor.identity.id, anchor.identity.coordinates);
+    for (const base of bases) if (base.identity) coordinatesById.set(base.identity.id, base.identity.coordinates);
+    const wanted = days
+      .flatMap((day) => day.items)
+      .filter((item) => item.kind === 'travel' && item.travel && item.travel.mode === 'drive' && item.travel.provenance === 'measured' && !item.travel.geometry && item.travel.fromId !== item.travel.toId)
+      .filter((item) => coordinatesById.has(item.travel!.fromId) && coordinatesById.has(item.travel!.toId))
+      .slice(0, DAY_SHAPE_LIMIT);
+    const confirm = context.confirmRoute;
+    await mapConcurrent(wanted, DAY_SHAPE_CONCURRENCY, async (item) => {
+      if (deadline()) return;
+      const travel = item.travel!;
+      const key = `${travel.fromId}=>${travel.toId}`;
+      let confirmation = confirmationMemo.get(key) ?? null;
+      if (!confirmation) {
+        await confirmMandatoryLeg(ledger, confirmationMemo, confirm, { id: travel.fromId, name: travel.fromName ?? travel.fromId, coordinates: coordinatesById.get(travel.fromId)! }, { id: travel.toId, name: travel.toName ?? travel.toId, coordinates: coordinatesById.get(travel.toId)! });
+        confirmation = confirmationMemo.get(key) ?? null;
+      }
+      const shape = confirmation?.geometry;
+      if (shape && shape.length > 1) travel.geometry = encodePolyline(simplifyPolyline(shape));
+    });
+  }
+
   // --- Additive enrichment: name a real venue for a meal where the region's
   // --- own food data holds one nearby. Never invents; never changes a stop. --
   const venueUse = new Map<string, number>();
@@ -3039,6 +3079,23 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
     const mode = plausible.mode;
     /*
+     * A FIGURE MEASURED FOR ANOTHER PROFILE IS NOT THIS LEG'S FIGURE.
+     *
+     * The trip's matrix is measured on one profile (car for a driving trip,
+     * foot for a car-free one). A short hop the plan walks used to borrow the
+     * car cell, which shipped a two-kilometre city walk as "6 min measured"
+     * — nineteen km/h on foot, labelled measured. The cell describes a drive;
+     * the walk gets Sidequest's own walking figure, labelled estimated, exactly
+     * as the untrusted `matrixFigure` path above already requires a matching
+     * profile. A base-to-base stand-in and a timetabled answer are left alone:
+     * neither was ever a walk's figure (see `walkIsTheJourney` below).
+     */
+    const crossProfile = (mode === 'walk' && context.matrix.mode === 'car') || (mode === 'drive' && context.matrix.mode === 'foot');
+    if (measured && crossProfile && !viaBases && confirmation?.basis !== 'scheduled') {
+      measured = null;
+      confirmation = null;
+    }
+    /*
      * V12.2 §2 §3 — A WALK NOBODY WOULD TAKE LOSES ITS FIGURE.
      *
      * `plausibleModeFor` above already substitutes a ground mode for an
@@ -3101,7 +3158,9 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * and arranged transfers still have no honest estimate without a timetable.
      */
     const geoEstimable = mode === 'rail' || mode === 'public_bus';
-    const estimate = !measured && (routable || geoEstimable) && !walkRefused && fromCoordinates && toCoordinates
+    /* The scan's own estimated cell is no better evidence than the estimator for a road nobody has seen measured (`MAX_GEO_ESTIMATE_DRIVE_KM`). */
+    const beyondRoadEstimate = mode === 'drive' && fromCoordinates && toCoordinates ? haversineKm(fromCoordinates, toCoordinates) > MAX_GEO_ESTIMATE_DRIVE_KM : false;
+    const estimate = !measured && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
       ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot')
         ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
         : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode })
@@ -3146,15 +3205,17 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       ...(viaBases ? { viaBases: true as const } : {}),
     };
     const duration = measured ? measured.minutes : estimate ? estimate.minutes : allowance!;
-    const precision: NonNullable<ItineraryItem['timing']>['precision'] = measured ? (basis === 'scheduled' ? 'fixed' : 'measured') : estimate ? 'estimated' : 'band';
+    /* Production pass — a figure the walk check withdrew is not a measurement: the words must say what the leg now holds (an allowance), never the withdrawn number. */
+    const shown = walkRefused ? null : measured;
+    const precision: NonNullable<ItineraryItem['timing']>['precision'] = shown ? (basis === 'scheduled' ? 'fixed' : 'measured') : estimate ? 'estimated' : 'band';
     items.push({
       id: `d${input.dayNumber}-leg-${items.length}`,
       kind: 'travel',
-      title: `${measured || estimate ? `${labelFor(mode)} to` : 'Travel to'} ${to.name}`,
+      title: `${shown || estimate ? `${labelFor(mode)} to` : 'Travel to'} ${to.name}`,
       ...span(clock, duration),
       travel,
-      reason: measured
-        ? `${measured.minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
+      reason: shown
+        ? `${shown.minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
         : estimate
           ? `About ${estimate.minutes} min by ${labelFor(mode).toLowerCase()}, estimated from map distance (roughly ${estimate.approxKm} km) — not a measured route.${plausible.corrected ? ` The plan said ${labelFor(hinted).toLowerCase()}; ${Math.round(straightLineKm ?? 0)} km apart is not a ${labelFor(hinted).toLowerCase()}.` : ''}`
           : hint && !roadRoutable(hint)
@@ -3394,7 +3455,16 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * hop from the last stop to the new bed on the far island.
      */
     const inheritedMove = cursor === startPoint ? input.previousDayMove?.how : undefined;
-    const transferHint = input.relocation ? (move?.how ?? inheritedMove ?? draftDay?.anchors[0]?.transport) : undefined;
+    /*
+     * Production pass — the relocation's own mode, never the first stop's.
+     * `anchors[0].transport` describes base → first stop, and a short first
+     * hop made a 45 km base change on a car trip a "walk", which the walk check
+     * then refused, leaving the transfer with no figure at all. Absent a stated
+     * move, a day that drives anywhere moves by car; otherwise the first stop's
+     * mode stands, as before.
+     */
+    const dayRoadMode = draftDay?.anchors.some((a) => a.transport === 'car') ? 'car' : draftDay?.anchors[0]?.transport;
+    const transferHint = input.relocation ? (move?.how ?? inheritedMove ?? dayRoadMode) : undefined;
     pushLeg(cursor, endPoint, transferHint, input.relocation ? 'transfer' : 'return', { inEpisode: episode !== null && !input.relocation && cursor !== startPoint });
   } else if (cursor !== endPoint) {
     pushLeg(cursor, endPoint, undefined, 'return', { inEpisode: episode !== null && offRoad });

@@ -208,7 +208,7 @@ describe('GET /api/trips/[id]/scan', () => {
     const after = await poll(tripId);
     expect(after.status).toBe(200);
     expect(after.body.state).toBe('ready');
-    expect(Object.keys(after.body).sort()).toEqual(['autoBuildPending', 'autoBuildStarted', 'counters', 'elapsedSeconds', 'failure', 'label', 'lines', 'reached', 'stage', 'stages', 'state'].sort());
+    expect(Object.keys(after.body).sort()).toEqual(['autoBuildPending', 'autoBuildStarted', 'counters', 'elapsedSeconds', 'failure', 'label', 'lines', 'map', 'reached', 'stage', 'stages', 'state'].sort());
     expect((after.body.counters as { proposed: number }).proposed).toBeGreaterThan(10);
     expect((after.body.lines as string[])[0]).toMatch(/^Proposed \d+ places that fit you/);
     // No provider, model, environment or region identifiers reach the traveller.

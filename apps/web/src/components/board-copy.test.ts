@@ -16,6 +16,7 @@ import {
   sharedBoardFacts,
   timeThere,
   whyThisFits,
+  whysForBoard,
 } from './BoardCopy';
 import { PROXIMITY_CLAIMS } from '@sidequest/core';
 
@@ -380,5 +381,25 @@ describe('the heading over the group that holds untimed journeys', () => {
   it('leaves the further-out heading its earned claim', () => {
     const detours = BOARD_GROUP_HEADINGS.scenic_detours;
     expect(`${detours.title} ${detours.blurb}`.toLowerCase()).toContain('further out');
+  });
+});
+
+describe('whysForBoard — a place whose every reason is spoken for', () => {
+  it('says what the place is before it says nothing, and never repeats a neighbour', () => {
+    const [a, b, c] = BOARD.candidates.filter((x) => x.fit.blockers.length === 0 && !x.fit.evidenceLimited);
+    const shared = 'A reason three cards share.';
+    const withReason = (x: DiscoveryCandidate, shortDescription: string): DiscoveryCandidate => ({ ...x, fit: { ...x.fit, reasons: [shared] }, place: { ...x.place, shortDescription } });
+    const whys = whysForBoard(
+      [
+        withReason(a!, 'Fort'),
+        withReason(b!, 'Moorish castle in Lisbon. Listed as National Monument of Portugal.'),
+        withReason(c!, 'Fort'),
+      ],
+      { suppressed: new Set(), commonWhy: null },
+    );
+    expect(whys[a!.place.id]).toBe(shared);
+    expect(whys[b!.place.id]).toBe('Moorish castle in Lisbon. Listed as National Monument of Portugal.');
+    /* A bare label is not a description: silence, not "Fort". */
+    expect(whys[c!.place.id]).toBeNull();
   });
 });

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { Glyph, type GlyphId } from '../interview/glyphs';
-import { ErrorNote, FOCUS_RING, buttonClass, cx, selectableCardClass } from '../ui';
+import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
+import { onRadioGroupKeys, rovingTabIndex } from './radio-keys';
+import { StepHeading } from './StepHeading';
 import { recommendTimingAction, type TimingResult, type TimingWindowView } from '@/app/(product)/trips/new/timing-actions';
 import { nightsBetween, type SetupDraft } from './setup-draft';
 
@@ -22,11 +23,11 @@ import { nightsBetween, type SetupDraft } from './setup-draft';
 
 type Family = 'exact' | 'roughly' | 'best' | 'undecided';
 
-const FAMILY_CARDS: { value: Family; glyph: GlyphId; title: string; implication: string }[] = [
-  { value: 'exact', glyph: 'clock', title: 'I know my dates', implication: 'The plan is built to the day, around your arrival and departure.' },
-  { value: 'roughly', glyph: 'compass', title: 'I know roughly when', implication: 'A month, a few months, a season, or a stretch you are free in.' },
-  { value: 'best', glyph: 'sunrise', title: 'Tell me when it is best', implication: 'Sidequest compares the months on climate records and picks the window.' },
-  { value: 'undecided', glyph: 'quiet', title: 'I have not decided', implication: 'Plan it first, put dates on it later.' },
+const FAMILY_CARDS: { value: Family; title: string; implication: string }[] = [
+  { value: 'exact', title: 'I know my dates', implication: 'The plan is built to the day, around your arrival and departure.' },
+  { value: 'roughly', title: 'I know roughly when', implication: 'A month, a few months, a season, or a stretch you are free in.' },
+  { value: 'best', title: 'Tell me when it is best', implication: 'Sidequest compares the months on climate records and picks the window.' },
+  { value: 'undecided', title: 'I have not decided', implication: 'Plan it first, put dates on it later.' },
 ];
 
 const ROUGHLY_KINDS = [
@@ -128,16 +129,13 @@ export function TimingStep({
 
   return (
     <div>
-      <p className="label">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[24ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <StepHeading number={2} kicker="The trip · when" headingRef={headingRef}>
         When can you travel?
-      </h1>
-      <p className="mt-2 max-w-[60ch] type-body text-ink-muted">
-        Season decides more of a trip than almost anything else. You do not have to know your dates.
-      </p>
+      </StepHeading>
+      <p className="mt-3 max-w-[52ch] text-base text-ink-muted">Season decides more of a trip than almost anything. You do not have to know your dates.</p>
 
-      <div className="mt-7 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="How settled your timing is">
-        {FAMILY_CARDS.map((card) => {
+      <div className="ob-rows mt-8" role="radiogroup" aria-label="How settled your timing is" onKeyDown={onRadioGroupKeys}>
+        {FAMILY_CARDS.map((card, index) => {
           const on = family === card.value;
           return (
             <button
@@ -145,19 +143,17 @@ export function TimingStep({
               type="button"
               role="radio"
               aria-checked={on}
+              tabIndex={rovingTabIndex(on, index, true)}
               onClick={() => setFamily(card.value)}
-              className={selectableCardClass(on, cx('pressable flex min-h-28 flex-col gap-2 p-4 pr-10 text-left', FOCUS_RING))}
+              className="ob-row w-full text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
+              data-on={on ? 'true' : 'false'}
               data-testid={`timing-${card.value}`}
             >
-              <Glyph id={card.glyph} className={cx('h-7 w-7', on ? 'text-accent' : 'text-ink-muted')} />
-              <span className={cx('font-display text-xl leading-snug', on ? 'font-semibold text-accent-strong' : 'text-ink')}>{card.title}</span>
-              <span className={cx('type-small leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{card.implication}</span>
-              {/* The chosen card says so three ways: ground, doubled edge, and a mark. */}
-              {on ? (
-                <span aria-hidden="true" className="absolute top-3 right-3 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-paper">
-                  <Glyph id="check" className="h-3 w-3" strokeWidth={2.5} />
-                </span>
-              ) : null}
+              <span aria-hidden="true" className="ob-letter">
+                {String.fromCharCode(65 + index)}
+              </span>
+              <span className="ob-row-label">{card.title}</span>
+              <span className="ob-row-why">{card.implication}</span>
             </button>
           );
         })}
@@ -167,12 +163,12 @@ export function TimingStep({
         <div className="rise mt-7 max-w-xl">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="label">Arrive</span>
-              <input type="date" value={draft.startDate} onChange={(event) => onChange({ startDate: event.target.value })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-start" />
+              <span className="sheet-label text-ink-muted">Arrive</span>
+              <input type="date" value={draft.startDate} onChange={(event) => onChange({ startDate: event.target.value })} className="ob-underline mt-1" data-testid="timing-start" />
             </label>
             <label className="block">
-              <span className="label">Leave</span>
-              <input type="date" value={draft.endDate} onChange={(event) => onChange({ endDate: event.target.value })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-end" />
+              <span className="sheet-label text-ink-muted">Leave</span>
+              <input type="date" value={draft.endDate} onChange={(event) => onChange({ endDate: event.target.value })} className="ob-underline mt-1" data-testid="timing-end" />
             </label>
           </div>
           {nightsBetween(draft.startDate, draft.endDate) !== null ? (
@@ -186,8 +182,10 @@ export function TimingStep({
             type="button"
             aria-pressed={draft.dateMode === 'flexible'}
             onClick={() => onChange({ dateMode: draft.dateMode === 'flexible' ? 'exact' : 'flexible' })}
-            className={cx('mt-4 inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm transition-colors', FOCUS_RING, draft.dateMode === 'flexible' ? 'border-accent bg-accent-soft text-accent-strong' : 'border-dashed border-rule text-ink-muted hover:text-ink')}
+            className={cx('ob-tag mt-5', FOCUS_RING)}
+            data-on={draft.dateMode === 'flexible' ? 'true' : 'false'}
           >
+            <span aria-hidden="true" className="ob-tag-box" />
             These can move by a few days
           </button>
         </div>
@@ -195,7 +193,7 @@ export function TimingStep({
 
       {family === 'roughly' ? (
         <div className="rise mt-7 max-w-xl">
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="How roughly">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="How roughly" onKeyDown={onRadioGroupKeys}>
             {ROUGHLY_KINDS.map((kind) => {
               const on = draft.dateMode === kind.value;
               return (
@@ -205,7 +203,9 @@ export function TimingStep({
                   role="radio"
                   aria-checked={on}
                   onClick={() => onChange({ dateMode: kind.value, pick: null })}
-                  className={cx('pressable inline-flex min-h-11 items-center rounded-full border px-4 text-sm transition-colors', FOCUS_RING, on ? 'border-accent bg-accent text-paper' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')}
+                  tabIndex={rovingTabIndex(on, ROUGHLY_KINDS.indexOf(kind), ROUGHLY_KINDS.some((k) => k.value === draft.dateMode))}
+                  className={cx('ob-tag', FOCUS_RING)}
+                  data-on={on ? 'true' : 'false'}
                   data-testid={`timing-kind-${kind.value}`}
                 >
                   {kind.label}
@@ -215,11 +215,11 @@ export function TimingStep({
           </div>
 
           {draft.dateMode === 'month' ? (
-            <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div className="ob-grid mt-5 grid-cols-4 sm:grid-cols-6">
               {MONTHS.map((name, index) => {
                 const on = draft.month === index + 1;
                 return (
-                  <button key={name} type="button" aria-pressed={on} onClick={() => onChange({ month: index + 1 })} className={cx('pressable min-h-11 rounded-[var(--radius-control)] border px-2 text-sm transition-colors', FOCUS_RING, on ? 'border-accent bg-accent text-paper' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')}>
+                  <button key={name} type="button" aria-pressed={on} onClick={() => onChange({ month: index + 1 })} className={cx('ob-cell min-h-14 items-center text-center font-display text-lg', FOCUS_RING)} data-on={on ? 'true' : 'false'}>
                     {name.slice(0, 3)}
                   </button>
                 );
@@ -230,7 +230,7 @@ export function TimingStep({
           {draft.dateMode === 'months' ? (
             <div className="mt-5">
               <p className="type-small text-ink-faint">Pick every month that would work. Sidequest chooses between them.</p>
-              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              <div className="ob-grid mt-2 grid-cols-4 sm:grid-cols-6">
                 {MONTHS.map((name, index) => {
                   const on = draft.months.includes(index + 1);
                   return (
@@ -239,7 +239,7 @@ export function TimingStep({
                       type="button"
                       aria-pressed={on}
                       onClick={() => onChange({ months: on ? draft.months.filter((m) => m !== index + 1) : [...draft.months, index + 1].sort((a, b) => a - b), pick: null })}
-                      className={cx('pressable min-h-11 rounded-[var(--radius-control)] border px-2 text-sm transition-colors', FOCUS_RING, on ? 'border-accent bg-accent text-paper' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')}
+                      className={cx('ob-cell min-h-14 items-center text-center font-display text-lg', FOCUS_RING)} data-on={on ? 'true' : 'false'}
                     >
                       {name.slice(0, 3)}
                     </button>
@@ -250,11 +250,11 @@ export function TimingStep({
           ) : null}
 
           {draft.dateMode === 'season' ? (
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="ob-grid mt-5 grid-cols-2 sm:grid-cols-4">
               {SEASONS.map((season) => {
                 const on = draft.season === season;
                 return (
-                  <button key={season} type="button" aria-pressed={on} onClick={() => onChange({ season, pick: null })} className={cx('pressable min-h-11 rounded-full border px-4 text-sm capitalize transition-colors', FOCUS_RING, on ? 'border-accent bg-accent text-paper' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')}>
+                  <button key={season} type="button" aria-pressed={on} onClick={() => onChange({ season, pick: null })} className={cx('ob-cell min-h-14 items-center text-center font-display text-lg capitalize', FOCUS_RING)} data-on={on ? 'true' : 'false'}>
                     {season}
                   </button>
                 );
@@ -265,12 +265,12 @@ export function TimingStep({
           {draft.dateMode === 'window' ? (
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="label">Free from</span>
-                <input type="date" value={draft.earliest} onChange={(event) => onChange({ earliest: event.target.value, pick: null })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-earliest" />
+                <span className="sheet-label text-ink-muted">Free from</span>
+                <input type="date" value={draft.earliest} onChange={(event) => onChange({ earliest: event.target.value, pick: null })} className="ob-underline mt-1" data-testid="timing-earliest" />
               </label>
               <label className="block">
-                <span className="label">Until</span>
-                <input type="date" value={draft.latest} onChange={(event) => onChange({ latest: event.target.value, pick: null })} className={cx('mt-1.5 h-12 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)} data-testid="timing-latest" />
+                <span className="sheet-label text-ink-muted">Until</span>
+                <input type="date" value={draft.latest} onChange={(event) => onChange({ latest: event.target.value, pick: null })} className="ob-underline mt-1" data-testid="timing-latest" />
               </label>
             </div>
           ) : null}
@@ -279,8 +279,7 @@ export function TimingStep({
 
       {deferredToReview ? (
         <section className="rise mt-8 max-w-2xl" aria-live="polite" data-testid="timing-pick">
-          <p className="flex gap-3 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4 type-body text-ink-muted" data-testid="timing-deferred">
-            <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-faint" />
+          <p className="flex gap-3 border-l-[3px] border-flare py-1 pl-4 type-body text-ink" data-testid="timing-deferred">
             <span className="min-w-0">Sidequest will choose the best window once it understands the trip — who is going, what it is for, and which weeks are busy where you are headed. You will see the pick, with its reasons, before anything is built.</span>
           </p>
         </section>
@@ -292,10 +291,10 @@ export function TimingStep({
           {pending && !result ? (
             <p className="breathing type-body text-ink-muted">Comparing the months on climate records…</p>
           ) : result?.ok && current ? (
-            <div className="card-raised overflow-hidden rounded-[var(--radius-panel)] border-accent/40 bg-accent-soft">
+            <div className="overflow-hidden border-t-[3px] border-flare bg-paper-raised shadow-[0_1px_0_rgb(13_26_31/0.12)]">
               <div className="p-5 sm:p-6">
-                <p className="label text-accent-strong">{shown === 0 ? 'Sidequest’s pick' : 'Another window'}</p>
-                <p className="mt-1.5 font-display text-4xl leading-none text-ink">{current.label}</p>
+                <p className="sheet-label text-accent">{shown === 0 ? 'Sidequest’s pick' : 'Another window'}</p>
+                <p className="ob-headline mt-2 text-[clamp(2.2rem,1.5rem+2vw,3.2rem)] text-ink">{current.label}</p>
                 {/*
                   The exact days, kept as ISO. Small, tabular, and never removed:
                   `timing-lock.spec.ts` reads the window straight out of this
@@ -319,7 +318,7 @@ export function TimingStep({
                   <ul className="mt-5 space-y-2 text-sm leading-relaxed text-ink">
                     {current.reasons.map((reason) => (
                       <li key={reason} className="flex gap-2.5">
-                        <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                        <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 bg-flare" />
                         <span className="min-w-0">{reason}</span>
                       </li>
                     ))}
@@ -335,7 +334,7 @@ export function TimingStep({
                   <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-muted">
                     {current.tradeoffs.map((tradeoff) => (
                       <li key={tradeoff} className="flex gap-2.5">
-                        <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full border border-accent" />
+                        <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 border border-ink" />
                         <span className="min-w-0">{tradeoff}</span>
                       </li>
                     ))}
@@ -360,7 +359,7 @@ export function TimingStep({
                 ) : null}
               </div>
               </div>
-              <details className="border-t border-accent/30 px-5 py-3 sm:px-6">
+              <details className="border-t border-ink/15 px-5 py-3 sm:px-6">
                 <summary className={cx('inline-flex min-h-11 cursor-pointer items-center type-small text-ink-muted underline underline-offset-4', FOCUS_RING)}>
                   What this does not tell you
                 </summary>
@@ -386,8 +385,7 @@ export function TimingStep({
               they had just said they did not want to do.
             */
             result.deferred ? (
-              <p className="flex gap-3 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4 type-body text-ink-muted" data-testid="timing-deferred">
-                <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-faint" />
+              <p className="flex gap-3 border-l-[3px] border-flare py-1 pl-4 type-body text-ink" data-testid="timing-deferred">
                 <span className="min-w-0">{result.note}</span>
               </p>
             ) : (
@@ -421,15 +419,15 @@ function YearStrip({ startDate, endDate }: { startDate: string; endDate: string 
   const inWindow = (index: number) => (first <= last ? index >= first && index <= last : index >= first || index <= last);
   const label = first === last ? `${MONTHS[first]}` : `${MONTHS[first]} to ${MONTHS[last]}`;
   return (
-    <div className="mt-4 flex gap-1" role="img" aria-label={`The window covers ${label}.`}>
+    <div className="ob-grid mt-4 grid-cols-12" role="img" aria-label={`The window covers ${label}.`}>
       {MONTH_INITIALS.map((initial, index) => {
         const on = inWindow(index);
         return (
           <span
             key={`${initial}-${index}`}
             className={cx(
-              'type-figure flex h-7 flex-1 items-center justify-center rounded-[0.25rem] text-xs',
-              on ? 'bg-accent text-paper' : 'bg-paper-raised text-ink-faint',
+              'type-figure flex h-8 items-center justify-center font-mono text-[11px]',
+              on ? 'bg-flare text-night' : 'bg-paper text-ink-faint',
             )}
           >
             {initial}

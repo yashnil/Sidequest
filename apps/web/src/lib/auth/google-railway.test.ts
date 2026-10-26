@@ -193,3 +193,41 @@ describe('Google sign-in behind Railway', () => {
     }
   });
 });
+
+/**
+ * PRODUCTION PASS — LOGIN CSRF. A callback URL started in one browser and
+ * opened in another must not sign the second browser in.
+ */
+describe('the OAuth state is bound to the browser that started it', () => {
+  it('refuses a callback from a browser that never started the flow', async () => {
+    const { state } = await start(null);
+    // The attacker's browser started it; the victim's browser has none of its cookies.
+    jar.clear();
+    expectPublicRedirect(await callback(`state=${encodeURIComponent(state)}&code=auth-code`), '/signin?error=state');
+    expect(tokenExchanges).toHaveLength(0);
+    expect(jar.get('sidequest_auth')).toBeUndefined();
+  });
+
+  it('refuses a binding for a different state, and is one-time', async () => {
+    const first = await start(null);
+    const second = await start(null);
+    // The jar now binds the second state only.
+    expectPublicRedirect(await callback(`state=${encodeURIComponent(first.state)}&code=auth-code`), '/signin?error=state');
+    // The callback cleared the binding, so even the right state cannot be replayed without a fresh start.
+    expectPublicRedirect(await callback(`state=${encodeURIComponent(second.state)}&code=auth-code`), '/signin?error=state');
+  });
+
+  it('writes the binding httpOnly, Lax and scoped to the auth routes', async () => {
+    await start(null);
+    const written = cookieWrites.find((write) => write.name === 'sidequest_oauth');
+    expect(written?.options).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/api/auth' });
+    expect((written?.options?.maxAge as number) > 0).toBe(true);
+  });
+
+  it('refuses when the browser cookie changed between start and callback', async () => {
+    jar.set('sidequest_session', 'browser-a');
+    const { state } = await start(null);
+    jar.set('sidequest_session', 'browser-b');
+    expectPublicRedirect(await callback(`state=${encodeURIComponent(state)}&code=auth-code`), '/signin?error=state');
+  });
+});

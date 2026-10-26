@@ -6,6 +6,7 @@ import {
   DIETARY_NEED_KIND_LABELS,
   INTEREST_LABELS,
   hardConstraintOffer,
+  recommendedInterests,
   type DietaryNeedKind,
   type HardConstraint,
   type Interest,
@@ -13,64 +14,41 @@ import {
   type InterviewOption,
   type QuestionnaireAnswers,
 } from '@sidequest/core';
-import { cx, FOCUS_RING, OVERLAY_INPUT, selectableCardClass } from '../ui';
-import { Glyph, INTEREST_CONTEXT, INTEREST_GLYPH, INTEREST_HUE, type GlyphId } from './glyphs';
+import { cx, FOCUS_RING, OVERLAY_INPUT } from '../ui';
+import { INTEREST_CONTEXT } from './glyphs';
 
 /**
- * THE INTERVIEW'S QUESTION PATTERNS.
+ * THE INTERVIEW'S QUESTION PATTERNS — SURVEY ATLAS.
  *
- * One component per cognitive task rather than one rectangle for everything:
- * a grid of interest plates, a four-step role meter, transport mode cards
- * with their consequence, a day drawn as blocks for pace, an elevation
- * profile for effort, a range map whose ring grows with the answer, an axis
- * for spend, a serious list for hard rules, and a calm page for writing.
- * Every pattern is a real fieldset of real inputs; the visual is on top of
- * the control, never instead of it.
+ * One drawing per cognitive task, and none of them a grid of cards:
+ *
+ * - interests are a **word index** — large serif words that take a flare
+ *   underline and an order number when chosen;
+ * - "how big a role" and pace, effort and reach are a **segmented scale**,
+ *   cells sharing one border, the chosen cell set in ink; pace's cells each
+ *   preview the day they describe;
+ * - a choice between a few distinct answers is a set of **ruled lettered rows**
+ *   (A / B / C, the answer, the one-line consequence at the right);
+ * - spend is an **axis** with stops; hard rules are a serious ruled list;
+ *   writing happens on ruled lines.
+ *
+ * Every pattern is a real fieldset of native inputs (radios keep arrow-key
+ * movement, checkboxes keep Space). The paint is on top of the control, never
+ * instead of it.
  */
 
-// ---------------------------------------------------------------------------
-// Shared selection surface
-// ---------------------------------------------------------------------------
-
-/*
- * V8 — every option is a selectable card from `ui.tsx`: resting paper with an
- * edge and a quiet shadow, a lift under the pointer, and when chosen the accent
- * fill, the doubled accent edge, the raised shadow, a filled mark and a heavier
- * title. `pressable` answers the press within the fast token. A selected state
- * is never only a border colour.
- */
-const CARD = 'pressable flex min-h-11 cursor-pointer text-left';
-function card(on: boolean, extra?: string): string {
-  return selectableCardClass(on, cx(CARD, FOCUS_RING, extra));
-}
-const TITLE_ON = 'font-semibold text-accent-strong';
-const TITLE_OFF = 'text-ink';
-
-function Check({ on }: { on: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cx(
-        'absolute top-2.5 right-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full border transition-[opacity,transform] duration-[var(--motion-fast)]',
-        on ? 'scale-100 border-accent bg-accent text-paper opacity-100' : 'scale-75 border-rule opacity-0',
-      )}
-    >
-      <Glyph id="check" className="h-3 w-3" strokeWidth={2.5} />
-    </span>
-  );
-}
+const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
- * The destination's recommendation, attached to the card it recommends.
+ * The destination's recommendation, attached to the row it recommends.
  *
- * One quiet note on the recommended option rather than a green banner above the
- * question *and* a chip on the card saying the same thing. The reason is the
- * screening's own sentence about this place; the note is never a pre-tick.
+ * One quiet line rather than a banner; the reason is the screening's own
+ * sentence about this place, and it is never a pre-tick.
  */
 export function RecommendedNote({ reason }: { reason?: string | undefined }) {
   return (
-    <span className="mt-2.5 flex items-start gap-1.5 rounded-[var(--radius-control)] bg-pine-soft/70 px-2.5 py-1.5 text-xs leading-snug text-pine-strong" data-testid="interview-recommendation">
-      <Glyph id="compass" className="mt-px h-3.5 w-3.5 shrink-0" />
+    <span className="mt-1.5 flex items-start gap-2 text-sm leading-snug text-pine-strong" data-testid="interview-recommendation">
+      <span aria-hidden="true" className="mt-[0.42em] inline-block h-1.5 w-1.5 shrink-0 bg-pine" />
       <span>
         <span className="font-semibold" data-testid="option-recommended">
           Sidequest recommends this here.
@@ -82,84 +60,57 @@ export function RecommendedNote({ reason }: { reason?: string | undefined }) {
 }
 
 // ---------------------------------------------------------------------------
-// Scenario / option cards
+// Ruled lettered rows (single choice, scenarios)
 // ---------------------------------------------------------------------------
-
-export const OPTION_GLYPHS: Record<string, Record<string, GlyphId>> = {
-  iconic_crowds: { see_it_anyway: 'crowd', go_at_odd_hours: 'sunrise', quieter_alternative: 'quiet' },
-  food_tradeoff: { convenient: 'food', exceptional: 'gem', fuel: 'market' },
-  base_moves: { move_once: 'bed', stay_put: 'home', move_if_it_saves_time: 'compass', move_freely: 'road' },
-  convenience_spend: { save_money: 'coin', balance: 'coins', pay_to_reduce_hassle: 'gem' },
-  coverage_strategy: { depth: 'home', breadth: 'road', best_subset: 'compass' },
-  guide_willingness: { prefer: 'guide', sometimes: 'compass', avoid: 'walk' },
-  private_transfers: { fine: 'boat', if_needed: 'compass', avoid: 'lock' },
-  remote_comfort: { fine: 'signal-off', prefer_not: 'neighbourhood', cannot: 'lock' },
-  boats_ferries: { fine: 'boat', prefer_not: 'compass', cannot: 'lock' },
-  internal_flights: { fine: 'plane', prefer_not: 'compass', cannot: 'lock' },
-  altitude_comfort: { fine: 'altitude', take_it_slow: 'clock', avoid_high: 'lock' },
-  road_comfort: { paved: 'road', mountain: 'altitude', gravel: 'gravel' },
-  daily_driving: { '90': 'clock', '150': 'car', '240': 'road', '360': 'drive' },
-  everyone_every_day: { yes: 'group', no: 'compass' },
-  day_start: { early: 'sunrise', normal: 'clock', relaxed: 'bed' },
-  famous_vs_hidden: { mostly_classics: 'landmark', balanced: 'compass', mostly_hidden: 'gem', deep_cuts: 'quiet' },
-  late_nights: { fine: 'stars', sometimes: 'clock', no: 'bed' },
-  stairs_hills: { fine: 'hike', prefer_not: 'walk', cannot: 'lock' },
-  rustic_lodging: { yes: 'tent', no: 'bed' },
-  pack_lunch: { yes: 'market', no: 'food' },
-  free_time: { packed: 'clock', balanced: 'compass', lots: 'quiet' },
-  transit_comfort: { cheapest: 'transit', best_value: 'compass', least_stressful: 'taxi' },
-  lodging_style: { hostel: 'group', basic_hotel: 'bed', boutique_hotel: 'gem', apartment: 'home', resort: 'beach', luxury_hotel: 'coins', nature_lodge: 'tent', no_preference: 'compass' },
-  breakfast: { skip: 'clock', coffee_light: 'food', full: 'plate', depends: 'compass' },
-  special_meals: { none: 'market', one: 'plate', a_few: 'food', often: 'gem' },
-};
 
 export function OptionCards({
   name,
   options,
   value,
   onChange,
-  glyphs,
-  lettered = false,
-  columns = 2,
   recommended = null,
   recommendedReason,
+  specimen,
 }: {
   name: string;
   options: readonly InterviewOption[];
   value: string | undefined;
   onChange: (value: string) => void;
-  glyphs?: Record<string, GlyphId>;
+  /** Kept for callers that still pass them; the ruled rows letter every option. */
+  glyphs?: unknown;
   lettered?: boolean;
   columns?: 1 | 2 | 3;
   /** MVP V3 — marked because of what this destination is, never as a pre-tick. */
   recommended?: string | null;
-  /** The screening's sentence about why, shown on the recommended card. */
+  /** The screening's sentence about why, shown on the recommended row. */
   recommendedReason?: string | undefined;
+  /** A small drawing at the right of a row (transport draws the line it will put on the map). */
+  specimen?: (value: string, on: boolean) => ReactNode;
 }) {
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">Choose one</legend>
-      <div className={cx('grid gap-3', columns === 1 ? '' : columns === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+      <div className="ob-rows">
         {options.map((option, index) => {
           const on = value === option.value;
-          const glyph = glyphs?.[option.value];
           return (
-            <label key={option.value} className={card(on, 'flex-col gap-3 p-4 pr-10')}>
+            <label key={option.value} className="ob-row" data-on={on ? 'true' : 'false'}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
-              <span className="flex items-center gap-3">
-                {lettered ? (
-                  <span aria-hidden="true" className={cx('inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-display text-sm', on ? 'border-accent bg-accent text-paper' : 'border-rule text-ink-muted')}>
-                    {String.fromCharCode(65 + index)}
-                  </span>
-                ) : null}
-                {glyph ? <Glyph id={glyph} className={cx('h-7 w-7', on ? 'text-accent' : 'text-ink-muted')} /> : null}
+              <span aria-hidden="true" className="ob-letter">
+                {String.fromCharCode(65 + index)}
               </span>
-              <span className="min-w-0">
-                <span className={cx('block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-                {option.detail ? <span className={cx('mt-1 block text-sm leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
-                {recommended === option.value ? <RecommendedNote reason={recommendedReason} /> : null}
-              </span>
-              <Check on={on} />
+              <span className="ob-row-label min-w-0">{option.label}</span>
+              {option.detail || specimen ? (
+                <span className="ob-row-why flex items-center gap-3 md:justify-end">
+                  {specimen ? <span aria-hidden="true" className="shrink-0">{specimen(option.value, on)}</span> : null}
+                  {option.detail ? <span className="min-w-0">{option.detail}</span> : null}
+                </span>
+              ) : null}
+              {recommended === option.value ? (
+                <span className="ob-row-extra">
+                  <RecommendedNote reason={recommendedReason} />
+                </span>
+              ) : null}
             </label>
           );
         })}
@@ -169,29 +120,38 @@ export function OptionCards({
 }
 
 // ---------------------------------------------------------------------------
-// Interests: plates in a grid
+// Interests: a typographic word index
 // ---------------------------------------------------------------------------
 
 export function InterestGrid({ context, offered, value, onChange }: { context: InterviewContext; offered: readonly InterviewOption[]; value: Interest[]; onChange: (value: Interest[]) => void }) {
   const [more, setMore] = useState(false);
   const all = context.traveller.offeredInterests;
-  const visible: Interest[] = more
+  /*
+   * PRODUCTION PASS — RECOMMENDED FOR THIS TRIP.
+   *
+   * Three interests chosen for this destination, season, length and party,
+   * each with the one reason that put it there (`recommendedInterests`). They
+   * lead the index and carry a flare dot; they are never pre-ticked —
+   * "Decide for me" applies exactly these.
+   */
+  const recommended = recommendedInterests(context);
+  const reasonFor = new Map(recommended.map((r) => [r.interest, r.reason]));
+  const base: Interest[] = more
     ? [...all]
     : [...offered.map((o) => o.value as Interest), ...value.filter((interest) => !offered.some((o) => o.value === interest))];
+  const visible: Interest[] = [...recommended.map((r) => r.interest).filter((i) => base.includes(i)), ...base.filter((i) => !reasonFor.has(i))];
+  const shownReasons = recommended.filter((r) => visible.includes(r.interest));
   return (
     <div>
       <fieldset className="min-w-0">
         <legend className="sr-only">Choose one or more</legend>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="ob-index">
           {visible.map((interest) => {
             const on = value.includes(interest);
-            const hue = INTEREST_HUE[interest];
+            const order = value.indexOf(interest);
+            const why = reasonFor.get(interest);
             return (
-              <label
-                key={interest}
-                className={card(on, 'flex-col overflow-hidden')}
-                style={{ '--plate-hue': hue } as React.CSSProperties}
-              >
+              <label key={interest} className="ob-word" data-on={on ? 'true' : 'false'} data-recommended={why ? 'true' : undefined} title={INTEREST_CONTEXT[interest]}>
                 <input
                   type="checkbox"
                   name="priorities"
@@ -201,65 +161,76 @@ export function InterestGrid({ context, offered, value, onChange }: { context: I
                   onChange={(event) => onChange(event.target.checked ? [...value, interest] : value.filter((entry) => entry !== interest))}
                   className={OVERLAY_INPUT}
                 />
-                <span className={cx('plate flex h-16 items-end px-3 pb-2 transition-[filter] duration-[var(--motion-fast)]', on ? 'brightness-[0.97]' : '')} aria-hidden="true">
-                  <Glyph id={INTEREST_GLYPH[interest]} className={cx('h-7 w-7', on ? 'text-accent-strong' : 'text-ink')} />
-                </span>
-                <span className="flex flex-1 flex-col px-3 py-2.5">
-                  <span className={cx('font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{INTEREST_LABELS[interest]}</span>
-                  <span className={cx('mt-0.5 text-xs leading-snug', on ? 'text-ink' : 'text-ink-muted')}>{INTEREST_CONTEXT[interest]}</span>
-                </span>
-                <Check on={on} />
+                <span aria-hidden="true">{INTEREST_LABELS[interest]}</span>
+                {on ? (
+                  <span aria-hidden="true" className="ob-word-n">
+                    {pad(order + 1)}
+                  </span>
+                ) : why ? (
+                  <span aria-hidden="true" className="ob-word-dot" />
+                ) : null}
               </label>
             );
           })}
         </div>
       </fieldset>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
-        <span>
-          {value.length === 0 ? 'Pick what matters most.' : `${value.length} chosen — we ask how big a role each plays next.`}
-        </span>
-        {!more && all.length > offered.length ? (
-          <button type="button" onClick={() => setMore(true)} className={cx('text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-more-interests">
-            See more interests
-          </button>
+      <div className="mt-6 border-t border-ink/15 pt-3">
+        {shownReasons.length > 0 ? (
+          <ul className="space-y-1">
+            {shownReasons.map((r) => (
+              <li key={r.interest} className="flex items-baseline gap-2.5 text-sm text-ink-muted">
+                <span aria-hidden="true" className="ob-word-dot mt-0 shrink-0 translate-y-[-1px]" />
+                <span>
+                  <span className="text-ink">{INTEREST_LABELS[r.interest]}</span> — <span data-testid="interest-recommended-reason">{r.reason}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         ) : null}
+        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <span className="sheet-label text-ink-muted" aria-live="polite">
+            {value.length === 0 ? 'Pick what matters most' : `${pad(value.length)} chosen · in the order you picked`}
+          </span>
+          {!more && all.length > offered.length ? (
+            <button type="button" onClick={() => setMore(true)} className={cx('inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-more-interests">
+              See more interests
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Role meter: how big a role one interest plays
+// Role: how big a role one interest plays, as a four-step scale
 // ---------------------------------------------------------------------------
 
+/** Four rising ticks, filled up to the step: the role drawn as weight rather than as a word. */
+function RoleTicks({ step, on }: { step: number; on: boolean }) {
+  return (
+    <span className="flex items-end gap-[3px]" aria-hidden="true">
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} className={cx('w-[5px]', i <= step ? (on ? 'bg-flare' : 'bg-ink') : on ? 'bg-paper/25' : 'bg-ink/15')} style={{ height: 6 + i * 4 }} />
+      ))}
+    </span>
+  );
+}
+
 export function RoleMeter({ name, options, value, onChange, interest }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; interest?: Interest }) {
-  const index = options.findIndex((o) => o.value === value);
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">How big a role</legend>
-      {interest ? (
-        <div className="mb-4 flex items-center gap-3" aria-hidden="true">
-          <span className="plate inline-flex h-12 w-12 items-center justify-center rounded-[var(--radius-card)]" style={{ '--plate-hue': INTEREST_HUE[interest] } as React.CSSProperties}>
-            <Glyph id={INTEREST_GLYPH[interest]} className="h-6 w-6 text-ink" />
-          </span>
-          <span className="font-display text-xl text-ink">{INTEREST_LABELS[interest]}</span>
-        </div>
-      ) : null}
-      <div className="grid gap-2 sm:grid-cols-4">
+      {interest ? <p className="mb-4 font-display text-3xl text-ink" aria-hidden="true">{INTEREST_LABELS[interest]}</p> : null}
+      <div className="ob-scale ob-scale-stack">
         {options.map((option, i) => {
           const on = value === option.value;
-          const reached = index >= 0 && i <= index;
           return (
-            <label key={option.value} className={card(on, 'flex-col p-3.5 pr-9')}>
+            <label key={option.value} className="ob-cell" data-on={on ? 'true' : 'false'}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
-              <span className="flex gap-1" aria-hidden="true">
-                {[0, 1, 2, 3].map((step) => (
-                  <span key={step} className={cx('h-1.5 flex-1 rounded-full transition-colors duration-[var(--motion-base)]', step <= i && reached ? 'bg-accent' : step <= i ? 'bg-ink-faint/50' : 'bg-rule')} />
-                ))}
-              </span>
-              <span className={cx('mt-3 block font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-              {option.detail ? <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{option.detail}</span> : null}
-              <Check on={on} />
+              <RoleTicks step={i} on={on} />
+              <span className="ob-cell-title">{option.label}</span>
+              {option.detail ? <span className="ob-cell-detail">{option.detail}</span> : null}
             </label>
           );
         })}
@@ -268,123 +239,102 @@ export function RoleMeter({ name, options, value, onChange, interest }: { name: 
   );
 }
 
-// ---------------------------------------------------------------------------
-// Role matrix: every chosen interest × the role it should play, on one screen
-// ---------------------------------------------------------------------------
-
 /**
- * PRODUCT RECOVERY V1 — five chosen interests were five screens. This is one:
- * a row per interest, the same four roles across, radio semantics per row so
- * the keyboard walks it naturally. Compact on phones (labels wrap under the
- * pips), roomy on desktop.
+ * PRODUCT RECOVERY V1 — one screen for every chosen interest: a ruled row per
+ * interest, the same four-step scale across, radio semantics per row so the
+ * keyboard walks it naturally.
  */
 export function RoleMatrix({ name, options, value, onChange, interests }: { name: string; options: readonly InterviewOption[]; value: Record<string, string>; onChange: (value: Record<string, string>) => void; interests: readonly Interest[] }) {
   return (
-    <div className="min-w-0 divide-y divide-rule" role="group" aria-label="What should lead the trip">
-      <div className="hidden gap-2 pb-2 sm:grid sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))]" aria-hidden="true">
+    <div className="min-w-0" role="group" aria-label="What should lead the trip">
+      <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-6 pb-2 md:grid" aria-hidden="true">
         <span />
-        {options.map((option) => (
-          <span key={option.value} className="text-center text-xs leading-snug text-ink-muted">
-            {option.label}
-          </span>
-        ))}
+        <span className="grid grid-cols-4">
+          {options.map((option) => (
+            <span key={option.value} className="sheet-label px-2 text-[10px] leading-snug text-ink-muted">
+              {option.label}
+            </span>
+          ))}
+        </span>
       </div>
-      {interests.map((interest) => {
-        const current = value[interest];
-        return (
-          <fieldset key={interest} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))] sm:items-center">
-            <legend className="sr-only">{INTEREST_LABELS[interest]}</legend>
-            <div className="flex items-center gap-3" aria-hidden="true">
-              <span className="plate inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-control)]" style={{ '--plate-hue': INTEREST_HUE[interest] } as React.CSSProperties}>
-                <Glyph id={INTEREST_GLYPH[interest]} className="h-4.5 w-4.5 text-ink" />
-              </span>
-              <span className="font-display text-lg leading-tight text-ink">{INTEREST_LABELS[interest]}</span>
-            </div>
-            <div className="contents max-sm:flex max-sm:flex-wrap max-sm:gap-1.5">
-              {options.map((option, i) => {
-                const on = current === option.value;
-                const index = options.findIndex((o) => o.value === current);
-                return (
-                  <label key={option.value} className={cx('pressable relative flex min-h-11 cursor-pointer items-center justify-center rounded-[var(--radius-control)] border px-2.5 py-2 text-center text-sm leading-snug transition-colors duration-[var(--motion-fast)]', FOCUS_RING, on ? 'border-accent bg-accent-soft font-semibold text-accent-strong shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')} title={option.detail}>
-                    <input type="radio" name={`${name}:${interest}`} value={option.value} checked={on} onChange={() => onChange({ ...value, [interest]: option.value })} className={OVERLAY_INPUT} />
-                    <span className="flex flex-col items-center gap-1.5">
-                      <span className="flex gap-0.5" aria-hidden="true">
-                        {[0, 1, 2, 3].map((step) => (
-                          <span key={step} className={cx('h-1 w-3 rounded-full', step <= i && index >= i ? 'bg-accent' : step <= i ? 'bg-ink-faint/50' : 'bg-rule')} />
-                        ))}
-                      </span>
-                      <span className="sm:hidden">{option.label}</span>
-                      <span className="sr-only sm:not-sr-only sm:hidden">{option.label}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-        );
-      })}
+      <div className="ob-rows">
+        {interests.map((interest, row) => {
+          const current = value[interest];
+          return (
+            <fieldset key={interest} className="grid gap-3 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] md:items-center md:gap-6">
+              <legend className="sr-only">{INTEREST_LABELS[interest]}</legend>
+              <div className="flex items-baseline gap-3" aria-hidden="true">
+                <span className="sheet-label text-ink-muted">{pad(row + 1)}</span>
+                <span className="font-display text-2xl leading-tight text-ink">{INTEREST_LABELS[interest]}</span>
+              </div>
+              <div className="ob-scale">
+                {options.map((option, i) => {
+                  const on = current === option.value;
+                  return (
+                    <label key={option.value} className="ob-cell min-h-12 items-start px-2.5 py-2" data-on={on ? 'true' : 'false'} title={option.detail}>
+                      <input type="radio" name={`${name}:${interest}`} value={option.value} checked={on} onChange={() => onChange({ ...value, [interest]: option.value })} className={OVERLAY_INPUT} />
+                      <RoleTicks step={i} on={on} />
+                      <span className="text-[11px] leading-tight md:sr-only">{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Transport: mode cards with the consequence stated
+// Transport: ruled rows, each showing the line it will draw on the map
 // ---------------------------------------------------------------------------
 
-const TRANSPORT_GLYPH: Record<string, GlyphId> = {
-  rent_car: 'car',
-  self_drive: 'car',
-  no_car: 'taxi',
-  transit_walk: 'transit',
-  taxis: 'taxi',
-  guided: 'guide',
-  boats_transfers: 'boat',
-  mixed: 'compass',
-};
-
-export function TransportChoice({ name, options, value, onChange, recommended = null, recommendedReason }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; recommended?: string | null; recommendedReason?: string | undefined }) {
+/** The line a mode puts on the context map, drawn small: the same dash, the same colour. */
+export function LineSpecimen({ mode, on }: { mode: string; on: boolean }) {
+  const style = TRANSPORT_LINE[mode] ?? TRANSPORT_LINE.mixed!;
   return (
-    <fieldset className="min-w-0">
-      <legend className="sr-only">How you get around</legend>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {options.map((option) => {
-          const on = value === option.value;
-          return (
-            <label key={option.value} className={card(on, 'flex-col items-start p-4 pr-9')}>
-              <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
-              <span className={cx('inline-flex h-12 w-12 items-center justify-center rounded-full border', on ? 'border-accent bg-paper-raised text-accent' : 'border-rule bg-paper-sunk text-ink')} aria-hidden="true">
-                <Glyph id={TRANSPORT_GLYPH[option.value] ?? 'compass'} className="h-6 w-6" />
-              </span>
-              <span className={cx('mt-3 block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-              {option.detail ? <span className={cx('mt-1 block text-sm leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
-              {recommended === option.value ? <RecommendedNote reason={recommendedReason} /> : null}
-              <Check on={on} />
-            </label>
-          );
-        })}
-      </div>
-    </fieldset>
+    <svg viewBox="0 0 48 10" className="h-2.5 w-12" aria-hidden="true">
+      <line x1={1} y1={5} x2={47} y2={5} stroke={style.color} strokeWidth={on ? 3 : 2} strokeDasharray={style.dash} strokeLinecap="round" opacity={on ? 1 : 0.7} />
+    </svg>
   );
 }
 
+export const TRANSPORT_LINE: Record<string, { color: string; dash: string | undefined }> = {
+  rent_car: { color: 'var(--color-flare)', dash: '6 3' },
+  self_drive: { color: 'var(--color-flare)', dash: '6 3' },
+  mixed: { color: 'var(--color-flare)', dash: '6 3 1 3' },
+  no_car: { color: 'var(--color-glacier)', dash: '4 3' },
+  transit_walk: { color: 'var(--color-glacier)', dash: '4 3' },
+  rail_transfers: { color: 'var(--color-glacier)', dash: '4 3' },
+  taxis: { color: 'var(--color-ink)', dash: '1 3' },
+  guided: { color: 'var(--color-ink)', dash: '5 2 1 2' },
+  boats_transfers: { color: 'var(--color-glacier)', dash: '8 3' },
+};
+
+export function TransportChoice({ name, options, value, onChange, recommended = null, recommendedReason }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; recommended?: string | null; recommendedReason?: string | undefined }) {
+  return <OptionCards name={name} options={options} value={value} onChange={onChange} recommended={recommended} recommendedReason={recommendedReason} specimen={(mode, on) => <LineSpecimen mode={mode} on={on} />} />;
+}
+
 // ---------------------------------------------------------------------------
-// Rhythm: a day drawn as blocks
+// Rhythm: a segmented scale whose cells preview the day
 // ---------------------------------------------------------------------------
 
 const RHYTHM: Record<string, { blocks: number[]; gaps: number }> = {
-  one_big: { blocks: [42, 14], gaps: 10 },
-  two_three: { blocks: [24, 20, 18], gaps: 6 },
-  cover: { blocks: [14, 12, 14, 12, 14], gaps: 3 },
+  one_big: { blocks: [46, 12], gaps: 12 },
+  two_three: { blocks: [24, 20, 18], gaps: 7 },
+  cover: { blocks: [14, 12, 14, 12, 14], gaps: 3.5 },
 };
 
 function DayStrip({ value, on }: { value: string; on: boolean }) {
   const shape = RHYTHM[value] ?? RHYTHM.two_three!;
-  const starts = shape.blocks.reduce<number[]>((acc, width, index) => [...acc, index === 0 ? 0 : acc[index - 1]! + shape.blocks[index - 1]! + shape.gaps], []);
+  const starts = shape.blocks.reduce<number[]>((acc, _width, index) => [...acc, index === 0 ? 0 : acc[index - 1]! + shape.blocks[index - 1]! + shape.gaps], []);
   return (
-    <svg viewBox="0 0 100 14" className="h-3.5 w-full" aria-hidden="true" preserveAspectRatio="none">
-      <line x1={0} y1={7} x2={100} y2={7} stroke="var(--color-rule)" strokeWidth={1} />
+    <svg viewBox="0 0 100 16" className="h-4 w-full" aria-hidden="true" preserveAspectRatio="none">
+      <line x1={0} y1={8} x2={100} y2={8} stroke="currentColor" strokeWidth={0.6} opacity={0.4} />
       {shape.blocks.map((width, index) => (
-        <rect key={index} x={starts[index]} y={2} width={width} height={10} rx={2} fill={on ? 'var(--color-accent)' : 'var(--color-ink-faint)'} opacity={on ? 0.9 : 0.6} />
+        <rect key={index} x={starts[index]} y={2} width={width} height={12} fill={on ? 'var(--color-flare)' : 'currentColor'} opacity={on ? 1 : 0.75} />
       ))}
     </svg>
   );
@@ -394,27 +344,23 @@ export function RhythmChoice({ name, options, value, onChange }: { name: string;
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">Which day</legend>
-      <div className="grid gap-3">
-        {options.map((option, index) => {
+      <div className="ob-scale ob-scale-stack">
+        {options.map((option) => {
           const on = value === option.value;
           return (
-            <label key={option.value} className={card(on, 'items-start gap-4 p-4 pr-10')}>
+            <label key={option.value} className="ob-cell gap-3 py-5 sm:min-h-44 sm:justify-between" data-on={on ? 'true' : 'false'}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
-              <span aria-hidden="true" className={cx('mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-display text-sm', on ? 'border-accent bg-accent text-paper' : 'border-rule text-ink-muted')}>
-                {String.fromCharCode(65 + index)}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className={cx('block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-                {option.detail ? <span className={cx('mt-0.5 block text-sm', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
-                <span className="mt-3 block max-w-xs">
-                  <DayStrip value={option.value} on={on} />
-                  <span className="label mt-1 flex justify-between" aria-hidden="true">
-                    <span>morning</span>
-                    <span>evening</span>
-                  </span>
+              <span className="block">
+                <DayStrip value={option.value} on={on} />
+                <span className="coordbar mt-1.5 flex justify-between opacity-70" aria-hidden="true">
+                  <span>08:00</span>
+                  <span>20:00</span>
                 </span>
               </span>
-              <Check on={on} />
+              <span className="block">
+                <span className="ob-cell-title block text-xl">{option.label}</span>
+                {option.detail ? <span className="ob-cell-detail mt-1 block">{option.detail}</span> : null}
+              </span>
             </label>
           );
         })}
@@ -424,16 +370,16 @@ export function RhythmChoice({ name, options, value, onChange }: { name: string;
 }
 
 // ---------------------------------------------------------------------------
-// Spectrum: effort with an elevation profile
+// Spectrum: effort as a scale whose cells carry a relief line
 // ---------------------------------------------------------------------------
 
 function ProfileLine({ level, on }: { level: number; on: boolean }) {
   const relief = [3, 8, 14, 20][Math.min(3, level)] ?? 8;
   const d = `M0 24 C 15 ${24 - relief * 0.4} 25 ${24 - relief} 40 ${24 - relief * 0.7} S 65 ${24 - relief * 1.1} 80 ${24 - relief * 0.5} S 95 ${24 - relief * 0.2} 100 24`;
   return (
-    <svg viewBox="0 0 100 26" className="h-8 w-full" aria-hidden="true" preserveAspectRatio="none">
-      <path d={`${d} L100 26 L0 26 Z`} fill={on ? 'var(--color-accent)' : 'var(--color-ink-faint)'} opacity={0.18} />
-      <path d={d} fill="none" stroke={on ? 'var(--color-accent)' : 'var(--color-ink-muted)'} strokeWidth={1.5} strokeLinecap="round" />
+    <svg viewBox="0 0 100 26" className="h-7 w-full" aria-hidden="true" preserveAspectRatio="none">
+      <path d={`${d} L100 26 L0 26 Z`} fill={on ? 'var(--color-flare)' : 'currentColor'} opacity={on ? 0.35 : 0.1} />
+      <path d={d} fill="none" stroke={on ? 'var(--color-flare)' : 'currentColor'} strokeWidth={1.5} strokeLinecap="round" />
     </svg>
   );
 }
@@ -444,17 +390,17 @@ export function SpectrumChoice({ name, options, value, onChange }: { name: strin
   return (
     <fieldset className="min-w-0">
       <legend className="sr-only">How much</legend>
-      <div className={cx('grid gap-3', options.length >= 4 ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
+      <div className="ob-scale ob-scale-stack">
         {options.map((option, index) => {
           const on = value === option.value;
-          const level = SPECTRUM_LEVEL[option.value] ?? index;
           return (
-            <label key={option.value} className={card(on, 'flex-col p-4 pr-9')}>
+            <label key={option.value} className="ob-cell gap-2 py-4 sm:min-h-36 sm:justify-between" data-on={on ? 'true' : 'false'}>
               <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
-              <ProfileLine level={level} on={on} />
-              <span className={cx('mt-2 block font-display text-lg leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-              {option.detail ? <span className={cx('mt-1 block text-sm leading-relaxed', on ? 'text-ink' : 'text-ink-muted')}>{option.detail}</span> : null}
-              <Check on={on} />
+              <ProfileLine level={SPECTRUM_LEVEL[option.value] ?? index} on={on} />
+              <span className="block">
+                <span className="ob-cell-title block">{option.label}</span>
+                {option.detail ? <span className="ob-cell-detail mt-1 block">{option.detail}</span> : null}
+              </span>
             </label>
           );
         })}
@@ -464,70 +410,55 @@ export function SpectrumChoice({ name, options, value, onChange }: { name: strin
 }
 
 // ---------------------------------------------------------------------------
-// Range map: the ring grows with the answer
+// Reach: a segmented scale; the ring is drawn on the context map
 // ---------------------------------------------------------------------------
 
-const RANGE_RADIUS: Record<string, number> = {
-  destination_only: 14,
-  nearby_30: 30,
-  nearby_60: 48,
-  nearby_120: 70,
-  best_regional: 92,
-  stay_in_city: 14,
-  one_day_trip: 48,
-  several: 78,
+/** The short mark a reach cell is set in: minutes or a word, never a distance nobody measured. */
+const RANGE_MARK: Record<string, string> = {
+  destination_only: 'Here',
+  nearby_30: '30′',
+  nearby_60: '1 h',
+  nearby_120: '2 h',
+  best_regional: 'Any',
+  stay_in_city: 'City',
+  one_day_trip: '1 day',
+  several: 'Several',
 };
 
-export function RangeMapChoice({ name, options, value, onChange, baseName }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; baseName: string }) {
-  const selected = value ? (RANGE_RADIUS[value] ?? 40) : 0;
-  const hovered = selected;
+export function RangeMapChoice({ name, options, value, onChange }: { name: string; options: readonly InterviewOption[]; value: string | undefined; onChange: (value: string) => void; baseName?: string }) {
+  const chosen = options.find((o) => o.value === value) ?? null;
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
-      <div className="plate relative overflow-hidden rounded-[var(--radius-plate)] border border-rule" style={{ '--plate-hue': 150, '--plate-x': '50%', '--plate-y': '50%' } as React.CSSProperties} aria-hidden="true">
-        <svg viewBox="0 0 240 200" className="h-auto w-full">
-          {options.map((option) => {
-            const r = RANGE_RADIUS[option.value] ?? 40;
-            const on = value === option.value;
-            return <circle key={option.value} cx={120} cy={100} r={r} fill="none" stroke={on ? 'var(--color-accent)' : 'var(--color-ink)'} strokeWidth={on ? 2 : 1} strokeDasharray={on ? undefined : '3 5'} opacity={on ? 0.9 : 0.35} />;
-          })}
-          <circle className="ring-live" cx={120} cy={100} r={hovered} fill="var(--color-accent)" opacity={0.12} />
-          {[[150, 70], [88, 128], [172, 140], [60, 60], [200, 92]].map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y} r={3} fill={Math.hypot(x! - 120, y! - 100) <= selected ? 'var(--color-accent)' : 'var(--color-ink-faint)'} className="transition-[fill] duration-[var(--motion-base)]" />
-          ))}
-          <rect x={115} y={95} width={10} height={10} rx={2} fill="var(--color-ink)" />
-          <text x={120} y={122} textAnchor="middle" fontSize={10} fill="var(--color-ink)" fontFamily="var(--font-display)">
-            {baseName}
-          </text>
-          <text x={12} y={190} fontSize={9} fill="var(--color-ink-muted)" letterSpacing={1}>
-            SCHEMATIC · NOT TO SCALE
-          </text>
-        </svg>
+    <fieldset className="min-w-0">
+      <legend className="sr-only">How far</legend>
+      <div className="ob-scale">
+        {options.map((option) => {
+          const on = value === option.value;
+          return (
+            <label key={option.value} className="ob-cell min-h-20 items-center px-1.5 text-center sm:min-h-24" data-on={on ? 'true' : 'false'} title={option.detail}>
+              <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
+              <span aria-hidden="true" className="ob-cell-big">
+                {RANGE_MARK[option.value] ?? option.label}
+              </span>
+              <span className="ob-cell-detail text-[12px] max-md:sr-only">{option.label}</span>
+            </label>
+          );
+        })}
       </div>
-      <fieldset className="min-w-0">
-        <legend className="sr-only">How far</legend>
-        <div className="grid gap-2">
-          {options.map((option) => {
-            const on = value === option.value;
-            return (
-              <label key={option.value} className={card(on, 'items-center gap-3 px-4 py-3 pr-10')}>
-                <input type="radio" name={name} value={option.value} checked={on} onChange={() => onChange(option.value)} className={OVERLAY_INPUT} />
-                <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center">
-                  <svg viewBox="0 0 32 32" className="h-8 w-8">
-                    <circle cx={16} cy={16} r={Math.max(3, (RANGE_RADIUS[option.value] ?? 40) / 7)} fill="none" stroke={on ? 'var(--color-accent)' : 'var(--color-ink-faint)'} strokeWidth={1.5} />
-                    <rect x={14.5} y={14.5} width={3} height={3} fill="var(--color-ink)" />
-                  </svg>
-                </span>
-                <span className="min-w-0">
-                  <span className={cx('block font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-                  {option.detail ? <span className="block text-xs text-ink-muted">{option.detail}</span> : null}
-                </span>
-                <Check on={on} />
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
-    </div>
+      <div className="ob-scale-ends sheet-label text-ink-muted" aria-hidden="true">
+        <span>Stay close</span>
+        <span>Go far</span>
+      </div>
+      <p className="mt-4 min-h-12 max-w-[52ch] text-base leading-snug text-ink" aria-live="polite">
+        {chosen ? (
+          <>
+            <span className="font-display text-xl">{chosen.label}</span>
+            {chosen.detail ? <span className="block text-sm text-ink-muted">{chosen.detail}</span> : null}
+          </>
+        ) : (
+          <span className="text-ink-muted">Pick a reach and the ring draws on the map.</span>
+        )}
+      </p>
+    </fieldset>
   );
 }
 
@@ -535,66 +466,64 @@ export function RangeMapChoice({ name, options, value, onChange, baseName }: { n
 // Budget: an axis, then an optional envelope
 // ---------------------------------------------------------------------------
 
-const BUDGET_COINS: Record<string, number> = { cheap: 1, value: 2, midrange: 3, premium: 4, luxury: 5, dont_know: 0 };
-
 export function BudgetAxis({ options, value, onChange }: { options: readonly InterviewOption[]; value: { style?: string; envelope: { amount?: number; basis?: string; currency?: string } | null }; onChange: (value: { style?: string; envelope: { amount?: number; basis?: string; currency?: string } | null }) => void }) {
   const [showEnvelope, setShowEnvelope] = useState(Boolean(value.envelope));
   const axis = options.filter((o) => o.value !== 'dont_know');
   const unsure = options.find((o) => o.value === 'dont_know');
+  const at = axis.findIndex((o) => o.value === value.style);
+  const chosen = at >= 0 ? axis[at]! : null;
+  /* The fill runs from the first stop's centre to the chosen one's: 10% … 90% of the axis. */
+  const fill = at <= 0 || axis.length < 2 ? 0 : (at / (axis.length - 1)) * 80;
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <fieldset className="min-w-0">
         <legend className="sr-only">Spending style</legend>
-        <div className="grid gap-2 sm:grid-cols-5">
-          {axis.map((option) => {
+        <div className="ob-axis">
+          <span aria-hidden="true" className="ob-axis-fill" style={{ width: `${fill}%` }} />
+          {axis.map((option, index) => {
             const on = value.style === option.value;
-            const coins = BUDGET_COINS[option.value] ?? 3;
             return (
-              <label key={option.value} className={card(on, 'flex-col items-start p-3.5 pr-8')}>
+              <label key={option.value} className="ob-stop" data-on={on ? 'true' : 'false'} data-reached={at >= 0 && index < at ? 'true' : 'false'} title={option.detail}>
                 <input type="radio" name="budget" value={option.value} checked={on} onChange={() => onChange({ ...value, style: option.value })} className={OVERLAY_INPUT} />
-                <span className="flex gap-0.5" aria-hidden="true">
-                  {[1, 2, 3, 4, 5].map((step) => (
-                    <span key={step} className={cx('h-2 w-2 rounded-full', step <= coins ? (on ? 'bg-accent' : 'bg-ink-muted') : 'bg-rule')} />
-                  ))}
-                </span>
-                <span className={cx('mt-2.5 block font-display text-base leading-snug', on ? TITLE_ON : TITLE_OFF)}>{option.label}</span>
-                {option.detail ? <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{option.detail}</span> : null}
-                <Check on={on} />
+                <span aria-hidden="true" className="ob-stop-tick" />
+                <span className="ob-stop-label">{option.label}</span>
               </label>
             );
           })}
         </div>
+        <p className="mt-3 min-h-6 text-center text-sm text-ink-muted" aria-live="polite">
+          {chosen?.detail ?? ''}
+        </p>
         {unsure ? (
-          <label className={cx(value.style === 'dont_know' ? card(true, 'mt-3 items-center gap-3 px-4 py-3 pr-10') : cx(CARD, FOCUS_RING, 'relative mt-3 items-center gap-3 rounded-[var(--radius-card)] border border-dashed border-rule bg-transparent px-4 py-3 pr-10 hover:border-ink-faint'))}>
-            <input type="radio" name="budget" value="dont_know" checked={value.style === 'dont_know'} onChange={() => onChange({ ...value, style: 'dont_know' })} className={OVERLAY_INPUT} />
-            <Glyph id="compass" className={cx('h-6 w-6', value.style === 'dont_know' ? 'text-accent' : 'text-ink-muted')} />
-            <span>
-              <span className={cx('block text-sm font-medium', value.style === 'dont_know' ? 'font-semibold text-accent-strong' : 'text-ink')}>{unsure.label}</span>
-              {unsure.detail ? <span className="block text-xs text-ink-muted">{unsure.detail}</span> : null}
-            </span>
-            <Check on={value.style === 'dont_know'} />
-          </label>
+          <div className="ob-rows mt-5">
+            <label className="ob-row" data-on={value.style === 'dont_know' ? 'true' : 'false'}>
+              <input type="radio" name="budget" value="dont_know" checked={value.style === 'dont_know'} onChange={() => onChange({ ...value, style: 'dont_know' })} className={OVERLAY_INPUT} />
+              <span aria-hidden="true" className="ob-letter">?</span>
+              <span className="ob-row-label min-w-0 text-lg">{unsure.label}</span>
+              {unsure.detail ? <span className="ob-row-why">{unsure.detail}</span> : null}
+            </label>
+          </div>
         ) : null}
       </fieldset>
       {!showEnvelope ? (
-        <button type="button" onClick={() => setShowEnvelope(true)} className={cx('text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-budget-envelope">
+        <button type="button" onClick={() => setShowEnvelope(true)} className={cx('inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-budget-envelope">
           Add a rough envelope (optional)
         </button>
       ) : (
-        <fieldset className="card p-4">
-          <legend className="px-1 text-sm font-medium text-ink">A rough envelope, excluding flights</legend>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
+        <fieldset className="border-t border-ink/20 pt-4">
+          <legend className="sheet-label pr-2 text-ink-muted">A rough envelope, excluding flights</legend>
+          <div className="mt-3 flex flex-wrap items-end gap-5">
             <label className="text-sm text-ink">
-              <span className="label block">Amount</span>
-              <input type="number" min={1} max={1000000} inputMode="numeric" value={value.envelope?.amount ?? ''} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), amount: Number(event.target.value) || undefined, basis: value.envelope?.basis ?? 'per_person_per_day', currency: value.envelope?.currency ?? 'USD' } })} className="type-figure mt-1 w-32 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base" />
+              <span className="sheet-label block text-ink-muted">Amount</span>
+              <input type="number" min={1} max={1000000} inputMode="numeric" value={value.envelope?.amount ?? ''} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), amount: Number(event.target.value) || undefined, basis: value.envelope?.basis ?? 'per_person_per_day', currency: value.envelope?.currency ?? 'USD' } })} className="ob-underline type-figure w-36" />
             </label>
             <label className="text-sm text-ink">
-              <span className="label block">Currency</span>
-              <input type="text" maxLength={3} value={value.envelope?.currency ?? 'USD'} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), currency: event.target.value.toUpperCase(), basis: value.envelope?.basis ?? 'per_person_per_day' } })} className="mt-1 w-20 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base uppercase" />
+              <span className="sheet-label block text-ink-muted">Currency</span>
+              <input type="text" maxLength={3} value={value.envelope?.currency ?? 'USD'} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), currency: event.target.value.toUpperCase(), basis: value.envelope?.basis ?? 'per_person_per_day' } })} className="ob-underline w-20 uppercase" />
             </label>
             <label className="text-sm text-ink">
-              <span className="label block">Per</span>
-              <select value={value.envelope?.basis ?? 'per_person_per_day'} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), basis: event.target.value, currency: value.envelope?.currency ?? 'USD' } })} className="mt-1 rounded-[var(--radius-control)] border border-rule bg-paper px-2.5 py-2 text-base">
+              <span className="sheet-label block text-ink-muted">Per</span>
+              <select value={value.envelope?.basis ?? 'per_person_per_day'} onChange={(event) => onChange({ ...value, envelope: { ...(value.envelope ?? {}), basis: event.target.value, currency: value.envelope?.currency ?? 'USD' } })} className="ob-underline text-lg">
                 <option value="per_person_per_day">person, per day</option>
                 <option value="per_person_trip">person, whole trip</option>
                 <option value="group_trip">whole group, whole trip</option>
@@ -609,7 +538,7 @@ export function BudgetAxis({ options, value, onChange }: { options: readonly Int
 }
 
 // ---------------------------------------------------------------------------
-// Chips (multi) and dietary
+// Square toggles (multi) and dietary
 // ---------------------------------------------------------------------------
 
 export function ChipGroup({ name, options, value, onChange, tone = 'accent' }: { name: string; options: readonly InterviewOption[]; value: string[]; onChange: (value: string[]) => void; tone?: 'accent' | 'clay' }) {
@@ -620,21 +549,9 @@ export function ChipGroup({ name, options, value, onChange, tone = 'accent' }: {
         {options.map((option) => {
           const on = value.includes(option.value);
           return (
-            <label
-              key={option.value}
-              className={cx(
-                'pressable relative inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full border px-4 py-2 text-sm transition-colors duration-[var(--motion-fast)]',
-                FOCUS_RING,
-                on
-                  ? tone === 'clay'
-                    ? 'border-clay bg-clay-soft font-medium text-clay shadow-[inset_0_0_0_1px_var(--color-clay)]'
-                    : 'border-accent bg-accent-soft font-medium text-accent-strong shadow-[inset_0_0_0_1px_var(--color-accent)]'
-                  : 'border-rule bg-paper-raised text-ink hover:border-ink-faint',
-              )}
-              title={option.detail}
-            >
+            <label key={option.value} className="ob-tag" data-on={on ? 'true' : 'false'} data-tone={tone} title={option.detail}>
               <input type="checkbox" name={name} value={option.value} checked={on} onChange={(event) => onChange(event.target.checked ? [...value, option.value] : value.filter((entry) => entry !== option.value))} className={OVERLAY_INPUT} />
-              <span aria-hidden="true" className={cx('inline-block h-2 w-2 rounded-full', on ? (tone === 'clay' ? 'bg-clay' : 'bg-accent') : 'border border-ink-faint')} />
+              <span aria-hidden="true" className="ob-tag-box" />
               {option.label}
             </label>
           );
@@ -647,11 +564,9 @@ export function ChipGroup({ name, options, value, onChange, tone = 'accent' }: {
 /**
  * DIET: A WAY OF EATING, THINGS YOU AVOID, AND YOUR OWN WORDS.
  *
- * MVP V3, Stage 16. Grouped because the three are different kinds of statement
- * and mixing them into one chip row is what made "Hindu non-veg: no beef or
- * pork" unsayable. The free-text box is not an afterthought: it is where
- * "vegetarian, but I eat eggs" lives, it survives verbatim into the brief the
- * model reads, and nothing parses it into the chips above.
+ * MVP V3, Stage 16. Grouped because the three are different kinds of statement.
+ * The free-text box is where "vegetarian, but I eat eggs" lives; it survives
+ * verbatim into the brief and nothing parses it into the toggles above.
  */
 export function DietaryControl({
   options,
@@ -667,32 +582,25 @@ export function DietaryControl({
   const group = (kind: DietaryNeedKind) => options.filter((option) => option.detail === kind);
   return (
     <div className="space-y-6">
-      {DIETARY_NEED_KINDS.map((kind) => {
+      {DIETARY_NEED_KINDS.map((kind, index) => {
         const inGroup = group(kind);
         if (inGroup.length === 0) return null;
         return (
-          <fieldset key={kind}>
-            <legend className="type-small font-medium text-ink">{DIETARY_NEED_KIND_LABELS[kind]}</legend>
-            <div className="mt-2">
+          <fieldset key={kind} className="border-t border-ink/20 pt-3">
+            <legend className="sheet-label float-left mb-3 w-full text-ink-muted">
+              {pad(index + 1)} · {DIETARY_NEED_KIND_LABELS[kind]}
+            </legend>
+            <div className="clear-both">
               <ChipGroup name={`dietary-${kind}`} options={inGroup.map((option) => ({ value: option.value, label: option.label }))} value={value.needs} onChange={(needs) => set({ needs: [...new Set([...value.needs.filter((entry) => !inGroup.some((option) => option.value === entry)), ...needs.filter((entry) => inGroup.some((option) => option.value === entry))])] })} tone={kind === 'allergy' ? 'clay' : 'accent'} />
             </div>
           </fieldset>
         );
       })}
       <div>
-        <label htmlFor="dietary-notes" className="type-small block font-medium text-ink">
+        <label htmlFor="dietary-notes" className="sheet-label block text-ink-muted">
           Anything else, in your words
         </label>
-        <textarea
-          id="dietary-notes"
-          rows={2}
-          maxLength={300}
-          value={notes}
-          onChange={(event) => set({ notes: event.target.value })}
-          placeholder="Vegetarian but I eat eggs · severe peanut allergy · no alcohol at dinner"
-          className="mt-2 w-full resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
-          data-testid="dietary-notes"
-        />
+        <textarea id="dietary-notes" rows={2} maxLength={300} value={notes} onChange={(event) => set({ notes: event.target.value })} placeholder="Vegetarian but I eat eggs · no alcohol at dinner" className="ob-lines mt-2" data-testid="dietary-notes" />
       </div>
       {value.needs.length > 0 || notes.trim().length > 0 ? (
         <SeriousToggle label="These are requirements, not preferences" detail="Say yes and we stop treating “nobody has confirmed it” as good enough." checked={value.strict} onChange={(strict) => set({ strict })} />
@@ -703,13 +611,10 @@ export function DietaryControl({
 
 export function SeriousToggle({ label, detail, checked, onChange }: { label: string; detail: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className={cx('card flex cursor-pointer gap-3 border-l-4 p-4 transition-colors', checked ? 'border-l-clay bg-clay-soft' : 'border-l-rule')}>
+    <label className={cx('flex min-h-11 cursor-pointer gap-3 border-l-[3px] py-2 pl-4 transition-colors', checked ? 'border-l-clay' : 'border-l-ink/20')}>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-clay)]" />
       <span>
-        <span className="flex items-center gap-2 text-sm font-medium text-ink">
-          <Glyph id="lock" className="h-4 w-4 text-clay" />
-          {label}
-        </span>
+        <span className={cx('block text-sm font-semibold', checked ? 'text-clay' : 'text-ink')}>{label}</span>
         <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">{detail}</span>
       </span>
     </label>
@@ -717,7 +622,7 @@ export function SeriousToggle({ label, detail, checked, onChange }: { label: str
 }
 
 // ---------------------------------------------------------------------------
-// Hard limits: a serious list
+// Hard limits: a serious ruled list
 // ---------------------------------------------------------------------------
 
 export function HardLimitsControl({ context, answers, value, onChange }: { context: InterviewContext; answers: QuestionnaireAnswers; value: { constraints: HardConstraint[]; notes: string; notesAreHard: boolean }; onChange: (value: { constraints: HardConstraint[]; notes: string; notesAreHard: boolean }) => void }) {
@@ -732,25 +637,25 @@ export function HardLimitsControl({ context, answers, value, onChange }: { conte
     onChange({ ...value, constraints: value.constraints.map((c) => (c.code === code ? { ...c, value: next } : c)) });
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <fieldset className="min-w-0">
-        <legend className="mb-3 flex items-center gap-2 text-sm font-medium text-ink">
-          <Glyph id="lock" className="h-4 w-4 text-clay" />
-          Rules, not wishes. Tick only what must hold.
-        </legend>
-        <ul className="card divide-y divide-rule overflow-hidden">
-          {offer.map((entry) => {
+        <legend className="sheet-label mb-3 text-clay">Rules, not wishes · tick only what must hold</legend>
+        <ul className="ob-rows">
+          {offer.map((entry, index) => {
             const on = has(entry.code);
             return (
-              <li key={entry.code} className={cx('transition-colors', on ? 'bg-clay-soft' : '')}>
-                <label className={cx('flex cursor-pointer items-start gap-3 px-4 py-3', FOCUS_RING)}>
-                  <input type="checkbox" checked={on} onChange={(event) => toggle(entry.code, event.target.checked, entry.values?.[1]?.value ?? entry.values?.[0]?.value)} className="mt-1 h-5 w-5 shrink-0 accent-[var(--color-clay)]" />
-                  <span className="min-w-0 flex-1">
-                    <span className={cx('block text-sm font-medium', on ? 'text-clay' : 'text-ink')}>{entry.label}</span>
-                    <span className="block text-sm leading-relaxed text-ink-muted">{entry.detail}</span>
+              <li key={entry.code}>
+                <label className={cx('grid cursor-pointer grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-4 gap-y-1 py-3.5 md:grid-cols-[1.5rem_minmax(0,1fr)_auto]', FOCUS_RING)}>
+                  <input type="checkbox" checked={on} onChange={(event) => toggle(entry.code, event.target.checked, entry.values?.[1]?.value ?? entry.values?.[0]?.value)} className="mt-1.5 h-5 w-5 shrink-0 accent-[var(--color-clay)]" />
+                  <span className="min-w-0">
+                    <span className="flex items-baseline gap-3">
+                      <span aria-hidden="true" className="sheet-label text-ink-faint">{pad(index + 1)}</span>
+                      <span className={cx('font-display text-xl leading-snug', on ? 'text-clay' : 'text-ink')}>{entry.label}</span>
+                    </span>
+                    <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">{entry.detail}</span>
                   </span>
                   {on && entry.values ? (
-                    <select value={valueOf(entry.code) ?? entry.values[0]!.value} onChange={(event) => setValue(entry.code, Number(event.target.value))} onClick={(event) => event.stopPropagation()} className="type-figure min-h-11 shrink-0 rounded-[var(--radius-control)] border border-clay/40 bg-paper px-2 py-1.5 text-sm" aria-label={`${entry.label} value`}>
+                    <select value={valueOf(entry.code) ?? entry.values[0]!.value} onChange={(event) => setValue(entry.code, Number(event.target.value))} onClick={(event) => event.stopPropagation()} className="type-figure col-start-2 min-h-11 shrink-0 border border-clay/50 bg-paper px-2 py-1.5 text-sm md:col-start-3" aria-label={`${entry.label} value`}>
                       {entry.values.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
@@ -765,13 +670,12 @@ export function HardLimitsControl({ context, answers, value, onChange }: { conte
         </ul>
       </fieldset>
       <div>
-        <label htmlFor="hardNotes" className="flex items-center gap-2 text-sm font-medium text-ink">
-          <Glyph id="pen" className="h-4 w-4 text-ink-muted" />
-          Anything else, in your own words? (optional)
+        <label htmlFor="hardNotes" className="sheet-label block text-ink-muted">
+          Anything else, in your own words (optional)
         </label>
-        <textarea id="hardNotes" rows={3} maxLength={500} value={value.notes} onChange={(event) => onChange({ ...value, notes: event.target.value })} className="mt-2 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-4 py-3 text-base leading-relaxed text-ink placeholder:text-ink-faint" placeholder="Altitude, knees, someone who hates heights…" aria-describedby="hardNotes-hint" />
+        <textarea id="hardNotes" rows={2} maxLength={500} value={value.notes} onChange={(event) => onChange({ ...value, notes: event.target.value })} className="ob-lines mt-2" placeholder="Altitude, knees, someone who hates heights…" aria-describedby="hardNotes-hint" />
         <p id="hardNotes-hint" className="mt-2 text-sm text-ink-muted">
-          Read when the days are composed. A sentence stays a preference unless you tick the box below.
+          A sentence stays a preference unless you tick the box below.
         </p>
         {value.notes.trim().length > 0 ? (
           <div className="mt-3">
@@ -791,7 +695,7 @@ export function WritingSpace({ id, value, onChange, placeholder }: { id: string;
   return (
     <label htmlFor={id} className="block">
       <span className="sr-only">Your answer</span>
-      <textarea id={id} rows={5} maxLength={500} value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-5 py-4 font-display text-lg leading-relaxed text-ink placeholder:text-ink-faint" placeholder={placeholder} />
+      <textarea id={id} rows={4} maxLength={500} value={value} onChange={(event) => onChange(event.target.value)} className="ob-lines" placeholder={placeholder} />
     </label>
   );
 }
@@ -799,14 +703,14 @@ export function WritingSpace({ id, value, onChange, placeholder }: { id: string;
 export function NamesSpace({ value, onChange }: { value: { include: string[]; avoid: string[] }; onChange: (value: { include: string[]; avoid: string[] }) => void }) {
   const split = (text: string) => text.split(/\n+/).map((line) => line.trim()).filter(Boolean).slice(0, 10);
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-8 sm:grid-cols-2">
       <label className="block">
-        <span className="label block text-pine">Must include</span>
-        <textarea rows={5} value={value.include.join('\n')} onChange={(event) => onChange({ ...value, include: split(event.target.value) })} className="mt-2 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-4 py-3 font-display text-lg leading-relaxed text-ink placeholder:text-ink-faint" placeholder="One per line" />
+        <span className="sheet-label block text-pine">Must include</span>
+        <textarea rows={5} value={value.include.join('\n')} onChange={(event) => onChange({ ...value, include: split(event.target.value) })} className="ob-lines mt-2" placeholder="One per line" />
       </label>
       <label className="block">
-        <span className="label block text-clay">Must avoid</span>
-        <textarea rows={5} value={value.avoid.join('\n')} onChange={(event) => onChange({ ...value, avoid: split(event.target.value) })} className="mt-2 w-full rounded-[var(--radius-card)] border border-rule bg-paper-raised px-4 py-3 font-display text-lg leading-relaxed text-ink placeholder:text-ink-faint" placeholder="One per line" />
+        <span className="sheet-label block text-clay">Must avoid</span>
+        <textarea rows={5} value={value.avoid.join('\n')} onChange={(event) => onChange({ ...value, avoid: split(event.target.value) })} className="ob-lines mt-2" placeholder="One per line" />
       </label>
     </div>
   );

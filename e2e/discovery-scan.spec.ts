@@ -51,6 +51,23 @@ test('find places → a pre-picked board → build → the itinerary', async ({ 
   await expect(page.getByTestId('route-overview')).toBeVisible();
 });
 
+test('when the research model is unavailable, the board comes from open map data and says so', async ({ page }) => {
+  /* The fixture scan reads the token `opendata` from what the traveller typed and answers from the recorded OpenStreetMap/Wikidata fixture. */
+  await createTrip(page, 'opendata Harbour City', AUGUST);
+  await page.waitForURL(/\/questionnaire$/, { timeout: 20_000 });
+  await completeQuestionnaire(page);
+  const find = page.getByTestId('interview-find-places');
+  await waitUntilInteractive(find);
+  await find.click();
+  await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
+  await expect(page.getByTestId('board-summary')).toBeVisible({ timeout: 60_000 });
+  const provenance = page.getByTestId('board-provenance');
+  await expect(provenance).toHaveAttribute('data-source', 'open-data');
+  await expect(provenance).toContainText('come from OpenStreetMap and Wikidata');
+  await expect(provenance).not.toContainText(/ANTHROPIC|API key|SIDEQUEST_/);
+  await expect(page.getByTestId('board-summary')).not.toContainText(/^0 chosen/);
+});
+
 test('Plan with smart defaults scans, picks and builds in one press', async ({ page }) => {
   await createTrip(page, DESTINATION, AUGUST);
   await page.waitForURL(/\/questionnaire$/, { timeout: 20_000 });

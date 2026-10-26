@@ -142,9 +142,20 @@ describe('the trip strip shows the shared card', () => {
     expect(markup).not.toContain('Pirque');
   });
 
-  it('draws the atlas route sketch, never a gradient stand-in, when there is no photograph', () => {
+  /*
+   * SURVEY ATLAS (2026-10) — the "atlas route sketch" plate placed its marks by
+   * index, not by place. Round 2: with nothing placed, the card carries a ledger
+   * mark made of what is known — the name's letterforms, the months, a tick a
+   * night, a square a person — and says it is not on the map yet. Never a
+   * route, never a gradient, never the same empty stamp for every trip.
+   */
+  it('marks the trip from what is known, never a route or a gradient, when nothing is placed', () => {
     const markup = render();
-    expect(markup).toContain('route-draw');
+    expect(markup).toContain('data-plate="ledger"');
+    expect(markup).toContain('>SM<');
+    expect(markup).toContain('Not on the map yet');
+    expect(markup).toContain('2 adults · 2 children');
+    expect(markup).not.toContain('<polyline');
     expect(markup).not.toContain('linear-gradient(');
   });
 

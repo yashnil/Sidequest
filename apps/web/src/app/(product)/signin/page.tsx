@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Glyph } from '@/components/interview/glyphs';
 import { redirect } from 'next/navigation';
 import { authProviders } from '@/lib/auth/config';
 import { safeReturnTo } from '@/lib/auth/google';
@@ -40,10 +41,17 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
     <div className="mx-auto max-w-lg px-5 py-14 sm:px-8 sm:py-20" data-testid="signin-page">
       <p className="eyebrow">Your account</p>
       <h1 className="display-xl mt-3 text-ink">Keep your trips.</h1>
-      <p className="mt-4 type-body text-lg text-ink-muted">
-        You never need an account to plan. One keeps every trip on every device, remembers who you
-        travel with, and carries what you told us into the next trip.
-      </p>
+      <p className="mt-4 type-body text-lg text-ink-muted">You never need an account to plan. One gives you:</p>
+      <ul className="mt-5 grid gap-2.5" aria-label="What an account adds">
+        {SIGNIN_BENEFITS.map((benefit, index) => (
+          <li key={benefit.text} className="fade-up flex items-center gap-3 text-ink" style={{ ['--d' as string]: `${80 + index * 70}ms` }}>
+            <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-ink/[0.06] text-ink">
+              <Glyph id={benefit.glyph} className="h-5 w-5" />
+            </span>
+            <span className="type-body">{benefit.text}</span>
+          </li>
+        ))}
+      </ul>
 
       {unclaimed > 0 ? (
         <p className="card mt-6 px-4 py-3 text-sm text-ink" data-testid="signin-unclaimed">
@@ -101,8 +109,15 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   );
 }
 
+const SIGNIN_BENEFITS = [
+  { glyph: 'home', text: 'Every trip, on every device' },
+  { glyph: 'group', text: 'The people you travel with, remembered' },
+  { glyph: 'pen', text: 'Your usual preferences, ready for the next trip' },
+] as const;
+
 const FAILURE_COPY: Record<string, string> = {
-  state: 'That sign-in link had expired. Start again from this page.',
+  state: 'That sign-in link had expired or was started in another browser. Start again from this page.',
+  busy: 'Too many sign-in attempts from here just now. Wait a minute and start again.',
   denied: 'Google did not sign you in. Nothing was changed.',
   exchange: 'We could not confirm your identity with Google just now. Try again in a moment.',
   unavailable: 'Sign-in is not available on this deployment.',

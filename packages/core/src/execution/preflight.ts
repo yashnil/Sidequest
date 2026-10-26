@@ -159,27 +159,38 @@ export function buildPreflight(input: {
   }
 
   // Documents, health, local set-up, connectivity from the readiness packet ------------------------------
+  const keysUsed = new Set<string>();
   for (const entry of intel?.readiness.entries ?? []) {
     if (entry.state === 'not_applicable') continue;
     const category: PreflightCategory = entry.kind === 'local_setup' ? 'local_setup' : /health|vaccin|medic|access|mobility/i.test(entry.kind) ? 'health_access' : /sim|esim|roaming|connect/i.test(`${entry.kind} ${entry.title}`) ? 'connectivity' : /pay|cash|card|app/i.test(`${entry.kind} ${entry.title}`) ? 'payments_apps' : /driv|licence|permit|transit/i.test(entry.kind) ? 'transport' : 'documents';
     const done = entry.state === 'confirmed';
     const link = entry.links[0];
+    /*
+     * Local set-up is one entry per thing to set up (a transit card, an app),
+     * all of kind `local_setup`: keyed by kind alone they shared one id and one
+     * check, so ticking one ticked them all, and their shared generic action
+     * ("Set this up before you fly.") made every row read the same.
+     */
+    const several = entry.kind === 'local_setup';
+    let key = several ? `${entry.kind}:${slugOf(entry.title)}` : entry.kind;
+    for (let n = 2; keysUsed.has(key); n++) key = `${several ? `${entry.kind}:${slugOf(entry.title)}` : entry.kind}-${n}`;
+    keysUsed.add(key);
     put(
       {
-        id: `preflight:readiness:${entry.kind}`,
+        id: `preflight:readiness:${key}`,
         category,
-        title: entry.action ?? entry.title,
-        detail: entry.summary,
+        title: several ? entry.title : (entry.action ?? entry.title),
+        detail: several && entry.action ? `${entry.action} ${entry.summary}` : entry.summary,
         href: '#before-you-go',
         ...(link ? { sourceName: link.name } : {}),
         ...(entry.facts?.find((f) => /compiled|as of|read on|checked/i.test(f)) ? { readAt: entry.facts.find((f) => /compiled|as of|read on|checked/i.test(f))! } : {}),
-        checkId: `readiness:${entry.kind}`,
+        checkId: `readiness:${key}`,
         readinessKind: entry.kind,
         readinessState: entry.state,
         phase: entry.phase,
         links: entry.links.map((l) => ({ name: l.name, url: l.url })),
       },
-      done || input.checks.checklist.includes(`readiness:${entry.kind}`),
+      done || input.checks.checklist.includes(`readiness:${key}`),
       entry.tier === 'more' && !entry.blocking && entry.state !== 'problem',
     );
   }
@@ -211,4 +222,8 @@ export function buildPreflight(input: {
   const verdict: Preflight['verdict'] = attention.length === 0 ? 'ready' : attention.length <= 2 && decisions.length === 0 ? 'nearly' : 'not_yet';
   const headline = verdict === 'ready' ? 'Ready for departure' : verdict === 'nearly' ? 'Nearly ready' : `${attention.length} thing${attention.length === 1 ? '' : 's'} before you go`;
   return { verdict, headline, daysUntilTrip: input.daysUntilTrip, ready, attention, later };
+}
+
+function slugOf(text: string): string {
+  return text.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'item';
 }

@@ -1,3 +1,4 @@
+import { adviseToShortlist } from './support/advisor';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { openHubView } from './support/hub';
 import {
@@ -229,16 +230,8 @@ test.describe('every normal route', () => {
     compiled = await createTrip(shared, 'Harbour City');
     await compileRegion(shared);
 
-    /* V11 §A1 — the intake asks one question at a time and stops when it can rank. */
-    await shared.goto('/decide');
-    await shared.getByRole('radio', { name: 'Some time in a month' }).check();
-    await shared.getByLabel('Which month?').selectOption('7');
-    await shared.getByRole('button', { name: 'Next', exact: true }).click();
-    await shared.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
-    await shared.getByRole('button', { name: 'One more question' }).click();
-    await shared.getByRole('spinbutton', { name: 'Nights away' }).fill('9');
-    await shared.getByRole('button', { name: 'Show me where to go' }).click();
-    await shared.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
+    /* The destination advisor: a typed request, the questions it chooses, a stored shortlist. */
+    await adviseToShortlist(shared);
     decided = new URL(shared.url()).pathname.split('/').pop()!;
   });
 

@@ -242,40 +242,54 @@ export function BookedStatusControl({ tripId, id, status, cost, paid, refundable
           </option>
         ))}
       </select>
-      <input
-        type="number"
-        min={0}
-        step={1}
-        defaultValue={cost?.amount ?? ''}
-        placeholder="cost"
-        aria-label="Cost paid"
-        className={cx(FIELD, 'w-24 py-1')}
-        data-testid="booked-cost"
-        disabled={pending}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            const amount = Number((event.target as HTMLInputElement).value);
-            if (Number.isFinite(amount) && amount >= 0) apply({ cost: { amount, currency: cost?.currency ?? 'USD' } });
-          }
-        }}
-      />
-      {cost?.currency ? <span className="text-ink-faint">{cost.currency}</span> : null}
-      <select value={paid ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Paid" data-testid="booked-paid" onChange={(event) => apply(event.target.value ? { paid: event.target.value } : {})}>
-        <option value="">Paid?</option>
-        {Object.entries(PAID_LABELS).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-      <select value={refundable ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Refund terms" data-testid="booked-refundable" onChange={(event) => apply(event.target.value ? { refundable: event.target.value } : {})}>
-        <option value="">Refundable?</option>
-        {Object.entries(REFUND_LABELS).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
+      {/*
+        HUB-4 — cost, payment and refund terms are three fields most bookings
+        never need on screen; they sit behind one "Cost & terms" pill (which
+        names what is already recorded) instead of four inputs on every row.
+      */}
+      <details className="group relative" data-testid="booked-terms">
+        <summary className="pressable inline-flex min-h-10 cursor-pointer list-none items-center gap-1.5 rounded-full border border-rule bg-paper px-3.5 text-[13px] font-medium text-ink hover:border-ink [&::-webkit-details-marker]:hidden">
+          {cost ? `${cost.amount} ${cost.currency}` : 'Cost & terms'}
+          {paid && PAID_LABELS[paid] ? <span className="text-ink-muted">· {PAID_LABELS[paid]}</span> : null}
+          <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <span className="absolute left-0 top-full z-20 mt-1.5 flex w-max max-w-[min(22rem,80vw)] flex-wrap items-center gap-2 rounded-[12px] border border-rule bg-paper-raised p-3 shadow-[var(--shadow-panel)]">
+          <input
+            type="number"
+            min={0}
+            step={1}
+            defaultValue={cost?.amount ?? ''}
+            placeholder="cost"
+            aria-label="Cost paid"
+            className={cx(FIELD, 'w-24 py-1')}
+            data-testid="booked-cost"
+            disabled={pending}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                const amount = Number((event.target as HTMLInputElement).value);
+                if (Number.isFinite(amount) && amount >= 0) apply({ cost: { amount, currency: cost?.currency ?? 'USD' } });
+              }
+            }}
+          />
+          {cost?.currency ? <span className="text-ink-faint">{cost.currency}</span> : null}
+          <select value={paid ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Paid" data-testid="booked-paid" onChange={(event) => apply(event.target.value ? { paid: event.target.value } : {})}>
+            <option value="">Paid?</option>
+            {Object.entries(PAID_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select value={refundable ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Refund terms" data-testid="booked-refundable" onChange={(event) => apply(event.target.value ? { refundable: event.target.value } : {})}>
+            <option value="">Refundable?</option>
+            {Object.entries(REFUND_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </span>
+      </details>
       {error ? (
         <span role="alert" className="text-clay">
           {error}

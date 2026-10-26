@@ -74,20 +74,50 @@ export interface DashboardRow {
   image: DestinationImage | null;
   fallback: ImageryFallback;
   claimed: boolean;
+  /**
+   * The trip's own geography, for the collection's stamps and cover: the
+   * bases in the order they are slept in, the placed stops, and the
+   * destination's centre. Only resolved coordinates the plan persisted — never
+   * an estimate, never a road. Optional so a row built elsewhere stays valid.
+   */
+  shape?: TripShape;
+}
+
+export interface TripShape {
+  center: { lat: number; lng: number } | null;
+  bases: { name: string; lat: number; lng: number }[];
+  stops: { lat: number; lng: number; day: number }[];
+}
+
+/** Ambiguous identities are kept for the audit and never drawn (V12.3 §14). */
+const UNDRAWABLE = new Set(['ambiguous', 'unresolved']);
+/** Folded anchors became a meal, a leg or a terminal: they are not stops. */
+const NOT_A_STOP = new Set(['folded_into_meal', 'folded_into_transfer', 'folded_into_terminal', 'rejected_contradiction', 'rejected_hard_constraint', 'unscheduled_capacity']);
+
+export function tripShapeOf(itinerary: ReturnType<typeof getItinerary>, center: { lat: number; lng: number } | null): TripShape {
+  const pkg = itinerary?.package;
+  const bases = (pkg?.bases ?? []).flatMap((b) => (b.coordinates && Number.isFinite(b.coordinates.lat) && Number.isFinite(b.coordinates.lng) ? [{ name: b.displayName ?? b.name, lat: b.coordinates.lat, lng: b.coordinates.lng }] : []));
+  const stops = (pkg?.anchors ?? [])
+    .filter((a) => a.identity && !NOT_A_STOP.has(a.disposition) && !UNDRAWABLE.has(a.identity.resolutionConfidence ?? '') && a.anchorKind !== 'transfer' && a.anchorKind !== 'gateway')
+    .map((a) => ({ lat: a.identity!.coordinates.lat, lng: a.identity!.coordinates.lng, day: a.scheduledDayNumber ?? a.dayNumber }))
+    .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+    .sort((a, b) => a.day - b.day);
+  return { center, bases, stops };
 }
 
 export function dashboardRowsFor(owner: { userId: string | null; ownerToken: string | null }, now: Date = new Date()): DashboardRow[] {
   const trips = listTripsFor(owner);
   const subjects = trips.map((trip) => {
-    const entryId = getIntent(trip.id)?.selectedDestination?.entryId ?? null;
+    const selected = getIntent(trip.id)?.selectedDestination ?? null;
+    const entryId = selected?.entryId ?? null;
     const entry = entryId ? destinationEntryById(entryId) : null;
-    return { trip, entry };
+    return { trip, entry, center: selected?.center ?? entry?.center ?? null };
   });
   const images = acceptedImagesFor(subjects.filter((s) => s.entry).map((s) => ({ kind: 'destination' as const, id: s.entry!.id, ...(s.entry!.wikidataId ? { wikidataId: s.entry!.wikidataId } : {}) })), now);
-  return subjects.map(({ trip, entry }) => rowFor(trip, entry, images[entry?.id ?? ''] ?? null, now));
+  return subjects.map(({ trip, entry, center }) => rowFor(trip, entry, images[entry?.id ?? ''] ?? null, now, center));
 }
 
-function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: number } } | null, image: DestinationImage | null, now: Date): DashboardRow {
+function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: number } } | null, image: DestinationImage | null, now: Date, center: { lat: number; lng: number } | null = null): DashboardRow {
   const itinerary = getItinerary(trip.id);
   const booked = listBookedItems(trip.id).filter((item) => item.status === 'booked');
   const profile = getProfile(trip.id);
@@ -132,6 +162,7 @@ function rowFor(trip: Trip, entry: { id: string; center?: { lat: number; lng: nu
     image,
     fallback: imageryFallbackFor({ kind: 'destination', id: entry?.id ?? trip.id, name: trip.basics.destinationInput, ...(entry?.center ? { coordinates: entry.center } : {}) }),
     claimed: Boolean(trip.userId),
+    shape: tripShapeOf(itinerary, center && Number.isFinite(center.lat) && Number.isFinite(center.lng) ? { lat: center.lat, lng: center.lng } : null),
   };
 }
 

@@ -83,8 +83,20 @@ function parseRow(row: Row, now: Date): StoredImagery | null {
   return {
     outcome: parsed.data,
     retrievedAt: row.retrieved_at,
-    dueForRevalidation: row.revalidate_after <= now.toISOString(),
+    dueForRevalidation: row.revalidate_after <= now.toISOString() || refusedByRetiredRule(parsed.data),
   };
+}
+
+/**
+ * A refusal the gate no longer makes is due now, not in ninety days.
+ *
+ * Commons moved its thumbnails to `thumb.wikimedia.org` (2026) and, until the
+ * gate learned the host, every photograph resolved in that window was refused
+ * as `unapproved_host` and written down for ninety days — which would have kept
+ * every board that was looked at then without pictures for a season.
+ */
+function refusedByRetiredRule(outcome: ImageryOutcome): boolean {
+  return outcome.status === 'rejected' && outcome.rejection.reason === 'unapproved_host' && (outcome.rejection.detail ?? '').startsWith('thumb.wikimedia.org') && !(outcome.rejection.detail ?? '').includes('/wikipedia/');
 }
 
 /**

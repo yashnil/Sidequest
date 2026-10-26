@@ -156,11 +156,14 @@ export function ImportCenter({ tripId, tripStart, tripEnd, pendingImports, bases
   const photoChosen = file ? looksLikePhoto(file.base64) : false;
 
   return (
-    <section className="card mt-8 p-5 print:hidden" aria-labelledby="import-center-heading" data-testid="import-center">
-      <h3 id="import-center-heading" className="type-section text-ink">
-        Add a confirmation
-      </h3>
-      <p className="mt-1 text-sm text-ink-muted">Paste the e-mail, or choose the file. Sidequest reads the booking out of it, shows you what it found, and changes nothing until you confirm. Card numbers, phone numbers and e-mail addresses are removed before anything is kept.</p>
+    <section className="mt-8 rounded-[14px] border border-dashed border-ink/25 bg-paper-raised/60 p-4 print:hidden sm:p-5" aria-labelledby="import-center-heading" data-testid="import-center">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 id="import-center-heading" className="type-section text-ink">
+          Add a confirmation
+        </h3>
+        <p className="sheet-label text-ink-muted">From your inbox</p>
+      </div>
+      <p className="mt-1 text-sm text-ink-muted">Paste the e-mail or add the file. Sidequest shows you what it found and changes nothing until you confirm.</p>
       {review ? (
         <ImportReview key={review.importId} tripId={tripId} review={review} tripStart={tripStart} tripEnd={tripEnd} bases={bases} onDone={reset} onReplace={(next) => setReview(next)} />
       ) : (
@@ -172,19 +175,23 @@ export function ImportCenter({ tripId, tripStart, tripEnd, pendingImports, bases
           }}
         >
           <label className="text-sm text-ink">
-            Confirmation text
-            <textarea name="text" value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={600_000} placeholder="Paste the whole confirmation e-mail here" className={cx(FIELD, 'font-mono text-xs leading-relaxed')} data-testid="import-text" />
+            <span className="sr-only">Confirmation text</span>
+            <textarea name="text" value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={600_000} placeholder="Paste the whole confirmation e-mail here" aria-label="Confirmation text" className={cx(FIELD, 'font-mono text-xs leading-relaxed')} data-testid="import-text" />
           </label>
-          <label className="text-sm text-ink">
-            Or a file <span className="text-ink-faint">(.eml, .pdf, or a photo or screenshot up to 4 MB)</span>
-            <input ref={fileInput} name="file" type="file" accept=".eml,.pdf,.png,.jpg,.jpeg,.webp,message/rfc822,application/pdf,image/png,image/jpeg,image/webp" onChange={(e) => void chooseFile(e.target.files?.[0] ?? null)} className={cx(FIELD, 'py-2 file:mr-3 file:rounded-[var(--radius-control)] file:border-0 file:bg-paper-sunk file:px-3 file:py-1.5 file:text-sm')} data-testid="import-file" />
-          </label>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-muted">
+            <label className="pressable inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-rule bg-paper px-4 font-medium text-ink hover:border-ink focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-pine">
+              <span aria-hidden="true">＋</span> Or add a file
+              <input ref={fileInput} name="file" type="file" aria-label="Or a file (.eml, .pdf, or a photo or screenshot up to 4 MB)" accept=".eml,.pdf,.png,.jpg,.jpeg,.webp,message/rfc822,application/pdf,image/png,image/jpeg,image/webp" onChange={(e) => void chooseFile(e.target.files?.[0] ?? null)} className="sr-only" data-testid="import-file" />
+            </label>
+            <span className="text-xs text-ink-faint">.eml, .pdf, a photo or a screenshot, up to 4 MB</span>
+          </div>
           {error ? <ErrorNote>{error}</ErrorNote> : null}
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" disabled={pending} className={buttonClass('primary', 'sm')} data-testid="import-submit">
               {pending ? (photoChosen ? 'Adding…' : 'Reading…') : photoChosen ? 'Add this photo' : 'Read this confirmation'}
             </button>
             {file ? <span className="text-sm text-ink-muted">{file.name}</span> : null}
+            <span className="basis-full text-xs text-ink-faint">Card numbers, phone numbers and e-mail addresses are removed before anything is kept.</span>
             {/* V9.1 §7 photo — said before the press: a photo is read only when asked. */}
             {photoChosen ? <span className="basis-full text-xs text-ink-faint" data-testid="import-photo-note">A photo is not read until you ask Sidequest to on the next screen. Its location and camera details are removed first.</span> : null}
           </div>

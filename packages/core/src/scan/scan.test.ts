@@ -50,7 +50,7 @@ function positionsFor(proposal: ScanProposal): Map<string, ResolvedPosition | nu
       positions.set(c.key, { coordinates: NORTH, method: 'locality', provider: 'test-geocoder', approximate: true });
       return;
     }
-    positions.set(c.key, { coordinates: offset(c.locality === 'Northport' ? NORTH : SOUTH, i), method: 'geocoder', provider: 'test-geocoder', approximate: false });
+    positions.set(c.key, { coordinates: offset(c.locality === 'Northport' ? NORTH : SOUTH, i), method: 'geocoder', provider: 'test-geocoder', approximate: false, ...(c.name === 'Old Fort' ? { wikidataId: 'Q42' } : {}) });
   });
   return positions;
 }
@@ -105,6 +105,13 @@ describe('discovery scan — region assembly', () => {
   it('produces a region that passes the integrity gate', () => {
     const { assembly } = assemble();
     expect(() => validateCompiledRegion(assembly.region)).not.toThrow();
+  });
+
+  it('carries the Wikidata item a placing source named, and invents none for the rest', () => {
+    const { assembly } = assemble();
+    const places = assembly.region.places;
+    expect(places.find((p) => p.name === 'Old Fort')?.wikidataId).toBe('Q42');
+    expect(places.filter((p) => p.name !== 'Old Fort').every((p) => p.wikidataId === undefined)).toBe(true);
   });
 
   it('leaves an approximate point-like place off the map, with a reason', () => {
@@ -282,5 +289,20 @@ describe('the same base proposed twice (live Hanoi finding)', () => {
     expect(plan.baseIdByKey.get(again.key)).toBe(plan.baseIdByKey.get(first.key));
     expect(plan.points.filter((p) => p.kind === 'base')).toHaveLength(proposal.bases.length - 1);
     expect(plan.unplaced.find((u) => u.key === again.key)?.code).toBe('duplicate');
+  });
+});
+
+/** Production pass — a scan-built trip credits the providers that actually contributed. */
+describe('discovery scan — attributions', () => {
+  it('credits OpenStreetMap when Nominatim placed stops, Google when Places did, and nobody for a test geocoder', async () => {
+    const { scanAttributions } = await import('./assemble');
+    expect(scanAttributions({ placement: ['nominatim'], routing: 'distance estimates', openData: false, osmFood: false })).toEqual(['© OpenStreetMap contributors']);
+    expect(scanAttributions({ placement: ['google-places'], routing: 'openrouteservice', openData: false, osmFood: false })).toEqual([
+      '© OpenStreetMap contributors',
+      'Place locations from Google',
+      'Routing © openrouteservice.org by HeiGIT',
+    ]);
+    expect(scanAttributions({ placement: ['google-places'], routing: 'distance estimates', openData: false, osmFood: false })).toEqual(['Place locations from Google']);
+    expect(assemble().assembly.region.sourceManifest.attributions).toEqual([]);
   });
 });

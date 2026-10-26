@@ -827,7 +827,7 @@ function substantiveDescription(description: string): boolean {
  *      the scorer still called the match strong — the most specific fact about
  *      such a candidate is why it is on the board at all.
  *   3. Established standing, when the record establishes it and the traveller
- *      asked for names at all.
+ *      asked for the highlights (a balanced mix gets it from the heading).
  *   4. The specific trade-off the scorer found — a quiet find for a
  *      crowd-avoider, a stop off the standard loop for a hidden-gem lean,
  *      effort that lines up, a free stop on a tight budget.
@@ -881,12 +881,16 @@ function buildReasons(input: ReasonInput): string[] {
   //     board captioned a suburban lake and a small municipal beach as the
   //     names a destination is known for while its famous waterfall rendered
   //     under "Probably skip".
-  if (standsAsEstablishedName(place) && profile.discoveryMix !== 'deep_cuts') {
-    connections.push(
-      profile.discoveryMix === 'mostly_classics'
-        ? 'One of the names people come here for, and you wanted the highlights.'
-        : 'One of the established names here — the kind of stop this area is known for.',
-    );
+  //
+  //     Only for a traveller who *asked* for the highlights, where it is a
+  //     connection to what they said. For a balanced mix it used to read "One of
+  //     the established names here — the kind of stop this area is known for" on
+  //     every classic: the same sentence on a third of an open-data board, in
+  //     the "more about this place" list of each card and on itinerary rows,
+  //     restating what the classics heading above those cards already says.
+  //     A sentence that is true of every card in a group tells none of them apart.
+  if (standsAsEstablishedName(place) && profile.discoveryMix === 'mostly_classics') {
+    connections.push('One of the names people come here for, and you wanted the highlights.');
   }
 
   // 4 — the specific trade-offs the scorer actually found.

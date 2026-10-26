@@ -208,15 +208,14 @@ function cards(html: string): Map<string, string> {
 /**
  * The plate's own drawing out of a card fragment.
  *
- * The whole SVG rather than its `d` attributes: a quiet find is drawn with a
- * broken line, which is a `stroke-dasharray` and not a path — and a comparison
- * that reads only the paths would call two visibly different plates identical.
+ * Production pass — the plate is a cut of the contour sheet whose scale,
+ * offset and waypoint carry the facts; `data-plate-drawing` is exactly that
+ * drawing (mask scale and offset, plus the quiet-find waypoint), so two plates
+ * that look different have different drawings here.
  */
 function plateOf(fragment: string): string {
-  const start = fragment.indexOf('viewBox="0 0 100 60"');
-  if (start < 0) return '';
-  const end = fragment.indexOf('</svg>', start);
-  return fragment.slice(start, end < 0 ? undefined : end);
+  const match = /data-plate-drawing="([^"]*)"/.exec(fragment);
+  return match ? match[1]! : '';
 }
 
 describe('the board is not twenty-four copies of one card', () => {
@@ -392,7 +391,7 @@ describe('the board is not twenty-four copies of one card', () => {
     expect(
       html,
       'no card leads its group, so the board is a wall of identical cells',
-    ).toContain('sm:col-span-2');
+    ).toContain('data-featured="true"');
   });
 
   it('folds the board-wide caveats behind one line rather than a wall of them', () => {

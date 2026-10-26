@@ -37,9 +37,15 @@ export function securityHeaders(options: { dev: boolean }): { key: string; value
      * renders them in a worker from a blob URL. Listed unconditionally: a host
      * in a CSP is not a request, and the map only reaches it when configured.
      */
-    "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://tiles.openfreemap.org",
+    /*
+     * PRODUCTION PASS — the landing globe's relief: AWS Terrain Tiles (open
+     * data, Terrarium PNGs) from `s3.amazonaws.com/elevation-tiles-prod`.
+     * MapLibre fetches raster-dem tiles with `fetch`, so the host is needed in
+     * connect-src as well as img-src.
+     */
+    "img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org https://commons.wikimedia.org https://tiles.openfreemap.org https://s3.amazonaws.com",
     "font-src 'self' data:",
-    `connect-src 'self' https://tiles.openfreemap.org${connectExtras}`,
+    `connect-src 'self' https://tiles.openfreemap.org https://s3.amazonaws.com${connectExtras}`,
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "object-src 'none'",
@@ -58,8 +64,24 @@ export function securityHeaders(options: { dev: boolean }): { key: string; value
      * over plain http — and load-bearing the moment this is served over TLS.
      */
     { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+    /*
+     * PRODUCTION PASS — powerful features this product never uses are refused
+     * outright, so an injected script or a framed page cannot ask for them.
+     * Geolocation included: nothing in `src/` reads the device position. If a
+     * feature starts needing one, allow `self` for that feature only.
+     */
+    { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
   ];
 }
+
+export const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), magnetometer=(), gyroscope=(), accelerometer=(), browsing-topics=(), interest-cohort=()';
+
+/**
+ * PRODUCTION PASS — paths that must never be indexed even when robots allows
+ * the site: a share link is a capability URL and a trip page is private, so a
+ * search engine that learns either from a link elsewhere still must not list it.
+ */
+export const NOINDEX_SOURCES = ['/share/:path*', '/trips/:path*', '/api/:path*', '/profile', '/labs/:path*'];
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@sidequest/bench', '@sidequest/core', '@sidequest/geo', '@sidequest/planner'],
@@ -67,12 +89,19 @@ const nextConfig: NextConfig = {
   typedRoutes: false,
   /** Advertising the framework in a response header helps exactly one audience. */
   poweredByHeader: false,
+  /*
+   * PRODUCTION PASS — nothing renders `next/image`, so the optimizer endpoint
+   * (`/_next/image`) only ever served as attack surface (the 16.3 SSRF/RCE
+   * advisories). Images are served as-is.
+   */
+  images: { unoptimized: true },
   async headers() {
     return [
       {
         source: '/:path*',
         headers: securityHeaders({ dev: process.env.NODE_ENV === 'development' }),
       },
+      ...NOINDEX_SOURCES.map((source) => ({ source, headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] })),
       /*
        * V9 §11 — the trip service worker. `no-cache` so a browser revalidates
        * the worker file on every check and a new version actually replaces the

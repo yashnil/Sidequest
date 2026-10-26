@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Concept B — Folio</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..800,100;1,9..144,300..800,100&family=Bricolage+Grotesque:opsz,wght@12..96,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --night:#0d1a1f; --bone:#f1ebdf; --paper:#f7f2e8; --ink:#0f1b20; --mute:#6b6a62; --flare:#ff5a1f; --rust:#a8360a; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:#ddd; font-family:'Bricolage Grotesque',sans-serif; color:var(--ink); }
+  .frame { position:relative; width:1440px; height:900px; overflow:hidden; background:var(--paper); border-bottom:1px solid #999; }
+  .serif { font-family:'Fraunces',serif; font-variation-settings:'SOFT' 50; }
+  .mono { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; }
+  .chrome { position:absolute; top:26px; left:48px; right:48px; display:flex; justify-content:space-between; z-index:5; font-size:14px; }
+  .wordmark { font-family:'Fraunces'; font-size:22px; font-weight:600; }
+  img { display:block; object-fit:cover; }
+  .cap { font-family:'JetBrains Mono'; font-size:10px; letter-spacing:.08em; color:var(--mute); margin-top:8px; }
+  /* home */
+  #f-home .photo { position:absolute; right:0; top:0; width:820px; height:900px; }
+  #f-home h1 { position:absolute; left:48px; top:170px; font-size:150px; line-height:.86; font-weight:300; letter-spacing:-.05em; z-index:3; }
+  #f-home h1 i { font-weight:500; color:var(--rust); }
+  #f-home .dek { position:absolute; left:52px; top:520px; width:440px; font-size:19px; line-height:1.5; color:#3a3f3c; }
+  #f-home .field { position:absolute; left:52px; top:660px; width:520px; display:flex; border:1.5px solid var(--ink); border-radius:999px; padding:6px 6px 6px 26px; align-items:center; background:var(--paper); }
+  #f-home .field span { flex:1; font-family:'Fraunces'; font-style:italic; font-size:22px; color:#555; }
+  .btn { background:var(--ink); color:var(--bone); border-radius:999px; padding:14px 22px; font-weight:600; font-size:15px; }
+  .btn.f { background:var(--flare); color:var(--night); }
+  .chapters { position:absolute; left:52px; bottom:46px; display:flex; gap:40px; }
+  .chapters div { width:150px; border-top:1px solid var(--ink); padding-top:10px; font-size:13px; }
+  .chapters b { font-family:'Fraunces'; font-weight:400; font-size:24px; display:block; }
+  /* interview */
+  #f-interview .num { position:absolute; left:40px; top:90px; font-family:'Fraunces'; font-size:300px; line-height:.8; font-weight:200; color:#e3dac8; }
+  #f-interview h2 { position:absolute; left:52px; top:250px; width:620px; font-size:70px; line-height:.98; font-weight:300; letter-spacing:-.03em; }
+  #f-interview .opts { position:absolute; left:52px; top:500px; width:640px; }
+  .opt { display:flex; align-items:baseline; gap:16px; border-top:1px solid #cfc5b1; padding:13px 0; font-family:'Fraunces'; font-size:28px; font-weight:300; }
+  .opt.on { color:var(--rust); }
+  .opt .mono { width:30px; color:var(--mute); }
+  .opt .why { margin-left:auto; font-family:'Bricolage Grotesque'; font-size:13px; color:var(--mute); }
+  #f-interview .stack { position:absolute; right:56px; top:96px; width:560px; height:720px; }
+  #f-interview .stack img { position:absolute; box-shadow:0 18px 40px rgba(0,0,0,.18); }
+  /* board */
+  #f-board .lead { position:absolute; left:48px; top:100px; width:760px; }
+  #f-board .lead img { width:760px; height:470px; }
+  #f-board .lead h3 { font-size:58px; font-weight:300; letter-spacing:-.03em; margin-top:16px; }
+  #f-board .lead p { font-size:16px; color:#3a3f3c; width:600px; line-height:1.5; margin-top:8px; }
+  #f-board .toc { position:absolute; left:860px; top:100px; width:530px; }
+  .toc h4 { border-bottom:2px solid var(--ink); padding-bottom:8px; margin-bottom:4px; }
+  .entry { display:grid; grid-template-columns:28px 1fr 70px 22px; gap:12px; align-items:center; padding:9px 0; border-bottom:1px solid #ddd3c0; }
+  .entry .nm { font-family:'Fraunces'; font-size:20px; }
+  .entry .k { font-size:12px; color:var(--mute); }
+  .box { width:20px; height:20px; border:1.5px solid var(--ink); border-radius:3px; }
+  .box.on { background:var(--rust); border-color:var(--rust); }
+  #f-board .plate { position:absolute; left:860px; bottom:40px; width:530px; height:210px; border:1px solid var(--ink); }
+  /* itinerary */
+  #f-itin .daynum { position:absolute; left:40px; top:60px; font-family:'Fraunces'; font-size:420px; line-height:.8; font-weight:200; letter-spacing:-.06em; color:var(--ink); }
+  #f-itin .meta { position:absolute; left:52px; top:420px; width:520px; }
+  #f-itin h2 { font-size:46px; font-weight:300; line-height:1; letter-spacing:-.02em; margin:10px 0 24px; }
+  .tl { display:grid; grid-template-columns:70px 1fr; gap:0 18px; }
+  .tl .t { font-family:'JetBrains Mono'; font-size:13px; padding:10px 0; border-top:1px solid #cfc5b1; }
+  .tl .s { font-family:'Fraunces'; font-size:21px; padding:8px 0; border-top:1px solid #cfc5b1; }
+  .tl .s small { display:block; font-family:'Bricolage Grotesque'; font-size:12px; color:var(--mute); }
+  #f-itin .photo { position:absolute; right:48px; top:90px; width:740px; height:440px; }
+  #f-itin .plate { position:absolute; right:48px; bottom:48px; width:740px; height:290px; border:1px solid var(--ink); }
+</style>
+</head>
+<body>
+<section class="frame" id="f-home">
+  <img class="photo" id="hp">
+  <div class="chrome"><span class="wordmark">Sidequest</span><span>Trips · Sign in</span></div>
+  <h1 class="serif">The long<br>way <i>round</i>,<br>planned.</h1>
+  <p class="dek">Tell Sidequest where and how you travel. It reads the place, finds the famous stops and the quiet ones, and draws your days on a real map.</p>
+  <div class="field"><span>Lisbon in November</span><span class="btn f">Begin →</span></div>
+  <div class="chapters"><div><b class="serif">01</b>Ask once</div><div><b class="serif">02</b>See what's there</div><div><b class="serif">03</b>Choose</div><div><b class="serif">04</b>Your days, drawn</div></div>
+</section>
+<section class="frame" id="f-interview">
+  <div class="chrome"><span class="wordmark">Sidequest</span><span class="mono">Lisbon · 10–14 Nov</span></div>
+  <div class="num">03</div>
+  <h2 class="serif">How full should a day feel?</h2>
+  <div class="opts">
+    <div class="opt"><span class="mono">A</span>One thing, done slowly<span class="why">long lunches</span></div>
+    <div class="opt on"><span class="mono">B</span>Two or three, with room<span class="why">most people</span></div>
+    <div class="opt"><span class="mono">C</span>As much as fits<span class="why">early starts</span></div>
+  </div>
+  <div class="stack" id="stack"></div>
+</section>
+<section class="frame" id="f-board">
+  <div class="chrome"><span class="wordmark">Sidequest</span><span class="mono">Lisbon — the board · 23 found</span></div>
+  <div class="lead" id="lead"></div>
+  <div class="toc"><h4 class="mono">In this issue</h4><div id="toc"></div></div>
+  <div class="plate" id="m-board"></div>
+</section>
+<section class="frame" id="f-itin">
+  <div class="daynum">02</div>
+  <div class="meta"><div class="mono" style="color:var(--rust)">Wednesday 11 November · Lisbon</div><h2 class="serif">Old masters and the white dome</h2><div class="tl" id="tl"></div></div>
+  <img class="photo" id="ip">
+  <div class="plate" id="m-itin"></div>
+</section>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="shared.js"></script>
+<script src="data.js"></script>
+<script>
+const P = DATA.places, byId = Object.fromEntries(P.map((p) => [p.id, p]));
+document.getElementById('hp').src = P[0].img.replace('width=900', 'width=1600');
+document.getElementById('stack').innerHTML = [[P[6], 0, 0, 340, 430], [P[3], 230, 250, 330, 420], [P[13], 40, 520, 260, 190]].map(([p, x, y, w, h]) => `<img src="${p.img}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">`).join('');
+const lead = P[2];
+document.getElementById('lead').innerHTML = `<img src="${lead.img.replace('900', '1400')}"><div class="cap">Padrão dos Descobrimentos · Wikimedia Commons, CC BY-SA</div><div class="mono" style="margin-top:18px;color:var(--rust)">The lead · ${lead.kind} · 4 km from base</div><h3 class="serif">${lead.name}</h3><p>The stone prow of the Belém waterfront. Go late in the day, when the river turns copper, and walk on to the tower.</p>`;
+document.getElementById('toc').innerHTML = P.slice(3, 13).map((p, i) => `<div class="entry"><span class="mono">${String(i + 2).padStart(2, '0')}</span><div><div class="nm">${p.name}</div><div class="k">${p.kind}</div></div><span class="k">${p.mins} min</span><span class="box ${i % 3 ? 'on' : ''}"></span></div>`).join('');
+const pin = (map, pts) => map.on('load', () => { map.addSource('p', { type: 'geojson', data: { type: 'FeatureCollection', features: pts.map((p) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })) } }); map.addLayer({ id: 'p', type: 'circle', source: 'p', paint: { 'circle-radius': 5, 'circle-color': '#a8360a', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } }); });
+pin(makeMap('m-board', ATLAS.bone, P, { padding: 20, interactive: false }), P);
+const day = DATA.days[1]; const stops = day.items.filter((i) => i.kind === 'activity').map((i) => byId[i.place]);
+document.getElementById('ip').src = stops[0].img.replace('900', '1400');
+const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+document.getElementById('tl').innerHTML = day.items.filter((i) => i.kind !== 'travel').slice(0, 6).map((i) => `<span class="t">${fmt(i.start)}</span><span class="s">${i.title.replace(/ — .*/, '')}<small>${i.kind === 'meal' ? 'near the midday stop' : '1 hr 30 min'}</small></span>`).join('');
+const im = makeMap('m-itin', ATLAS.bone, stops, { padding: 40, interactive: false });
+pin(im, stops);
+im.on('load', () => { im.addSource('r', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: stops.map((p) => [p.lng, p.lat]) } } }); im.addLayer({ id: 'r', type: 'line', source: 'r', paint: { 'line-color': '#0f1b20', 'line-width': 1.5, 'line-dasharray': [3, 2] } }, 'p'); });
+</script>
+</body>
+</html>

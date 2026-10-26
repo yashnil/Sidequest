@@ -29,6 +29,8 @@ const MOBILE = viewport('mobile');
  */
 const RESPONSIVE_SPEC = ['**/viewports.spec.ts', '**/benchmark-viewports.spec.ts'];
 /** Today mode needs the fixture clock; `playwright.today.config.ts` runs it and clears this ignore. */
+/** The interactive-map suite needs the real map provider and a controlled tile source; `playwright.maps.config.ts` runs it. */
+const MAPS_SPEC = ['**/maps/**'];
 const TODAY_SPEC = ['**/live-world-today.spec.ts', '**/v9-today.spec.ts'];
 /**
  * V6 — needs the fixture climate; `playwright.timing.config.ts` runs it on its own server.
@@ -190,12 +192,12 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'light' },
-      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC, ...MAPS_SPEC],
     },
     {
       name: 'desktop-dark',
       use: { ...devices['Desktop Chrome'], viewport: DESKTOP, colorScheme: 'dark' },
-      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC, ...MAPS_SPEC],
     },
     {
       // Chromium at an iPhone viewport. This verifies responsive layout and touch
@@ -205,7 +207,7 @@ export default defineConfig({
       // viewport is stated, for the reason above.
       name: 'mobile',
       use: { ...devices['iPhone 13'], browserName: 'chromium', viewport: MOBILE },
-      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC],
+      testIgnore: [...RESPONSIVE_SPEC, ...TODAY_SPEC, ...TIMING_LOCK_SPEC, ...LIVE_SPEC, ...MAPS_SPEC],
     },
     /**
      * The tablet width, and only the responsive spec at it.
@@ -232,6 +234,9 @@ export default defineConfig({
     // The app and the tests now share one port, so stop `npm run dev` first —
     // reusing a running dev server here would silently test a different build
     // against the development database.
+    // No vector basemap (`SIDEQUEST_MAP_PROVIDER=` overrides `.env.local`): the
+    // suite drives the deterministic SVG figure, which is also what renders
+    // without WebGL, and never waits on a tile service.
     // The fixture weather provider, so a browser test asserts against weather it
     // chose rather than against whatever the sky was doing that morning — and so
     // an end-to-end run never depends on an external service being reachable.
@@ -294,7 +299,7 @@ export default defineConfig({
     // server is a test server. Fixture sign-in has its own, narrower door
     // (`SIDEQUEST_AUTH_FIXTURE=allow`); it used to open on `SIDEQUEST_ACTION_FENCES=off`
     // as well, and that second door is closed.
-    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= GOOGLE_MAPS_API_KEY= SIDEQUEST_GEOCODER_PROVIDER=off SIDEQUEST_PLACE_BACKBONE=off SIDEQUEST_POI_PROVIDER=off SIDEQUEST_ROUTES_PROVIDER=off SIDEQUEST_RESEARCH_PROVIDER=off SIDEQUEST_IMAGERY_PROVIDER=fixture SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_COMPOSER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_FX_PROVIDER=off SIDEQUEST_DESTINATION_INTERPRETER=fixture SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_AUTH_PROVIDER=fixture SIDEQUEST_AUTH_FIXTURE=allow SIDEQUEST_FIXTURES=allow SIDEQUEST_BASE_URL=http://127.0.0.1:${PORT} SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
+    command: `SIDEQUEST_DB_PATH=${DATABASE_PATH} SIDEQUEST_SECURE_COOKIES=off ANTHROPIC_API_KEY= GOOGLE_MAPS_API_KEY= SIDEQUEST_GEOCODER_PROVIDER=off SIDEQUEST_PLACE_BACKBONE=off SIDEQUEST_POI_PROVIDER=off SIDEQUEST_ROUTES_PROVIDER=off SIDEQUEST_RESEARCH_PROVIDER=off SIDEQUEST_IMAGERY_PROVIDER=fixture SIDEQUEST_TIMEZONE_PROVIDER=off SIDEQUEST_TRANSIT_PROVIDER= SIDEQUEST_MAP_PROVIDER= SIDEQUEST_WEATHER_PROVIDER=fixture SIDEQUEST_COMPILER_PROVIDER=fixture SIDEQUEST_COMPOSER_PROVIDER=fixture SIDEQUEST_CLIMATE_PROVIDER=off SIDEQUEST_FX_PROVIDER=off SIDEQUEST_DESTINATION_INTERPRETER=fixture SIDEQUEST_BENCHMARK_MODE=fixture SIDEQUEST_BENCHMARK_BUDGET_USD= SIDEQUEST_ACTION_FENCES=off SIDEQUEST_AUTH_PROVIDER=fixture SIDEQUEST_AUTH_FIXTURE=allow SIDEQUEST_FIXTURES=allow SIDEQUEST_BASE_URL=http://127.0.0.1:${PORT} SIDEQUEST_DESTINATION_INDEX_SEED=../../e2e/support/destination-index.ndjson PORT=${PORT} npm run start --workspace @sidequest/web`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

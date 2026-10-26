@@ -1,3 +1,4 @@
+import { recommendedInterests } from './recommended';
 import { UNIVERSAL_INTERESTS } from '../interests/vocabulary';
 import {
   INTEREST_LABELS,
@@ -326,6 +327,8 @@ export function priorityOffer(ctx: InterviewContext, answers: QuestionnaireAnswe
   const chosen = chosenInterests(answers);
   for (const theme of ctx.traveller.composerThemes ?? []) for (const interest of THEME_INTERESTS[theme] ?? []) push(interest);
   for (const interest of chosen) push(interest);
+  /* Production pass — the trip's recommended three are always on the first screen. */
+  for (const { interest } of recommendedInterests(ctx)) push(interest);
   for (const interest of signatureInterests(ctx)) push(interest);
   for (const interest of UNIVERSAL_INTERESTS) push(interest);
   for (const interest of offered) push(interest);
@@ -404,7 +407,12 @@ const PRIORITIES: QuestionDefinition = {
     return { interests };
   },
   smartDefault: (ctx, answers) => {
-    const picks = priorityOffer(ctx, answers).slice(0, 3);
+    /*
+     * Production pass — "Decide for me" applies exactly what the screen marks
+     * as Recommended, so the badge and the default can never disagree.
+     */
+    const recommended = recommendedInterests(ctx).map((r) => r.interest);
+    const picks = recommended.length >= 2 ? recommended : priorityOffer(ctx, answers).slice(0, 3);
     const label = ctx.destination.traits.length > 0 ? `a place like ${ctx.destination.proseName}` : 'most trips';
     return {
       value: picks,

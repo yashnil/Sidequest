@@ -47,6 +47,8 @@ export interface ResolvedPosition {
   method: 'places' | 'geocoder' | 'locality';
   provider: string;
   providerRef?: string;
+  /** The Wikidata item the placing source named for this exact place, when it named one. Imagery reads it; nothing invents it from a name. */
+  wikidataId?: string;
   /** True when the point stands for the locality rather than the thing itself. */
   approximate: boolean;
   /** Settled locality from the provider, when it gave one. */
@@ -215,6 +217,14 @@ export interface AssembleScanRegionInput {
   createdAt: string;
   /** Which providers answered, for the source manifest and the coverage note. */
   providers: { proposal: string; placement: readonly string[]; routing: string };
+  /**
+   * Who proposed the candidates. `open_data` is the scan's fallback when the
+   * research model was unavailable (`apps/web/src/lib/discovery-scan/open-data-proposal.ts`):
+   * notable OpenStreetMap places ranked with Wikidata. It changes only how
+   * provenance is worded and licensed, never how anything is planned. Absent
+   * means the model (or its fixture).
+   */
+  proposalSource?: 'model' | 'open_data';
   /**
    * Somewhere to eat, from the scan's food step: venues whose `routingId` is
    * one of `plan.points` (snapped within a door walk), or null when nothing
@@ -545,6 +555,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
   const transportModes: TransportMode[] = input.carAvailable === false ? ['walk', 'public_bus', 'rail', 'rideshare'] : ['drive', 'walk'];
 
   // --- places -------------------------------------------------------------------
+  const openData = input.proposalSource === 'open_data';
+  const proposedBy = openData ? 'Found on OpenStreetMap and ranked with Wikidata' : "Proposed by Sidequest's research model";
   const places: Place[] = placeEntries.map(({ id, proposal: c }) => {
     const position = positionOf(c.key)!;
     const profile = SCAN_KIND_PROFILES[c.kind];
@@ -557,18 +569,19 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const hidden = c.tier === 'hidden_gem' ? 0.75 : c.tier === 'side_quest' ? 0.5 : 0.15;
     const sourceName =
       position.accessPoint
-        ? `Proposed by Sidequest's research model; routed from its ${position.accessPoint.kind.replace(/_/g, ' ')}${position.accessPoint.name ? ` (${position.accessPoint.name})` : ''}, located with ${position.provider}`
+        ? `${proposedBy}; routed from its ${position.accessPoint.kind.replace(/_/g, ' ')}${position.accessPoint.name ? ` (${position.accessPoint.name})` : ''}, located with ${position.provider}`
         : position.method === 'places'
-        ? `Proposed by Sidequest's research model; located with ${position.provider}`
+        ? `${proposedBy}; located with ${position.provider}`
         : position.method === 'geocoder'
-          ? `Proposed by Sidequest's research model; located with ${position.provider}`
-          : `Proposed by Sidequest's research model; placed at its town by ${position.provider}`;
+          ? `${proposedBy}; located with ${position.provider}`
+          : `${proposedBy}; placed at its town by ${position.provider}`;
     const place: Place = {
       id,
       regionId: input.regionId,
       name: c.name,
       // The proposal's own locality, in the traveller's language; the geocoder's is a fallback, never a replacement.
       locality: c.locality || position.locality || input.destinationName,
+      ...(position.wikidataId && /^Q\d+$/.test(position.wikidataId) ? { wikidataId: position.wikidataId } : {}),
       shortDescription: c.why.slice(0, 280),
       coordinates: position.coordinates,
       tags: [`kind:${c.kind}`, `tier:${c.tier}`, ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
@@ -806,9 +819,9 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
   const measured = matrix.provenance.kind === 'measured';
   const dimensions: CoverageDimensionReport[] = [
     { dimension: 'geographic_resolution', level: 'usable_with_cautions', reasons: ['inferred_not_sourced'], detail: 'An area drawn around the places the scan found, not a published boundary.' },
-    { dimension: 'places', level: places.length >= 12 ? 'usable_with_cautions' : 'weak', reasons: ['inferred_not_sourced'], detail: `${places.length} places proposed by Sidequest's research model and located on a map (${precise} precisely).`, expected: proposal.candidates.length, covered: places.length },
-    { dimension: 'mainstream_attractions', level: 'usable_with_cautions', reasons: ['inferred_not_sourced'], detail: 'Classics come from travel knowledge, not a popularity database.' },
-    { dimension: 'hidden_gems', level: 'usable_with_cautions', reasons: ['inferred_not_sourced'], detail: 'Quieter places were proposed deliberately; how quiet they are is a judgement, not a count.' },
+    { dimension: 'places', level: places.length >= 12 ? 'usable_with_cautions' : 'weak', reasons: ['inferred_not_sourced'], detail: openData ? `${places.length} notable places found on OpenStreetMap and ranked with Wikidata, because the research model was unavailable (${precise} placed precisely).` : `${places.length} places proposed by Sidequest's research model and located on a map (${precise} precisely).`, expected: proposal.candidates.length, covered: places.length },
+    { dimension: 'mainstream_attractions', level: 'usable_with_cautions', reasons: ['inferred_not_sourced'], detail: openData ? 'Classics are the places Wikipedia writes about most, counted on Wikidata; a count of attention, not a judgement of quality.' : 'Classics come from travel knowledge, not a popularity database.' },
+    { dimension: 'hidden_gems', level: 'usable_with_cautions', reasons: ['inferred_not_sourced'], detail: openData ? 'Hidden gems here are mapped, linked places with less written about them; nobody has judged how quiet they are.' : 'Quieter places were proposed deliberately; how quiet they are is a judgement, not a count.' },
     { dimension: 'operating_hours', level: 'weak', reasons: ['no_official_source_found'], detail: 'No opening hours are stored here; staffed places are checked when the trip is built where a provider has them.', expected: places.length, covered: 0 },
     { dimension: 'road_routing', level: mode === 'car' ? (measured ? 'high' : 'usable_with_cautions') : 'not_applicable', reasons: mode === 'car' ? [measured ? 'fully_covered' : 'inferred_not_sourced'] : ['not_relevant_to_region'], detail: measured ? `Travel times measured by ${input.providers.routing}.` : 'Travel times estimated from distance; no router answered.' },
     { dimension: 'walking_routing', level: mode === 'foot' ? (measured ? 'high' : 'usable_with_cautions') : 'not_applicable', reasons: mode === 'foot' ? [measured ? 'fully_covered' : 'inferred_not_sourced'] : ['not_relevant_to_region'], detail: measured ? `Walking times measured by ${input.providers.routing}.` : 'Walking times estimated from distance.' },
@@ -873,8 +886,13 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
         }
       : {}),
     licences: [
-      ...(input.food?.source === 'openstreetmap' && food ? [licence('ODbL-1.0', ['food'])] : []),
-      licence('sidequest-authored', ['places', 'access', 'hours']),
+      ...((osm) => (osm.length > 0 ? [licence('ODbL-1.0', osm)] : []))([
+        ...(openData ? ['places'] : []),
+        ...(input.food?.source === 'openstreetmap' && food ? ['food'] : []),
+        /* Production pass — a stop Nominatim placed carries OpenStreetMap coordinates. */
+        ...(!openData && input.providers.placement.includes('nominatim') ? ['placement'] : []),
+      ]),
+      licence('sidequest-authored', openData ? ['access', 'hours'] : ['places', 'access', 'hours']),
     ],
     sourceManifest: {
       facts: [],
@@ -885,14 +903,19 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
         { name: input.providers.routing, version: '1', calls: 0, failures: 0 },
         ...(food && input.food?.source === 'openstreetmap' ? [{ name: input.food.providerName ?? 'openstreetmap', version: '1', calls: 0, failures: 0 }] : []),
       ],
-      attributions: [],
+      attributions: scanAttributions({
+        placement: input.providers.placement,
+        routing: input.providers.routing,
+        openData,
+        osmFood: Boolean(food && input.food?.source === 'openstreetmap'),
+      }),
     },
     coverage: {
       dimensions,
       blocksItinerary: blocking.blocksItinerary,
       blockingDimensions: blocking.blockingDimensions,
       recheckFactIds: [],
-      summary: `Proposed by Sidequest's research model for this traveller, located on a map, timed by ${measured ? input.providers.routing : 'distance estimates'}. Hours and access are checked when the trip is built.`,
+      summary: `${openData ? 'Found on OpenStreetMap and ranked with Wikidata for this traveller because the research model was unavailable' : "Proposed by Sidequest's research model for this traveller, located on a map"}, timed by ${measured ? input.providers.routing : 'distance estimates'}. Hours and access are checked when the trip is built.`,
     },
     diagnostics: {
       compilerVersion: SCAN_COMPILER_VERSION,
@@ -917,3 +940,24 @@ export const SCAN_COMPILER_VERSION = 'discovery-scan/1';
 
 /** Months the scan's dates touch, for callers assembling a region request. */
 export { monthsOf as scanMonthsOf };
+
+/**
+ * PRODUCTION PASS — WHOSE DATA A SCAN-BUILT TRIP SHOWS, SAID ON THE TRIP.
+ *
+ * The scan wrote `attributions: []`, so a plan whose stops were placed by
+ * Nominatim — the normal path — rendered and printed with no OpenStreetMap
+ * notice. The list now follows the providers that actually contributed, and
+ * the strings come from the licence records where one exists (never
+ * paraphrased). Rendered by `ItineraryView` (itinerary, share, print) and the
+ * Discovery Board footer, which already read `sourceManifest.attributions`.
+ */
+export function scanAttributions(input: { placement: readonly string[]; routing: string | null; openData: boolean; osmFood: boolean }): string[] {
+  const out: string[] = [];
+  const routing = (input.routing ?? '').toLowerCase();
+  const osmRouting = /valhalla|openrouteservice|osrm|osm/.test(routing);
+  if (input.openData || input.osmFood || input.placement.includes('nominatim') || osmRouting) out.push(licence('ODbL-1.0').attribution);
+  if (input.openData) out.push('Wikidata (CC0)');
+  if (input.placement.includes('google-places')) out.push('Place locations from Google');
+  if (routing.includes('openrouteservice')) out.push('Routing © openrouteservice.org by HeiGIT');
+  return out;
+}

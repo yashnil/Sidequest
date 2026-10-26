@@ -316,14 +316,14 @@ export function describeTiming(draft: SetupDraft): { value: string; assumed: boo
     case 'flexible': {
       const nights = nightsBetween(draft.startDate, draft.endDate);
       if (nights === null) return { value: 'Not set', assumed: false };
-      return { value: `${draft.startDate} → ${draft.endDate}${draft.dateMode === 'flexible' ? ` ± ${draft.flexDays}d` : ''}`, assumed: false };
+      return { value: `${humanRange(draft.startDate, draft.endDate)}${draft.dateMode === 'flexible' ? ` ± ${draft.flexDays} days` : ''}`, assumed: false };
     }
     case 'month':
       return { value: MONTH_NAMES[draft.month - 1] ?? '—', assumed: false };
     case 'months':
       return { value: draft.months.map((m) => MONTH_NAMES[m - 1]?.slice(0, 3) ?? '').join(', '), assumed: false };
     case 'window':
-      return { value: `Free ${draft.earliest} → ${draft.latest}`, assumed: false };
+      return { value: draft.earliest && draft.latest ? `Free ${humanRange(draft.earliest, draft.latest)}` : 'A window you are free', assumed: false };
     case 'season':
       return { value: draft.season.charAt(0).toUpperCase() + draft.season.slice(1), assumed: false };
     case 'best_time':
@@ -332,6 +332,24 @@ export function describeTiming(draft: SetupDraft): { value: string; assumed: boo
     default:
       return { value: 'Not decided', assumed: true };
   }
+}
+
+/**
+ * Two ISO dates as a person writes them: "10 – 15 Dec 2026", "28 Dec – 3 Jan
+ * 2027". The summary is read, not parsed; anything malformed is shown as typed.
+ */
+export function humanRange(start: string, end: string): string {
+  const parse = (iso: string) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return match ? { y: Number(match[1]), m: Number(match[2]), d: Number(match[3]) } : null;
+  };
+  const a = parse(start);
+  const b = parse(end);
+  if (!a || !b) return `${start} → ${end}`;
+  const mon = (m: number) => MONTH_NAMES[m - 1]?.slice(0, 3) ?? '';
+  if (a.y === b.y && a.m === b.m) return `${a.d} – ${b.d} ${mon(b.m)} ${b.y}`;
+  if (a.y === b.y) return `${a.d} ${mon(a.m)} – ${b.d} ${mon(b.m)} ${b.y}`;
+  return `${a.d} ${mon(a.m)} ${a.y} – ${b.d} ${mon(b.m)} ${b.y}`;
 }
 
 export interface SetupSummary {

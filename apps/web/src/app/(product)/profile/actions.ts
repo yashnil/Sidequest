@@ -4,7 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { SIGNAL_STRENGTH, featureIsLearnable } from '@sidequest/core';
-import { currentUser } from '@/lib/auth/session';
+import { cookies } from 'next/headers';
+import { currentUser, currentUserId } from '@/lib/auth/session';
+import { AUTH_COOKIE } from '@/lib/auth/config';
+import { DELETE_ALL_CONFIRMATION } from '@/lib/data-rights/confirmation';
+import { anyTripBusy, deleteOwnerData, ownedTripIds } from '@/lib/db/data-rights-repository';
+import { guardAction, presentedSessionToken, secureCookiesEnabled } from '@/lib/net/caller';
 import { updateUserProfile } from '@/lib/db/auth-repository';
 import { dismissFeature, restoreFeature } from '@/lib/db/execution-repository';
 import { learnedWithDismissals, recordPreferenceEvidence } from '@/lib/db/preference-evidence-repository';
@@ -112,4 +117,48 @@ function recordConfirmation(userId: string, feature: string, how: 'restored' | '
       createdAt: new Date().toISOString(),
     },
   ]);
+}
+
+/**
+ * PRODUCTION PASS — "DELETE ALL MY DATA".
+ *
+ * Deletes everything the asker owns under the one ownership rule
+ * (`lib/net/trip-access.ts`): every trip on the signed-in account and the
+ * account itself (its sessions, people, evidence, saved ideas and dismissals
+ * cascade), plus every *unclaimed* row the presented browser cookie made. A
+ * trip on someone else's account is never reached through the cookie.
+ *
+ * Two steps: the page asks first, and this action refuses unless the typed
+ * confirmation phrase arrives with it, so a stray POST cannot erase anything.
+ * The browser keeps its anonymous cookie, which afterwards owns nothing; the
+ * account cookie is cleared because the account is gone.
+ */
+export type DeleteAllResult = { ok: true; trips: number; account: boolean } | { ok: false; error: string };
+
+export async function deleteAllMyDataAction(confirmation: string): Promise<DeleteAllResult> {
+  const limited = await guardAction('data_rights');
+  if (limited) return { ok: false, error: limited };
+  if (typeof confirmation !== 'string' || confirmation.trim().toLowerCase() !== DELETE_ALL_CONFIRMATION) {
+    return { ok: false, error: `Type “${DELETE_ALL_CONFIRMATION}” to confirm. Nothing was deleted.` };
+  }
+  const userId = await currentUserId();
+  const ownerToken = await presentedSessionToken();
+  if (!userId && !ownerToken) return { ok: true, trips: 0, account: false };
+  const owner = { userId, ownerToken };
+  if (anyTripBusy(ownedTripIds(owner))) {
+    return { ok: false, error: 'One of your trips is being researched right now. Stop that build first, then try again. Nothing was deleted.' };
+  }
+  try {
+    const report = deleteOwnerData(owner);
+    if (report.account) {
+      const jar = await cookies();
+      jar.set(AUTH_COOKIE, '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0, secure: secureCookiesEnabled() });
+    }
+    console.warn('[sidequest] data deletion', JSON.stringify({ kind: userId ? 'account' : 'browser', trips: report.trips, account: report.account }));
+    revalidatePath('/', 'layout');
+    return { ok: true, trips: report.trips, account: report.account };
+  } catch (error) {
+    console.error('Data deletion failed', { name: error instanceof Error ? error.name : 'Error' });
+    return { ok: false, error: 'We could not delete your data just then. Nothing was deleted — try again.' };
+  }
 }

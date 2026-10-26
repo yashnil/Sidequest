@@ -111,6 +111,17 @@ function judge(place: NominatimPlace, options: PlacementOptions): { point: { lat
 }
 
 /** The first acceptable row, or why there was none: no rows at all, or the first refusal among the rows that came back. */
+/**
+ * The Wikidata item the geocoder row names, carried onto a precise placement so the
+ * board can look for a licensed photograph of *this* place by identifier rather
+ * than by name. An approximate (area-level) answer keeps none: its item is the
+ * area, not the thing the traveller would visit.
+ */
+function withWikidata(position: ResolvedPosition, place: NominatimPlace): ResolvedPosition {
+  const id = place.extratags?.wikidata?.trim();
+  return !position.approximate && id && /^Q\d+$/.test(id) ? { ...position, wikidataId: id } : position;
+}
+
 async function geocodeFirst(query: string, options: PlacementOptions, wholePhrase?: string): Promise<{ point: { lat: number; lng: number }; place: NominatimPlace } | { outcome: PlacementOutcome }> {
   const result = await geocode(query, { limit: 5 });
   let refusal: PlacementOutcome = 'no_results';
@@ -197,6 +208,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
           position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
+          position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }
       } catch {
@@ -221,6 +233,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
           position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
+          position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }
       } catch {
@@ -241,6 +254,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
           position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
+          position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }
       } catch {

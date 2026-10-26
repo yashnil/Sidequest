@@ -17,14 +17,15 @@ import type { MapBasemap } from '../map-adapter';
 import { DestinationField, type DestinationSuggestionView } from './DestinationField';
 import { TimingStep } from './TimingStep';
 import { StagePath } from '../interview/StagePath';
-import { Glyph } from '../interview/glyphs';
+import { onRadioGroupKeys, rovingTabIndex } from './radio-keys';
+import { ACCENT_WAITING, StepHeading } from './StepHeading';
 import { QUESTION_S, QUESTION_VARIANTS, timing, type Direction } from '../interview/choreography';
-import { ErrorNote, FOCUS_RING, buttonClass, cx, selectableCardClass } from '../ui';
+import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
 import { scopeWords } from './destination-prefill';
 import { createTripFromComposer, updateTripFromComposer, type ComposerResult } from '@/app/(product)/trips/new/actions';
 import { placeDestinationAction } from '@/app/(product)/trips/new/place-actions';
 import type { SetupDraft, SetupStepId } from './setup-draft';
-import { SETUP_STEPS, describeParty, initialDraft, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf, advanceDraft } from './setup-draft';
+import { SETUP_STEPS, SETUP_STEP_LABELS, describeParty, initialDraft, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf, advanceDraft } from './setup-draft';
 
 /**
  * ONE QUESTION AT A TIME, FROM THE FIRST SCREEN.
@@ -289,6 +290,12 @@ export function SetupFlow({
   }, [initialDestination, editing, place]);
 
   const summary = useMemo(() => summaryOf(draft), [draft]);
+  /* Steps that still count for this trip and have no line in the summary yet — "How long" disappears once two dates answer it. */
+  const ahead = useMemo(() => {
+    const shown = new Set(summary.lines.map((line) => line.label));
+    const lineFor: Record<SetupStepId, string> = { where: 'Where', when: 'When', nights: 'Length', who: 'Who', fixed: 'Anything fixed' };
+    return SETUP_STEPS.filter((id) => stepIsRelevant(id, draft) && !shown.has(lineFor[id]) && !(id === 'fixed' && draft.answered.includes('fixed')));
+  }, [summary, draft]);
   /* The semantic reading names the kind of thing first; the row's own class is the fallback. */
   const scope = scopeWords(draft.destinationSemanticType) ?? scopeWords(draft.destinationFeatureType);
 
@@ -351,100 +358,157 @@ export function SetupFlow({
   const back = previousStep(step, draft);
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-5 pb-32 sm:px-8 lg:pb-16" data-testid="setup-flow" data-step={step}>
-      <div className="pt-6">
-        <StagePath current="trip" note={summary.short} />
-      </div>
-
-      <div className={cx('mt-8 grid gap-10', step === 'where' ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-center' : 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start')}>
-        <div className="relative min-w-0">
-          {/*
-            V8 — one question replaces another with a directional slide: forward
-            enters from the right, back from the left, the outgoing one fades in
-            place. ≤ 260 ms; nothing under reduced motion. `popLayout` lifts the
-            outgoing screen out of the flow so the two never stack.
-          */}
-          <AnimatePresence initial={false} mode="wait" custom={direction}>
-            <motion.div key={step} custom={direction} variants={QUESTION_VARIANTS} initial="initial" animate="animate" exit="exit" transition={timing(QUESTION_S, reduced)} className="min-w-0">
-              {step === 'where' ? (
-                <WhereStep
-                  intent={intent}
-                  draft={draft}
-                  headingRef={heading}
-                  error={fieldErrors.destination}
-                  onChange={patch}
-                  onSubmit={advance}
-                  onSettle={place}
-                />
-              ) : null}
-
-              {step === 'when' ? (
-                <TimingStep
-                  draft={draft}
-                  headingRef={heading}
-                  onChange={patch}
-                  onContinue={advance}
-                />
-              ) : null}
-
-              {step === 'nights' ? <NightsStep draft={draft} headingRef={heading} onChange={patch} onSubmit={advance} /> : null}
-              {step === 'who' ? <WhoStep draft={draft} headingRef={heading} onChange={patch} /> : null}
-              {step === 'fixed' ? <FixedStep draft={draft} headingRef={heading} onChange={patch} hasPlan={intent === 'has_plan'} /> : null}
-            </motion.div>
-          </AnimatePresence>
-
-          {error ? <ErrorNote>{error}</ErrorNote> : null}
-
-          <div className="mt-10 hidden items-center justify-between gap-4 border-t border-rule pt-6 lg:flex">
-            <div className="flex items-center gap-2">
-              {back ? (
-                <button type="button" onClick={() => goTo(back, 'push')} className={buttonClass('ghost')} data-testid="setup-back">
-                  ← Back
-                </button>
-              ) : null}
-              {step === 'fixed' ? <span className="type-small text-ink-faint">Optional — most trips have nothing here.</span> : null}
-            </div>
-            <button type="button" onClick={() => advance()} disabled={!canContinue || pending} className={buttonClass('primary', 'lg')} data-testid="setup-continue">
-              {pending ? 'Saving…' : nextStep(step, draft) === null ? 'Start the interview →' : 'Continue →'}
-            </button>
-          </div>
+    <div className="survey min-h-[calc(100dvh-var(--chrome-height))]">
+      <div className="mx-auto w-full max-w-7xl px-5 pb-36 sm:px-8 lg:pb-16" data-testid="setup-flow" data-step={step}>
+        <div className="pt-5">
+          <StagePath current="trip" note={summary.short} />
         </div>
 
-        <aside className="min-w-0">
-          <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} locating={locating} unplacedNote={unplacedNote} scope={scope} />
-          {/*
-            V8 — THE TRIP PORTRAIT. The same object the review later opens on:
-            a compact set of facts the traveller has actually given, each
-            settling into place as it is answered. Labels are true labels
-            (12 px, lightly tracked); a figure is set as a figure.
-          */}
-          {summary.lines.length > 0 ? (
-            <dl className="card mt-4 divide-y divide-rule px-4" data-testid="setup-summary" aria-label="Your trip so far">
-              <AnimatePresence initial={false}>
-                {summary.lines.map((line) => (
-                  <motion.div key={line.label} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={timing(QUESTION_S, reduced)} className="flex items-baseline justify-between gap-3 py-2.5">
-                    <dt className="label">{line.label}</dt>
-                    <dd className={cx('min-w-0 text-right text-sm', /\d/.test(line.value) ? 'type-figure' : '', line.assumed ? 'text-ink-muted italic' : 'text-ink')}>{line.value}</dd>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </dl>
-          ) : null}
-        </aside>
-      </div>
+        <div className="mt-6 grid gap-8 lg:mt-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] lg:gap-14">
+          <div
+            className="relative order-1 min-w-0 lg:order-1"
+            onKeyDown={(event) => {
+              /*
+               * Enter moves on from any step, the way it does from the
+               * destination field — but never from a control that owns Enter
+               * itself (a button presses, a textarea breaks a line).
+               */
+              if (event.key !== 'Enter' || event.defaultPrevented || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+              const target = event.target as HTMLElement;
+              if (['BUTTON', 'TEXTAREA', 'SELECT', 'A'].includes(target.tagName)) return;
+              if (!isStepAnswered(step, draftRef.current) || pending) return;
+              event.preventDefault();
+              advance();
+            }}
+          >
+            {/*
+              V8 — one question replaces another with a directional slide: forward
+              enters from the right, back from the left. ≤ 260 ms; nothing under
+              reduced motion.
+            */}
+            <AnimatePresence initial={false} mode="wait" custom={direction}>
+              <motion.div key={step} custom={direction} variants={QUESTION_VARIANTS} initial="initial" animate="animate" exit="exit" transition={timing(QUESTION_S, reduced)} className="min-w-0">
+                {step === 'where' ? (
+                  <WhereStep
+                    intent={intent}
+                    draft={draft}
+                    headingRef={heading}
+                    error={fieldErrors.destination}
+                    onChange={patch}
+                    onSubmit={advance}
+                    onSettle={place}
+                  />
+                ) : null}
 
-      {/* Phones: the one action, always under the thumb. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-rule bg-paper/95 px-5 py-3 backdrop-blur-sm lg:hidden">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          {back ? (
-            <button type="button" onClick={() => goTo(back, 'push')} className={cx(buttonClass('ghost'), 'shrink-0')} aria-label="Back">
-              ←
+                {step === 'when' ? (
+                  <TimingStep
+                    draft={draft}
+                    headingRef={heading}
+                    onChange={patch}
+                    onContinue={advance}
+                  />
+                ) : null}
+
+                {step === 'nights' ? <NightsStep draft={draft} headingRef={heading} onChange={patch} onSubmit={advance} /> : null}
+                {step === 'who' ? <WhoStep draft={draft} headingRef={heading} onChange={patch} /> : null}
+                {step === 'fixed' ? <FixedStep draft={draft} headingRef={heading} onChange={patch} hasPlan={intent === 'has_plan'} /> : null}
+              </motion.div>
+            </AnimatePresence>
+
+            {error ? <ErrorNote>{error}</ErrorNote> : null}
+
+            <div className="mt-12 hidden items-center justify-between gap-4 border-t-[1.5px] border-ink pt-4 lg:flex">
+              <div className="flex items-center gap-3">
+                {back ? (
+                  <button type="button" onClick={() => goTo(back, 'push')} className={buttonClass('ghost')} data-testid="setup-back">
+                    ← Back
+                  </button>
+                ) : null}
+                {step === 'fixed' ? <span className="type-small text-ink-faint">Optional — most trips have nothing here.</span> : null}
+              </div>
+              <div className="flex items-center gap-4">
+                {canContinue && !pending && step !== 'fixed' ? (
+                  <span className="hidden font-mono text-[11px] tracking-[0.06em] text-ink-faint xl:inline" aria-hidden="true">
+                    or press <kbd className="rounded-[3px] border border-ink/25 bg-paper-raised px-1.5 py-0.5 text-ink-muted">Enter ↵</kbd>
+                  </span>
+                ) : null}
+                <button type="button" onClick={() => advance()} disabled={!canContinue || pending} className={cx(buttonClass('accent', 'lg'), ACCENT_WAITING)} data-testid="setup-continue">
+                  {pending ? 'Saving…' : nextStep(step, draft) === null ? 'Start the interview →' : 'Continue →'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* On a phone the question comes first and the map follows it, so the field and its examples are above the fold. */}
+          <aside className="order-2 min-w-0 lg:order-2">
+            <div className="lg:sticky lg:top-[calc(var(--chrome-height)+1.25rem)]">
+              <DestinationCanvas geometry={geometry} tiles={tiles} destinationText={draft.destinationText} placing={placing} attempted={attempted} locating={locating} unplacedNote={unplacedNote} scope={scope} />
+              {/*
+                V8 — THE TRIP PORTRAIT: only the facts the traveller has actually
+                given, as ruled rows, each settling into place as it is answered.
+              */}
+              <div className="mt-4 hidden lg:block">
+                <div className="flex items-baseline justify-between gap-3 pb-2">
+                  <p className="sheet-label text-ink">Your trip so far</p>
+                  <p className="font-mono text-[11px] tracking-[0.06em] text-ink-faint">{ahead.length === 0 ? 'All set' : `${ahead.length} ${ahead.length === 1 ? 'question' : 'questions'} to go`}</p>
+                </div>
+              {summary.lines.length > 0 ? (
+                <dl className="ruled border-t-[1.5px] border-ink" data-testid="setup-summary" aria-label="Your trip so far">
+                  <AnimatePresence initial={false}>
+                    {summary.lines.map((line) => (
+                      <motion.div key={line.label} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={timing(QUESTION_S, reduced)} className="flex items-baseline justify-between gap-3 py-2.5">
+                        <dt className="sheet-label text-ink-muted">{line.label}</dt>
+                        <dd className={cx('min-w-0 text-right font-display text-lg', /\d/.test(line.value) ? 'type-figure' : '', line.assumed ? 'text-ink-muted italic' : 'text-ink')}>{line.value}</dd>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </dl>
+              ) : null}
+              {/*
+                What is still to come, as the same ruled rows in their empty state:
+                a sense of how short this is, and the right-hand column stops
+                being a small map above a lot of nothing.
+              */}
+              {ahead.length > 0 ? (
+                <ol className={cx('ruled', summary.lines.length > 0 ? 'border-t border-ink/15' : 'border-t-[1.5px] border-ink')} aria-label="Still to come" data-testid="setup-ahead">
+                  {ahead.map((id) => (
+                    <li key={id} className={cx('flex items-baseline justify-between gap-3 py-2.5', id === step ? 'text-ink' : 'text-ink-faint')}>
+                      <span className="sheet-label">{SETUP_STEP_LABELS[id]}</span>
+                      <span className="flex items-center gap-2 font-mono text-[11px] tracking-[0.06em]">
+                        {id === step ? (
+                          <>
+                            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-flare" />
+                            Answering now
+                          </>
+                        ) : (
+                          <span aria-hidden="true" className="inline-block h-px w-10 bg-current opacity-50" />
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+              <p className="mt-4 text-sm leading-relaxed text-ink-muted">
+                {step === 'fixed' ? 'Next: a short interview about how you like to travel. Every question can be handed to Sidequest.' : 'About a minute. Nothing is booked or charged — you can change any answer later.'}
+              </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {/* Phones: the one action, always under the thumb. */}
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t-[1.5px] border-ink bg-paper/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm lg:hidden">
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            {back ? (
+              <button type="button" onClick={() => goTo(back, 'push')} className={cx(buttonClass('secondary'), 'w-11 shrink-0 px-0')} aria-label="Back">
+                ←
+              </button>
+            ) : null}
+            <span className="sheet-label min-w-0 flex-1 truncate text-ink-muted">{summary.short}</span>
+            <button type="button" onClick={() => advance()} disabled={!canContinue || pending} className={cx(buttonClass('accent'), ACCENT_WAITING, 'shrink-0 px-6')} data-testid="setup-continue">
+              {pending ? 'Saving…' : nextStep(step, draft) === null ? 'Start' : 'Continue →'}
             </button>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">{summary.short}</span>
-          <button type="button" onClick={() => advance()} disabled={!canContinue || pending} className={cx(buttonClass('primary'), 'shrink-0')} data-testid="setup-continue">
-            {pending ? 'Saving…' : nextStep(step, draft) === null ? 'Start' : 'Continue'}
-          </button>
+          </div>
         </div>
       </div>
     </div>
@@ -454,6 +518,20 @@ export function SetupFlow({
 // ---------------------------------------------------------------------------
 // Where
 // ---------------------------------------------------------------------------
+
+/**
+ * Starting points for somebody facing an empty field — one of each *kind* of
+ * answer the field accepts. They are words, not records: pressing one types it,
+ * and nothing downstream knows it came from a chip.
+ */
+const DESTINATION_EXAMPLES = [
+  { kind: 'City', text: 'Lisbon' },
+  { kind: 'Country', text: 'Japan' },
+  { kind: 'Region', text: 'The Dolomites' },
+  { kind: 'Island', text: 'Iceland' },
+  { kind: 'Road trip', text: 'Scottish Highlands' },
+  { kind: 'Park', text: 'Yosemite' },
+] as const;
 
 function WhereStep({
   intent,
@@ -473,12 +551,13 @@ function WhereStep({
   /** The traveller has stopped typing and left the field: place what they wrote, once. */
   onSettle: (text: string) => void;
 }) {
+  const typed = draft.destinationText.trim();
+  const showExamples = typed.length === 0 || DESTINATION_EXAMPLES.some((example) => example.text === typed);
   return (
     <div>
-      <p className="label text-accent">{intent === 'has_plan' ? 'A plan you already have' : 'New trip'}</p>
-      <h1 ref={headingRef} tabIndex={-1} className="display-hero mt-3 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <StepHeading number={1} kicker={intent === 'has_plan' ? 'A plan you already have' : 'New trip · where'} headingRef={headingRef}>
         {intent === 'has_plan' ? 'Where is the plan taking you?' : 'Where are you thinking?'}
-      </h1>
+      </StepHeading>
       <div className="mt-8 max-w-2xl">
         <DestinationField
           value={draft.destinationText}
@@ -503,14 +582,45 @@ function WhereStep({
         {error ? <ErrorNote>{error}</ErrorNote> : null}
       </div>
       {/*
-        Examples, not instructions. They exist to widen what somebody thinks they
-        are allowed to type — a country and a borderless region are both fine —
-        and they are set as one quiet line rather than four chips competing with
-        the field above them.
+        Examples, not instructions. They widen what somebody thinks they are
+        allowed to type — a country and a borderless region are both fine — and
+        a press fills the field exactly as typing would: the words are placed
+        the same way, by the same lookup, when the traveller moves on. They step
+        aside once the field holds something of the traveller's own.
       */}
-      <p className="mt-8 type-small text-ink-muted">
-        A city, a whole country, a region with no borders, somewhere you cannot spell.
-      </p>
+      {showExamples ? (
+        <div className="mt-8 max-w-2xl" data-testid="destination-examples">
+          <p className="text-sm text-ink-muted">A city, a whole country, a region with no borders — or try one of these:</p>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {DESTINATION_EXAMPLES.map((example, index) => {
+              const on = typed === example.text;
+              return (
+                <li key={example.text} className="fade-up" style={{ '--d': `${80 + index * 45}ms` } as React.CSSProperties}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange({ destinationText: example.text, destinationEntryId: null, destinationCenter: null, destinationBounds: null, destinationFeatureType: null, destinationSemanticType: null, destinationScale: null, destinationExtentSource: null, destinationGateways: [] });
+                      onSettle(example.text);
+                    }}
+                    aria-pressed={on}
+                    className={cx(
+                      'pressable group inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm transition-[background-color,border-color,color] duration-[var(--motion-fast)]',
+                      on ? 'border-ink bg-ink text-paper' : 'border-ink/20 bg-paper-raised/70 text-ink hover:border-ink/50 hover:bg-paper-raised',
+                      'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine',
+                    )}
+                    data-testid={`destination-example-${index}`}
+                  >
+                    <span aria-hidden="true" className={cx('font-mono text-[10px] tracking-[0.08em] uppercase', on ? 'text-flare' : 'text-ink-faint group-hover:text-accent')}>
+                      {example.kind}
+                    </span>
+                    {example.text}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -535,35 +645,26 @@ function NightsStep({
   const nights = draft.nights;
   return (
     <div>
-      <p className="label">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 max-w-[20ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <StepHeading number={3} kicker="The trip · how long" headingRef={headingRef}>
         How many nights do you have?
-      </h1>
+      </StepHeading>
 
-      {/* V8 — nights are proper selectable cards: fill, accent edge, a mark and a heavier figure when chosen. */}
-      <div className="mt-7 grid grid-cols-4 gap-3 sm:grid-cols-8" role="group" aria-label="Nights">
+      {/* Survey Atlas — the nights as one scale of figures sharing their borders; the chosen one set in ink. */}
+      <div className="ob-grid mt-8 grid-cols-4 sm:grid-cols-8" role="group" aria-label="Nights">
         {NIGHT_CHIPS.map((value) => {
           const on = nights === value;
           return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={on}
-              onClick={() => onChange({ nights: value, wantsLengthHelp: false })}
-              className={selectableCardClass(on, cx('pressable flex min-h-16 flex-col items-center justify-center gap-0.5 px-2 py-3 text-center', FOCUS_RING))}
-              data-testid={`nights-${value}`}
-            >
-              <span className={cx('type-figure font-display text-2xl leading-none', on ? 'text-accent-strong' : 'text-ink')}>{value}</span>
-              <span className={cx('text-xs', on ? 'text-accent-strong' : 'text-ink-faint')}>{value === 1 ? 'night' : 'nights'}</span>
-              {on ? <SelectedMark /> : null}
+            <button key={value} type="button" aria-pressed={on} onClick={() => onChange({ nights: value, wantsLengthHelp: false })} className={cx('ob-cell min-h-20 items-center text-center', FOCUS_RING)} data-on={on ? 'true' : 'false'} data-testid={`nights-${value}`}>
+              <span className="ob-cell-big type-figure">{value}</span>
+              <span className="coordbar text-[9.5px] opacity-70">{value === 1 ? 'night' : 'nights'}</span>
             </button>
           );
         })}
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <label className="flex items-center gap-3">
-          <span className="type-small text-ink-muted">Another number</span>
+      <div className="mt-6 flex flex-wrap items-end gap-x-8 gap-y-3">
+        <label className="flex items-end gap-3">
+          <span className="sheet-label pb-3 text-ink-muted">Another number</span>
           <input
             type="text"
             inputMode="numeric"
@@ -577,11 +678,11 @@ function NightsStep({
             onKeyDown={(event) => {
               if (event.key === 'Enter' && nights !== null) onSubmit();
             }}
-            className={cx('type-figure h-12 w-20 rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-center text-lg text-ink', FOCUS_RING)}
+            className="ob-underline type-figure w-20 text-center"
           />
         </label>
         {nights !== null ? (
-          <p className="type-figure text-sm text-ink-muted" data-testid="nights-derived">
+          <p className="coordbar pb-3 text-ink-muted" data-testid="nights-derived">
             {nights} {nights === 1 ? 'night' : 'nights'} · {nights + 1} days on the ground
           </p>
         ) : null}
@@ -591,10 +692,11 @@ function NightsStep({
         type="button"
         onClick={() => onChange({ wantsLengthHelp: !draft.wantsLengthHelp })}
         aria-pressed={draft.wantsLengthHelp}
-        className={cx('mt-7 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors', FOCUS_RING, draft.wantsLengthHelp ? 'border-accent bg-accent-soft text-accent-strong' : 'border-dashed border-rule text-ink-muted hover:text-ink')}
+        className={cx('ob-tag mt-8', FOCUS_RING)}
+        data-on={draft.wantsLengthHelp ? 'true' : 'false'}
         data-testid="nights-recommend"
       >
-        <Glyph id="compass" className="h-4 w-4" />
+        <span aria-hidden="true" className="ob-tag-box" />
         I am not sure — tell me how long this deserves
       </button>
     </div>
@@ -617,13 +719,12 @@ function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRe
   const shape = draft.partyShape;
   return (
     <div>
-      <p className="label">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 max-w-[20ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <StepHeading number={4} kicker="The trip · who" headingRef={headingRef}>
         Who is going?
-      </h1>
+      </StepHeading>
 
-      <div className="mt-7 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Who is going">
-        {PARTY_SHAPES.map((option) => {
+      <div className="ob-rows mt-8" role="radiogroup" aria-label="Who is going" onKeyDown={onRadioGroupKeys}>
+        {PARTY_SHAPES.map((option, index) => {
           const on = shape === option.value;
           return (
             <button
@@ -631,34 +732,39 @@ function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRe
               type="button"
               role="radio"
               aria-checked={on}
+              tabIndex={rovingTabIndex(on, index, Boolean(shape))}
               onClick={() => onChange({ partyShape: option.value, adults: option.adults, children: option.children })}
-              className={selectableCardClass(on, cx('pressable flex min-h-16 items-center justify-between gap-3 px-4 py-3 pr-11 text-left', FOCUS_RING))}
+              className="ob-row w-full text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
+              data-on={on ? 'true' : 'false'}
               data-testid={`party-${option.value}`}
             >
-              <span className={cx('font-display text-xl', on ? 'font-semibold text-accent-strong' : 'text-ink')}>{option.label}</span>
-              {on ? <SelectedMark /> : null}
+              <span aria-hidden="true" className="ob-letter">
+                {String.fromCharCode(65 + index)}
+              </span>
+              <span className="ob-row-label">{option.label}</span>
+              <span className="ob-row-why type-figure">{option.value === 'other' ? 'set the counts' : `${option.adults} ${option.adults === 1 ? 'adult' : 'adults'}${option.children ? ` · ${option.children} children` : ''}`}</span>
             </button>
           );
         })}
       </div>
 
       {shape ? (
-        <div className="rise mt-7 flex flex-wrap items-end gap-6">
+        <div className="rise mt-8 flex flex-wrap items-end gap-8">
           <Counter label="Adults" min={1} value={draft.adults} onChange={(adults) => onChange({ adults })} />
           <Counter label="Children" min={0} value={draft.children} onChange={(children) => onChange({ children })} />
-          <p className="type-figure pb-3 text-sm text-ink-muted">{describeParty(draft)}</p>
+          <p className="coordbar pb-3 text-ink-muted">{describeParty(draft)}</p>
         </div>
       ) : null}
 
       {shape ? (
-        <fieldset className="rise mt-8">
-          <legend className="type-small font-medium text-ink">Anything that changes what a day can hold?</legend>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <fieldset className="rise mt-8 border-t border-ink/20 pt-3">
+          <legend className="sheet-label float-left mb-3 w-full text-ink-muted">Anything that changes what a day can hold?</legend>
+          <div className="clear-both flex flex-wrap gap-2">
             {TRAVELER_NEEDS.map((need) => {
               const on = draft.travelerNeeds.includes(need);
               return (
-                <label key={need} className={cx('pressable inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm transition-colors', FOCUS_RING, on ? 'border-accent bg-accent-soft font-medium text-accent-strong shadow-[inset_0_0_0_1px_var(--color-accent)]' : 'border-rule bg-paper-raised text-ink hover:border-ink-faint')}>
-                  <span aria-hidden="true" className={cx('inline-block h-2 w-2 rounded-full', on ? 'bg-accent' : 'border border-ink-faint')} />
+                <label key={need} className="ob-tag" data-on={on ? 'true' : 'false'}>
+                  <span aria-hidden="true" className="ob-tag-box" />
                   <input
                     type="checkbox"
                     checked={on}
@@ -680,15 +786,15 @@ function Counter({ label, min, value, onChange }: { label: string; min: number; 
   const clamp = (next: number) => Math.max(min, Math.min(12, next));
   return (
     <div>
-      <p className="label">{label}</p>
-      <div className="mt-1.5 flex items-center gap-1">
-        <button type="button" aria-label={`One fewer ${label.toLowerCase().replace(/s$/, '')}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={cx('flex h-11 w-11 items-center justify-center rounded-[var(--radius-card)] border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40', FOCUS_RING)}>
+      <p className="sheet-label text-ink-muted">{label}</p>
+      <div className="mt-1.5 flex items-stretch border-[1.5px] border-ink">
+        <button type="button" aria-label={`One fewer ${label.toLowerCase().replace(/s$/, '')}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={cx('flex h-12 w-12 items-center justify-center text-xl text-ink hover:bg-ink/5 disabled:opacity-35', FOCUS_RING)}>
           −
         </button>
-        <span className="type-figure w-10 text-center text-xl text-ink" aria-live="polite" data-testid={`count-${label.toLowerCase()}`}>
+        <span className="ob-cell-big type-figure flex w-14 items-center justify-center border-x border-ink/35 text-ink" aria-live="polite" data-testid={`count-${label.toLowerCase()}`}>
           {value}
         </span>
-        <button type="button" aria-label={`One more ${label.toLowerCase().replace(/s$/, '')}`} disabled={value >= 12} onClick={() => onChange(clamp(value + 1))} className={cx('flex h-11 w-11 items-center justify-center rounded-[var(--radius-card)] border border-rule bg-paper-raised text-lg text-ink disabled:opacity-40', FOCUS_RING)}>
+        <button type="button" aria-label={`One more ${label.toLowerCase().replace(/s$/, '')}`} disabled={value >= 12} onClick={() => onChange(clamp(value + 1))} className={cx('flex h-12 w-12 items-center justify-center text-xl text-ink hover:bg-ink/5 disabled:opacity-35', FOCUS_RING)}>
           +
         </button>
       </div>
@@ -703,22 +809,20 @@ function Counter({ label, min, value, onChange }: { label: string; min: number; 
 function FixedStep({ draft, headingRef, onChange, hasPlan }: { draft: SetupDraft; headingRef: React.RefObject<HTMLHeadingElement | null>; onChange: (patch: Partial<SetupDraft>) => void; hasPlan: boolean }) {
   return (
     <div>
-      <p className="label">The trip</p>
-      <h1 ref={headingRef} tabIndex={-1} className="display-lg mt-2 max-w-[22ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+      <StepHeading number={5} kicker="The trip · anything fixed" headingRef={headingRef}>
         Anything already booked or fixed?
-      </h1>
-      <p className="mt-3 max-w-[52ch] type-body text-ink-muted">Only what the plan has to work around. How you like to travel comes next.</p>
+      </StepHeading>
+      <p className="mt-3 max-w-[52ch] text-base text-ink-muted">Only what the plan has to work around. How you like to travel comes next.</p>
 
-      <div className="mt-7 space-y-6 max-w-2xl">
+      <div className="mt-8 max-w-2xl space-y-8">
         {/*
           V1 — "I already have a plan": the plan itself, in the traveller's order.
           Its places become their own must-dos, and the board checks the plan as
-          written — rushed days, doubling back, travel over their limit, closures,
-          weather and what it leaves out — before anything is built.
+          written before anything is built.
         */}
         {hasPlan || draft.existingPlan ? (
           <div>
-            <label htmlFor="setup-existing-plan" className="block text-sm font-medium text-ink">
+            <label htmlFor="setup-existing-plan" className="sheet-label block text-ink-muted">
               Your plan, one day per line
             </label>
             <textarea
@@ -729,63 +833,41 @@ function FixedStep({ draft, headingRef, onChange, hasPlan }: { draft: SetupDraft
               value={draft.existingPlan}
               onChange={(event) => onChange({ existingPlan: event.target.value })}
               placeholder={'Day 1: the old town, the castle, a market for lunch\nDay 2: a day trip to the lakes'}
-              className={cx('mt-2 w-full resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint', FOCUS_RING)}
+              className="ob-lines mt-2"
             />
             <p className="mt-1.5 type-small text-ink-faint">We check it against real travel times, your pace and the forecast, and keep every place you name.</p>
           </div>
         ) : null}
         <div>
-          <label htmlFor="setup-fixed" className="block text-sm font-medium text-ink">
+          <label htmlFor="setup-fixed" className="sheet-label block text-ink-muted">
             Booked, fixed, or would regret missing
           </label>
-          <textarea
-            id="setup-fixed"
-            rows={3}
-            maxLength={600}
-            value={draft.mustDo}
-            onChange={(event) => onChange({ mustDo: event.target.value })}
-            placeholder="A hotel you have booked, a tour on a set day, one place you must see."
-            className={cx('mt-2 w-full resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint', FOCUS_RING)}
-          />
+          <textarea id="setup-fixed" rows={3} maxLength={600} value={draft.mustDo} onChange={(event) => onChange({ mustDo: event.target.value })} placeholder="A hotel you have booked, a tour on a set day, one place you must see." className="ob-lines mt-2" />
         </div>
         <div>
-          <label htmlFor="setup-avoid" className="block text-sm font-medium text-ink">
+          <label htmlFor="setup-avoid" className="sheet-label block text-ink-muted">
             Anything you would rather not do
           </label>
-          <textarea
-            id="setup-avoid"
-            rows={2}
-            maxLength={600}
-            value={draft.avoid}
-            onChange={(event) => onChange({ avoid: event.target.value })}
-            className={cx('mt-2 w-full resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint', FOCUS_RING)}
-          />
+          <textarea id="setup-avoid" rows={2} maxLength={600} value={draft.avoid} onChange={(event) => onChange({ avoid: event.target.value })} className="ob-lines mt-2" />
         </div>
 
         {/*
-          MVP V3, Stage 9 — arrival and departure are not settings.
-          Asking every traveller to pick a check-in band is asking them to invent
-          a fact. It is asked only by somebody who says a flight is booked; for
-          everyone else the plan uses an estimate and the trip says so.
+          MVP V3, Stage 9 — arrival and departure are not settings. Asked only by
+          somebody who says a flight is booked; for everyone else the plan uses
+          an estimate and says so.
         */}
-        <div className={cx(draft.knowsFlightTimes ? 'card-raised' : 'card', 'p-4')}>
-          <button
-            type="button"
-            onClick={() => onChange({ knowsFlightTimes: !draft.knowsFlightTimes })}
-            aria-expanded={draft.knowsFlightTimes}
-            className={cx('flex min-h-11 w-full items-center justify-between gap-3 text-left', FOCUS_RING)}
-            data-testid="setup-flight-times"
-          >
-            <span className="text-sm font-medium text-ink">I know when I land and when I leave</span>
-            <span aria-hidden="true" className="text-ink-faint">
+        <div className="border-y border-ink/20">
+          <button type="button" onClick={() => onChange({ knowsFlightTimes: !draft.knowsFlightTimes })} aria-expanded={draft.knowsFlightTimes} className={cx('flex min-h-14 w-full items-center justify-between gap-3 text-left', FOCUS_RING)} data-testid="setup-flight-times">
+            <span className="font-display text-lg text-ink">I know when I land and when I leave</span>
+            <span aria-hidden="true" className="font-mono text-lg text-ink-muted">
               {draft.knowsFlightTimes ? '−' : '+'}
             </span>
           </button>
           {draft.knowsFlightTimes ? (
-            <div className="slide-down mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="slide-down grid gap-5 pb-4 sm:grid-cols-2">
               <label className="block">
-                <span className="label">Landing</span>
-                <select value={draft.arrival} onChange={(event) => onChange({ arrival: event.target.value as SetupDraft['arrival'] })} className={cx('mt-1.5 h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)}>
+                <span className="sheet-label text-ink-muted">Landing</span>
+                <select value={draft.arrival} onChange={(event) => onChange({ arrival: event.target.value as SetupDraft['arrival'] })} className="ob-underline mt-1 text-lg">
                   {ARRIVAL_PRECISIONS.map((precision) => (
                     <option key={precision} value={precision}>
                       {ARRIVAL_PRECISION_LABELS[precision]}
@@ -794,8 +876,8 @@ function FixedStep({ draft, headingRef, onChange, hasPlan }: { draft: SetupDraft
                 </select>
               </label>
               <label className="block">
-                <span className="label">Leaving</span>
-                <select value={draft.departure} onChange={(event) => onChange({ departure: event.target.value as SetupDraft['departure'] })} className={cx('mt-1.5 h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 text-ink', FOCUS_RING)}>
+                <span className="sheet-label text-ink-muted">Leaving</span>
+                <select value={draft.departure} onChange={(event) => onChange({ departure: event.target.value as SetupDraft['departure'] })} className="ob-underline mt-1 text-lg">
                   {ARRIVAL_PRECISIONS.map((precision) => (
                     <option key={precision} value={precision}>
                       {ARRIVAL_PRECISION_LABELS[precision]}
@@ -805,20 +887,11 @@ function FixedStep({ draft, headingRef, onChange, hasPlan }: { draft: SetupDraft
               </label>
             </div>
           ) : (
-            <p className="mt-2 type-small text-ink-faint">Otherwise we plan an afternoon arrival and a morning departure, and label both as estimates.</p>
+            <p className="pb-3 type-small text-ink-faint">Otherwise we plan an afternoon arrival and a morning departure, and label both as estimates.</p>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-/** The filled mark on a chosen card: a selected state is never only a border colour. */
-function SelectedMark() {
-  return (
-    <span aria-hidden="true" className="absolute top-2.5 right-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-accent text-paper">
-      <Glyph id="check" className="h-3 w-3" strokeWidth={2.5} />
-    </span>
   );
 }
 

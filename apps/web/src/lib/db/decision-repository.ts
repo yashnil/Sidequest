@@ -1,8 +1,10 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import {
+  advisorShortlistSchema,
   destinationShortlistSchema,
   tripComposerAnswersSchema,
+  type AdvisorShortlist,
   type DestinationShortlist,
   type TripComposerAnswers,
 } from '@sidequest/core';
@@ -28,6 +30,12 @@ export interface DecisionSession {
   answers: TripComposerAnswers;
   /** Null until a shortlist has been built. Different from "empty shortlist". */
   shortlist: DestinationShortlist | null;
+  /**
+   * The destination advisor's shortlist (2026-10 rebuild). One column holds
+   * either shape; `kind: 'advisor'` tells them apart, and a session holds at
+   * most one of the two.
+   */
+  advisor: AdvisorShortlist | null;
   /** Set once, when they chose. Never cleared. */
   resolvedTripId: string | null;
   /**
@@ -65,15 +73,23 @@ function toSession(row: Row): DecisionSession | null {
   if (!answers.success) return null;
 
   let shortlist: DestinationShortlist | null = null;
+  let advisor: AdvisorShortlist | null = null;
   if (row.shortlist_json) {
-    const parsed = destinationShortlistSchema.safeParse(JSON.parse(row.shortlist_json));
-    shortlist = parsed.success ? parsed.data : null;
+    const raw: unknown = JSON.parse(row.shortlist_json);
+    if ((raw as { kind?: unknown } | null)?.kind === 'advisor') {
+      const parsed = advisorShortlistSchema.safeParse(raw);
+      advisor = parsed.success ? parsed.data : null;
+    } else {
+      const parsed = destinationShortlistSchema.safeParse(raw);
+      shortlist = parsed.success ? parsed.data : null;
+    }
   }
 
   return {
     id: row.id,
     answers: answers.data,
     shortlist,
+    advisor,
     resolvedTripId: row.resolved_trip_id,
     ownerToken: row.owner_token,
     createdAt: row.created_at,
@@ -148,7 +164,7 @@ export function saveDecisionAnswers(id: string, answers: TripComposerAnswers, no
     .run(JSON.stringify(answers), now.toISOString(), id);
 }
 
-export function saveDecisionShortlist(id: string, shortlist: DestinationShortlist, now: Date): void {
+export function saveDecisionShortlist(id: string, shortlist: DestinationShortlist | AdvisorShortlist, now: Date): void {
   getDb()
     .prepare('UPDATE decision_sessions SET shortlist_json = ?, updated_at = ? WHERE id = ?')
     .run(JSON.stringify(shortlist), now.toISOString(), id);
@@ -171,4 +187,19 @@ export function resolveDecisionSession(id: string, tripId: string, now: Date): b
     )
     .run(tripId, now.toISOString(), id);
   return result.changes > 0;
+}
+
+/**
+ * A refinement changes the answers *and* produces the list those answers rank
+ * to, in one write. `saveDecisionAnswers` drops the shortlist on purpose; a
+ * refinement must not, or the screen would flash empty between the two.
+ */
+export function saveDecisionAnswersAndShortlist(id: string, answers: TripComposerAnswers, shortlist: AdvisorShortlist, now: Date): void {
+  getDb()
+    .prepare(
+      `UPDATE decision_sessions
+          SET answers_json = ?, shortlist_json = ?, updated_at = ?
+        WHERE id = ? AND resolved_trip_id IS NULL`,
+    )
+    .run(JSON.stringify(answers), JSON.stringify(shortlist), now.toISOString(), id);
 }

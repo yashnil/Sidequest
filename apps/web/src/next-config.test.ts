@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import nextConfig, { securityHeaders } from '../next.config';
+import nextConfig, { NOINDEX_SOURCES, securityHeaders } from '../next.config';
 
 /**
  * THE SECURITY HEADERS, ASSERTED WITHOUT A SERVER.
@@ -32,7 +32,7 @@ describe('the security header policy', () => {
     // QUALITY V1 — plus the optional OpenFreeMap basemap host (tiles, sprites) and
     // the blob: URLs MapLibre draws from; only reached when the provider is configured.
     expect(csp).toContain(
-      "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://tiles.openfreemap.org",
+      "img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org https://commons.wikimedia.org https://tiles.openfreemap.org",
     );
     expect(csp).toContain("connect-src 'self' https://tiles.openfreemap.org");
     expect(csp).toContain("worker-src 'self' blob:");
@@ -54,13 +54,38 @@ describe('the security header policy', () => {
     expect(nextConfig.poweredByHeader).toBe(false);
     const rules = await nextConfig.headers!();
     /* V9 — one policy for every route, and one narrow rule that keeps the trip service worker from being cached. */
-    expect(rules).toHaveLength(2);
+    expect(rules).toHaveLength(2 + NOINDEX_SOURCES.length);
     expect(rules[0]!.source).toBe('/:path*');
     const keys = rules[0]!.headers.map((entry) => entry.key);
     expect(keys).toContain('Content-Security-Policy');
     expect(keys).toContain('Strict-Transport-Security');
-    expect(rules[1]!.source).toBe('/trip-offline-sw.js');
-    expect(rules[1]!.headers.find((entry) => entry.key === 'Cache-Control')?.value).toMatch(/no-cache/);
-    expect(rules[1]!.headers.find((entry) => entry.key === 'Service-Worker-Allowed')?.value).toBe('/');
+    const worker = rules.find((rule) => rule.source === '/trip-offline-sw.js')!;
+    expect(worker.headers.find((entry) => entry.key === 'Cache-Control')?.value).toMatch(/no-cache/);
+    expect(worker.headers.find((entry) => entry.key === 'Service-Worker-Allowed')?.value).toBe('/');
+  });
+});
+
+describe('production pass hardening', () => {
+  it('refuses powerful browser features the product never uses', () => {
+    const policy = headerMap({ dev: false }).get('Permissions-Policy')!;
+    for (const feature of ['camera=()', 'microphone=()', 'geolocation=()', 'payment=()']) expect(policy).toContain(feature);
+  });
+
+  it('keeps the landing globe terrain host the lead added', () => {
+    const csp = headerMap({ dev: false }).get('Content-Security-Policy')!;
+    expect(csp).toMatch(/img-src [^;]*https:\/\/s3\.amazonaws\.com/);
+    expect(csp).toMatch(/connect-src [^;]*https:\/\/s3\.amazonaws\.com/);
+  });
+
+  it('marks share links, trips and the API noindex even when robots allows the site', async () => {
+    const rules = await nextConfig.headers!();
+    for (const source of ['/share/:path*', '/trips/:path*', '/api/:path*']) {
+      const rule = rules.find((entry) => entry.source === source);
+      expect(rule?.headers.find((entry) => entry.key === 'X-Robots-Tag')?.value, source).toContain('noindex');
+    }
+  });
+
+  it('turns the unused image optimizer off (the /_next/image advisories)', () => {
+    expect(nextConfig.images?.unoptimized).toBe(true);
   });
 });

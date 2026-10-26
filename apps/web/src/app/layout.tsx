@@ -1,26 +1,26 @@
 import type { Metadata, Viewport } from 'next';
-import { Manrope, Newsreader } from 'next/font/google';
+import { Bricolage_Grotesque, Fraunces, JetBrains_Mono } from 'next/font/google';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 import './globals.css';
 
 /*
- * V8 — THE LIVING TRAVEL ATLAS PAIRING, SELF-HOSTED AT BUILD TIME.
+ * PRODUCTION PASS — THE FIELD ATLAS PAIRING, SELF-HOSTED AT BUILD TIME.
  *
- * Newsreader (variable, optical sizes 6–72) carries destination names,
- * question titles and the editorial voice: it reads as a travel magazine at
- * display size and stays legible at card size, where Instrument Serif went
- * spindly. Manrope (variable) carries every row a traveller scans: wider
- * counters and a taller x-height than Instrument Sans, so 15 px body and
- * 13 px metadata are comfortably readable, and its tabular figures set the
- * durations, prices and dates. Both are OFL-licensed Google Fonts, fetched by
- * next/font at build time — no runtime request, no layout shift. Exposed as
- * CSS variables the theme reads; system fallbacks stay in the stack.
- *
- * Verified on the review, the interview and the hub before adoption
- * (`.claude-private/V8-UI-AUDIT.md`, round 2).
+ * Fraunces (variable: optical size, SOFT, WONK) carries the voice — place
+ * names, headlines, the wordmark. Its SOFT axis rounds the serifs so a
+ * destination reads warm and hand-lettered at display size, and its optical
+ * sizes keep it sturdy at card size, where Newsreader (V8) read quiet and
+ * Instrument Serif (Production UI V1) went spindly. Bricolage Grotesque
+ * (variable: optical size) carries every row a traveller scans: a grotesk with
+ * enough character to be recognisable, generous counters at 15 px. JetBrains
+ * Mono sets the figures a traveller compares — clock times, durations,
+ * distances, coordinates — so they align without a table. All three are OFL
+ * Google Fonts fetched by next/font at build time: no runtime request, no
+ * layout shift. Exposed as CSS variables the theme reads.
  */
-const displayFont = Newsreader({ subsets: ['latin', 'latin-ext'], axes: ['opsz'], style: ['normal', 'italic'], variable: '--font-newsreader', display: 'swap' });
-const uiFont = Manrope({ subsets: ['latin', 'latin-ext'], variable: '--font-manrope', display: 'swap' });
+const displayFont = Fraunces({ subsets: ['latin', 'latin-ext'], axes: ['opsz', 'SOFT', 'WONK'], style: ['normal', 'italic'], variable: '--font-fraunces', display: 'swap' });
+const uiFont = Bricolage_Grotesque({ subsets: ['latin', 'latin-ext'], axes: ['opsz'], variable: '--font-bricolage', display: 'swap' });
+const monoFont = JetBrains_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-jetbrains', display: 'swap' });
 
 /**
  * THE DOCUMENT, AND NOTHING ELSE.
@@ -84,7 +84,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${displayFont.variable} ${uiFont.variable}`}>
+    <html lang="en" className={`${displayFont.variable} ${uiFont.variable} ${monoFont.variable}`}>
       <body className="flex min-h-dvh flex-col paper-grain">
         {children}
         <ServiceWorkerRegistrar />

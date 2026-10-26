@@ -17,7 +17,7 @@ export interface PrepareTopItem {
 }
 
 const TONE: Record<PrepareTopItem['tone'], { word: string; className: string }> = {
-  book: { word: 'Book', className: 'bg-accent text-paper' },
+  book: { word: 'Book', className: 'bg-flare text-night' },
   check: { word: 'Check', className: 'bg-amber text-paper' },
   decide: { word: 'Decide', className: 'bg-clay text-paper' },
 };

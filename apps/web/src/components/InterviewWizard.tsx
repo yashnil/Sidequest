@@ -59,7 +59,6 @@ import {
   HardLimitsControl,
   InterestGrid,
   NamesSpace,
-  OPTION_GLYPHS,
   OptionCards,
   RangeMapChoice,
   RhythmChoice,
@@ -68,10 +67,11 @@ import {
   TransportChoice,
   WritingSpace,
 } from './interview/patterns';
-import { mapLayersFor, partyLine, SketchFigure, TripSketchPanel, TripSketchSheet, sketchFor } from './interview/TripSketch';
+import { partyLine, sketchFor } from './interview/TripSketch';
+import { ContextPlate } from './interview/ContextPlate';
 import { QUESTION_S, QUESTION_VARIANTS, timing, type Direction } from './interview/choreography';
 import { isHardLine, reviewFacts, understandingChips } from './interview/review-brief';
-import { DestinationMap, type DestinationGeometry } from './interview/DestinationMap';
+import type { DestinationGeometry } from './interview/DestinationMap';
 import { GenerationScreen } from './interview/GenerationScreen';
 import { ReviewTimingCard } from './interview/ReviewTimingCard';
 import { callAction, newBuildKey } from './client-action';
@@ -79,6 +79,7 @@ import type { BuildRunView } from '@/lib/planning/build-run-view';
 import type { TimingWindowView } from '@/app/(product)/trips/new/timing-actions';
 import type { MapBasemap } from './map-adapter';
 import { StagePath, stageOf } from './interview/StagePath';
+import { ACCENT_WAITING, QuestionNumeral } from './setup/StepHeading';
 import {
   completeQuestionnaireAction,
   exploreExperiencesAction,
@@ -395,12 +396,19 @@ export function InterviewWizard({
     });
   }
 
-  const hasMoved = useRef(false);
+  /*
+   * Focus follows the question only when the position actually changed. A
+   * "has this run before" flag was true on React's development replay of the
+   * first effect, which focused the review heading on arrival and drew an
+   * outline round it for every visitor.
+   */
+  const shownPosition = useRef<typeof position | null>(null);
   useEffect(() => {
-    if (!hasMoved.current) {
-      hasMoved.current = true;
+    if (shownPosition.current === null || shownPosition.current === position) {
+      shownPosition.current = position;
       return;
     }
+    shownPosition.current = position;
     window.scrollTo({ top: 0, left: 0 });
     headingRef.current?.focus({ preventScroll: true });
   }, [position]);
@@ -409,147 +417,178 @@ export function InterviewWizard({
   const stage = stageOf(position === UNDERSTANDING_POSITION ? null : position);
   const inInterview = current !== null;
 
+  /*
+   * SURVEY ATLAS — THE MAP ANSWERS WHILE THE TRAVELLER IS STILL CHOOSING.
+   *
+   * The plate beside the question is drawn from the answers as they would
+   * stand with the option on screen applied: the ring grows as the reach scale
+   * moves, the lines change dash as the transport rows do. Nothing is saved
+   * until Continue — this is `answerQuestion`, a pure function, run for the
+   * picture only.
+   */
+  const [preview, setPreview] = useState<{ id: string; value: unknown } | null>(null);
+  const plateAnswers = useMemo(() => {
+    if (!current || !preview || preview.id !== current.id) return answers;
+    try {
+      return answerQuestion({ answers, ctx: context, question: current.definition, value: preview.value, now: new Date(), ...(region ? { region } : {}) });
+    } catch {
+      return answers;
+    }
+  }, [answers, current, preview, context, region]);
+  const plateAnswerText = useMemo(() => {
+    if (!current) return null;
+    const considered = (preview !== null && preview.id === current.id) || current.status !== 'open';
+    if (!considered) return null;
+    try {
+      return describeAnswer(current.definition, context, plateAnswers);
+    } catch {
+      return null;
+    }
+  }, [current, preview, context, plateAnswers]);
+
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-16 sm:px-8" data-testid="interview" data-position={position} data-mode={mode}>
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-6">
-        <p className="label">Your trip preferences</p>
-        {fixtureMode ? (
-          <span className="inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-dashed border-amber/60 px-2.5 py-1 text-xs text-amber" data-testid="fixture-planning-badge">
-            Fixture planning data — not the live model
-          </span>
-        ) : null}
-      </div>
-
-      {interpretation ? (
-        <div className="mt-4">
-          <InterpretationPanel tripId={tripId} interpretation={interpretation.set} mustDo={interpretation.mustDo} avoid={interpretation.avoid} collapsed={!panelOpen} onExpand={() => setPanelOpen(true)} />
-        </div>
-      ) : null}
-
-      {position === UNDERSTANDING_POSITION ? (
-        <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} geometry={geometry} tiles={tiles} {...(researchDoor ? { onExplore: exploreFirst } : {})} />
-      ) : null}
-
-      {inInterview || position === REVIEW_POSITION ? (
-        <div className={cx('mt-6 grid gap-8 lg:gap-12', position === REVIEW_POSITION ? '' : 'lg:grid-cols-[minmax(0,1fr)_21rem]')}>
-          <div className="relative min-w-0">
-            {/*
-              V8 — one question replaces another with a directional slide, the
-              outgoing one fading in place (`popLayout` lifts it out of the
-              flow). ≤ 260 ms; nothing under reduced motion.
-            */}
-            <AnimatePresence initial={false} mode="wait" custom={direction}>
-              {current ? (
-                <motion.div key={current.id} custom={direction} variants={QUESTION_VARIANTS} initial="initial" animate="animate" exit="exit" transition={timing(QUESTION_S, reduced)} className="min-w-0">
-                  <QuestionScreen
-                    question={current}
-                    index={shownIndex}
-                    total={shown.length}
-                    stage={stage}
-                    context={context}
-                    answers={answers}
-                    headingRef={headingRef}
-                    pending={pending}
-                    call={call}
-                    onCallChange={(id) => jumpTo(id)}
-                    onJumpStage={jumpToStage}
-                    onAnswer={answer}
-                    onDecide={decide}
-                    onSkip={skip}
-                    onBack={back}
-                    enough={enoughToBuild}
-                    onEnough={planWithDefaults}
-                    portrait={<TripSketchSheet ctx={context} answers={answers} geometry={geometry} tiles={tiles} />}
-                  />
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
-            {position === REVIEW_POSITION ? (
-              <ReviewScreen
-                tripId={tripId}
-                geometry={geometry}
-                tiles={tiles}
-                context={context}
-                qContext={qContext}
-                answers={answers}
-                plan={plan}
-                headingRef={headingRef}
-                durationAdvice={durationAdvice}
-                unresolved={interpretation?.set.unresolved ?? []}
-                boardAvailable={boardAvailable}
-                scanUnavailable={scanUnavailable}
-                pending={pending}
-                analytics={analytics}
-                onJump={jumpTo}
-                onBack={back}
-                onPersonalize={personalizeMore}
-                onFinish={finish}
-                onUpdate={(patch) => setAnswers((curr) => withPosition({ ...curr, ...patch }, REVIEW_POSITION))}
-                timingOpen={timingOpen}
-                activeBuild={activeBuild}
-                acceptedWindow={acceptedWindow}
-                buildUnavailable={buildUnavailable}
-              />
-            ) : null}
-          </div>
-          {current ? (
-            <div className="hidden lg:block">
-              <div className="sticky top-[calc(var(--chrome-height)+1.5rem)]">
-                <TripSketchPanel ctx={context} answers={answers} geometry={geometry} tiles={tiles} />
-              </div>
-            </div>
+    <div className="survey min-h-[calc(100dvh-var(--chrome-height))]" data-testid="interview" data-position={position} data-mode={mode}>
+      <div className="mx-auto max-w-7xl px-5 pb-16 sm:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-5">
+          <p className="sheet-label text-ink-muted">
+            Trip survey <span className="text-ink-faint">·</span> {context.destination.name}
+          </p>
+          {fixtureMode ? (
+            <span className="sheet-label inline-flex items-center gap-2 border border-dashed border-amber/60 px-2.5 py-1 text-amber" data-testid="fixture-planning-badge">
+              Fixture planning data — not the live model
+            </span>
           ) : null}
         </div>
-      ) : null}
 
-      {building && !buildFailure ? <GenerationScreen tripId={tripId} destination={context.destination.name} geometry={geometry} tiles={tiles} variant="overlay" /> : null}
-      {stale ? (
-        <section className="card-raised mt-8 rounded-[var(--radius-panel)] border-amber/40 bg-amber-soft p-5" data-testid="answers-stale" role="alert">
-          <h2 className="font-display text-xl text-ink">These answers are behind the saved ones.</h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink">{error}</p>
+        {interpretation ? (
           <div className="mt-4">
-            <button type="button" className={buttonClass('primary')} onClick={() => router.refresh()} data-testid="answers-reload">
-              Reload my answers
-            </button>
+            <InterpretationPanel tripId={tripId} interpretation={interpretation.set} mustDo={interpretation.mustDo} avoid={interpretation.avoid} collapsed={!panelOpen} onExpand={() => setPanelOpen(true)} />
           </div>
-        </section>
-      ) : null}
-      {buildFailure && !stale ? (
-        <section className="card-raised mt-8 rounded-[var(--radius-panel)] p-6" data-testid="build-failure" role="alert" aria-live="polite">
-          <h2 className="font-display text-xl text-ink">{buildFailure.heading ?? 'Sidequest couldn’t start this build.'}</h2>
-          {/*
-            MVP V3, Stage 25 — SAY WHAT ACTUALLY HAPPENED. The reason the server
-            gave is rendered, above the recovery; the recovery sentence is the
-            part that tells them nothing was lost. V8 — this panel is only for a
-            build that never became a run; a run that failed is shown by the
-            build screen, from the row.
-          */}
-          <p className="mt-2 text-sm leading-relaxed text-ink" data-testid="build-failure-reason">{buildFailure.message}</p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-            {buildFailure.retryable ? 'Your trip profile is saved. Nothing was composed, so trying again costs nothing you have not already chosen to spend.' : 'Your trip profile is saved. Nothing was composed.'}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            {buildFailure.retryable ? (
-              <button type="button" className={buttonClass('primary')} onClick={() => build(buildFailure.answers)} disabled={pending} data-testid="retry-draft">
-                {pending ? 'Starting…' : 'Try build again'}
+        ) : null}
+
+        {position === UNDERSTANDING_POSITION ? (
+          <UnderstandingScreen context={context} answers={answers} headingRef={headingRef} questionCount={shown.length} pending={pending} onStart={start} onDefaults={planWithDefaults} geometry={geometry} tiles={tiles} {...(researchDoor ? { onExplore: exploreFirst } : {})} />
+        ) : null}
+
+        {inInterview ? (
+          /*
+           * One question at a time, with the map that answers beside it. On a
+           * phone the plate is a slim band above the question (same element,
+           * reordered), the controls run full width, and the action bar sits
+           * at the bottom under the thumb.
+           */
+          <div className="mt-4 grid gap-6 lg:mt-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] lg:gap-14">
+            <div className="relative order-2 min-w-0 lg:order-1">
+              {/*
+                V8 — one question replaces another with a directional slide; the
+                outgoing one goes at once. ≤ 260 ms; nothing under reduced motion.
+              */}
+              <AnimatePresence initial={false} mode="wait" custom={direction}>
+                {current ? (
+                  <motion.div key={current.id} custom={direction} variants={QUESTION_VARIANTS} initial="initial" animate="animate" exit="exit" transition={timing(QUESTION_S, reduced)} className="min-w-0">
+                    <QuestionScreen
+                      question={current}
+                      index={shownIndex}
+                      total={shown.length}
+                      stage={stage}
+                      context={context}
+                      answers={answers}
+                      headingRef={headingRef}
+                      pending={pending}
+                      call={call}
+                      onCallChange={(id) => jumpTo(id)}
+                      onJumpStage={jumpToStage}
+                      onAnswer={answer}
+                      onDecide={decide}
+                      onSkip={skip}
+                      onBack={back}
+                      enough={enoughToBuild}
+                      onEnough={planWithDefaults}
+                      onDraft={(value) => setPreview({ id: current.id, value })}
+                    />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+            <div className="order-1 min-w-0 lg:order-2">
+              <div className="lg:sticky lg:top-[calc(var(--chrome-height)+1.25rem)]">
+                <ContextPlate ctx={context} answers={plateAnswers} geometry={geometry} tiles={tiles} questionId={current?.id ?? null} answerText={plateAnswerText} />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {position === REVIEW_POSITION ? (
+          <ReviewScreen
+            tripId={tripId}
+            geometry={geometry}
+            tiles={tiles}
+            context={context}
+            qContext={qContext}
+            answers={answers}
+            plan={plan}
+            headingRef={headingRef}
+            durationAdvice={durationAdvice}
+            unresolved={interpretation?.set.unresolved ?? []}
+            boardAvailable={boardAvailable}
+            scanUnavailable={scanUnavailable}
+            pending={pending}
+            analytics={analytics}
+            onJump={jumpTo}
+            onBack={back}
+            onPersonalize={personalizeMore}
+            onFinish={finish}
+            onUpdate={(patch) => setAnswers((curr) => withPosition({ ...curr, ...patch }, REVIEW_POSITION))}
+            timingOpen={timingOpen}
+            activeBuild={activeBuild}
+            acceptedWindow={acceptedWindow}
+            buildUnavailable={buildUnavailable}
+          />
+        ) : null}
+
+        {building && !buildFailure ? <GenerationScreen tripId={tripId} destination={context.destination.name} geometry={geometry} tiles={tiles} variant="overlay" /> : null}
+        {stale ? (
+          <section className="mt-8 border-t-[1.5px] border-l-[3px] border-amber bg-amber-soft p-5" data-testid="answers-stale" role="alert">
+            <h2 className="font-display text-xl text-ink">These answers are behind the saved ones.</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink">{error}</p>
+            <div className="mt-4">
+              <button type="button" className={buttonClass('primary')} onClick={() => router.refresh()} data-testid="answers-reload">
+                Reload my answers
               </button>
-            ) : null}
-            <button
-              type="button"
-              className={buttonClass('secondary')}
-              onClick={() => {
-                setBuildFailure(null);
-                go(REVIEW_POSITION, buildFailure.answers);
-              }}
-              disabled={pending}
-              data-testid="back-to-preferences"
-            >
-              Return to review
-            </button>
-          </div>
-        </section>
-      ) : null}
-      {error ? <ErrorNote>{error}</ErrorNote> : null}
+            </div>
+          </section>
+        ) : null}
+        {buildFailure && !stale ? (
+          <section className="mt-8 border-t-[1.5px] border-ink bg-paper-raised p-6" data-testid="build-failure" role="alert" aria-live="polite">
+            <h2 className="font-display text-xl text-ink">{buildFailure.heading ?? 'Sidequest couldn’t start this build.'}</h2>
+            {/* MVP V3, Stage 25 — say what actually happened: the server's reason, then that nothing was lost. */}
+            <p className="mt-2 text-sm leading-relaxed text-ink" data-testid="build-failure-reason">{buildFailure.message}</p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              {buildFailure.retryable ? 'Your trip profile is saved. Nothing was composed, so trying again costs nothing you have not already chosen to spend.' : 'Your trip profile is saved. Nothing was composed.'}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              {buildFailure.retryable ? (
+                <button type="button" className={buttonClass('primary')} onClick={() => build(buildFailure.answers)} disabled={pending} data-testid="retry-draft">
+                  {pending ? 'Starting…' : 'Try build again'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={buttonClass('secondary')}
+                onClick={() => {
+                  setBuildFailure(null);
+                  go(REVIEW_POSITION, buildFailure.answers);
+                }}
+                disabled={pending}
+                data-testid="back-to-preferences"
+              >
+                Return to review
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {error ? <ErrorNote>{error}</ErrorNote> : null}
+      </div>
     </div>
   );
 }
@@ -582,48 +621,45 @@ function UnderstandingScreen({
   tiles?: MapBasemap | null;
 }) {
   const d = context.destination;
-  const sketch = sketchFor(context, answers);
-  /* V8 — short facts only; the assumption is set once, as the paragraph below, never also as a chip. */
+  /* V8 — short facts only; the assumption is set once, as the sentence below, never also as a chip. */
   const stamps = understandingChips(d.understanding.slice(1), d.assumption?.sentence);
   return (
-    <section className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-center" data-testid="interview-understanding">
-      <div className="enter min-w-0">
-        <p className="label text-accent">{[d.scaleLabel ?? 'Your destination', `${d.nights} ${d.nights === 1 ? 'night' : 'nights'}`].join(' · ')}</p>
-        <h1 ref={headingRef} tabIndex={-1} className="display-hero mt-3 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
-          {d.name}
+    <section className="mt-4 grid gap-6 lg:mt-6 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] lg:gap-14" data-testid="interview-understanding">
+      <div className="order-2 min-w-0 lg:order-1 lg:pt-10">
+        <p className="sheet-label text-accent">{[d.scaleLabel ?? 'Your destination', `${d.nights} ${d.nights === 1 ? 'night' : 'nights'}`].join(' · ')}</p>
+        <h1 ref={headingRef} tabIndex={-1} className="display-stage mt-4 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+          <span className="mask-rise pb-[0.12em]">
+            <span>{d.name}</span>
+          </span>
         </h1>
         {stamps.length > 0 ? (
-          <ul className="mt-5 flex flex-wrap gap-2" aria-label="What Sidequest read about this destination">
+          <ul className="mt-5 flex flex-wrap gap-x-4 gap-y-1" aria-label="What Sidequest read about this destination">
             {stamps.map((line) => (
-              <li key={line} className="rounded-full border border-ink/30 px-3 py-1 text-sm text-ink">
+              <li key={line} className="sheet-label flex items-center gap-2 text-ink">
+                <span aria-hidden="true" className="inline-block h-1.5 w-1.5 bg-ink" />
                 {line}
               </li>
             ))}
           </ul>
         ) : null}
-        <p className="mt-7 max-w-xl font-display text-xl leading-snug text-ink sm:text-2xl" data-testid="interview-assumption">
+        <p className="fade-up mt-8 max-w-[34ch] border-t-[1.5px] border-ink pt-5 font-display text-2xl leading-snug text-ink sm:text-[1.75rem]" style={{ '--d': '180ms' } as React.CSSProperties} data-testid="interview-assumption">
           {/*
-            QUALITY V1 — RESEARCH IS OPTIONAL, SO IT IS NEVER AN EXCUSE.
-
-            This fallback used to read "We have not researched X yet … once the
-            research runs", which named a machine a traveller has not been told
-            about, on the one path where that machine never runs at all. What is
-            actually true when no destination reading exists is simpler and
-            better: nothing has been assumed, so the questions decide the trip.
+            QUALITY V1 — research is optional, so it is never an excuse: when no
+            destination reading exists, nothing has been assumed.
           */}
           {d.assumption
             ? d.assumption.sentence
             : `Sidequest has assumed nothing about ${d.name} yet — your answers are what will shape this trip.`}
         </p>
-        <p className="mt-3 max-w-xl type-body text-ink-muted">
-          {questionCount} short {questionCount === 1 ? 'question' : 'questions'}, about a minute. Every one redraws the sketch; hand any of them to us.
+        <p className="sheet-label mt-4 text-ink-muted">
+          {String(questionCount).padStart(2, '0')} {questionCount === 1 ? 'question' : 'questions'} · about a minute · hand any of them to Sidequest
         </p>
         {d.traits.length > 0 ? (
-          <details className="mt-3 text-sm text-ink-muted">
+          <details className="mt-2 text-sm text-ink-muted">
             <summary className={cx('inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4', FOCUS_RING)}>Why we think so</summary>
-            <ul className="mt-2 space-y-1">
+            <ul className="ruled mt-1 border-t border-ink/15">
               {d.traits.map((trait) => (
-                <li key={trait}>
+                <li key={trait} className="py-1.5">
                   <span className="font-medium text-ink">{DESTINATION_TRAIT_LABELS[trait]}</span> — {d.basis[trait]}
                 </li>
               ))}
@@ -631,8 +667,9 @@ function UnderstandingScreen({
           </details>
         ) : null}
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={onStart} disabled={pending} className={buttonClass('primary', 'lg')} data-testid="interview-start">
+          <button type="button" onClick={onStart} disabled={pending} className={buttonClass('accent', 'lg')} data-testid="interview-start">
             {pending ? 'Saving…' : 'Start the interview'}
+            <span aria-hidden="true">→</span>
           </button>
           <button type="button" onClick={onDefaults} disabled={pending} className={buttonClass('secondary', 'lg')} data-testid="interview-smart-defaults">
             <Glyph id="compass" className="h-4 w-4" />
@@ -644,13 +681,13 @@ function UnderstandingScreen({
             <button type="button" onClick={onExplore} disabled={pending} className={cx('text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-explore">
               Explore experiences first
             </button>
-            {' '}— the research path: Sidequest researches the area while you answer, and you choose from a board before building.
+            {' '}— Sidequest researches the area while you answer, and you choose from a board before building.
           </p>
         ) : null}
       </div>
-      <div className="enter-slow min-w-0">
-        {geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} {...mapLayersFor(sketch, answers)} /> : <SketchFigure sketch={sketch} />}
-        <p className="type-meta mt-2">{geometry ? 'The map takes shape as you answer.' : 'The sketch redraws as you answer.'}</p>
+      <div className="order-1 min-w-0 lg:order-2">
+        <ContextPlate ctx={context} answers={answers} geometry={geometry} tiles={tiles} notes={false} size="portrait" />
+        <p className="coordbar mt-2 hidden text-ink-muted lg:block">The map redraws as you answer</p>
       </div>
     </section>
   );
@@ -678,7 +715,7 @@ function QuestionScreen({
   onBack,
   enough,
   onEnough,
-  portrait = null,
+  onDraft,
 }: {
   question: PlannedQuestion;
   index: number;
@@ -707,14 +744,8 @@ function QuestionScreen({
   enough: boolean;
   /** Answer everything still open the way Sidequest would, and go to the review. */
   onEnough: () => void;
-  /**
-   * Round 3 — the phone's collapsed trip portrait, rendered *inside* the
-   * question directly after its last control and before the sticky action
-   * bar. Placed after the bar it sat below the bar's empty flow slot — ~300 px
-   * of paper while the bar was pinned. The bar is now always the column's last
-   * element, so nothing can be pinned under it and nothing sits under its slot.
-   */
-  portrait?: React.ReactNode;
+  /** The answer being considered, so the map beside the question can draw it before it is saved. */
+  onDraft: (value: unknown) => void;
 }) {
   const def = question.definition;
   const resolved = question.status !== 'open';
@@ -771,39 +802,44 @@ function QuestionScreen({
   const whyInline = WHY_INLINE.has(def.kind);
   const why = def.why(context);
 
+  const number = String(Math.min(index + 1, Math.max(1, total))).padStart(2, '0');
   return (
     <div data-testid={`interview-question-${def.id}`} data-module={def.module} data-tier={question.tier}>
       <StagePath current={stage} note={`Question ${Math.min(index + 1, Math.max(1, total))}`} onJump={onJumpStage} />
 
       {/*
-        V8 — "Sidequest's call" after a "Decide for me": a compact chip row above
-        the next question, not a box taller than the question. The label, the
-        value, the reason as a title, and Change beside it.
+        V8 — "Sidequest's call" after a "Decide for me": one ruled line above the
+        next question, the label, the value, the reason, and Change beside it.
       */}
       {call && call.id !== def.id ? (
-        <div className="slide-down mt-5 flex flex-wrap items-center gap-x-3 gap-y-1.5" data-testid="interview-call">
-          <span className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-[var(--radius-control)] border border-accent/40 bg-accent-soft px-3 py-1 text-sm text-ink" title={call.decision.reason}>
-            <Glyph id="compass" className="h-4 w-4 shrink-0 text-accent" />
-            <span className="label text-accent-strong">Sidequest’s call</span>
-            <span className="min-w-0">
-              <span className="font-medium">{call.label}:</span> {call.value}
-            </span>
+        <div className="slide-down mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l-2 border-flare py-1 pl-3" data-testid="interview-call">
+          <span className="sheet-label text-accent">Sidequest’s call</span>
+          <span className="min-w-0 text-sm text-ink" title={call.decision.reason}>
+            <span className="font-medium">{call.label}:</span> {call.value}
           </span>
           <span className="type-meta max-w-[48ch]">{call.decision.reason}</span>
-          <button type="button" onClick={() => onCallChange(call.id)} className={cx('inline-flex min-h-9 items-center text-sm text-accent-strong underline underline-offset-4', FOCUS_RING)} data-testid="interview-call-change">
+          <button type="button" onClick={() => onCallChange(call.id)} className={cx('inline-flex min-h-11 items-center text-sm text-accent-strong underline underline-offset-4', FOCUS_RING)} data-testid="interview-call-change">
             Change
           </button>
         </div>
       ) : null}
 
-      <p className="type-meta mt-6">
-        {question.tier === 'destination' ? 'Because of where you are going' : INTERVIEW_MODULE_LABELS[def.module]}
-      </p>
-      {/* The question is the page's one level-one heading: every state of the interview has exactly one. */}
-      <h1 ref={headingRef} tabIndex={-1} className="type-title mt-1.5 max-w-[28ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
-        {def.prompt(context, answers)}
-      </h1>
-      {whyInline ? <p className="mt-2 max-w-[62ch] type-body text-ink-muted">{why}</p> : null}
+      {/* The question: a giant light numeral, the module in the margin, one display sentence. */}
+      <div className="relative mt-6 pt-[clamp(1.5rem,0.6rem+3vw,3.5rem)] lg:mt-8">
+        <QuestionNumeral value={number} />
+        <div className="relative">
+          <p className="sheet-label inline-flex items-center gap-2 text-accent">
+            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-flare" />
+            {question.tier === 'destination' ? 'Because of where you are going' : INTERVIEW_MODULE_LABELS[def.module]}</p>
+          {/* The question is the page's one level-one heading: every state of the interview has exactly one. */}
+          <h1 ref={headingRef} tabIndex={-1} className="ob-headline mt-3 max-w-[19ch] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+            <span className="mask-rise pb-[0.14em]">
+              <span>{def.prompt(context, answers)}</span>
+            </span>
+          </h1>
+        </div>
+      </div>
+      {whyInline ? <p className="mt-3 max-w-[54ch] text-base leading-relaxed text-ink-muted">{why}</p> : null}
       {question.tier === 'destination' ? (
         <p className="sr-only" data-testid="interview-branch-reason">
           Asked {question.reason}.
@@ -811,15 +847,14 @@ function QuestionScreen({
       ) : null}
 
       {decidedReason ? (
-        <p className="mt-4 flex max-w-[62ch] items-start gap-2 type-small text-ink-muted" data-testid="interview-decided-note">
-          <Glyph id="compass" className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+        <p className="mt-4 flex max-w-[62ch] items-start gap-2 border-l-2 border-ink/30 pl-3 type-small text-ink-muted" data-testid="interview-decided-note">
           <span>
             <span className="font-medium text-ink">Sidequest decided:</span> {decidedReason}
           </span>
         </p>
       ) : null}
 
-      <div className="mt-6">
+      <div className="fade-up mt-8" style={{ '--d': '120ms' } as React.CSSProperties}>
         <QuestionControl
           question={def}
           options={options}
@@ -829,13 +864,14 @@ function QuestionScreen({
           onChange={(value) => {
             setTouched(true);
             setDraft(value);
+            onDraft(value);
           }}
           recommended={recommendation?.value ?? null}
           recommendedReason={recommendation?.reason}
         />
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-1">
         {questionElaborates(def.id) && !noteOpen ? (
           <button type="button" onClick={() => setNoteOpen(true)} className={cx('inline-flex min-h-11 items-center gap-2 text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid="interview-note-open">
             <Glyph id="pen" className="h-4 w-4" />
@@ -856,20 +892,11 @@ function QuestionScreen({
       </div>
 
       {questionElaborates(def.id) && noteOpen ? (
-        <div className="slide-down mt-3">
-          <label htmlFor={`note-${def.id}`} className="type-small block font-medium text-ink">
+        <div className="slide-down mt-3 max-w-2xl">
+          <label htmlFor={`note-${def.id}`} className="sheet-label block text-ink-muted">
             In your own words
           </label>
-          <textarea
-            id={`note-${def.id}`}
-            rows={2}
-            maxLength={300}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Anything the options above do not quite say"
-            className="mt-2 w-full max-w-2xl resize-y rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint"
-            data-testid="interview-note"
-          />
+          <textarea id={`note-${def.id}`} rows={2} maxLength={300} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Anything the options above do not quite say" className="ob-lines mt-2" data-testid="interview-note" />
           <p className="type-meta mt-1.5">Kept exactly as you write it and read alongside your answer.</p>
           {readings.length > 0 ? (
             <div className="mt-3" data-testid="interview-note-readings">
@@ -888,10 +915,12 @@ function QuestionScreen({
                           return next;
                         })
                       }
-                      className={cx('pressable inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm', FOCUS_RING, reading.accepted ? 'border-pine/50 bg-pine-soft text-pine-strong' : 'border-rule bg-paper-raised text-ink-faint line-through')}
+                      className={cx('ob-tag', FOCUS_RING, reading.accepted ? '' : 'text-ink-faint line-through')}
+                      data-on={reading.accepted ? 'true' : 'false'}
                       data-testid="interview-note-reading"
                       data-accepted={reading.accepted ? 'true' : 'false'}
                     >
+                      <span aria-hidden="true" className="ob-tag-box" />
                       {reading.label}
                       <span className="text-xs font-normal opacity-80">{reading.strength.replace(/_/g, ' ')}</span>
                     </button>
@@ -905,50 +934,35 @@ function QuestionScreen({
         </div>
       ) : null}
 
-      {portrait ? <div className="mt-6 lg:hidden">{portrait}</div> : null}
-
       {/*
-        V8 — the action bar is sticky at every width: on a phone it is the
-        thumb's row, on a desktop it pins to the bottom only while the question
-        is taller than the viewport, which is what `sticky bottom-0` means. It
-        is the last thing in the question column, so its flow slot is the end of
-        the column: scrolled to the bottom, the bar sits in that slot and every
-        control above it — the recommended card's note included — is clear of
-        its background. Nothing follows it that it could cover.
+        The action bar: sticky at every width and the last thing in the column,
+        so nothing is ever pinned under it. On a phone it is the thumb's row —
+        the two real actions edge to edge, the quiet ones above them.
       */}
-      <div className="sticky bottom-0 z-10 -mx-5 mt-8 border-t border-rule bg-paper/95 px-5 py-3 backdrop-blur-sm sm:-mx-8 sm:px-8 lg:mx-0 lg:mt-10 lg:px-0">
-        {/*
-          Two rows on a phone, one on anything wider. The two real actions —
-          hand it to Sidequest, or continue — share the bottom row edge to
-          edge; the two quiet ones sit above them.
-        */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky bottom-0 z-20 -mx-5 mt-10 border-t-[1.5px] border-ink bg-paper/95 px-5 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:-mx-8 sm:px-8 lg:mx-0 lg:mt-12 lg:px-0 lg:pt-3">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center justify-between gap-2 sm:justify-start">
-            <button type="button" onClick={onBack} disabled={pending} className={buttonClass('ghost')}>
+            <button type="button" onClick={onBack} disabled={pending} className={cx(buttonClass('ghost'), 'whitespace-nowrap px-3')}>
               ← Back
             </button>
             {def.optional ? (
-              <button type="button" onClick={onSkip} disabled={pending} className={buttonClass('ghost')} data-testid="interview-no-preference">
+              <button type="button" onClick={onSkip} disabled={pending} className={cx(buttonClass('ghost'), 'whitespace-nowrap px-3')} data-testid="interview-no-preference">
                 No preference
               </button>
             ) : null}
-            {/*
-              Reachable from here rather than only from the first screen. Once
-              nothing critical is open, carrying on is a choice about how much
-              of themselves the traveller wants to spend, not a requirement.
-            */}
+            {/* Once nothing critical is open, carrying on is a choice, not a requirement. */}
             {enough ? (
-              <button type="button" onClick={onEnough} disabled={pending} className={buttonClass('ghost')} data-testid="interview-enough">
-                Sidequest has enough — plan it
+              <button type="button" onClick={onEnough} disabled={pending} className={cx(buttonClass('ghost'), 'whitespace-nowrap px-3')} data-testid="interview-enough">
+                Enough — plan it
               </button>
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onDecide} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-decide" title="Sidequest chooses, tells you what it chose, and you can change it">
-              <Glyph id="compass" className="h-4 w-4" />
+            <button type="button" onClick={onDecide} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 whitespace-nowrap sm:flex-none')} data-testid="interview-decide" title="Sidequest chooses, tells you what it chose, and you can change it">
+              <Glyph id="compass" className="h-4 w-4 max-sm:hidden" />
               Decide for me
             </button>
-            <button type="button" onClick={() => onAnswer(draft, note, readings)} disabled={pending || !canContinue} className={cx(buttonClass('primary'), 'flex-1 sm:flex-none')} data-testid="interview-continue">
+            <button type="button" onClick={() => onAnswer(draft, note, readings)} disabled={pending || !canContinue} className={cx(buttonClass('accent'), ACCENT_WAITING, 'flex-[1.3] whitespace-nowrap sm:flex-none sm:px-6')} data-testid="interview-continue">
               {pending ? 'Saving…' : 'Continue →'}
             </button>
           </div>
@@ -997,7 +1011,6 @@ function draftIsUsable(def: QuestionDefinition, draft: unknown): boolean {
 
 /** Kinds where an untouched control is a real answer ("nothing"), so Continue is never withheld. */
 const EMPTY_IS_AN_ANSWER = new Set<QuestionDefinition['kind']>(['hard_constraints', 'multi', 'dietary', 'names', 'text', 'interest_roles']);
-const SCENARIO_LETTERED = new Set(['iconic_crowds', 'food_tradeoff', 'base_moves', 'coverage_strategy', 'convenience_spend']);
 const SPECTRUM = new Set(['effort', 'walking_tolerance', 'hike_appetite']);
 const RANGE = new Set(['scenic_reach', 'day_trips']);
 
@@ -1034,7 +1047,7 @@ function QuestionControl({
   switch (question.kind) {
     case 'single':
     case 'scenario':
-      return <OptionCards name={id} options={options} value={value as string | undefined} onChange={onChange} glyphs={OPTION_GLYPHS[id]} lettered={question.kind === 'scenario' || SCENARIO_LETTERED.has(id)} columns={options.length >= 4 ? 2 : options.length === 3 ? 3 : 2} recommended={recommended} recommendedReason={recommendedReason} />;
+      return <OptionCards name={id} options={options} value={value as string | undefined} onChange={onChange} recommended={recommended} recommendedReason={recommendedReason} />;
     case 'multi':
       return <ChipGroup name={id} options={options} value={(value as string[]) ?? []} onChange={onChange} />;
     case 'dietary':
@@ -1173,7 +1186,7 @@ function ReviewScreen({
       {pending ? 'Opening your board…' : 'Open the Discovery Board'}
     </button>
   ) : (
-    <button type="button" onClick={() => onFinish('scan')} disabled={pending || Boolean(scanUnavailable)} aria-describedby={scanUnavailable ? 'build-unavailable-note' : undefined} className={cx(buttonClass('accent', 'lg'), 'flex-1 sm:flex-none')} data-testid="interview-find-places">
+    <button type="button" onClick={() => onFinish('scan')} disabled={pending || Boolean(scanUnavailable)} aria-describedby={scanUnavailable ? 'build-unavailable-note' : undefined} className={cx(buttonClass('accent', 'lg'), 'flex-[1.4] whitespace-nowrap sm:flex-none')} data-testid="interview-find-places">
       {pending ? 'Starting the search…' : 'Find places for my trip →'}
     </button>
   );
@@ -1183,35 +1196,47 @@ function ReviewScreen({
     </button>
   ) : !buildUnavailable ? (
     <button type="button" onClick={() => onFinish('build')} disabled={pending} className={cx(buttonClass('secondary'), 'flex-1 sm:flex-none')} data-testid="interview-build-trip">
-      {pending ? 'Starting your build…' : 'Skip the board and build now'}
+      {pending ? 'Starting your build…' : (
+        <>
+          <span className="sm:hidden">Build now</span>
+          <span className="max-sm:hidden">Skip the board and build now</span>
+        </>
+      )}
     </button>
   ) : null;
 
+  const notice = 'mt-6 border-l-[3px] py-4 pr-4 pl-5';
   return (
     <div data-testid="interview-review">
-      <StagePath current="ready" note={`${analytics.answered} answered · ${analytics.decided} decided by Sidequest`} />
+      <div className="pt-1">
+        <StagePath current="ready" note={`${analytics.answered} answered · ${analytics.decided} decided by Sidequest`} />
+      </div>
 
       {/*
-        V8 — THE PORTRAIT BAND. The place as a name, one sentence about the
-        traveller, and a strip of figures; the map beside it on a wide screen
-        and under it on a phone. It is the setup rail's portrait, grown up.
+        THE PORTRAIT BAND — Survey Atlas. The place as a display line, one
+        sentence about the traveller, the figures as boxed stats sharing their
+        borders, and the plate (the same map the questions drew) beside it.
       */}
-      <section className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start" aria-labelledby="review-heading">
-        <div className="min-w-0">
-          <p className="eyebrow">Sidequest understands</p>
-          <h1 id="review-heading" ref={headingRef} tabIndex={-1} className="display-xl mt-1.5 text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
-            {context.destination.name}, your way
+      <section className="mt-6 grid gap-8 lg:mt-10 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] lg:gap-14" aria-labelledby="review-heading">
+        <div className="order-2 min-w-0 lg:order-1">
+          <p className="sheet-label text-accent">Sidequest understands</p>
+          <h1 id="review-heading" ref={headingRef} tabIndex={-1} className="ob-headline mt-3 text-[clamp(2.6rem,1.4rem+3.4vw,4.75rem)] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-4 focus-visible:outline-dashed">
+            <span className="mask-rise pb-[0.14em]">
+              <span>
+                {context.destination.name}, <em className="font-light italic">your way</em>
+              </span>
+            </span>
           </h1>
           {profile ? (
-            <p className="mt-4 max-w-[56ch] text-lg leading-relaxed text-ink-muted" data-testid="interview-sentence">
+            <p className="fade-up mt-5 max-w-[46ch] font-display text-xl leading-snug text-ink" style={{ '--d': '160ms' } as React.CSSProperties} data-testid="interview-sentence">
               {sentenceFor(context, answers, sketch)}
             </p>
           ) : null}
-          <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-3 border-y border-rule py-4" data-testid="review-facts">
+          <dl className="mt-7 grid grid-cols-2 pt-px pl-px sm:grid-cols-3" data-testid="review-facts">
             {facts.map((fact) => (
-              <div key={fact.id} className="min-w-0">
-                <dt className="label">{fact.label}</dt>
-                <dd className={cx('mt-0.5 text-base', fact.figure ? 'type-figure' : '', fact.assumed ? 'text-ink-muted' : 'text-ink')}>
+              <div key={fact.id} className="label-box -mt-px -ml-px min-w-0">
+                <dt>{fact.label}</dt>
+                <dd className={cx('text-lg', fact.figure ? 'type-figure' : '', fact.assumed ? 'text-ink-muted italic' : 'text-ink')}>
                   {fact.value}
                   {fact.assumed ? <span className="sr-only"> (Sidequest’s read)</span> : null}
                 </dd>
@@ -1219,45 +1244,37 @@ function ReviewScreen({
             ))}
           </dl>
         </div>
-        {/*
-          Round 3 — the map is a portrait frame (3:2, no controls, one-line
-          caption) so this column is no taller than the text beside it, and the
-          band is top-aligned; the glance grid begins directly beneath. The
-          full map with its controls is the hub's, not the review's.
-        */}
-        <div className="min-w-0">{geometry ? <DestinationMap geometry={geometry} tiles={tiles} shape={sketch.bases > 1 ? 'moving' : 'stay_put'} rangeKm={sketch.rangeKm} {...mapLayersFor(sketch, answers)} compact /> : <SketchFigure sketch={sketch} />}</div>
+        <div className="order-1 min-w-0 lg:order-2">
+          <ContextPlate ctx={context} answers={answers} geometry={geometry} tiles={tiles} notes={false} size="portrait" />
+        </div>
       </section>
 
       {/*
-        MVP V3, Stage 39 — ONE rendering of each fact. The glance is the review;
-        the per-question ledger waits behind one disclosure below. V8 — the
-        glance is a grid of brief cards, and the party, the hard rules and the
-        timing are cards in the same grid rather than strips floating under it.
+        MVP V3, Stage 39 — ONE rendering of each fact. The glance is the review,
+        set as a ruled register: the topic in the margin, what it says, Edit at
+        the right. The party, the hard rules and the timing are rows in the same
+        register, not cards floating under it.
       */}
-      <section className="mt-10" data-testid="review-glance" aria-labelledby="review-glance-heading">
-        <h2 id="review-glance-heading" className="eyebrow">
-          What will shape the route
-        </h2>
-        <p className="measure mt-2 type-small text-ink-muted">
-          The answers that change where you go and what the days hold. Everything else you told us is in the full list
-          below.
-        </p>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {glance.map((group) => (
-            <article key={group.id} className="card min-w-0 p-5" data-testid={`glance-${group.id}`}>
-              <div className="flex items-baseline justify-between gap-3">
-                <h3 className="font-display text-lg leading-tight text-ink">{group.title}</h3>
-                <button type="button" onClick={() => onJump(group.editQuestionId)} className={cx('inline-flex min-h-9 shrink-0 items-center text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid={`glance-edit-${group.id}`}>
-                  Edit
-                  <span className="sr-only"> {group.title.toLowerCase()}</span>
-                </button>
-              </div>
-              <ul className="mt-3 space-y-2">
+      <section className="mt-14" data-testid="review-glance" aria-labelledby="review-glance-heading">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+          <h2 id="review-glance-heading" className="sheet-label text-ink">
+            What will shape the route
+          </h2>
+          <p className="type-small text-ink-muted">Everything else you told us is in the full list below.</p>
+        </div>
+        <div className="ob-rows mt-3">
+          {glance.map((group, index) => (
+            <article key={group.id} className="grid min-w-0 gap-x-8 gap-y-2 py-5 md:grid-cols-[13rem_minmax(0,1fr)_auto]" data-testid={`glance-${group.id}`}>
+              <h3 className="flex items-baseline gap-3 font-display text-xl leading-tight text-ink">
+                <span aria-hidden="true" className="sheet-label text-ink-faint">{String(index + 1).padStart(2, '0')}</span>
+                {group.title}
+              </h3>
+              <ul className="min-w-0 space-y-1.5">
                 {group.lines.map((line) => {
                   const rule = isHardLine(line.text, ledger.hard);
                   return (
-                    <li key={line.text} className={cx('flex gap-2 type-body', line.assumed ? 'text-ink-muted' : 'text-ink')}>
-                      {line.assumed ? <span aria-hidden="true" className="mt-3 h-px w-3 shrink-0 bg-ink-faint" /> : <span aria-hidden="true" className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+                    <li key={line.text} className={cx('flex gap-2.5 type-body', line.assumed ? 'text-ink-muted' : 'text-ink')}>
+                      <span aria-hidden="true" className={cx('mt-2 inline-block h-2 w-2 shrink-0', line.assumed ? 'border border-ink/50' : 'bg-flare')} />
                       <span className="min-w-0">
                         {line.text}
                         {rule ? (
@@ -1272,75 +1289,71 @@ function ReviewScreen({
                   );
                 })}
               </ul>
+              <button type="button" onClick={() => onJump(group.editQuestionId)} className={cx('inline-flex min-h-11 shrink-0 items-center self-start text-sm text-accent underline underline-offset-4', FOCUS_RING)} data-testid={`glance-edit-${group.id}`}>
+                Edit
+                <span className="sr-only"> {group.title.toLowerCase()}</span>
+              </button>
             </article>
           ))}
 
-          {/* V6 §3 — people, not counts: the door to describing each person is on the review, where the party is first stated. */}
-          <article className="card min-w-0 p-5" data-testid="review-party">
-            <h3 className="font-display text-lg leading-tight text-ink">Party</h3>
-            <p className="type-figure mt-3 type-body text-ink">{partyLine(context.traveller)}</p>
-            {party ? (
-              <p className="type-small mt-1 text-ink-muted">
-                {party.members} {party.members === 1 ? 'person' : 'people'} described
-                {party.needs.length > 0 ? ` · ${party.needs.map((need) => FUNCTIONAL_NEED_LABELS[need as keyof typeof FUNCTIONAL_NEED_LABELS] ?? need.replace(/_/g, ' ')).join(', ')}` : ''}
-              </p>
-            ) : (
-              <p className="type-small mt-1 text-ink-muted">A diet, a knee, an early riser — describe each person and the plan is built for all of them.</p>
-            )}
-            <a href={`/trips/${tripId}/party`} className={cx(buttonClass('secondary', 'sm'), 'mt-4')} data-testid="review-party-link">
+          {/* V6 §3 — people, not counts: the door to describing each person is on the review. */}
+          <article className="grid min-w-0 gap-x-8 gap-y-2 py-5 md:grid-cols-[13rem_minmax(0,1fr)_auto]" data-testid="review-party">
+            <h3 className="flex items-baseline gap-3 font-display text-xl leading-tight text-ink">
+              <span aria-hidden="true" className="sheet-label text-ink-faint">{String(glance.length + 1).padStart(2, '0')}</span>
+              Party
+            </h3>
+            <div className="min-w-0">
+              <p className="type-figure type-body text-ink">{partyLine(context.traveller)}</p>
+              {party ? (
+                <p className="type-small mt-1 text-ink-muted">
+                  {party.members} {party.members === 1 ? 'person' : 'people'} described
+                  {party.needs.length > 0 ? ` · ${party.needs.map((need) => FUNCTIONAL_NEED_LABELS[need as keyof typeof FUNCTIONAL_NEED_LABELS] ?? need.replace(/_/g, ' ')).join(', ')}` : ''}
+                </p>
+              ) : (
+                <p className="type-small mt-1 text-ink-muted">A diet, a knee, an early riser — describe each person and the plan is built for all of them.</p>
+              )}
+            </div>
+            <a href={`/trips/${tripId}/party`} className={cx(buttonClass('secondary', 'sm'), 'self-start')} data-testid="review-party-link">
               {party ? 'Change who is going' : 'Describe each person'}
             </a>
           </article>
 
           {/*
-            THE THINGS THE PLAN MAY NOT BREAK. Distinguished by a clay edge,
-            because it is the one card that is a *promise* rather than a
-            reading: these are the answers the composition is forbidden to
-            trade away.
+            THE THINGS THE PLAN MAY NOT BREAK — the one row that is a promise
+            rather than a reading, so it carries the clay rule.
           */}
-          <article className="card min-w-0 border-clay/40 p-5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-clay)_35%,transparent),var(--shadow-card)]" data-testid="review-hard">
-            <h3 className="flex items-center gap-2 font-display text-lg leading-tight text-ink">
+          <article className="relative grid min-w-0 gap-x-8 gap-y-2 py-5 md:grid-cols-[13rem_minmax(0,1fr)_auto]" data-testid="review-hard">
+            <span aria-hidden="true" className="absolute top-0 left-0 h-[3px] w-24 bg-clay" />
+            <h3 className="flex items-center gap-2 font-display text-xl leading-tight text-ink">
               <Glyph id="lock" className="h-5 w-5 text-clay" />
               Hard rules
             </h3>
             {ledger.hard.length === 0 ? (
-              <p className="type-small mt-3 text-ink-muted">None — everything here is a preference.</p>
+              <p className="type-small text-ink-muted">None — everything here is a preference.</p>
             ) : (
-              <ul className="mt-3 flex min-w-0 flex-wrap gap-2 text-sm text-ink">
+              <ul className="flex min-w-0 flex-wrap gap-2 text-sm text-ink">
                 {ledger.hard.map((entry) => (
-                  <li key={entry.label} className="rounded-full border border-clay/40 bg-clay-soft/50 px-3 py-1.5" title={entry.detail}>
+                  <li key={entry.label} className="border border-clay/50 px-3 py-1.5 text-clay" title={entry.detail}>
                     {entry.label}
                   </li>
                 ))}
               </ul>
             )}
-            <button type="button" onClick={() => onJump('hard_constraints')} className={cx('mt-4 inline-flex min-h-11 items-center text-sm text-accent underline underline-offset-4', FOCUS_RING)}>
+            <button type="button" onClick={() => onJump('hard_constraints')} className={cx('inline-flex min-h-11 items-center self-start text-sm text-accent underline underline-offset-4', FOCUS_RING)}>
               Change the hard rules
             </button>
           </article>
 
-          {showTiming ? <ReviewTimingCard tripId={tripId} initialAccepted={acceptedWindow} onAccepted={() => setTimingAccepted(true)} className="sm:col-span-2 xl:col-span-3" /> : null}
+          {showTiming ? (
+            <div className="py-5">
+              <ReviewTimingCard tripId={tripId} initialAccepted={acceptedWindow} onAccepted={() => setTimingAccepted(true)} />
+            </div>
+          ) : null}
         </div>
 
-        {/*
-          V11 §H — what Sidequest decided, as one line rather than as cards.
-
-          These were three or four equal cards of defaults for questions the
-          traveller never saw, on the screen where they check what they said.
-          They are not deleted and not hidden behind anything new: the ledger
-          below is one press away and already carries every one of them with its
-          reason.
-        */}
+        {/* V11 §H — what Sidequest decided, as one line; every one is in the ledger below with its reason. */}
         {shapers.decidedForYou.length > 0 ? (
           <p className="mt-4 type-small text-ink-muted" data-testid="review-decided-for-you">
-            {/*
-              V11 §N — TOPICS, BECAUSE THAT IS WHAT IS BEING COUNTED.
-
-              `decidedForYou` holds group titles, not answers, so "6 things you
-              did not answer" sat two lines under "16 decided by Sidequest" and
-              invited the obvious question about which of the two numbers was
-              real. Both are: six topics, sixteen answers inside them.
-            */}
             Sidequest also decided {shapers.decidedForYou.length}{' '}
             {shapers.decidedForYou.length === 1 ? 'topic' : 'topics'} you did not answer at all —{' '}
             {shapers.decidedForYou.map((title) => title.toLowerCase()).join(', ')}. Every one is in the list below, with
@@ -1350,13 +1363,13 @@ function ReviewScreen({
       </section>
 
       {durationAdvice ? (
-        <p className="card mt-6 p-4 type-small text-ink-muted">
+        <p className={cx(notice, 'border-ink/30 type-small text-ink-muted')}>
           <span className="font-medium text-ink">How long this deserves.</span> {durationAdvice}
         </p>
       ) : null}
 
       {sufficiency.kind === 'one_question' ? (
-        <div className="card mt-6 border-l-4 border-l-accent bg-accent-soft p-5" data-testid="critical-unknown">
+        <div className={cx(notice, 'border-flare bg-paper-raised')} data-testid="critical-unknown">
           <h3 className="font-display text-lg text-ink">One answer would change this trip</h3>
           <p className="mt-1.5 type-small text-ink-muted">
             {sufficiency.unknown.question.definition.prompt(context, answers).replace(/[:?]$/, '')} — Sidequest can decide it, but it shapes {sufficiency.unknown.question.definition.impacts.slice(0, 2).map((impact) => impact.replace(/_/g, ' ')).join(' and ')}.
@@ -1372,7 +1385,7 @@ function ReviewScreen({
 
       {/* V6 §8 — the contradiction engine: only material conflicts with no safe reading interrupt, each with real resolutions. */}
       {conflicts.filter((c) => !dismissedConflicts.includes(c.id)).map((conflict) => (
-        <div key={conflict.id} className="card mt-6 border-l-4 border-l-amber bg-amber-soft p-5" data-testid={`conflict-${conflict.id}`}>
+        <div key={conflict.id} className={cx(notice, 'border-amber bg-amber-soft')} data-testid={`conflict-${conflict.id}`}>
           <h3 className="font-display text-lg text-ink">These two answers pull in different directions</h3>
           <p className="mt-1.5 type-small text-ink-muted">
             “{conflict.sides[0]}” and “{conflict.sides[1]}”.{conflict.moreRecent !== null ? ` You said the ${conflict.moreRecent === 0 ? 'first' : 'second'} more recently.` : ''} Which should the trip follow?
@@ -1391,7 +1404,7 @@ function ReviewScreen({
       ))}
 
       {reconcile && !rangeKept ? (
-        <div className="card mt-6 border-l-4 border-l-amber bg-amber-soft p-5" data-testid="mobility-reconciliation">
+        <div className={cx(notice, 'border-amber bg-amber-soft')} data-testid="mobility-reconciliation">
           <h3 className="font-display text-lg text-ink">Two of your answers pull against each other</h3>
           <p className="mt-1.5 type-small text-ink-muted">
             You said up to {formatMinutes(reconcile.wheelMinutes)} at the wheel in a day, but nothing further than about {formatMinutes(reconcile.rangeMinutes)} from base. As things stand the shorter answer wins. Which did you mean?
@@ -1409,7 +1422,7 @@ function ReviewScreen({
 
       {/* V8 — a run already on this trip is shown from the row, so the review can never start a second one by accident. */}
       {activeBuild && activeBuild.state !== 'none' && activeBuild.state !== 'succeeded' ? (
-        <section className={cx('card mt-8 border-l-4 p-5', activeBuild.state === 'running' ? 'border-l-pine bg-pine-soft' : 'border-l-amber bg-amber-soft')} data-testid="review-active-build" data-state={activeBuild.state}>
+        <section className={cx(notice, 'mt-8', activeBuild.state === 'running' ? 'border-pine bg-pine-soft' : 'border-amber bg-amber-soft')} data-testid="review-active-build" data-state={activeBuild.state}>
           <h3 className="font-display text-lg text-ink">{activeBuild.state === 'running' ? 'Sidequest is building this trip now.' : activeBuild.state === 'lost' ? 'The last build was lost part-way.' : 'The last build didn’t finish.'}</h3>
           <p className="mt-1.5 type-small text-ink-muted">
             {activeBuild.state === 'running'
@@ -1424,7 +1437,7 @@ function ReviewScreen({
         </section>
       ) : null}
 
-      <details className="mt-8 rule-top pt-4" data-testid="review-ledger">
+      <details className="mt-10 border-t-[1.5px] border-ink pt-3" data-testid="review-ledger">
         <summary className={cx('inline-flex min-h-11 cursor-pointer items-center text-sm text-ink-muted underline underline-offset-4', FOCUS_RING)}>
           Every answer, and where it came from ({ledger.told.length} yours · {ledger.assumed.length} ours)
         </summary>
@@ -1435,10 +1448,10 @@ function ReviewScreen({
       </details>
 
       {unresolved.length > 0 ? (
-        <section className="mt-10 rounded-[var(--radius-card)] border border-dashed border-rule p-5">
-          <h3 className="font-display text-lg text-ink">In your own words</h3>
+        <section className="mt-10 border-t border-dashed border-ink/40 pt-5">
+          <h3 className="sheet-label text-ink">In your own words</h3>
           <p className="mt-1 type-small text-ink-muted">Kept exactly as you wrote it. These are not settings, so they have not steered anything above.</p>
-          <ul className="mt-3 space-y-1.5 font-display text-lg italic text-ink-muted">
+          <ul className="mt-3 space-y-1.5 font-display text-xl italic text-ink-muted">
             {unresolved.map((entry) => (
               <li key={`${entry.field ?? 'mustDo'}-${entry.span[0]}-${entry.quote}`}>“{entry.quote}”</li>
             ))}
@@ -1447,13 +1460,11 @@ function ReviewScreen({
       ) : null}
 
       {/*
-        V8 — THE BUILD BAR IS STICKY AT EVERY WIDTH. The founder's page ends in
-        the one action the whole interview exists for, and on a long review it
-        must never be below the fold: pinned to the bottom of the viewport
-        while the page is taller than it, in flow once the end is reached. The
-        one accent-filled action on the screen.
+        V8 — THE BUILD BAR IS STICKY AT EVERY WIDTH: pinned to the bottom while
+        the review is taller than the viewport, in flow at the end. The one
+        flare action on the screen.
       */}
-      <div className="sticky bottom-0 z-10 -mx-5 mt-12 border-t border-rule bg-paper/95 px-5 py-3 backdrop-blur-sm sm:-mx-8 sm:px-8" data-testid="review-build-bar">
+      <div className="sticky bottom-0 z-20 -mx-5 mt-12 border-t-[1.5px] border-ink bg-paper/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:-mx-8 sm:px-8" data-testid="review-build-bar">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center justify-between gap-2 sm:justify-start">
             <button type="button" onClick={onBack} disabled={pending} className={buttonClass('ghost')}>

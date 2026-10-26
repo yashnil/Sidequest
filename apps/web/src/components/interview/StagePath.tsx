@@ -57,49 +57,36 @@ export function StagePath({ current, note, onJump }: { current: Stage; note?: st
   const index = STAGES.indexOf(current);
   return (
     <nav aria-label="Interview progress" className="min-w-0" data-testid="stage-path">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="min-w-0">
-          <span className="type-small font-semibold text-ink">{STAGE_LABELS[current]}</span>
-          <span className="type-meta ml-2">
-            stage {index + 1} of {STAGES.length}
-          </span>
+      {/*
+        Survey Atlas — a pager in the sheet's margin rather than a progress bar:
+        "02 / 05 · What you love" at the left, the running note at the right,
+        five hairline segments under them. A finished stage is still a way back.
+      */}
+      <div className="flex items-baseline justify-between gap-x-4">
+        <p className="sheet-label min-w-0 text-ink">
+          <span className="text-accent">{String(index + 1).padStart(2, '0')}</span>
+          <span className="text-ink-faint"> / {String(STAGES.length).padStart(2, '0')}</span>
+          <span className="text-ink-muted"> · </span>
+          {STAGE_LABELS[current]}
+          <span className="sr-only">, stage {index + 1} of {STAGES.length}</span>
         </p>
-        {/*
-          The trip so far, as context rather than as a sixth stage. Seen on the
-          live Kyrgyzstan run reading as one orphan word at the end of the path;
-          on the other side of the line, quieter, it reads as what it is.
-        */}
-        {note ? <span className="numeral type-meta min-w-0 truncate">{note}</span> : null}
+        {/* Not `.sheet-label`: its uppercase would change the note's rendered text, which the browser suite reads ("13 answered"). */}
+        {note ? <span className="min-w-0 truncate font-mono text-[11px] tracking-[0.08em] text-ink-muted">{note}</span> : null}
       </div>
-      <ol className="mt-2 grid grid-cols-5 gap-1.5" role="list">
+      <ol className="mt-2 grid grid-cols-5 gap-1" role="list">
         {segments.map(({ stage, label, state }) => {
-          /*
-           * MVP V3, Stage 40 — a finished stage is a way back.
-           *
-           * Only a *finished* one: a stage the traveller has not reached is not
-           * a place they can go, and rendering it as a control that refuses is
-           * worse than rendering it as what it is. The label is a real button
-           * with a real accessible name, so this works from the keyboard.
-           */
           const clickable = state === 'done' && onJump !== undefined;
           const track = (
-            <span className="relative block h-1.5 w-full overflow-hidden rounded-full bg-rule" aria-hidden="true">
-              {state === 'done' ? <span className="absolute inset-0 rounded-full bg-ink" /> : null}
-              {state === 'now' ? (
-                <motion.span layoutId="stage-path-live" transition={timing(PORTRAIT_S, reduced)} className="absolute inset-0 rounded-full bg-accent" />
-              ) : null}
+            <span className="ob-pager-seg relative block w-full overflow-hidden" data-state={state === 'now' ? 'ahead' : state} aria-hidden="true">
+              {state === 'now' ? <motion.span layoutId="stage-path-live" transition={timing(PORTRAIT_S, reduced)} className="absolute inset-0 bg-flare" /> : null}
             </span>
           );
-          const name = (
-            <span className={cx('mt-1.5 block truncate text-xs leading-snug', state === 'now' ? 'font-semibold text-ink' : state === 'done' ? 'text-ink-muted' : 'text-ink-faint', 'max-lg:sr-only')}>
-              {label}
-            </span>
-          );
+          const name = <span className={cx('coordbar mt-1.5 block truncate text-[9.5px]', state === 'now' ? 'text-ink' : state === 'done' ? 'text-ink-muted' : 'text-ink-faint', 'max-lg:sr-only')}>{label}</span>;
           return (
             <li key={stage} className="min-w-0">
               {clickable ? (
-                <button type="button" onClick={() => onJump(stage)} className={cx('pressable block min-h-11 w-full rounded-[var(--radius-control)] pt-2 text-left hover:text-accent-strong', FOCUS_RING)} data-testid={`stage-jump-${stage}`}>
-                  {/* Not the word "Back": the interview already has a Back button, and two controls answering to one name is ambiguous for a screen-reader user reading a control list. */}
+                <button type="button" onClick={() => onJump(stage)} className={cx('pressable flex min-h-11 w-full flex-col justify-start pt-2 text-left hover:text-accent-strong', FOCUS_RING)} data-testid={`stage-jump-${stage}`}>
+                  {/* Not the word "Back": the interview already has a Back button, and two controls answering to one name is ambiguous. */}
                   <span className="sr-only">Go to </span>
                   {track}
                   {name}

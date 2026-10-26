@@ -66,7 +66,20 @@ export default defineConfig({
      * hundreds of other tests fight for the same cores measures the contention,
      * not the code.
      */
-    exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/src/lib/execution/perf-offline.test.ts', 'apps/web/src/lib/destinations/recommend-perf.test.ts'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'apps/web/src/lib/execution/perf-offline.test.ts',
+      'apps/web/src/lib/destinations/recommend-perf.test.ts',
+      'apps/web/src/lib/planning/planner-bench.perf.test.ts',
+      /*
+       * The live evaluation suite (`apps/web/src/lib/eval/`) reaches public
+       * Nominatim, Overpass and Wikidata for thirty trips and takes the better
+       * part of an hour. It is a measurement, never part of `npm run test`;
+       * `SIDEQUEST_EVAL=1` is the only way in.
+       */
+      ...(process.env.SIDEQUEST_EVAL === '1' ? [] : ['apps/web/src/lib/eval/*.live.test.ts']),
+    ],
     environment: 'node',
     /*
      * FX is on by default in the product (keyless ECB rates). The unit suite

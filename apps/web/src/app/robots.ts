@@ -11,5 +11,12 @@ export const dynamic = 'force-dynamic';
 
 export default function robots(): MetadataRoute.Robots {
   const indexable = (process.env.SIDEQUEST_INDEXABLE ?? '').trim().toLowerCase() === 'on';
-  return indexable ? { rules: { userAgent: '*', allow: '/', disallow: ['/labs', '/api', '/share', '/trips'] } } : { rules: { userAgent: '*', disallow: '/' } };
+  const base = (process.env.SIDEQUEST_BASE_URL ?? '').trim().replace(/\/+$/, '');
+  return indexable
+    ? {
+        rules: { userAgent: '*', allow: '/', disallow: ['/labs', '/api', '/share', '/trips', '/profile'] },
+        /* Production pass — the sitemap lists the public pages only (`sitemap.ts`). */
+        ...(/^https?:\/\//.test(base) ? { sitemap: `${base}/sitemap.xml` } : {}),
+      }
+    : { rules: { userAgent: '*', disallow: '/' } };
 }

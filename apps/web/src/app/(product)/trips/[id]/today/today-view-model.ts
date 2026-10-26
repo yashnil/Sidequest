@@ -2,6 +2,7 @@ import 'server-only';
 import { dayState, formatMinuteOfDay, type BookedPlanItem, type FactObservation, type Itinerary, type NextActions, type TodayView, type Trip, type TripNodeState } from '@sidequest/core';
 import { legDirectionsLinks, navModeFor, placeNavigationLinks } from '@/lib/navigation-links';
 import { itineraryViewModel } from '../itinerary/view-model';
+import { firstDayPreview, type FirstDayPreview } from './today-before';
 
 /**
  * V9 §8 — TODAY, READ FOR A PHONE.
@@ -46,6 +47,8 @@ export interface TodayModel {
   /** Unacknowledged changes observed for today. */
   changed: FactObservation[];
   nextActions: NextActions | null;
+  /** Day one, for the screen before the trip starts. */
+  firstDay: FirstDayPreview | null;
   /** The next item's start, as a clock, for the "Change today" request. */
   clock: (minute: number) => string;
 }
@@ -108,6 +111,7 @@ export async function todayViewModel(trip: Trip, itinerary: Itinerary): Promise<
     reservation: todayReservation(today, model.booked),
     changed: today.dayNumber ? model.observations.filter((o) => o.changed && !o.acknowledgedAt && o.dayNumbers.includes(today.dayNumber!)) : [],
     nextActions: model.nextActions,
+    firstDay: firstDayPreview(model.appliedItinerary),
     clock: formatMinuteOfDay,
   };
 }

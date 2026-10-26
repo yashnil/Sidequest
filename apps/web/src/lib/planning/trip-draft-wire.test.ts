@@ -282,6 +282,18 @@ describe('an abandoned draft is refused, and a deliberate one is not', () => {
     expect(normalizeTripDraftWire(draft, { days: 4 }).ok).toBe(true);
   });
 
+  it('allows an empty day that moves base, and still refuses one that only says it does', () => {
+    const stays = [
+      { name: 'Old Town', locality: null, nights: 2, why: 'First half', lodgingArea: null, lodgingStyle: null },
+      { name: 'Far Isle', locality: null, nights: 2, why: 'Second half', lodgingArea: null, lodgingStyle: null },
+    ];
+    const moving = { ...wireDraft(5), stays, days: [dayWith(1, 1), dayWith(2, 1), { ...dayWith(3, 0), stay: 'Far Isle', relocation: true }, { ...dayWith(4, 1), stay: 'Far Isle' }, { ...dayWith(5, 1), stay: 'Far Isle' }] };
+    expect(normalizeTripDraftWire(moving, { days: 5 }).ok).toBe(true);
+    const claimed = { ...wireDraft(4), days: [dayWith(1, 1), dayWith(2, 1), { ...dayWith(3, 0), relocation: true }, dayWith(4, 1)] };
+    const out = normalizeTripDraftWire(claimed, { days: 4 });
+    expect(out.ok).toBe(false);
+  });
+
   it('refuses literal placeholder text wherever it appears', () => {
     const withPlaceholder = { ...wireDraft(3), omissions: [{ name: 'placeholder', reason: 'placeholder' }] };
     const out = normalizeTripDraftWire(withPlaceholder, { days: 3 });

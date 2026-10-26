@@ -514,7 +514,7 @@ export interface RankedCandidate {
 }
 
 /** Every candidate through the gate, best first; the incompatible ones are returned too, so a caller can explain a refusal. */
-export function rankCandidates(node: Pick<IntentNode, 'kind' | 'label' | 'countryCode'>, candidates: readonly DestinationCandidate[], expectation: SemanticExpectation = {}): RankedCandidate[] {
+export function rankCandidates(node: Pick<IntentNode, 'kind' | 'label' | 'countryCode'>, candidates: readonly DestinationCandidate[], expectation: SemanticExpectation = {}, prominence: ProminenceContext = {}): RankedCandidate[] {
   const regionWanted = REGION_SEMANTIC_TYPES.has(expectation.type ?? semanticTypeOfKind(node.kind)) || isRegionKind(node.kind);
   const ranked = candidates.map((candidate) => {
     const assessment = assessCompatibility(node, candidate, expectation);
@@ -529,7 +529,172 @@ export function rankCandidates(node: Pick<IntentNode, 'kind' | 'label' | 'countr
     }
     return { candidate, assessment, score };
   });
-  return ranked.sort((a, b) => b.score - a.score);
+  ranked.sort((a, b) => b.score - a.score);
+  return regionWanted ? ranked : promoteProminentNamesake(ranked, prominence);
+}
+
+/**
+ * What the traveller's own situation adds to a namesake question. Optional and
+ * currently unrecorded at the two destination doors (only the decision flow
+ * asks where somebody departs from); when it is known, a namesake in the
+ * traveller's own country is never dismissed as "a small foreign town".
+ */
+export interface ProminenceContext {
+  /** ISO 3166-1 alpha-2 of the country the traveller lives in or departs from. */
+  homeCountry?: string | undefined;
+}
+
+/** A tenfold published population: the original rule ("Rome" is Roma, not Rome, Georgia). */
+const PROMINENCE_POPULATION_RATIO = 10;
+/**
+ * The geocoder's prominence gap that marks an internationally known place
+ * against a local namesake. Nominatim's `importance` is log-scaled from
+ * Wikipedia link counts, so 0.15 is a large gap: Firenze 0.77 against the
+ * Florences of Alabama, South Carolina and Kentucky at 0.51–0.54 (≥ 0.24);
+ * Portland, Oregon 0.71 against Portland, Maine 0.60 (0.11 — still a
+ * question); Cambridge (UK) 0.70 against Cambridge, Massachusetts 0.67.
+ */
+export const INTERNATIONAL_IMPORTANCE_GAP = 0.15;
+/** Even across a border, a namesake within a third of the leader's population is comparable ("Valencia": Spain 0.84 M, Venezuela 2.3 M). */
+const INTERNATIONAL_POPULATION_RATIO = 3;
+
+const populationOf = (c: DestinationCandidate) => c.providerClass?.population ?? 0;
+
+/** The original rule: both populations published and the rival a tenth of the leader's or less. */
+function tenfoldAbove(leader: DestinationCandidate, rival: DestinationCandidate): boolean {
+  const lead = populationOf(leader);
+  const other = populationOf(rival);
+  return lead > 0 && other > 0 && other * PROMINENCE_POPULATION_RATIO <= lead;
+}
+
+/**
+ * THE INTERNATIONAL NAMESAKE RULE (2026-10).
+ *
+ * "Florence" asked "which one?" because Firenze (362,000) is only ~9× the
+ * Florences of Alabama and South Carolina (~40,000) — under the tenfold rule,
+ * which is shared with Portland (Oregon 652,000, Maine 68,000, ~9.5×) where the
+ * question is genuine. Population alone cannot tell those apart; three other
+ * facts every geocoder row already carries can:
+ *
+ * 1. **Prominence** — the geocoder's own `importance` (Wikipedia-derived) is at
+ *    least `INTERNATIONAL_IMPORTANCE_GAP` above the rival's. Both must be
+ *    published: unknown is never "less known".
+ * 2. **A border** — the rival is in a different country from the leader. A
+ *    famous city abroad against towns of another country is the pattern;
+ *    two cities of one country (Portland, Portland) stay a question however
+ *    their prominence differs, because a traveller from that country plausibly
+ *    means either.
+ * 3. **Size still matters** — the leader publishes a population, and the rival
+ *    is under a third of it when it publishes one (Valencia, Spain is not
+ *    prominent "over" Valencia, Venezuela at 2.7× its size).
+ *
+ * And the traveller's home country, when known: a namesake in the country the
+ * traveller lives in is never dismissed this way (an American typing
+ * "Florence" may mean South Carolina). Never a list of famous names, never a
+ * per-destination switch.
+ */
+export function internationallyAbove(leader: DestinationCandidate, rival: DestinationCandidate, context: ProminenceContext = {}): boolean {
+  const li = leader.providerClass?.importance;
+  const ri = rival.providerClass?.importance;
+  if (li === undefined || ri === undefined || li - ri < INTERNATIONAL_IMPORTANCE_GAP) return false;
+  const lc = leader.countryCode?.toUpperCase();
+  const rc = rival.countryCode?.toUpperCase();
+  if (!lc || !rc || lc === rc) return false;
+  if (context.homeCountry && context.homeCountry.toUpperCase() === rc) return false;
+  const lead = populationOf(leader);
+  if (lead <= 0) return false;
+  const other = populationOf(rival);
+  return other <= 0 || other * INTERNATIONAL_POPULATION_RATIO <= lead;
+}
+
+/** Whether `leader` stands so far above `rival` that the rival is not a question. */
+export function standsAboveNamesake(leader: DestinationCandidate, rival: DestinationCandidate, context: ProminenceContext = {}): boolean {
+  return tenfoldAbove(leader, rival) || internationallyAbove(leader, rival, context);
+}
+
+/**
+ * Production pass — "Rome" is Rome. A bare name that two real settlements
+ * answer exactly is read as the one that is an order of magnitude larger: the
+ * gate scored Roma (2.8 million, matched through its `name:en` alias) and Rome,
+ * Georgia (36,000, matched on its primary name) the same, and the confidence
+ * nudge for a primary-name match made a 30-trip evaluation plan a weekend in
+ * Floyd County. Only between rows the gate already found compatible and exact,
+ * and only on a tenfold published population — never a guess about which is
+ * "famous", and never across a country the phrase named (that row is refused
+ * before this runs).
+ */
+function promoteProminentNamesake(ranked: RankedCandidate[], context: ProminenceContext = {}): RankedCandidate[] {
+  const leader = ranked[0];
+  if (!leader || leader.assessment.verdict !== 'compatible' || leader.assessment.name !== 'exact') return ranked;
+  const lead = populationOf(leader.candidate);
+  let best = leader;
+  for (const r of ranked.slice(1)) {
+    if (r.assessment.verdict !== 'compatible' || r.assessment.name !== 'exact') continue;
+    const pop = populationOf(r.candidate);
+    if ((pop >= Math.max(1, populationOf(best.candidate)) * PROMINENCE_POPULATION_RATIO && pop > lead) || internationallyAbove(r.candidate, best.candidate, context)) best = r;
+  }
+  return best === leader ? ranked : [best, ...ranked.filter((r) => r !== best)];
+}
+
+function boundsContain(bounds: GeoBounds, point: Coordinates): boolean {
+  return point.lat >= bounds.southWest.lat && point.lat <= bounds.northEast.lat && point.lng >= bounds.southWest.lng && point.lng <= bounds.northEast.lng;
+}
+
+/**
+ * Production pass — one place is one reading. Nominatim answers "Lisbon" with
+ * the city of Lisboa *and* the district of Lisboa around it: the same name,
+ * the same country, the district's boundary drawn around the city's centre.
+ * Those are two rows of one place, never two candidates a traveller should be
+ * asked to choose between. A lower-ranked row is folded into a higher-ranked
+ * one only when both match the words exactly, they share a country, and one
+ * is an administrative or regional row whose published box contains the
+ * other's centre — decided by containment, never by a name.
+ *
+ * 2026-10, two more shapes of one place:
+ * - **The same Wikidata item.** "Paris" answers the city (rank 12) and the
+ *   same city again as a département-level row (rank 15, 2.1 million) — both
+ *   tagged Q90. Two rows that publish the same knowledge-base item are one
+ *   place whatever their types, and the second used to make Paris a question.
+ * - **A row whose name contains the words, inside an exact region row of the
+ *   same country.** "Bali" answers the province and "Bali Island" inside its
+ *   box; the island is the province's own land, not a second Bali to pick.
+ *   Only ever folded into an *exact* row, never the other way round.
+ */
+export function collapseSameNamedContainers(ranked: readonly RankedCandidate[]): RankedCandidate[] {
+  const kept: RankedCandidate[] = [];
+  for (const r of ranked) {
+    const item = r.candidate.providerClass?.wikidata;
+    if (r.assessment.verdict !== 'incompatible' && item && kept.some((k) => k.assessment.verdict !== 'incompatible' && k.candidate.providerClass?.wikidata === item)) continue;
+    const folded = r.assessment.verdict !== 'incompatible' && (r.assessment.name === 'exact' || r.assessment.name === 'contains') && kept.some((k) => {
+      if (k.assessment.verdict === 'incompatible' || k.assessment.name !== 'exact') return false;
+      const a = k.candidate.countryCode?.toUpperCase();
+      const b = r.candidate.countryCode?.toUpperCase();
+      if (!a || !b || a !== b) return false;
+      const contains = (outer: RankedCandidate, inner: RankedCandidate) => outer.candidate.bounds !== undefined && REGION_SEMANTIC_TYPES.has(outer.assessment.semantics.type) && boundsContain(outer.candidate.bounds, inner.candidate.center) && (!inner.candidate.bounds || diagonalKm(outer.candidate.bounds) >= diagonalKm(inner.candidate.bounds));
+      return r.assessment.name === 'exact' ? contains(r, k) || contains(k, r) : contains(k, r);
+    });
+    if (!folded) kept.push(r);
+  }
+  return kept;
+}
+
+/**
+ * Production pass — a namesake an order of magnitude smaller is not a
+ * question. The leader settles a bare name without asking when it is a
+ * compatible, exact match with a published population, and every other row
+ * that could also stand for the words is either only a weak lead or stands
+ * below it by `standsAboveNamesake`: a published population a tenth of the
+ * leader's or less (the rule `promoteProminentNamesake` orders by), or the
+ * international namesake rule (`internationallyAbove` — "Florence"). A
+ * namesake with no published population and no prominence gap is not
+ * provably smaller, so it is still asked about; two comparable places of one
+ * country ("Portland") are still asked about.
+ */
+export function leaderIsProminent(ranked: readonly RankedCandidate[], context: ProminenceContext = {}): boolean {
+  const leader = ranked[0];
+  if (!leader || leader.assessment.verdict !== 'compatible' || leader.assessment.name !== 'exact') return false;
+  if (populationOf(leader.candidate) <= 0) return false;
+  return ranked.slice(1).every((r) => r.assessment.verdict !== 'compatible' || standsAboveNamesake(leader.candidate, r.candidate, context));
 }
 
 /**

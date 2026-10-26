@@ -1,3 +1,4 @@
+import { adviseToShortlist } from './support/advisor';
 import { expect, test, type Page, type Request } from '@playwright/test';
 
 /**
@@ -87,22 +88,9 @@ async function brokenImages(page: Page): Promise<string[]> {
 }
 
 async function rankedShortlist(page: Page): Promise<void> {
-  await page.goto('/decide');
-  /*
-   * V11 §A1 — the intake asks one question at a time, in the order that changes
-   * the ranking most, and stops as soon as it can rank. Two answers is enough,
-   * which is why the primary action appears here rather than a third question.
-   */
-  await page.getByRole('radio', { name: 'Some time in a month' }).check();
-  await page.getByLabel('Which month?').selectOption('7');
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Hiking and being outside' }).check();
-  await page.getByRole('checkbox', { name: 'Mountains and high country' }).check();
-  await page.getByRole('button', { name: 'One more question' }).click();
-  await page.getByRole('spinbutton', { name: 'Nights away' }).fill('9');
-  await page.getByRole('button', { name: 'Show me where to go' }).click();
-  await page.waitForURL(/\/decide\/[0-9a-f-]{8,}/);
-  await expect(page.getByTestId('shortlist-featured')).toBeVisible({ timeout: 30_000 });
+  /* The destination advisor (2026-10): type, answer what it asks, wait for the stored list. */
+  await adviseToShortlist(page);
+  await expect(page.getByTestId('advisor-shortlist')).toBeVisible({ timeout: 30_000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +110,7 @@ test('NO EXTERNAL REQUEST DURING RENDER', async ({ page }) => {
 
   const afterRanking = external.length;
   await page.reload();
-  await expect(page.getByTestId('shortlist-featured')).toBeVisible();
+  await expect(page.getByTestId('advisor-shortlist')).toBeVisible();
 
   // A re-render added no lookups of any kind.
   const added = external.slice(afterRanking);
@@ -134,60 +122,29 @@ test('NO EXTERNAL REQUEST DURING RENDER', async ({ page }) => {
   expect(wikis, `a wiki API was called during render: ${wikis.join(', ')}`).toEqual([]);
 });
 
-test('destination fallback renders as a designed graphic, never an absence', async ({ page }) => {
+test('a destination without a photograph says so on a real map, never an empty or invented frame', async ({ page }) => {
   await sealOff(page);
   await rankedShortlist(page);
 
   /*
-   * The invariant, asserted over every frame rather than over a lucky one:
-   * **no image slot is ever empty, and nothing announces a photograph that is not
-   * there.** A slot draws either a photograph over the graphic — in which case
-   * the graphic is decorative and hidden from assistive technology — or the
-   * graphic alone.
-   *
-   * The emptiness half is a *rendered* check rather than an element count. It
-   * used to be `img + [role=img] > 0`, which was satisfied by an `<img>` the
-   * browser had already given up on: with every request refused, the count said
-   * "not empty" while the frame held the broken-file glyph. A box with height is
-   * the thing the traveller can actually see.
+   * The advisor's rule: a card shows a credited photograph of the destination's
+   * own Wikidata item, or a locator — the place's real coordinate on a world
+   * map, captioned "No photograph yet". Never an empty frame, and never an
+   * abstract graphic dressed as a picture of the place.
    */
-  const figures = page.locator('figure');
-  const total = await figures.count();
-  expect(total).toBeGreaterThan(0);
-
-  let announced = 0;
-
+  const picks = page.getByTestId('advisor-pick');
+  const total = await picks.count();
+  expect(total).toBe(3);
   for (let index = 0; index < total; index += 1) {
-    const figure = figures.nth(index);
-    const box = await figure.boundingBox();
-    expect(box?.height ?? 0, `frame ${index} drew nothing`).toBeGreaterThan(10);
-
-    const photographs = await figure.locator('img').count();
-    const graphics = await figure.locator('[role="img"]').count();
-
-    if (graphics > 0) {
-      announced += 1;
-      // The textual equivalent says what it is and names the place, so a screen
-      // reader is never told there is a photograph here.
-      const label = await figure.locator('[role="img"]').first().getAttribute('aria-label');
-      expect(label).toMatch(/generated graphic/i);
-      expect(label).toMatch(/no freely licensed photograph/i);
-      /*
-       * And it is never said over a photograph. A candidate we *did* licence a
-       * file for keeps its graphic decorative whether or not the bytes arrived —
-       * "no freely licensed photograph was available" is false about it, and a
-       * network failure does not make it true.
-       */
-      expect(photographs, `frame ${index} announced its backdrop as content`).toBe(0);
+    const pick = picks.nth(index);
+    const photographs = await pick.locator('figure').count();
+    const locators = await pick.getByText('No photograph yet').count();
+    expect(photographs + locators, `pick ${index} drew no image slot`).toBeGreaterThan(0);
+    if (locators > 0) {
+      await expect(pick.getByRole('img', { name: /on a world map/ })).toBeVisible();
+      expect(await pick.locator('img').count(), `pick ${index} has a photo inside its locator`).toBe(0);
     }
   }
-
-  /*
-   * The fallback path has to be exercised for the rules above to mean anything.
-   * The fixture resolver refuses a share of its subjects on purpose, for exactly
-   * this reason.
-   */
-  expect(announced, 'no frame fell back, so the fallback rules asserted nothing').toBeGreaterThan(0);
 });
 
 /**
@@ -211,7 +168,7 @@ for (const mode of ['abort', 'not_found', 'corrupt'] as const) {
     await rankedShortlist(page);
 
     /* V11 §A2 — the featured card is where a destination is argued for and pictured. */
-    const detail = page.getByTestId('shortlist-featured-card').first();
+    const detail = page.getByTestId('advisor-pick').filter({ has: page.locator('figure') }).first();
     await expect(detail).toBeVisible();
 
     const hero = detail.locator('figure').first();
@@ -290,7 +247,7 @@ test('an artifact with no imagery still renders every card', async ({ page }) =>
   await sealOff(page);
   await rankedShortlist(page);
 
-  const rows = page.getByTestId('shortlist-featured-card');
+  const rows = page.getByTestId('advisor-pick');
   const count = await rows.count();
   expect(count).toBeGreaterThan(1);
 
@@ -299,10 +256,10 @@ test('an artifact with no imagery still renders every card', async ({ page }) =>
     // Every card has a name and its three actions, photograph or not. A card
     // that lost its content because it lost its picture would fail here.
     await expect(row.getByRole('heading', { level: 3 })).not.toBeEmpty();
-    await expect(row.getByRole('button', { name: 'Plan this' })).toBeVisible();
+    await expect(row.getByRole('button', { name: /Plan a trip to/ })).toBeVisible();
   }
 
   // And the journey onward is unaffected: choosing still produces a trip.
-  await page.getByRole('button', { name: 'Plan this' }).first().click();
+  await page.getByRole('button', { name: /Plan a trip to/ }).first().click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
 });

@@ -1,5 +1,7 @@
 'use client';
 
+import { humanDate } from './plan-format';
+
 import { useState, useTransition } from 'react';
 import { BOOKED_ITEM_TYPES, BOOKED_ITEM_TYPE_LABELS, type BookedPlanItem, type TravelReadinessProfile } from '@sidequest/core';
 import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
@@ -172,37 +174,59 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
  * and stay on this trip: the disclosure is `print:hidden`, never on paper,
  * and this row is rendered only for the owner (the shared copy lists titles).
  */
+function tileMonth(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+}
+function tileDay(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? '?' : String(parsed.getUTCDate());
+}
+
 export function BookedItemRow({ tripId, item }: { tripId: string; item: BookedPlanItem }) {
   const [pending, startTransition] = useTransition();
   const hasConfirmation = Boolean(item.confirmationRef || item.url || item.cost || item.paid || item.refundable || item.cancellationDeadline || item.provider);
   return (
-    <li className="py-3" data-testid="booked-item" data-source={item.source ?? 'typed'}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div className="min-w-0">
-          <p className="text-sm text-ink">
+    <li className="py-4" data-testid="booked-item" data-source={item.source ?? 'typed'}>
+      {/*
+        HUB-4 — a booked fact as a ticket: the date as a calendar tile, what it
+        is and where, then its three controls together on the right (under it on
+        a phone). The ISO date a machine stores is printed as a person reads it.
+      */}
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2.5">
+        <span aria-hidden="true" className={cx('flex w-12 shrink-0 flex-col items-center rounded-[10px] border py-1.5 leading-none', item.status === 'booked' ? 'border-pine/40 bg-pine/10 text-pine' : 'border-rule text-ink-muted')}>
+          <span className="font-mono text-[9px] font-semibold tracking-[0.12em] uppercase">{item.date ? tileMonth(item.date) : '—'}</span>
+          <span className="mt-0.5 font-display text-xl">{item.date ? tileDay(item.date) : '?'}</span>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] text-ink">
             <span className="font-semibold">{item.title}</span>
-            <span className="text-ink-muted"> · {BOOKED_ITEM_TYPE_LABELS[item.type]}</span>
-            {item.status !== 'booked' ? <span className="text-ink-muted"> · {item.status === 'soft_hold' ? 'held' : 'idea'}</span> : null}
           </p>
-          <p className="type-figure text-xs font-medium text-ink-muted">
-            {item.date ?? 'No date'}
-            {item.endDate ? ` → ${item.endDate}` : ''}
-            {item.startTime ? ` · ${item.startTime}` : ''}
-            {item.endTime ? `–${item.endTime}` : ''}
-            {item.location ? ` · ${item.location}` : ''}
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+            <span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold', item.status === 'booked' ? 'bg-pine text-paper' : 'bg-paper-sunk text-ink-muted')}>
+              {item.status === 'booked' ? '✓ Booked' : item.status === 'soft_hold' ? 'On hold' : 'Just an idea'}
+            </span>
+            <span>{BOOKED_ITEM_TYPE_LABELS[item.type]}</span>
+            <span className="type-figure">
+              {item.date ? humanDate(item.date) : 'No date'}
+              {item.endDate ? ` → ${humanDate(item.endDate)}` : ''}
+              {item.startTime ? ` · ${item.startTime}` : ''}
+              {item.endTime ? `–${item.endTime}` : ''}
+            </span>
+            {item.location ? <span>· {item.location}</span> : null}
           </p>
           {item.replaces ? <p className="mt-0.5 text-xs text-ink-muted">In place of the plan’s “{item.replaces}”.</p> : null}
         </div>
-        <span className="inline-flex flex-wrap items-center gap-3">
+        <span className="inline-flex basis-full flex-wrap items-center gap-1.5 pl-16">
           <BookedStatusControl tripId={tripId} id={item.id} status={item.status} {...(item.cost ? { cost: item.cost } : {})} {...(item.paid ? { paid: item.paid } : {})} {...(item.refundable ? { refundable: item.refundable } : {})} />
           <AddConfirmationButton tripId={tripId} item={item} />
-          <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx(buttonClass('ghost', 'sm'), 'hover:text-clay')} data-testid="booked-remove">
+          <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx(buttonClass('ghost', 'sm'), 'text-ink-muted hover:text-clay')} data-testid="booked-remove">
             Remove
           </button>
         </span>
       </div>
       {hasConfirmation ? (
-        <details className="mt-1 print:hidden" data-testid="booked-confirmation">
+        <details className="mt-1 pl-16 print:hidden" data-testid="booked-confirmation">
           <summary className="min-h-11 cursor-pointer py-2 text-sm text-ink-muted">Your confirmation</summary>
           <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             {item.confirmationRef ? (

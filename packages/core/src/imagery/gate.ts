@@ -1,6 +1,7 @@
 import {
   ACCEPTED_IMAGE_MEDIA_TYPES,
   APPROVED_IMAGE_HOSTS,
+  COMMONS_ONLY_PATH_HOSTS,
   IMAGERY_RECORD_VERSION,
   IMAGE_LICENCES,
   MAX_ATTRIBUTION_CHARS,
@@ -238,6 +239,10 @@ export function classifyImageUrl(value: string): UrlVerdict {
   }
   if (!APPROVED_IMAGE_HOSTS.some((approved) => host === approved)) {
     return { ok: false, reason: 'unapproved_host', detail: host };
+  }
+  const commonsPath = COMMONS_ONLY_PATH_HOSTS[host];
+  if (commonsPath && !url.pathname.startsWith(commonsPath)) {
+    return { ok: false, reason: 'unapproved_host', detail: `${host}${url.pathname.split('/').slice(0, 3).join('/')}` };
   }
   return { ok: true, url: url.toString() };
 }
@@ -512,6 +517,21 @@ export function evaluateImageCandidate(
   }
   if (!candidate.match.relationship.trim()) {
     return reject(subject, context, 'malformed_metadata', 'no stated relationship', title);
+  }
+
+  /*
+   * A LOGO IS NOT A PICTURE OF A PLACE.
+   *
+   * The article-lead rung follows a sitelink to whatever image an article
+   * opens with, and for an institution that is often its logo — a live Lisbon
+   * board illustrated the Gulbenkian museum with the foundation's wordmark.
+   * Logos, emblems, flags and coats of arms are also the highest trademark
+   * exposure on Commons, which is why rung (a) already refuses those
+   * properties. The file's own title is the evidence: Commons names these files
+   * for what they are.
+   */
+  if (/(^|[^a-z])(logo|logotipo|logotype|wordmark|emblem|coat[ _]of[ _]arms|flag[ _]of|seal[ _]of)([^a-z]|$)/i.test(candidate.fileTitle)) {
+    return reject(subject, context, 'not_a_photograph', 'a logo or emblem, not a picture of the place', title);
   }
 
   // --- 2. can we safely point a browser at it? ---------------------------

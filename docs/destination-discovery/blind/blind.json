@@ -1,0 +1,478 @@
+[
+ {
+  "scenario": "S01",
+  "request": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.",
+  "list_X": [
+   "Bay of Kotor & Durmitor, Montenegro",
+   "Banff & Jasper, Canadian Rockies, Alberta",
+   "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan"
+  ],
+  "list_Y": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ]
+ },
+ {
+  "scenario": "S02",
+  "request": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.",
+  "list_X": [
+   "Transylvania & the Carpathians, Romania",
+   "Sabah, Borneo, Malaysian Borneo",
+   "Kruger & Sabi Sand, Northeast South Africa"
+  ],
+  "list_Y": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ]
+ },
+ {
+  "scenario": "S03",
+  "request": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration. I'm based in London.",
+  "list_X": [
+   "North Cascades, Washington State",
+   "Corsica, Mediterranean France",
+   "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan"
+  ],
+  "list_Y": [
+   "Nouvelle-Aquitaine, France",
+   "North Brabant, Netherlands",
+   "Lower Saxony, Germany"
+  ]
+ },
+ {
+  "scenario": "S04",
+  "request": "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Corsica, Mediterranean France",
+   "Rio de Janeiro & Costa Verde, Southeast Brazil",
+   "Lycian Coast, Southwest Turkey"
+  ]
+ },
+ {
+  "scenario": "S05",
+  "request": "Two weeks of trekking in July, anywhere in the world, moderate budget.",
+  "list_X": [
+   "Lisbon, Portugal",
+   "Lima Province, Lima",
+   "Copenhagen Municipality, Capital Region of Denmark"
+  ],
+  "list_Y": [
+   "Cordillera Blanca, Huaraz, Peruvian Andes",
+   "West MacDonnell Ranges, Alice Springs, Australia",
+   "Corsica, Mediterranean France"
+  ]
+ },
+ {
+  "scenario": "S06",
+  "request": "I want to see lions and elephants on safari in August. Comfortable budget, about 10 days.",
+  "list_X": [
+   "Kruger & Sabi Sand, Northeast South Africa",
+   "Maasai Mara, Southwest Kenya",
+   "South Luangwa, Eastern Zambia"
+  ],
+  "list_Y": [
+   "Mixco, Guatemala Department",
+   "Zagreb County, Croatia",
+   "Gyeonggi, South Korea"
+  ]
+ },
+ {
+  "scenario": "S07",
+  "request": "Rainforest, monkeys and birds, a jungle lodge or two. Any time of year.",
+  "list_X": [
+   "Osa Peninsula, Southern Costa Rica",
+   "Madagascar's RN7, Southern Highlands, Madagascar",
+   "Sabah, Borneo, Malaysian Borneo"
+  ],
+  "list_Y": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ]
+ },
+ {
+  "scenario": "S08",
+  "request": "Sea kayaking and coastal hikes in September, active but not extreme.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Crete, Greece",
+   "Corsica, Mediterranean France",
+   "Lycian Coast, Southwest Turkey"
+  ]
+ },
+ {
+  "scenario": "S09",
+  "request": "Family trip with two kids (6 and 9) in July from Chicago. Nature, lakes, easy hikes, wildlife.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Banff & Jasper, Canadian Rockies, Alberta",
+   "The Azores, Mid-Atlantic, Portugal",
+   "Julian Alps, Slovenia"
+  ]
+ },
+ {
+  "scenario": "S10",
+  "request": "Cheap backpacking trip with lots of hiking in September. Hostels are fine.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "High Atlas, Central Morocco",
+   "Avenue of the Volcanoes, Ecuadorian Andes",
+   "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan"
+  ]
+ },
+ {
+  "scenario": "S11",
+  "request": "Snow, northern lights and a bit of wildlife in February.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Shiretoko, Eastern Hokkaido, Japan",
+   "Swedish Lapland, Arctic Sweden",
+   "Svalbard, High Arctic, Norway"
+  ]
+ },
+ {
+  "scenario": "S12",
+  "request": "Escape the cold in December from New York. Warm, beaches, some nature.",
+  "list_X": [
+   "Turks & Caicos, Caribbean",
+   "Sydney & the Blue Mountains, New South Wales, Australia",
+   "Krabi & the Andaman Coast, Southern Thailand"
+  ],
+  "list_Y": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ]
+ },
+ {
+  "scenario": "S13",
+  "request": "Trip with my parents (in their 70s) and our kids in June. Scenery, lakes, gentle walks, no long hikes.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Julian Alps, Slovenia",
+   "The Azores, Mid-Atlantic, Portugal",
+   "Almaty & the Northern Tian Shan, Southeast Kazakhstan"
+  ]
+ },
+ {
+  "scenario": "S14",
+  "request": "My husband uses a walking aid. We love scenery, wildlife and lakes. October.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Kruger & Sabi Sand, Northeast South Africa",
+   "The Engadin, Graubünden, Switzerland",
+   "Yellowstone & Grand Teton, Wyoming and Montana"
+  ]
+ },
+ {
+  "scenario": "S15",
+  "request": "Mountains and hiking by train in August, no car.",
+  "list_X": [
+   "Lima Province, Lima",
+   "Fier County, Albania",
+   "Ile-de-France, France"
+  ],
+  "list_Y": [
+   "Chamonix & Mont Blanc, French Alps",
+   "Japanese Alps: Kamikochi & Takayama, Chubu, Japan",
+   "Cordillera Blanca, Huaraz, Peruvian Andes"
+  ]
+ },
+ {
+  "scenario": "S16",
+  "request": "A long weekend of hiking and coast from London in May.",
+  "list_X": [
+   "North Holland, Netherlands",
+   "Ile-de-France, France",
+   "Baden-Württemberg, Germany"
+  ],
+  "list_Y": [
+   "Gulf of Orosei & Supramonte, East Sardinia",
+   "High Atlas, Central Morocco",
+   "Peneda-Gerês, Northern Portugal"
+  ]
+ },
+ {
+  "scenario": "S17",
+  "request": "Long weekend from San Francisco in September: mountains and lakes.",
+  "list_X": [
+   "North Cascades, Washington State",
+   "Banff & Jasper, Canadian Rockies, Alberta",
+   "Mammoth Lakes & the Eastern Sierra, California"
+  ],
+  "list_Y": [
+   "British Columbia, Canada",
+   "State of Mexico, Mexico",
+   "Mixco, Guatemala Department"
+  ]
+ },
+ {
+  "scenario": "S18",
+  "request": "Three weeks in October, somewhere far away. Mountains, culture and food.",
+  "list_X": [
+   "Annapurna Region, Central Nepal",
+   "Transylvania & the Carpathians, Romania",
+   "Réunion, French Indian Ocean"
+  ],
+  "list_Y": [
+   "Ho Chi Minh City, Vietnam",
+   "Lisbon, Portugal",
+   "Ile-de-France, France"
+  ]
+ },
+ {
+  "scenario": "S19",
+  "request": "Anywhere in the world, any time. Surprise me with something outdoors and unusual.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Damaraland & Kaokoland, Northwest Namibia",
+   "Rila & Pirin Mountains, Southwest Bulgaria",
+   "Spiti Valley, Himachal Pradesh, India"
+  ]
+ },
+ {
+  "scenario": "S20",
+  "request": "Hiking and lakes in the Balkans in June.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Julian Alps, Slovenia",
+   "Bay of Kotor & Durmitor, Montenegro",
+   "Lake Ohrid, North Macedonia & Albania"
+  ]
+ },
+ {
+  "scenario": "S21",
+  "request": "Southeast Asia in February: beaches, snorkelling and some jungle.",
+  "list_X": [
+   "Krabi & the Andaman Coast, Southern Thailand",
+   "Khao Sok, Southern Thailand",
+   "Raja Ampat, West Papua, Indonesia"
+  ],
+  "list_Y": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ]
+ },
+ {
+  "scenario": "S22",
+  "request": "First time in Europe, iconic mountains and lakes in July.",
+  "list_X": [
+   "Republika Srpska, Bosnia and Herzegovina",
+   "Municipality of Staro Nagorichane, North Macedonia",
+   "Varna, Bulgaria"
+  ],
+  "list_Y": [
+   "Bernese Oberland, Swiss Alps",
+   "The Dolomites, Northern Italy",
+   "Julian Alps, Slovenia"
+  ]
+ },
+ {
+  "scenario": "S23",
+  "request": "Remote, expedition-style trekking far from anyone. August, about three weeks.",
+  "list_X": [
+   "Cordillera Blanca, Huaraz, Peruvian Andes",
+   "Corsica, Mediterranean France",
+   "Réunion, French Indian Ocean"
+  ],
+  "list_Y": [
+   "Ile-de-France, France",
+   "Lisbon, Portugal",
+   "North Brabant, Netherlands"
+  ]
+ },
+ {
+  "scenario": "S24",
+  "request": "Something relaxing: lakes, gentle walks and good food, late September.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "The Italian Lakes, Lombardy & Garda, Italy",
+   "Dilijan & Lake Sevan, Northern Armenia",
+   "Salzkammergut, Upper Austria"
+  ]
+ },
+ {
+  "scenario": "S25",
+  "request": "Luxury wildlife trip in September, five-star lodges.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Kruger & Sabi Sand, Northeast South Africa",
+   "Laikipia & Samburu, Central Kenya",
+   "Okavango Delta, Northern Botswana"
+  ]
+ },
+ {
+  "scenario": "S26",
+  "request": "Cheap beach and snorkelling trip in January, from Berlin.",
+  "list_X": [
+   "Silesian Voivodeship, Poland",
+   "Tyrol, Austria",
+   "North Brabant, Netherlands"
+  ],
+  "list_Y": [
+   "Oaxaca Coast, Pacific Mexico",
+   "Palawan: El Nido & Coron, Philippines",
+   "Zanzibar, Tanzania"
+  ]
+ },
+ {
+  "scenario": "S27",
+  "request": "Summer holidays from Sydney, hiking and beaches.",
+  "list_X": [
+   "Tayrona & the Sierra Nevada Coast, Caribbean Colombia",
+   "Sydney & the Blue Mountains, New South Wales, Australia",
+   "Wild Coast, Eastern Cape, South Africa"
+  ],
+  "list_Y": [
+   "City of Moreton Bay, Queensland",
+   "Auckland, New Zealand",
+   "Central Java, Indonesia"
+  ]
+ },
+ {
+  "scenario": "S28",
+  "request": "Mountains and hiking in May from Delhi, not too far.",
+  "list_X": [
+   "Sindhupalchowk, Bagamati Province",
+   "Jharkhand, India",
+   "Balochistan, Pakistan"
+  ],
+  "list_Y": [
+   "Yunnan: Lijiang & Tiger Leaping Gorge, Northwest Yunnan, China",
+   "Issyk-Kul & Karakol, Tian Shan, Kyrgyzstan",
+   "Everest Region (Khumbu), Eastern Nepal"
+  ]
+ },
+ {
+  "scenario": "S29",
+  "request": "Deserts, volcanoes and starry skies in November.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Tongariro & Rotorua, Central North Island, New Zealand",
+   "Tenerife & La Gomera, Canary Islands, Spain",
+   "Atacama Desert, Northern Chile"
+  ]
+ },
+ {
+  "scenario": "S30",
+  "request": "A scenic road trip in the Americas in October, happy to drive.",
+  "list_X": [
+   "City of Belgrade, Central Serbia",
+   "Nouvelle-Aquitaine, France",
+   "Jalisco, Mexico"
+  ],
+  "list_Y": [
+   "Great Smoky Mountains & Blue Ridge, Tennessee and North Carolina",
+   "Utah Canyon Country, Southern Utah",
+   "Salta & Jujuy, Northwest Argentina"
+  ]
+ },
+ {
+  "scenario": "S31",
+  "request": "Food, culture and a bit of nature in Asia in March, mid-range budget.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Hoi An & Central Vietnam, Hue to Hoi An, Vietnam",
+   "Yunnan: Lijiang & Tiger Leaping Gorge, Northwest Yunnan, China",
+   "Istanbul, Turkey"
+  ]
+ },
+ {
+  "scenario": "S32",
+  "request": "Whale watching, seals and puffins in June.",
+  "list_X": [
+   "Great Barrier Reef & Daintree, Tropical North Queensland, Australia",
+   "The Azores, Mid-Atlantic, Portugal",
+   "Kenai Peninsula, Southcentral Alaska"
+  ],
+  "list_Y": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ]
+ },
+ {
+  "scenario": "S33",
+  "request": "Hidden gems with mountains and lakes in September, avoid crowds.",
+  "list_X": [
+   "Auvergne-Rhône-Alpes, France",
+   "Baden-Württemberg, Germany",
+   "Silesian Voivodeship, Poland"
+  ],
+  "list_Y": [
+   "Fann Mountains, Western Tajikistan",
+   "North Cascades, Washington State",
+   "The Engadin, Graubünden, Switzerland"
+  ]
+ },
+ {
+  "scenario": "S34",
+  "request": "Hiking and lakes in June, domestic, from Denver.",
+  "list_X": [
+   "Pennsylvania, United States",
+   "California, United States",
+   "Virginia, United States"
+  ],
+  "list_Y": [
+   "Adirondacks, Upstate New York",
+   "North Cascades, Washington State",
+   "Mammoth Lakes & the Eastern Sierra, California"
+  ]
+ }
+]

@@ -33,6 +33,15 @@ export interface ScanCounters {
   unplaced?: number;
   timed?: number;
   measured?: boolean;
+  /**
+   * Production pass — what the scan screen's map draws while the scan runs:
+   * the destination's centre and scale as soon as they are known, and every
+   * place and base once it is placed. Real coordinates from the placement
+   * step, never estimated; capped so the row stays small.
+   */
+  center?: { lat: number; lng: number };
+  scale?: string | null;
+  points?: { name: string; lat: number; lng: number; kind: 'place' | 'base' }[];
 }
 
 export interface ScanView {
@@ -176,6 +185,19 @@ export interface ScanProposalExtras {
 /** What a scan proposed, what it could not place and why, and whether it recovered — enough to explain a thin scan without rerunning it. */
 export interface ScanDiagnostics {
   proposal: { returned: number; kept: number; dropped: { name: string; reason: string }[]; stopReason: string | null; outputTokens: number | null };
+  /**
+   * Who proposed the candidates: the research model, its fixture, or the
+   * open-data fallback (`discovery-scan/open-data-proposal.ts`) when the model
+   * was unavailable. Absent on scans recorded before the fallback existed,
+   * which were all the model's. The board's provenance line reads it.
+   */
+  proposalSource?: 'model' | 'open_data' | 'fixture';
+  /** Production pass — milliseconds per stage (`run.ts#stageTimings`). Absent on older scans. */
+  timings?: { preparingMs: number; totalMs: number; proposingMs?: number; placingMs?: number; timingMs?: number; assemblingMs?: number };
+  /** Why the model was not used, when `proposalSource` is `open_data`: the model's own failure cause. */
+  fallbackReason?: string;
+  /** The open-data proposal's own account: box, groups refused, elements read, Wikidata answers, what was kept. */
+  openData?: { source: string; boxHalfKm: number; groups: number; failedGroups: string[]; elements: number; usable: number; sitelinksAsked: number; sitelinksAnswered: number; settlements: number; kept: number; bases: number };
   envelope: { scale: string | null; reachKm: number; center: { lat: number; lng: number } };
   placement: {
     attempted: number;

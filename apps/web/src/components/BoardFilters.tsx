@@ -206,11 +206,11 @@ function FilterChip({
   return (
     <label
       className={cx(
-        'relative inline-flex min-h-11 cursor-pointer items-center rounded-full border px-3 text-xs font-medium transition-colors',
+        'relative inline-flex min-h-10 cursor-pointer items-center rounded-full border px-3.5 text-[12.5px] font-medium whitespace-nowrap transition-colors max-sm:min-h-11',
         FOCUS_RING,
         checked
-          ? 'border-pine-strong bg-pine-soft text-pine-strong'
-          : 'border-rule bg-paper-raised text-ink-muted hover:border-ink-faint hover:text-ink',
+          ? 'border-ink bg-ink text-paper'
+          : 'border-ink/15 bg-paper-raised/60 text-ink-muted hover:border-ink/40 hover:text-ink',
       )}
     >
       <input
@@ -220,11 +220,6 @@ function FilterChip({
         onChange={onChange}
         className={OVERLAY_INPUT}
       />
-      {checked ? (
-        <span aria-hidden="true" className="mr-1">
-          ✓
-        </span>
-      ) : null}
       {children}
     </label>
   );
@@ -232,9 +227,9 @@ function FilterChip({
 
 function FacetRow({ legend, children }: { legend: string; children: React.ReactNode }) {
   return (
-    <fieldset className="min-w-0">
-      <legend className="text-xs font-medium text-ink">{legend}</legend>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">{children}</div>
+    <fieldset className="min-w-0 max-sm:w-full">
+      <legend className="text-[12px] font-medium text-ink-muted">{legend}</legend>
+      <div className="board-jump mt-1.5 flex flex-wrap gap-1.5 max-sm:-mr-4 max-sm:flex-nowrap max-sm:overflow-x-auto">{children}</div>
     </fieldset>
   );
 }
@@ -271,18 +266,31 @@ export function BoardFilterRail({
     <section
       aria-labelledby="board-filters"
       data-testid="board-filters"
-      className="mb-8 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-4 print:hidden"
+      className="mb-8 rounded-[18px] border border-ink/8 bg-paper-sunk/40 p-4 print:hidden"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h2 id="board-filters" className="text-sm font-medium text-ink">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h2 id="board-filters" className="text-sm font-semibold text-ink">
           Narrow it down
         </h2>
-        <p className="text-xs text-ink-muted" data-testid="board-filter-count">
-          Showing {showing} of {total}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-[12px] text-ink-muted tabular-nums" data-testid="board-filter-count">
+            Showing {showing} of {total}
+          </p>
+          {/* Only when there is something to clear: a permanent "Clear" beside an unfiltered board does nothing. */}
+          {active ? (
+            <button
+              type="button"
+              onClick={() => onChange(NO_FILTERS)}
+              className={cx(buttonClass('ghost', 'sm'), 'min-h-9 px-2.5 text-[12px] underline underline-offset-2 max-sm:min-h-11')}
+              data-testid="board-filter-clear"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 flex flex-wrap gap-x-7 gap-y-3.5">
         {facets.travelSteps.length > 0 ? (
           <FacetRow legend="How far from base">
             <FilterChip
@@ -367,21 +375,6 @@ export function BoardFilterRail({
         ) : null}
       </div>
 
-      {/*
-        Only when there is something to clear. A permanently visible "Clear"
-        beside an unfiltered board is a control that does nothing, which is the
-        one thing this pass is not allowed to add.
-      */}
-      {active ? (
-        <button
-          type="button"
-          onClick={() => onChange(NO_FILTERS)}
-          className={cx(buttonClass('secondary', 'sm'), 'mt-4')}
-          data-testid="board-filter-clear"
-        >
-          Clear filters
-        </button>
-      ) : null}
     </section>
   );
 }

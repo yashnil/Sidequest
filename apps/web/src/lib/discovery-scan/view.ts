@@ -42,6 +42,8 @@ export interface TravellerScanView {
   /** The build this scan asked for has been started; the screen should follow it. */
   autoBuildStarted: boolean;
   failure: ScanFailureCopy | null;
+  /** The live map: the destination's centre, then every placed point. Null until the centre is known. */
+  map: { center: { lat: number; lng: number }; scale: string | null; points: { name: string; lat: number; lng: number; kind: 'place' | 'base' }[] } | null;
 }
 
 /** Mirrors `run.ts#ScanFailureKind`; declared here so the polling route never imports the scan's providers. */
@@ -171,6 +173,7 @@ export function travellerScanViewOf(view: ScanView, now: Date, options: { autoBu
     autoBuildPending: view.autoBuild && view.state !== 'failed' && view.state !== 'lost',
     autoBuildStarted: options.autoBuildStarted ?? false,
     failure,
+    map: view.counters.center ? { center: view.counters.center, scale: view.counters.scale ?? null, points: view.counters.points ?? [] } : null,
   };
 }
 

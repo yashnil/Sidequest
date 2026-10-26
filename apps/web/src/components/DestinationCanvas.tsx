@@ -74,7 +74,7 @@ export function DestinationCanvas({
   const surface = geometry ? 'map' : 'graticule';
   const fade = timing(CANVAS_S, reduced);
   return (
-    <div className={cx('relative min-w-0 overflow-hidden rounded-[var(--radius-plate)] border border-white/10 bg-[var(--color-atlas-raised)]', className)} data-testid="destination-canvas" data-state={state}>
+    <div className={cx('topo relative min-w-0 overflow-hidden border-[1.5px] border-ink bg-[var(--color-atlas-raised)] text-[var(--color-atlas-ink)] [--topo-opacity:0.1]', className)} data-testid="destination-canvas" data-state={state}>
       <AnimatePresence initial={false} mode="sync">
         {surface === 'map' && geometry ? (
           <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, position: 'absolute', inset: 0 }} transition={fade} className="destination-canvas-map p-3">
@@ -102,20 +102,6 @@ export function DestinationCanvas({
 const WIDTH = 640;
 const HEIGHT = 400;
 
-/** The equirectangular grid both graticules share: denser near the equator, the way an atlas endpaper reads. */
-function gridPath(): string {
-  const lines: string[] = [];
-  for (let lng = -180; lng <= 180; lng += 30) {
-    const x = ((lng + 180) / 360) * WIDTH;
-    lines.push(`M${x.toFixed(1)} 0 V${HEIGHT}`);
-  }
-  for (let lat = -60; lat <= 60; lat += 30) {
-    const y = ((90 - lat) / 180) * HEIGHT;
-    lines.push(`M0 ${y.toFixed(1)} H${WIDTH}`);
-  }
-  return lines.join(' ');
-}
-
 /**
  * The destination named on the atlas ground, while it is being placed or after it could not be.
  *
@@ -129,8 +115,7 @@ function NamedGraticule({ name, placing, attempted, locating, unplacedNote, redu
   return (
     <figure className="m-0">
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto w-full" role="img" aria-label={`${name}, not yet placed on the map`}>
-        <rect width={WIDTH} height={HEIGHT} fill="var(--color-atlas-raised)" />
-        <path d={gridPath()} fill="none" stroke="rgb(255 255 255 / 0.08)" strokeWidth="1" />
+        {/* Production pass — the contour sheet (`.topo` on the frame) is the ground; no graticule grid. */}
         {/* The name settles in once, when words first appear; it does not re-enter on every keystroke. */}
         <motion.g initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={timing(CANVAS_S * 0.6, reduced)}>
           <text x={WIDTH / 2} y={HEIGHT / 2 - 6} textAnchor="middle" fontSize="30" fill="var(--color-atlas-ink, #f5f2ea)" fontFamily="var(--font-display)">
@@ -165,11 +150,12 @@ function NamedGraticule({ name, placing, attempted, locating, unplacedNote, redu
 function WorldGraticule() {
   return (
     <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto w-full" role="img" aria-label="World grid">
-      <rect width={WIDTH} height={HEIGHT} fill="var(--color-atlas-raised)" />
-      <path d={gridPath()} fill="none" stroke="rgb(255 255 255 / 0.12)" strokeWidth="1" />
-      <ellipse cx={WIDTH / 2} cy={HEIGHT / 2} rx={WIDTH * 0.42} ry={HEIGHT * 0.44} fill="none" stroke="rgb(255 255 255 / 0.18)" strokeWidth="1" />
-      <path d={`M${WIDTH / 2} 0 V${HEIGHT}`} stroke="rgb(255 255 255 / 0.22)" strokeWidth="1" />
-      <path d={`M0 ${HEIGHT / 2} H${WIDTH}`} stroke="rgb(255 255 255 / 0.22)" strokeWidth="1" />
+      {/* A globe's limb and one flare waypoint waiting for a name — over the contour sheet the frame already carries. */}
+      <circle cx={WIDTH / 2} cy={HEIGHT / 2} r={HEIGHT * 0.36} fill="rgb(255 255 255 / 0.03)" stroke="rgb(255 255 255 / 0.2)" strokeWidth="1" />
+      <ellipse cx={WIDTH / 2} cy={HEIGHT / 2} rx={HEIGHT * 0.36} ry={HEIGHT * 0.11} fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="1" />
+      <ellipse cx={WIDTH / 2} cy={HEIGHT / 2} rx={HEIGHT * 0.13} ry={HEIGHT * 0.36} fill="none" stroke="rgb(255 255 255 / 0.1)" strokeWidth="1" />
+      <circle cx={WIDTH / 2 + 34} cy={HEIGHT / 2 - 40} r={11} fill="#ff5a1f" opacity={0.18} className="breathing" />
+      <circle cx={WIDTH / 2 + 34} cy={HEIGHT / 2 - 40} r={4.5} fill="#ff5a1f" />
       <text x={WIDTH / 2} y={HEIGHT - 14} textAnchor="middle" fontSize="13" fill="var(--color-atlas-muted)" fontFamily="var(--font-sans)" letterSpacing="1.5">
         ANYWHERE
       </text>

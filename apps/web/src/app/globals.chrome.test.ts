@@ -84,8 +84,8 @@ describe('--chrome-height is the height of the chrome', () => {
     // even if every control were removed.
     const rowRem = Math.max(tallestControlRem, TEXT_XL_LINE_BOX_REM);
 
-    // `border-b` on the header element itself.
-    const borderPx = /<header className="[^"]*\bborder-b\b/.test(CHROME) ? 1 : 0;
+    // `border-b` on the header element itself (a plain string or a template, for the night tone).
+    const borderPx = /<header className=(?:"|\{`)[^"`]*\bborder-b\b/.test(CHROME) ? 1 : 0;
 
     const token = resolveTokenRem('chrome-height');
     expect(

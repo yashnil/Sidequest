@@ -417,6 +417,24 @@ describe('unsafe URL', () => {
     });
   });
 
+  it('accepts Commons thumbnails on the 2026 thumbnail host, and only under the Commons path', () => {
+    const commons = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Belem_Tower.jpg/960px-Belem_Tower.jpg?utm_source=commons.wikimedia.org';
+    expect(classifyImageUrl(commons)).toMatchObject({ ok: true });
+    // The same host serves the other wikis' files, fair-use ones included: theirs, not ours.
+    expect(classifyImageUrl('https://thumb.wikimedia.org/wikipedia/en/thumb/a/ab/Poster.jpg/400px-Poster.jpg')).toMatchObject({ ok: false, reason: 'unapproved_host' });
+    const outcome = evaluateImageCandidate(SUBJECT, candidate({ thumbnailUrl: commons }), CONTEXT);
+    expect(outcome.status).toBe('accepted');
+  });
+
+  it('never accepts a logo, emblem, flag or coat of arms as a picture of a place', () => {
+    for (const fileTitle of ['File:FCG_Calouste_Gulbenkian_Logo.jpg', 'File:Coat of arms of Lisbon.png', 'File:Flag of Portugal.jpg', 'File:Museum emblem.jpg']) {
+      const outcome = evaluateImageCandidate(SUBJECT, candidate({ fileTitle }), CONTEXT);
+      expect(outcome.status === 'rejected' && outcome.rejection.reason, fileTitle).toBe('not_a_photograph');
+    }
+    // A word that merely contains the letters is not a logo.
+    expect(evaluateImageCandidate(SUBJECT, candidate({ fileTitle: 'File:Logone river at dusk.jpg' }), CONTEXT).status).toBe('accepted');
+  });
+
   it('refuses any Google image endpoint, which is where an unread licence would arrive from', () => {
     for (const url of [
       'https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=x',

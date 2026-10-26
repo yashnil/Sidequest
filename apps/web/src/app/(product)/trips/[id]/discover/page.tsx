@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
   autoSelect,
@@ -18,7 +17,7 @@ import { acceptedImagesFor, unresolvedImagerySubjects } from '@/lib/db/imagery-r
 
 import { FoodStopsBoard, type FoodChoiceMap } from '@/components/FoodStopsBoard';
 import { TripPersonalityCard } from '@/components/TripPersonalityCard';
-import { Panel, buttonClass } from '@/components/ui';
+import { Panel } from '@/components/ui';
 import { MustDoPanel } from '@/components/MustDoPanel';
 import { PlanCritiquePanel } from '@/components/PlanCritiquePanel';
 import { plannerCritique } from '@/lib/planning/planner-autopick';
@@ -51,6 +50,7 @@ import { boardFor, compiledRegionFor, resolveTripRegion } from '@/lib/region';
 import { refreshWeatherFormAction } from './actions';
 import { ScanScreen } from '@/components/ScanScreen';
 import { RescanButton } from '@/components/RescanButton';
+import { BoardHeader } from '@/components/board/BoardHeader';
 import { scanPreflight } from '@/lib/discovery-scan/preflight';
 import { scanFailureCopy, travellerScanView } from '@/lib/discovery-scan/view';
 import { getScanProposalExtras, scanView } from '@/lib/db/scan-repository';
@@ -133,6 +133,8 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const compiled = compiledRegionFor(id);
   /* Whether the board on screen is the one a Discovery scan built, so its header can say where the places came from. */
   const scannedBoard = compiled !== null && scanView(id).compiledRegionId === compiled.id;
+  /* Whether that board's places came from the open-data fallback because the research model was unavailable — said plainly in the header. */
+  const openDataBoard = scannedBoard && getScanProposalExtras(id)?.diagnostics?.proposalSource === 'open_data';
   const attributions = compiled?.sourceManifest.attributions ?? [];
   const suggestion = autoSelect({
     candidates: board.candidates,
@@ -313,66 +315,46 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
       : {}),
   });
 
-  return (
-    <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
+  /*
+   * Whether the board itself renders. When it does, the sheet header and the
+   * notes about the trip ride at the top of its register column, so the stage
+   * map beside them starts at the top of the screen rather than below a header
+   * that spans the page.
+   */
+  const boardShown = !(readiness && !mayShowDiscoveryBoard(readiness)) && workable.length > 0;
+  const lead = (
+    <>
       {/*
-        THE HEADER IS ONE LINE, BECAUSE THE PAGE IS ABOUT PLACES.
+        THE SHEET HEADER — what somebody re-reads while choosing, and nothing else.
 
-        It was a five-item definition list plus a summary paragraph plus two
-        buttons — about two hundred and eighty pixels of trip metadata a
-        traveller had already typed, in front of the thing they came for. §10.1
-        is explicit that the primary experience is exciting places, not the
-        research engine's account of itself.
-
-        What is left is what somebody genuinely re-reads while choosing: when
-        they are going, where they are sleeping, and how far the board reaches.
-        Everything else — how much was found, how the region was searched, what
-        public transport could and could not be measured — is one press away at
-        the foot of the page.
+        Where this step sits in the trip, the place, the trip's facts as chips,
+        one line of instruction, and where these places came from as a single
+        chip. Everything about how the board was made is at the foot of the
+        page behind one door.
       */}
-      <header className="border-b border-rule pb-6">
-        <p className="label text-accent">Discovery board</p>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <h1 className="display-xl text-ink">{region.name}</h1>
-          <div className="flex flex-wrap gap-2 print:hidden">
-            <Link href={`/trips/${id}/questionnaire`} className={buttonClass('secondary', 'sm')}>
-              Change my answers
-            </Link>
-            {planned ? (
-              <Link href={`/trips/${id}/itinerary`} className={buttonClass('secondary', 'sm')}>
-                View the trip you built
-              </Link>
-            ) : null}
-            {scannedBoard ? <RescanButton tripId={id} /> : null}
-          </div>
-        </div>
-        {scannedBoard ? (
-          /*
-           * V1 convergence — where these places came from, said once and plainly:
-           * proposed by Sidequest's research, each located on a map, Sidequest's
-           * picks pre-ticked and the traveller's to change. A rescan keeps a pick
-           * only on a place that comes back under the same identity.
-           */
-          <p className="measure mt-3 text-sm leading-relaxed text-ink-muted" data-testid="board-provenance">
-            Sidequest’s research proposed these places for how you travel, and each one was located on a map before it reached this board. Sidequest’s picks are already ticked — keep them, change them, or let Sidequest choose again, then build your trip from what you chose. Rescanning replaces the list; your picks on places that still appear are kept.
-          </p>
-        ) : null}
-        <p className="mt-3 text-sm text-ink-muted" data-testid="trip-line">
-          {formatDateRange(trip.basics.startDate, trip.basics.endDate)} · {days} days ·{' '}
-          {trip.basics.adults} adult{trip.basics.adults === 1 ? '' : 's'}
-          {trip.basics.children > 0 ? `, ${trip.basics.children} children` : ''} · staying in{' '}
-          {region.baseName} ·{' '}
-          {/*
-            The radius in the mode this traveller actually moves in. The raw
-            `radiusMinutes` is a driving figure — for a car-free traveller it is
-            a constant twenty, and this header once said "20 min from base" over
-            cards legitimately reached by a 45-minute train two rows below.
-          */}
-          {profile.transport.willDrive
-            ? `up to ${formatMinutes(board.expansion.radiusMinutes)} out`
-            : `up to ${formatMinutes(detourToleranceMinutesFor(profile, 'rail'))} out by public transport`}
-        </p>
-      </header>
+      <BoardHeader
+        tripId={id}
+        title={region.name}
+        facts={{
+          dates: formatDateRange(trip.basics.startDate, trip.basics.endDate),
+          days,
+          travellers: `${trip.basics.adults} adult${trip.basics.adults === 1 ? '' : 's'}${trip.basics.children > 0 ? `, ${trip.basics.children} ${trip.basics.children === 1 ? 'child' : 'children'}` : ''}`,
+          base: region.baseName,
+          /* The radius in the mode this traveller actually moves in; the raw figure is a driving one. */
+          reach: profile.transport.willDrive
+            ? `Day trips up to ${formatMinutes(board.expansion.radiusMinutes)} by car`
+            : `Day trips up to ${formatMinutes(detourToleranceMinutesFor(profile, 'rail'))} by public transport`,
+        }}
+        planned={planned}
+        /*
+         * Where these places came from, said once: proposed by Sidequest's
+         * research and placed on a real map — or, when the research model was
+         * unavailable, from open map data, which the board says instead of
+         * claiming research it did not get.
+         */
+        provenance={scannedBoard ? (openDataBoard ? 'open-data' : 'research') : null}
+        rescan={scannedBoard ? <RescanButton tripId={id} /> : null}
+      />
 
       {/*
         BELOW THE HEADING, NOT ABOVE IT.
@@ -390,14 +372,13 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           acknowledgements={acknowledgements}
         />
       ) : awaitingReconciliation > 0 ? (
-        <Panel className="mb-8 p-5" as="section" testId="reconciliation-pending">
+        <Panel className="mb-6 p-4" as="section" testId="reconciliation-pending">
           <p className="eyebrow">Since you last looked</p>
-          <p className="measure mt-2 text-sm leading-relaxed text-ink-muted">
-            {awaitingReconciliation}{' '}
-            {awaitingReconciliation === 1 ? 'choice you made is' : 'choices you made are'} still
-            waiting to be checked against a finished build. Nothing has been lost — we simply have
-            not been able to tell you what became of{' '}
-            {awaitingReconciliation === 1 ? 'it' : 'them'} yet.
+          <p className="measure mt-1.5 text-sm leading-relaxed text-ink-muted">
+            {awaitingReconciliation === 1
+              ? 'One of your choices hasn’t been checked against a finished build yet.'
+              : `${awaitingReconciliation} of your choices haven’t been checked against a finished build yet.`}{' '}
+            Nothing is lost — we’ll tell you what became of {awaitingReconciliation === 1 ? 'it' : 'them'} after the next build.
           </p>
         </Panel>
       ) : null}
@@ -412,9 +393,16 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
       */}
       {critique ? <PlanCritiquePanel critique={critique} /> : null}
       {settled.coverage ? <MustDoPanel tripId={id} coverage={settled.coverage} /> : null}
+    </>
+  );
+
+  return (
+    <div className="survey min-h-[calc(100dvh-var(--chrome-height))]">
+    <div className="mx-auto max-w-[1680px] px-5 pt-6 pb-10 sm:px-8 lg:px-10">
+      {boardShown ? null : lead}
 
       {readiness && !mayShowDiscoveryBoard(readiness) ? null : (
-        <div className="mt-6">
+        <div className={boardShown ? undefined : 'mt-6'}>
           {workable.length === 0 ? (
             /*
              * THE EMPTY BOARD, EXPLAINED BY THE THING THAT IS ACTUALLY BINDING.
@@ -430,6 +418,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
           ) : (
             <DiscoveryBoardView
               tripId={id}
+              lead={lead}
               tiles={resolveMapBasemap(process.env)}
               /*
                * The artifact these counts are counts *of*.
@@ -643,6 +632,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
         line of content — and is a great deal better than a licence notice and a
         staleness warning nobody can read.
       */}
+    </div>
     </div>
   );
 }

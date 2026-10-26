@@ -1,0 +1,512 @@
+[
+ {
+  "scenario": "S01",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "prefer": "X",
+  "reason": "Kotor/Durmitor, Rockies, Issyk-Kul hit mountains, lakes, wildlife, swimming; Y is admin regions."
+ },
+ {
+  "scenario": "S02",
+  "X": {
+   "fit": 3,
+   "defensibility": 4,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "prefer": "X",
+  "reason": "Real nature destinations with wildlife; Kruger less on coast/swimming but still strong."
+ },
+ {
+  "scenario": "S03",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "prefer": "X",
+  "reason": "Corsica, North Cascades, Karakol are true outdoor picks; Y lists flat admin regions."
+ },
+ {
+  "scenario": "S04",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Corsica, Costa Verde, Lycian Coast combine hiking, coast, swimming; X is generic regions."
+ },
+ {
+  "scenario": "S05",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "prefer": "Y",
+  "reason": "Cordillera Blanca and Corsica GR20 are classic July treks; X lists cities."
+ },
+ {
+  "scenario": "S06",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "prefer": "X",
+  "reason": "Kruger, Mara, Luangwa are prime August safari; Y has no safari at all."
+ },
+ {
+  "scenario": "S07",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "prefer": "X",
+  "reason": "Osa, Madagascar, Sabah are genuine rainforest wildlife lodges; Y is irrelevant."
+ },
+ {
+  "scenario": "S08",
+  "X": {
+   "fit": 1,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Crete, Corsica, Lycian Coast are September sea-kayak and coastal-hike staples."
+ },
+ {
+  "scenario": "S09",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Banff easy from Chicago, family-friendly lakes and wildlife; Azores and Julian Alps fit too."
+ },
+ {
+  "scenario": "S10",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "prefer": "Y",
+  "reason": "Morocco, Ecuador, Kyrgyzstan are cheap hiking hostels in September; X regions are pricier, vague."
+ },
+ {
+  "scenario": "S11",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "prefer": "Y",
+  "reason": "Lapland and Svalbard for aurora, Shiretoko for drift ice and eagles; X irrelevant."
+ },
+ {
+  "scenario": "S12",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "prefer": "X",
+  "reason": "Warm December beaches with nature; Y is cold Europe in winter."
+ },
+ {
+  "scenario": "S13",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Julian Alps and Azores suit gentle multigenerational scenery; Almaty more of a stretch."
+ },
+ {
+  "scenario": "S14",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Kruger drives, Engadin rail, Yellowstone boardwalks suit limited mobility; October Yellowstone cold."
+ },
+ {
+  "scenario": "S15",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Chamonix and Japanese Alps are excellent by train; Cordillera Blanca is bus-based, not rail."
+ },
+ {
+  "scenario": "S16",
+  "X": {
+   "fit": 1,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Sardinia, Morocco, Ger\u00eas offer hiking plus coast-ish; X lacks coast and hiking focus."
+ },
+ {
+  "scenario": "S17",
+  "X": {
+   "fit": 4,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "prefer": "X",
+  "reason": "Eastern Sierra ideal for a long weekend; Y includes Guatemala city suburb and vague provinces."
+ },
+ {
+  "scenario": "S18",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 2,
+   "defensibility": 3,
+   "variety": 3
+  },
+  "prefer": "X",
+  "reason": "Annapurna in October is peak; mountains plus culture and food; Y lacks mountains."
+ },
+ {
+  "scenario": "S19",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "prefer": "Y",
+  "reason": "Damaraland, Spiti, Rila are unusual outdoor picks; X is mundane regions."
+ },
+ {
+  "scenario": "S20",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Y is exactly Balkan lakes and hiking; X isn't in the Balkans."
+ },
+ {
+  "scenario": "S21",
+  "X": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "prefer": "X",
+  "reason": "Krabi, Khao Sok, Raja Ampat nail February beaches, snorkel and jungle."
+ },
+ {
+  "scenario": "S22",
+  "X": {
+   "fit": 1,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Bernese Oberland and Dolomites are iconic; X is obscure for first-timers."
+ },
+ {
+  "scenario": "S23",
+  "X": {
+   "fit": 3,
+   "defensibility": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "prefer": "X",
+  "reason": "Cordillera Blanca is expedition-grade; Corsica and R\u00e9union are busier but real treks."
+ },
+ {
+  "scenario": "S24",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Italian Lakes and Salzkammergut perfect for relaxed lakes and food in late September."
+ },
+ {
+  "scenario": "S25",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Sabi Sand, Laikipia, Okavango have top luxury lodges in September dry season."
+ },
+ {
+  "scenario": "S26",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 5
+  },
+  "prefer": "Y",
+  "reason": "Palawan and Zanzibar are cheapish January beach-snorkel picks; X is wintry inland Europe."
+ },
+ {
+  "scenario": "S27",
+  "X": {
+   "fit": 3,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 3
+  },
+  "prefer": "X",
+  "reason": "Blue Mountains plus real hiking-coast picks; Y is vague and suburban."
+ },
+ {
+  "scenario": "S28",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 3,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Khumbu is great in May near Delhi; Yunnan and Kyrgyzstan less 'not too far'; X weak/unsafe."
+ },
+ {
+  "scenario": "S29",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 5,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Atacama, Tenerife, Tongariro deliver deserts, volcanoes and dark skies."
+ },
+ {
+  "scenario": "S30",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensibility": 5,
+   "variety": 5
+  },
+  "prefer": "Y",
+  "reason": "Smokies foliage, Utah canyons, Salta-Jujuy are October road trips in the Americas."
+ },
+ {
+  "scenario": "S31",
+  "X": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Hoi An and Yunnan suit March food and culture; Istanbul is marginally Asian."
+ },
+ {
+  "scenario": "S32",
+  "X": {
+   "fit": 3,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensibility": 1,
+   "variety": 1
+  },
+  "prefer": "X",
+  "reason": "Azores and Kenai fit whales, seals, puffins in June; GBR is off-season for puffins."
+ },
+ {
+  "scenario": "S33",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Fann Mountains and North Cascades are uncrowded; Engadin is less of a hidden gem."
+ },
+ {
+  "scenario": "S34",
+  "X": {
+   "fit": 2,
+   "defensibility": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensibility": 4,
+   "variety": 4
+  },
+  "prefer": "Y",
+  "reason": "Specific lake hiking regions; Adirondacks far from Denver, Sierra may hold snow in June."
+ }
+]

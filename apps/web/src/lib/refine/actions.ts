@@ -8,6 +8,7 @@ import { recordDecision } from '../db/execution-repository';
 import { bookedItemBinds, draftDelta, evidenceRowsFromRequest, metricsDelta, type DeltaDraftShape, type DeltaLine, type DraftDelta } from '@sidequest/core';
 import { getTripDraft } from '../db/draft-repository';
 import { FOREIGN_TRIP_REFUSAL, ownedTrip, tripAccessRefusal } from '../net/trip-access';
+import { callerKey, guardBilledAction } from '../net/caller';
 import { ResearchModel } from '../providers/anthropic';
 import { isCompositionModelConfigured, isFixtureComposer } from '../providers/switches';
 import { reserveModelCalls } from '../compiler/daily-ceiling';
@@ -80,6 +81,15 @@ const SUMMARY_LINE_LIMIT = 6;
 
 const NOT_CONFIGURED = 'Sidequest cannot make changes for you right now. Your trip is unchanged.';
 
+/** A refusal before the model call (a fence or the daily allowance): its sentence is the traveller's, and the trip is unchanged. */
+const REFUSAL_MARK = '[sidequest-refused] ';
+class RefinementRefusedError extends Error {
+  constructor(readonly sentence: string) {
+    /* The graph keeps only `error.message`, so the mark is how the sentence survives to `travellerSentenceFor`. */
+    super(`${REFUSAL_MARK}${sentence}`);
+  }
+}
+
 function interpreterFor(caller: string | null, now: Date): { interpreter: RefinementInterpreter; error?: undefined } | { interpreter?: undefined; error: string } {
   if (isFixtureComposer()) {
     /*
@@ -127,8 +137,11 @@ function interpreterFor(caller: string | null, now: Date): { interpreter: Refine
   return {
     interpreter: {
       async interpret(input) {
+        /* Production pass — the billed fence, taken only where the model is actually called (never for Apply, Cancel or Undo). */
+        const fenced = await guardBilledAction('refine');
+        if (fenced) throw new RefinementRefusedError(fenced);
         const reservation = reserveModelCalls(1, { now, caller });
-        if (!reservation.allowed) throw new Error(reservation.message ?? 'Today’s allowance is used up. Try again tomorrow.');
+        if (!reservation.allowed) throw new RefinementRefusedError(reservation.message ?? 'Today’s allowance is used up. Try again tomorrow.');
         return underlying.interpret(input);
       },
     },
@@ -202,7 +215,7 @@ export async function refineTripAction(input: { tripId: string; request: string;
     throw error;
   }
 
-  const seam = interpreterFor(null, now);
+  const seam = interpreterFor(await callerKey(), now);
   if (!seam.interpreter) {
     updateRun({ id: run.id, status: 'failed', error: seam.error, now });
     return { ok: false, error: seam.error, runId: run.id };
@@ -220,7 +233,7 @@ export async function answerRefinementAction(input: { tripId: string; runId: str
   const draft = await draftFor(input.tripId);
   if (!draft) return { ok: false, error: 'There is no plan to change yet.' };
   const now = new Date();
-  const seam = interpreterFor(null, now);
+  const seam = interpreterFor(await callerKey(), now);
   if (!seam.interpreter) {
     updateRun({ id: run.id, status: 'failed', error: seam.error, now });
     return { ok: false, error: seam.error, runId: run.id };
@@ -413,7 +426,11 @@ async function runGraph(input: {
      * told. A stale version is its own sentence because it has a different
      * remedy: reload and ask again.
      */
-    const message = error instanceof StaleTripVersionError ? 'Your trip changed while Sidequest was working on this. Reload and ask again.' : 'Sidequest could not apply that change. Your current trip is unchanged.';
+    const message = error instanceof StaleTripVersionError
+      ? 'Your trip changed while Sidequest was working on this. Reload and ask again.'
+      : error instanceof RefinementRefusedError
+        ? `${error.sentence} Your current trip is unchanged.`
+        : 'Sidequest could not apply that change. Your current trip is unchanged.';
     console.error('A refinement failed', { tripId, runId: run.id, error: error instanceof Error ? error.message : 'unknown' });
     updateRun({ id: run.id, status: 'failed', question: null, error: message });
     return { ok: false, error: message, runId: run.id };
@@ -463,6 +480,8 @@ function recordCancelledBaseChange(tripId: string, now: Date = new Date()): void
 /** One sentence, from whatever the graph recorded. Never a schema path or a provider name. */
 function travellerSentenceFor(errors: readonly string[], refused: readonly { reason: string }[]): string {
   if (refused.some((entry) => entry.reason.includes('locked'))) return 'That would have changed something you asked Sidequest to keep, so nothing was changed.';
+  const refusedBeforeCall = errors.find((entry) => entry.startsWith(REFUSAL_MARK));
+  if (refusedBeforeCall) return `${refusedBeforeCall.slice(REFUSAL_MARK.length)} Your current trip is unchanged.`;
   if (errors.some((entry) => entry.includes('model calls'))) return `Sidequest allows ${MAX_REFINEMENT_MODEL_CALLS} attempts at one change. Try asking for something more specific.`;
   return 'Sidequest could not make that change. Your current trip is unchanged.';
 }

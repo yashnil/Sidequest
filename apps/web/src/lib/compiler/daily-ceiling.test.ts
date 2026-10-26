@@ -248,3 +248,58 @@ describe('reserving model calls outside a compilation', () => {
     expect(dailySpendSoFar('model_calls', NOW)).toBe(6);
   });
 });
+
+/**
+ * PRODUCTION PASS — COOKIE FARMING AND THE RESERVATION FOR ACCOUNTS.
+ *
+ * A signed session cookie is free: any action mints one. Two properties stop a
+ * script that keeps one fresh cookie per round trip from draining the day.
+ */
+describe('a cookie cannot reset its own allowance', () => {
+  afterEach(() => {
+    delete process.env.SIDEQUEST_NEW_SPENDERS_PER_HOUR;
+    delete process.env.SIDEQUEST_ANONYMOUS_SPEND_SHARE;
+  });
+
+  it('admits new session spenders from one deployment-wide bucket', async () => {
+    process.env.SIDEQUEST_NEW_SPENDERS_PER_HOUR = '3';
+    const { reserveModelCalls } = await import('./daily-ceiling');
+    for (let index = 0; index < 3; index += 1) {
+      expect(reserveModelCalls(1, { now: NOW, caller: `session:farmed-${index}` }).allowed).toBe(true);
+    }
+    const fourth = reserveModelCalls(1, { now: NOW, caller: 'session:farmed-3' });
+    expect(fourth.allowed, 'a fourth fresh cookie bought a fresh allowance').toBe(false);
+    if (!fourth.allowed) expect(fourth.message).toContain('new travellers');
+
+    // A browser that has already spent today is not asked again…
+    expect(reserveModelCalls(1, { now: NOW, caller: 'session:farmed-0' }).allowed).toBe(true);
+    // …and an address the infrastructure vouches for, or an account, is never asked.
+    expect(reserveModelCalls(1, { now: NOW, caller: 'ip:203.0.113.9' }).allowed).toBe(true);
+    expect(reserveModelCalls(1, { now: NOW, caller: 'user:abc' }).allowed).toBe(true);
+
+    // The bucket refills over the hour.
+    const later = new Date(NOW.getTime() + 25 * 60_000);
+    expect(reserveModelCalls(1, { now: later, caller: 'session:farmed-3' }).allowed).toBe(true);
+  });
+
+  it('keeps a share of the day that anonymous traffic can never take', async () => {
+    process.env.SIDEQUEST_DAILY_MODEL_CALLS = '100';
+    process.env.SIDEQUEST_ANONYMOUS_SPEND_SHARE = '0.5';
+    const { dailySpendSoFar, reserveModelCalls } = await import('./daily-ceiling');
+    // Fifty addresses, ten calls' share each, one call apiece: the anonymous half is spent.
+    for (let index = 0; index < 50; index += 1) {
+      expect(reserveModelCalls(1, { now: NOW, caller: `ip:198.51.100.${index}` }).allowed).toBe(true);
+    }
+    expect(reserveModelCalls(1, { now: NOW, caller: 'ip:198.51.100.200' }).allowed).toBe(false);
+    expect(reserveModelCalls(1, { now: NOW, caller: null }).allowed).toBe(false);
+    // A signed-in account still has the reserved half.
+    expect(reserveModelCalls(1, { now: NOW, caller: 'user:traveller' }).allowed).toBe(true);
+    expect(dailySpendSoFar('model_calls', NOW)).toBe(51);
+  });
+
+  it('reads a malformed share as the default, never as no reservation', async () => {
+    process.env.SIDEQUEST_ANONYMOUS_SPEND_SHARE = '7';
+    const { anonymousSpendShare } = await import('./daily-ceiling');
+    expect(anonymousSpendShare()).toBe(0.75);
+  });
+});

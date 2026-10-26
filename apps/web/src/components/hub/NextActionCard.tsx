@@ -27,7 +27,7 @@ const PHASE_WORD: Record<TripPhase, { eyebrow: string; blurb: string }> = {
 
 const KIND_CLASS: Record<NextAction['kind'], string> = {
   decide: 'bg-clay text-paper',
-  book: 'bg-accent text-paper',
+  book: 'bg-flare text-night',
   verify: 'bg-amber text-paper',
   prepare: 'bg-ink text-paper',
   recheck: 'bg-slate-blue text-paper',

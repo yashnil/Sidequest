@@ -2,36 +2,28 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
-  DATE_MODE_LABELS,
-  TRIP_THEME_LABELS,
-  nightsFrom,
-  shortlistLead,
-  shortlistSeparation,
-  type DestinationShortlist,
+  ADVISOR_QUESTIONS,
+  destinationCatalog,
+  emptyComposerAnswers,
+  parseTravelRequest,
+  profileChips,
+  type QuestionId,
 } from '@sidequest/core';
-import { ShortlistView } from '@/components/ShortlistView';
-import { DecisionRevise } from '@/components/DecisionRevise';
-import { buttonClass } from '@/components/ui';
-import { ShortlistImagery } from './ShortlistImagery';
+import { AdvisorInterview } from '@/components/advisor/AdvisorInterview';
+import { AdvisorShortlistView } from '@/components/advisor/AdvisorShortlistView';
+import { AdvisorImagery } from './AdvisorImagery';
 import { ownedDecisionSession } from '@/lib/net/decision-access';
-import { destinationEntryById } from '@/lib/db/destination-index-repository';
 import { acceptedImagesFor } from '@/lib/db/imagery-repository';
-import { isClimateEnabled } from '@/lib/providers/switches';
+import { advisorImageSubjects } from '@/lib/destinations/advisor-images';
 
 /**
- * Dynamic, and reads rows only.
+ * ONE DECISION: THE INTERVIEW UNTIL THERE IS A SHORTLIST, THEN THE SHORTLIST.
  *
- * Nothing here starts external work: the shortlist is built by an explicit
- * action and stored, so a refresh re-renders what is on disk rather than paying
- * for it again. That is the same rule the plan page follows and the same reason —
- * a page that ranked on every render would rank on every back button.
- *
- * Imagery follows the identical rule and is the reason it is worth restating.
- * The photographs on this screen were resolved by `buildShortlistAction`, gated,
- * credited and written to `destination_images`; this reads that table. A render
- * that could ask a wiki for a picture would ask once per card, on every refresh,
- * from every visitor — which is the "hot spider" pattern Wikimedia's own
- * guidance names and asks clients not to build.
+ * Reads rows only. The interview runs in the browser on the stored answers;
+ * the shortlist is built by an explicit action and stored, so a refresh renders
+ * what is on disk and a back button costs nothing. A session from the previous
+ * ranker (stored before the 2026-10 rebuild) has its answers and no advisor
+ * shortlist, so it re-enters the interview with everything it already said.
  */
 export const dynamic = 'force-dynamic';
 
@@ -41,246 +33,81 @@ export const metadata: Metadata = {
 
 export default async function DecideSessionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
-  /*
-   * The owner's decision or nothing — a foreign browser sees a missing page,
-   * the same boundary every trip door holds. What somebody is deciding between
-   * is the most traveller-specific thing this product stores, and the
-   * `/decide/<id>` URL must not be a second, mutable share surface.
-   * See `lib/net/decision-access`.
-   */
+  const query = await searchParams;
+  /* The owner's decision or nothing — see `lib/net/decision-access`. */
   const session = await ownedDecisionSession(id);
   if (!session) notFound();
-
-  /*
-   * Already chosen. The decision is a record of how they got there, and the trip
-   * is where the work now lives — so this is a redirect rather than a read-only
-   * copy of a screen they have finished with.
-   */
   if (session.resolvedTripId) redirect(`/trips/${session.resolvedTripId}/plan`);
 
-  const nights = nightsFrom(session.answers);
-  const summary = [
-    session.answers.dates.mode === 'month' && session.answers.dates.month
-      ? MONTHS[session.answers.dates.month - 1]
-      : session.answers.dates.mode === 'season' && session.answers.dates.season
-        ? `${session.answers.dates.season[0]!.toUpperCase()}${session.answers.dates.season.slice(1)}`
-        : DATE_MODE_LABELS[session.answers.dates.mode],
-    nights === null ? 'length open' : `${nights} nights`,
-    session.answers.themes.map((theme) => TRIP_THEME_LABELS[theme].toLowerCase()).join(', '),
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const catalog = destinationCatalog();
+  const points = catalog.map((entry) => ({ id: entry.id, lat: entry.center.lat, lng: entry.center.lng }));
+  const editing = query.edit === '1';
+  const askParam = typeof query.ask === 'string' ? query.ask : null;
+  const startAt = askParam && ADVISOR_QUESTIONS.some((question) => question.id === askParam) ? (askParam as QuestionId) : null;
 
-  const images = imagesForShortlist(session.shortlist);
-  const picks = session.shortlist?.picks ?? [];
+  if (session.advisor && !editing) {
+    const subjects = advisorImageSubjects(session.advisor);
+    const images = acceptedImagesFor(subjects);
+    const missing = subjects.filter((subject) => !images[subject.id]).length;
+    return (
+      <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+        <AdvisorImagery sessionId={id} missing={missing} />
+        <AdvisorShortlistView
+          sessionId={id}
+          shortlist={session.advisor}
+          images={images}
+          points={points}
+          summary={profileChips(session.answers).map((chip) => chip.label)}
+        />
+        <p className="mt-14 rule-top pt-6 type-small text-ink-muted">
+          <Link href={`/decide/${id}?edit=1`} className="underline underline-offset-4 hover:text-pine">
+            Change your answers
+          </Link>
+          {' · '}
+          <Link href="/decide" className="underline underline-offset-4 hover:text-pine">
+            Start again
+          </Link>
+          {' · '}
+          <Link href="/trips/new" className="underline underline-offset-4 hover:text-pine">
+            I know where I’m going
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
-  /**
-   * WHEN A RANKING IS NOT A RANKING.
-   *
-   * A live run produced eight administrative polygons under a numbered list and
-   * a "why this one" panel beside the first. A list in an order that means
-   * nothing, presented as an order, is worse than no list: somebody acts on the
-   * first row.
-   *
-   * This used to test `band === 'thin_evidence'` on every pick, which was the
-   * wrong question twice over. It was too *narrow* — a full set of answers puts
-   * the same eight indistinguishable regions in the `worth_a_look` band, and the
-   * screen went back to numbering them 1 to 8 — and it was indirect, because the
-   * band is a statement about one destination's evidence while the thing at
-   * stake is whether the eight can be told apart *from each other*.
-   *
-   * So the verdict is derived from the scores themselves, in `@sidequest/core`
-   * beside the ranker that produced them, and `ShortlistView` reads the same
-   * function. Two screens cannot disagree about whether a list is ranked.
-   */
-  const separation = shortlistSeparation(picks);
-
-  /**
-   * WHICH ONE THE PAGE LEADS WITH, AND WHAT IT MAY SAY ABOUT IT.
-   *
-   * The old headline for a tie was "We could not tell these apart", and below it
-   * the page spent two paragraphs elaborating on that, then offered six things
-   * the traveller could go and answer. Every word of it was true and the whole
-   * screen was about us. Somebody who asked where they should go got a report on
-   * our confidence.
-   *
-   * `shortlistLead` is the same function `ShortlistView` calls, so the name in
-   * this heading and the destination in the panel below cannot drift apart.
-   */
-  const lead = shortlistLead(picks, separation);
-  const leadPick = lead ? picks.find((pick) => pick.entryId === lead.entryId) : undefined;
+  const request = session.answers.discovery?.request;
+  const understood = request ? parseTravelRequest(request, emptyComposerAnswers('help_me_decide', new Date())).readings.map((reading) => reading.label) : [];
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-      <p className="eyebrow">Where should I go</p>
-      {/*
-        An empty result gets its own heading rather than the confident one.
-
-        `shortlistSeparation([])` reports `separates: true` — vacuously, because
-        no adjacent pair disagrees — so a run that returned nothing was headed
-        "Places that fit this trip" above a panel reading "Nothing came back".
-      */}
-      <h1 className="mt-3 font-display text-3xl leading-tight text-ink sm:text-4xl">
-        {!session.shortlist
-          ? 'Working out where you should go'
-          : picks.length === 0
-            ? 'We could not put a list together'
-            : !separation.separates && leadPick
-              ? `Start with ${leadPick.displayName}`
-              : 'Places that fit this trip'}
-      </h1>
-
-      <div className="mt-10">
-        <ShortlistView
+      <p className="sheet-label inline-flex items-center gap-2 text-accent">
+        <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-flare" />
+        Help me choose
+      </p>
+      {request ? (
+        <blockquote className="mt-3 max-w-3xl border-l-2 border-flare pl-4 font-display text-xl leading-snug text-ink-muted italic">“{request}”</blockquote>
+      ) : null}
+      <div className="mt-8">
+        <AdvisorInterview
           sessionId={id}
-          shortlist={session.shortlist}
-          answers={session.answers}
-          answersSummary={summary}
-          images={images}
+          initial={editing ? { ...session.answers, discovery: session.answers.discovery ? { ...session.answers.discovery, asked: [] } : undefined } : session.answers}
+          understood={understood}
+          startAt={startAt}
         />
       </div>
-
-      {/*
-        THE ONE INPUT THAT WOULD CHANGE THE ANSWER.
-
-        One, not the six this listed before. The dimensions are not equal —
-        climate carries 0.24 of the nominal weight and transport 0.04 — so
-        `shortlistLead` sorts them and hands back the heaviest question that is
-        the traveller's to answer. Six bullet points and a button reading
-        "Answer those and re-rank" is a form, and a form is exactly what
-        somebody is trying to avoid when they ask a product where to go.
-
-        Absent entirely when nothing would help: every remaining gap is ours or
-        nobody's, they are listed once inside the disclosure below the results,
-        and offering a form for a problem the traveller cannot solve is worse
-        than saying nothing.
-      */}
-      {session.shortlist && !separation.separates && lead?.nextQuestion ? (
-        /*
-         * V11 §A2 — BELOW THE ANSWER, NOT ABOVE IT.
-         *
-         * This sat between the heading and the recommendations, so a traveller
-         * who asked where they should go met a question from us before they met
-         * an answer from us. It is a good offer and it belongs after the thing
-         * it would improve.
-         */
-        <div className="mt-10 max-w-2xl rounded-[var(--radius-card)] border border-rule bg-paper-sunk p-5">
-          <p className="eyebrow">One answer would change this</p>
-          <p className="mt-3 leading-relaxed text-ink">{lead.nextQuestion.action}</p>
-          <a href="#revise" className={`${buttonClass('primary')} mt-5`}>
-            Answer that and re-rank
-          </a>
-        </div>
-      ) : null}
-
-      {/*
-        Photographs are resolved after the ranking is on screen, never in front
-        of it. See `ShortlistImagery` and the note in `buildShortlistAction`.
-      */}
-      {picks.length > 0 ? (
-        <ShortlistImagery
-          sessionId={id}
-          missing={picks.filter((pick) => !images[pick.entryId]).length}
-        />
-      ) : null}
-
-      {/*
-        `scroll-mt-8` rather than `scroll-mt-24`.
-
-        The root now carries `scroll-padding-top: var(--chrome-height)` so that
-        a focused control never lands behind the header (WCAG 2.2 SC 2.4.11).
-        That padding applies to anchor jumps too, and it *adds* to any
-        `scroll-margin` here — 96px of margin on top of 73px of padding would
-        drop this heading a quarter of the way down a phone screen. What is
-        wanted here is only breathing room above the rule.
-      */}
-      <div id="revise" className="mt-14 scroll-mt-8 border-t border-rule pt-8">
-        <DecisionRevise
-          sessionId={id}
-          climateEnabled={isClimateEnabled()}
-          initial={{
-            dateMode: session.answers.dates.mode,
-            ...(session.answers.dates.startDate ? { startDate: session.answers.dates.startDate } : {}),
-            ...(session.answers.dates.endDate ? { endDate: session.answers.dates.endDate } : {}),
-            ...(session.answers.dates.month ? { month: session.answers.dates.month } : {}),
-            ...(session.answers.dates.season ? { season: session.answers.dates.season } : {}),
-            nights: session.answers.duration.nights ?? null,
-            shape: session.answers.shape ?? null,
-            transport: session.answers.transport ?? null,
-            pace: session.answers.pace ?? null,
-            themes: [...session.answers.themes],
-            outdoorIntensity: session.answers.outdoorIntensity ?? null,
-            budget: session.answers.budget ?? null,
-            adults: session.answers.adults,
-            children: session.answers.children,
-            avoid: session.answers.avoid ?? '',
-            /*
-             * V11 §A1 — everything the intake ladder collects, so reopening the
-             * answers shows what was said rather than an empty question. A field
-             * missing here is a question the traveller answered and is asked
-             * again, which is the exact experience §A5 exists to prevent.
-             */
-            ...(session.answers.duration.minNights ? { minNights: session.answers.duration.minNights } : {}),
-            ...(session.answers.duration.maxNights ? { maxNights: session.answers.duration.maxNights } : {}),
-            ...(session.answers.origin ? { origin: session.answers.origin } : {}),
-            ...(session.answers.originCountry ? { originCountry: session.answers.originCountry } : {}),
-            ...(session.answers.flightTolerance ? { flightTolerance: session.answers.flightTolerance } : {}),
-            ...(session.answers.climatePreference ? { climatePreference: session.answers.climatePreference } : {}),
-            ...(session.answers.lodgingComfort ? { lodgingComfort: session.answers.lodgingComfort } : {}),
-            ...(session.answers.tripScope ? { tripScope: session.answers.tripScope } : {}),
-            ...(session.answers.surpriseAppetite ? { surpriseAppetite: session.answers.surpriseAppetite } : {}),
-            ...(session.answers.crowdTolerance ? { crowdTolerance: session.answers.crowdTolerance } : {}),
-            ...(session.answers.visited?.length ? { visited: [...session.answers.visited] } : {}),
-            ...(typeof session.answers.budgetPerPerson === 'number' ? { budgetPerPerson: session.answers.budgetPerPerson } : {}),
-            ...(session.answers.budgetIncludesFlights === undefined ? {} : { budgetIncludesFlights: session.answers.budgetIncludesFlights }),
-            travelerNeeds: [...session.answers.travelerNeeds],
-            skipped: [...session.answers.skipped],
-          }}
-        />
-      </div>
-
-      <p className="mt-10 text-sm text-ink-faint">
+      <p className="mt-14 rule-top pt-6 type-small text-ink-muted">
+        Already know where you are going?{' '}
         <Link href="/trips/new" className="underline underline-offset-4 hover:text-pine">
-          Or start from a destination you already have in mind.
+          Start from a destination instead.
         </Link>
       </p>
     </div>
   );
 }
-
-/**
- * Stored photographs for the destinations on screen, keyed by index entry id.
- *
- * The Wikidata id comes back out of the index rather than out of the shortlist,
- * because that is what an imagery record is keyed on — a photograph survives the
- * index being rebuilt and every entry renumbered, and looking it up by our own
- * id would lose it at exactly the moment the catalogue is refreshed.
- *
- * Two local table reads and no network. A shortlist with nothing stored yields
- * an empty object and every card draws its coordinate-derived graphic, which is
- * a designed outcome rather than a degraded one.
- */
-function imagesForShortlist(shortlist: DestinationShortlist | null) {
-  if (!shortlist || shortlist.picks.length === 0) return {};
-  const subjects = shortlist.picks.flatMap((pick) => {
-    const entry = destinationEntryById(pick.entryId);
-    if (!entry) return [];
-    return [
-      {
-        kind: 'destination' as const,
-        id: entry.id,
-        ...(entry.wikidataId ? { wikidataId: entry.wikidataId } : {}),
-      },
-    ];
-  });
-  return acceptedImagesFor(subjects);
-}
-
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];

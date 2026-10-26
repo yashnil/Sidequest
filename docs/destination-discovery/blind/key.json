@@ -1,0 +1,172 @@
+{
+ "S01": {
+  "X": "after",
+  "Y": "before",
+  "id": "original-summer-outdoors"
+ },
+ "S02": {
+  "X": "after",
+  "Y": "before",
+  "id": "original-wildlife-led"
+ },
+ "S03": {
+  "X": "after",
+  "Y": "before",
+  "id": "original-mountains-rugged"
+ },
+ "S04": {
+  "X": "before",
+  "Y": "after",
+  "id": "original-beach-led-warm"
+ },
+ "S05": {
+  "X": "before",
+  "Y": "after",
+  "id": "alpine-trekking-july"
+ },
+ "S06": {
+  "X": "after",
+  "Y": "before",
+  "id": "safari-first-timer"
+ },
+ "S07": {
+  "X": "after",
+  "Y": "before",
+  "id": "tropical-biodiversity"
+ },
+ "S08": {
+  "X": "before",
+  "Y": "after",
+  "id": "coastal-adventure"
+ },
+ "S09": {
+  "X": "before",
+  "Y": "after",
+  "id": "family-nature"
+ },
+ "S10": {
+  "X": "before",
+  "Y": "after",
+  "id": "budget-hiking"
+ },
+ "S11": {
+  "X": "before",
+  "Y": "after",
+  "id": "winter-nature-escape"
+ },
+ "S12": {
+  "X": "after",
+  "Y": "before",
+  "id": "warm-december"
+ },
+ "S13": {
+  "X": "before",
+  "Y": "after",
+  "id": "multi-generational"
+ },
+ "S14": {
+  "X": "before",
+  "Y": "after",
+  "id": "limited-mobility"
+ },
+ "S15": {
+  "X": "before",
+  "Y": "after",
+  "id": "no-car"
+ },
+ "S16": {
+  "X": "before",
+  "Y": "after",
+  "id": "short-weekend-london"
+ },
+ "S17": {
+  "X": "after",
+  "Y": "before",
+  "id": "short-weekend-sf"
+ },
+ "S18": {
+  "X": "after",
+  "Y": "before",
+  "id": "long-international"
+ },
+ "S19": {
+  "X": "before",
+  "Y": "after",
+  "id": "flexible-worldwide"
+ },
+ "S20": {
+  "X": "before",
+  "Y": "after",
+  "id": "region-balkans"
+ },
+ "S21": {
+  "X": "after",
+  "Y": "before",
+  "id": "region-southeast-asia"
+ },
+ "S22": {
+  "X": "before",
+  "Y": "after",
+  "id": "region-europe-classic"
+ },
+ "S23": {
+  "X": "after",
+  "Y": "before",
+  "id": "remote-adventure"
+ },
+ "S24": {
+  "X": "before",
+  "Y": "after",
+  "id": "relaxed-nature"
+ },
+ "S25": {
+  "X": "before",
+  "Y": "after",
+  "id": "luxury-wildlife"
+ },
+ "S26": {
+  "X": "before",
+  "Y": "after",
+  "id": "budget-beach-winter"
+ },
+ "S27": {
+  "X": "after",
+  "Y": "before",
+  "id": "from-sydney-summer"
+ },
+ "S28": {
+  "X": "before",
+  "Y": "after",
+  "id": "from-delhi-mountains"
+ },
+ "S29": {
+  "X": "before",
+  "Y": "after",
+  "id": "desert-volcano"
+ },
+ "S30": {
+  "X": "before",
+  "Y": "after",
+  "id": "road-trip-americas"
+ },
+ "S31": {
+  "X": "before",
+  "Y": "after",
+  "id": "culture-food-asia"
+ },
+ "S32": {
+  "X": "after",
+  "Y": "before",
+  "id": "marine-wildlife"
+ },
+ "S33": {
+  "X": "before",
+  "Y": "after",
+  "id": "avoid-crowds-hidden"
+ },
+ "S34": {
+  "X": "before",
+  "Y": "after",
+  "id": "domestic-us"
+ }
+}

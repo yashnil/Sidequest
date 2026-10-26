@@ -1,0 +1,548 @@
+/*
+ * SURVEY ATLAS — THE HUB'S READING VIEWS (Plan · Book · Prepare).
+ *
+ * Three compositions built from the same vocabulary as the board and the days:
+ * a view head with a sheet number and the view's figures in boxed cells; a rail
+ * (a sticky margin label beside an ink thread) for anything that has an order —
+ * booking deadlines, readiness sections; ruled registers for rows. No new
+ * colour, no decoration: every shape here carries a figure or an order.
+ */
+@layer components {
+  /* ── View head ─────────────────────────────────────────────────────────── */
+  .hv-head {
+    padding-top: 2.25rem;
+  }
+  .hv-title {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+    font-size: clamp(2.5rem, 1.7rem + 2.6vw, 4rem);
+    line-height: 0.95;
+    letter-spacing: -0.035em;
+    color: var(--color-ink);
+  }
+  .hv-lede {
+    max-width: 58ch;
+    margin-top: 0.75rem;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--color-ink-muted);
+  }
+
+  /* Boxed figures that share borders and wrap cleanly (two up on a phone). */
+  .hv-figs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 1px 0 0 1px;
+  }
+  @media (min-width: 640px) {
+    .hv-figs {
+      grid-template-columns: repeat(var(--hv-cols, 4), minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 639px) {
+    .hv-figs > .label-box:last-child:nth-child(odd) {
+      grid-column: span 2;
+    }
+  }
+  .hv-figs:empty {
+    display: none;
+  }
+  .hv-figs > .label-box {
+    margin: -1px 0 0 -1px;
+    min-width: 0;
+    background: var(--color-paper-raised);
+  }
+  .hv-figs > .label-box > :last-child {
+    font-variant-numeric: tabular-nums lining-nums;
+    overflow-wrap: anywhere;
+  }
+  a.label-box {
+    transition: background-color var(--motion-fast) var(--ease-out);
+  }
+  a.label-box:hover {
+    background: var(--color-paper);
+  }
+
+  /* ── Plan's section index (the tabs) ───────────────────────────────────── */
+  .hv-tabs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(8.5rem, 1fr);
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--color-ink);
+  }
+  .hv-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .hv-tab {
+    position: relative;
+    display: flex;
+    min-height: 4.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.15rem;
+    padding: 0.7rem 0.85rem 0.75rem;
+    text-align: left;
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+    color: var(--color-ink-muted);
+    transition:
+      background-color var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out);
+  }
+  .hv-tab + .hv-tab {
+    border-left: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+  }
+  .hv-tab:hover {
+    color: var(--color-ink);
+    background: color-mix(in srgb, var(--color-paper-raised) 60%, transparent);
+  }
+  .hv-tab[aria-selected='true'] {
+    color: var(--color-ink);
+    background: var(--color-paper-raised);
+    box-shadow: inset 0 3px 0 var(--color-ink);
+  }
+  .hv-tab-label {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    line-height: 1.15;
+  }
+  .hv-tab-sum {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* ── The rail: a sticky margin label beside an ink thread ──────────────── */
+  .hv-tl {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hv-tl + .hv-tl {
+    margin-top: 2.25rem;
+  }
+  .hv-tl-rail {
+    padding-bottom: 0.5rem;
+  }
+  .hv-tl-body {
+    min-width: 0;
+    border-top: 1.5px solid var(--color-ink);
+  }
+  @media (min-width: 768px) {
+    .hv-tl {
+      grid-template-columns: 13rem minmax(0, 1fr);
+      column-gap: 2rem;
+    }
+    .hv-tl + .hv-tl {
+      margin-top: 0;
+    }
+    .hv-tl-rail {
+      position: sticky;
+      top: calc(var(--chrome-height) + 4.5rem);
+      align-self: start;
+      padding: 0.85rem 0 2.5rem;
+      border-top: 1.5px solid var(--color-ink);
+    }
+    .hv-tl-body {
+      position: relative;
+      border-top: 1.5px solid var(--color-ink);
+      border-left: 1px solid color-mix(in srgb, var(--color-ink) 22%, transparent);
+      padding: 0 0 2.5rem 1.5rem;
+    }
+    .hv-tl-body::before {
+      content: '';
+      position: absolute;
+      left: -5px;
+      top: -5px;
+      width: 9px;
+      height: 9px;
+      background: var(--color-ink);
+    }
+    .hv-tl[data-tone='quiet'] .hv-tl-body::before {
+      background: var(--color-paper);
+      border: 1.5px solid var(--color-ink);
+    }
+  }
+  .hv-tl-count {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-size: 2.5rem;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    font-variant-numeric: lining-nums tabular-nums;
+    color: var(--color-ink);
+  }
+
+  /* ── A booking need as a register row: when · what · status ───────────── */
+  .hv-bk {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem 1rem;
+    padding: 1rem 0;
+  }
+  .hv-bk-when {
+    grid-column: 1;
+    align-self: center;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-muted);
+  }
+  .hv-bk-when b {
+    font-weight: 500;
+    color: var(--color-ink);
+    margin-right: 0.6em;
+  }
+  @media (min-width: 640px) {
+    .hv-bk {
+      grid-template-columns: 6.25rem minmax(0, 1fr) auto;
+    }
+    .hv-bk-when {
+      align-self: start;
+      padding-top: 0.2rem;
+    }
+    .hv-bk-when b {
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: 1.625rem;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      text-transform: none;
+      margin: 0 0 0.25rem;
+    }
+  }
+  .hv-bk[data-elevated='true'] .hv-bk-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+
+  /* A status in words, in a square mono box; the tone is the word's, not a decoration. */
+  .hv-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid currentColor;
+    padding: 0.2rem 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1.2;
+    color: var(--color-ink-muted);
+  }
+  .hv-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+  }
+  .hv-status[data-tone='open'] {
+    color: var(--color-clay);
+  }
+  .hv-status[data-tone='booked'] {
+    color: var(--color-pine);
+  }
+  .hv-status[data-tone='held'] {
+    color: var(--color-slate-blue);
+  }
+  .hv-status[data-tone='quiet']::before {
+    background: transparent;
+    border: 1px solid currentColor;
+  }
+
+  /* ── Stays: the route as a sequence of beds, nights as figures ─────────── */
+  /* A phone reads the strip as a proportional bar (number and nights); the names are in the register below. */
+  .hv-strip {
+    display: flex;
+    flex-direction: row;
+    border: 1px solid var(--color-ink);
+    background: var(--color-paper-raised);
+  }
+  .hv-strip > li {
+    flex: var(--n, 1) 1 0;
+    min-width: 0;
+    padding: 0.5rem 0.45rem 0.55rem;
+  }
+  .hv-strip > li + li {
+    border-left: 1px solid var(--color-ink);
+  }
+  .hv-strip .hv-strip-days {
+    display: none;
+  }
+  .hv-strip .hv-nights {
+    font-size: 1.75rem;
+  }
+  @media (min-width: 640px) {
+    .hv-strip > li {
+      padding: 0.75rem 0.9rem 0.85rem;
+    }
+    .hv-strip .hv-strip-days {
+      display: inline;
+    }
+    .hv-strip .hv-nights {
+      font-size: clamp(2.75rem, 2rem + 2vw, 4rem);
+    }
+  }
+  .hv-nights {
+    font-family: var(--font-display);
+    font-weight: 200;
+    font-variation-settings: 'SOFT' 100, 'WONK' 0;
+    font-size: clamp(2.75rem, 2rem + 2vw, 4rem);
+    line-height: 0.8;
+    letter-spacing: -0.06em;
+    font-variant-numeric: lining-nums;
+    color: var(--color-ink);
+  }
+  .hv-base {
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    gap: 0 1rem;
+    padding: 1.5rem 0;
+  }
+  @media (min-width: 640px) {
+    .hv-base {
+      grid-template-columns: 3rem minmax(0, 1fr) 6rem;
+    }
+  }
+  .hv-specimen {
+    display: inline-grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    background: var(--color-ink);
+    color: var(--color-paper);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* ── Getting around: legs as a register with their evidence drawn ──────── */
+  .hv-leg {
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    gap: 0.35rem 1rem;
+    padding: 0.85rem 0;
+    align-items: baseline;
+  }
+  .hv-leg-meta {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.9rem;
+  }
+  @media (min-width: 768px) {
+    .hv-leg {
+      grid-template-columns: 4rem minmax(0, 1fr) auto;
+    }
+    .hv-leg-meta {
+      grid-column: auto;
+      justify-content: flex-end;
+    }
+  }
+  /* The same line the map draws: solid measured, dashed estimated, dotted not timed, glacier on the water and rail. */
+  .hv-swatch {
+    display: inline-block;
+    width: 2rem;
+    height: 0;
+    border-top: 2.5px solid var(--color-ink);
+    vertical-align: middle;
+  }
+  .hv-swatch[data-evidence='estimated'] {
+    border-top-style: dashed;
+  }
+  .hv-swatch[data-evidence='unmeasured'] {
+    border-top-style: dotted;
+    border-top-width: 3px;
+  }
+  .hv-swatch[data-evidence='scheduled'] {
+    border-top-color: var(--color-slate-blue);
+  }
+
+  /* ── Food: the meals as a rhythm across the days ───────────────────────── */
+  .hv-rhythm {
+    display: grid;
+    grid-template-columns: 3.75rem repeat(3, minmax(0, 1fr));
+  }
+  @media (min-width: 768px) {
+    .hv-rhythm {
+      grid-template-columns: 6.5rem repeat(3, minmax(0, 1fr)) minmax(0, 0.9fr);
+    }
+  }
+  .hv-rhythm > * {
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+    padding: 0.7rem 0.6rem 0.75rem 0;
+    min-width: 0;
+  }
+  .hv-rhythm-head > * {
+    border-top: 0 !important;
+    padding-bottom: 0.4rem;
+  }
+  .hv-rhythm-extra {
+    grid-column: 2 / -1;
+    border-top-style: dashed !important;
+  }
+  @media (min-width: 768px) {
+    .hv-rhythm-extra {
+      grid-column: auto;
+      border-top-style: solid !important;
+    }
+  }
+  .hv-meal {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+  .hv-meal::before {
+    content: '';
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border: 1.5px solid var(--color-ink);
+    transform: translateY(-1px);
+  }
+  .hv-meal[data-weight='event']::before {
+    background: var(--color-ink);
+  }
+  .hv-meal[data-weight='none']::before {
+    border-color: color-mix(in srgb, var(--color-ink) 25%, transparent);
+    border-style: dotted;
+  }
+
+  /* ── Budget: a figure table with each range drawn to one scale ─────────── */
+  .hv-range {
+    position: relative;
+    height: 6px;
+    background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  }
+  .hv-range > i {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--lo);
+    width: max(2px, calc(var(--hi) - var(--lo)));
+    background: var(--color-ink);
+  }
+  /* A per-person range is drawn hollow: it shares the scale but is not the same quantity as a party figure. */
+  .hv-range[data-basis='pp'] > i {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--color-ink);
+  }
+  .hv-budget-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.3rem 1.25rem;
+    padding: 0.85rem 0;
+    align-items: baseline;
+  }
+  @media (min-width: 768px) {
+    .hv-budget-row {
+      grid-template-columns: 12rem minmax(0, 1fr) 11rem;
+      align-items: center;
+    }
+  }
+  .hv-budget-row .hv-range {
+    grid-column: 1 / -1;
+  }
+  @media (min-width: 768px) {
+    .hv-budget-row > dt {
+      grid-row: 1;
+    }
+    .hv-budget-row .hv-range {
+      grid-row: 1;
+      grid-column: 2;
+    }
+  }
+
+  /* ── Prepare: the verdict head ─────────────────────────────────────────── */
+  .hv-verdict {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: end;
+  }
+  @media (min-width: 768px) {
+    .hv-verdict {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+  }
+  .hv-away {
+    font-family: var(--font-display);
+    font-weight: 200;
+    font-variation-settings: 'SOFT' 100, 'WONK' 0;
+    font-size: clamp(4rem, 2.5rem + 5vw, 7.5rem);
+    line-height: 0.78;
+    letter-spacing: -0.06em;
+    font-variant-numeric: lining-nums;
+    color: var(--color-ink);
+  }
+  .hv-dot {
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    flex: none;
+  }
+
+  /* A checklist row: tick · subject · what to do. */
+  .hv-check {
+    display: grid;
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: 0 0.5rem;
+    align-items: start;
+    padding: 0.5rem 0;
+  }
+  @media (min-width: 900px) {
+    .hv-check {
+      grid-template-columns: 2.75rem 9rem minmax(0, 1fr);
+    }
+  }
+  .hv-check-cat {
+    display: none;
+  }
+  @media (min-width: 900px) {
+    .hv-check-cat {
+      display: block;
+      padding-top: 0.95rem;
+    }
+  }
+
+  /* Folded reference: a summary set as a sheet heading. */
+  .hv-fold > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 1rem;
+  }
+  .hv-fold > summary::after {
+    content: '+';
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    color: var(--color-ink-muted);
+  }
+  .hv-fold[open] > summary::after {
+    content: '–';
+  }
+
+  /* Packing: categories as narrow ruled registers. */
+  .hv-pack .check-hint {
+    font-size: 0.75rem;
+  }
+}

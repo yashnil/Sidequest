@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Concept C — Survey Journal</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..800,100;1,9..144,300..800,100&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#13201f; --paper:#ebe5d6; --grid:rgba(19,32,31,.09); --flare:#ff5a1f; --rust:#a8360a; --mute:#5f625c; --night:#0d1a1f; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:#ccc; font-family:'Bricolage Grotesque',sans-serif; color:var(--ink); }
+  .frame { position:relative; width:1440px; height:900px; overflow:hidden; background:var(--paper);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 120px 120px; background-position: 0 0; border-bottom:1px solid #888; }
+  .mono { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+  .serif { font-family:'Fraunces',serif; }
+  .bar { position:absolute; left:0; right:0; top:0; height:40px; border-bottom:1px solid var(--ink); display:flex; align-items:center; gap:28px; padding:0 24px; background:var(--paper); z-index:6; }
+  .bar .mark { font-family:'Fraunces'; font-weight:600; font-size:18px; margin-right:auto; }
+  .label { border:1px solid var(--ink); padding:10px 12px; background:var(--paper); }
+  .label .k { font-family:'JetBrains Mono'; font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--mute); }
+  .label .v { font-family:'Fraunces'; font-size:20px; margin-top:2px; }
+  .print { background:#fff; padding:8px 8px 26px; box-shadow:0 10px 24px rgba(0,0,0,.18); position:absolute; }
+  .print img { display:block; width:100%; height:calc(100% - 0px); object-fit:cover; }
+  .print .c { position:absolute; left:10px; bottom:6px; font-family:'JetBrains Mono'; font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); }
+  .stamp { position:absolute; border:2px solid var(--rust); color:var(--rust); border-radius:50%; width:150px; height:150px; display:grid; place-items:center; text-align:center; font-family:'JetBrains Mono'; font-size:10px; letter-spacing:.14em; transform:rotate(-12deg); }
+  .stamp b { font-family:'Fraunces'; font-size:30px; letter-spacing:0; display:block; }
+  #f-home h1 { position:absolute; left:120px; top:240px; font-size:132px; line-height:.9; font-weight:400; letter-spacing:-.04em; font-variation-settings:'SOFT' 0, 'WONK' 1; }
+  #f-home h1 i { color:var(--rust); }
+  .inp { position:absolute; left:120px; top:600px; width:600px; border-bottom:2px solid var(--ink); padding:10px 0; display:flex; align-items:baseline; font-family:'Fraunces'; font-style:italic; font-size:34px; }
+  .inp span:last-child { margin-left:auto; font-family:'Bricolage Grotesque'; font-style:normal; font-size:15px; font-weight:600; background:var(--flare); padding:12px 20px; border-radius:999px; }
+  .mapframe { position:absolute; border:1px solid var(--ink); }
+  .row { display:grid; grid-template-columns:44px 1fr auto; gap:12px; border-bottom:1px solid var(--ink); padding:10px 14px; align-items:center; background:var(--paper); }
+  .row .n { font-family:'JetBrains Mono'; font-size:12px; }
+  .row .nm { font-family:'Fraunces'; font-size:19px; }
+  .row .k { font-size:12px; color:var(--mute); }
+  .chk { font-family:'JetBrains Mono'; font-size:11px; border:1px solid var(--ink); padding:4px 8px; }
+  .chk.on { background:var(--ink); color:var(--paper); }
+  .scale { display:flex; gap:0; }
+  .scale div { flex:1; text-align:center; border:1px solid var(--ink); border-left:0; padding:14px 0; font-family:'Fraunces'; font-size:22px; }
+  .scale div:first-child { border-left:1px solid var(--ink); }
+  .scale div.on { background:var(--ink); color:var(--paper); }
+  .ticks { display:flex; justify-content:space-between; margin-top:6px; }
+</style>
+</head>
+<body>
+<section class="frame" id="f-home">
+  <div class="bar"><span class="mark">Sidequest</span><span class="mono">38.7077° N · 9.1366° W</span><span class="mono">Sheet 01 / Lisbon</span><span class="mono">Trips</span></div>
+  <h1 class="serif">Every trip is<br>a <i>survey</i><br>of a place.</h1>
+  <div class="inp"><span>Lisbon in November</span><span>Begin →</span></div>
+  <div class="print" style="left:860px;top:110px;width:380px;height:470px;transform:rotate(2deg)"><img id="p1" style="height:436px"><span class="c">I · Belém Tower</span></div>
+  <div class="print" style="left:1010px;top:470px;width:320px;height:300px;transform:rotate(-4deg)"><img id="p2" style="height:266px"><span class="c">II · Rossio</span></div>
+  <div class="stamp" style="left:760px;top:600px"><div>Lisbon<b>5 days</b>10–14 Nov</div></div>
+</section>
+<section class="frame" id="f-interview">
+  <div class="bar"><span class="mark">Sidequest</span><span class="mono">Question 04 / 07 · Reach</span><span class="mono">Lisbon</span></div>
+  <div class="mono" style="position:absolute;left:120px;top:130px;color:var(--rust)">04 · Reach</div>
+  <h2 class="serif" style="position:absolute;left:120px;top:160px;font-size:68px;font-weight:400;line-height:1;width:620px;letter-spacing:-.03em">How far will you go for something good?</h2>
+  <div style="position:absolute;left:120px;top:430px;width:600px"><div class="scale"><div>15′</div><div class="on">30′</div><div>1 h</div><div>2 h</div><div>Any</div></div><div class="ticks mono"><span>stay close</span><span>day trips</span></div></div>
+  <div class="mapframe" style="left:840px;top:120px;width:480px;height:640px" id="m-int"></div>
+  <div class="label" style="position:absolute;left:860px;top:700px;width:240px"><div class="k">Reach from base</div><div class="v">30 min · 11 of 23 places</div></div>
+</section>
+<section class="frame" id="f-board">
+  <div class="bar"><span class="mark">Sidequest</span><span class="mono">Board · 23 specimens · 10 chosen</span><span class="mono" id="coord">38.71° N 9.16° W · z12</span></div>
+  <div class="mapframe" style="left:480px;top:80px;width:920px;height:780px" id="m-board"></div>
+  <div style="position:absolute;left:40px;top:80px;width:400px;border-top:1px solid var(--ink)" id="rows"></div>
+  <div class="print" style="left:1040px;top:120px;width:320px;height:300px;transform:rotate(1.5deg)"><img id="p3" style="height:266px"><span class="c">III · Castle of Saint George</span></div>
+</section>
+<section class="frame" id="f-itin">
+  <div class="bar"><span class="mark">Sidequest</span><span class="mono">Day 02 / 05 · Wed 11 Nov</span><span class="mono">4 stops · 52 min moving · 6.1 km</span></div>
+  <div class="mapframe" style="left:40px;top:80px;width:840px;height:780px" id="m-itin"></div>
+  <div style="position:absolute;left:920px;top:80px;width:480px">
+    <div class="mono" style="color:var(--rust)">Day 02</div>
+    <h2 class="serif" style="font-size:48px;font-weight:400;line-height:1;letter-spacing:-.02em;margin:6px 0 18px">Old masters &amp; the white dome</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0" id="stats"></div>
+    <div style="margin-top:20px;border-top:1px solid var(--ink)" id="tl"></div>
+  </div>
+</section>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="shared.js"></script>
+<script src="data.js"></script>
+<script>
+const P = DATA.places, byId = Object.fromEntries(P.map((p) => [p.id, p]));
+p1.src = P[0].img; p2.src = P[13].img; p3.src = P[3].img;
+const survey = JSON.parse(JSON.stringify(ATLAS.bone)); survey.layers[0].paint['background-color'] = '#ebe5d6'; survey.layers.find(l=>l.id==='water').paint['fill-color'] = '#c9d5cf';
+const numbered = (map, pts) => map.on('load', () => { map.addSource('p', { type: 'geojson', data: { type: 'FeatureCollection', features: pts.map((p, i) => ({ type: 'Feature', properties: { n: String(i + 1) }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })) } }); map.addLayer({ id: 'p', type: 'circle', source: 'p', paint: { 'circle-radius': 10, 'circle-color': '#13201f' } }); map.addLayer({ id: 'pl', type: 'symbol', source: 'p', layout: { 'text-field': ['get', 'n'], 'text-font': ['Noto Sans Bold'], 'text-size': 10 }, paint: { 'text-color': '#ebe5d6' } }); });
+const im0 = new maplibregl.Map({ container: 'm-int', style: survey, center: [DATA.base.lng, DATA.base.lat], zoom: 11.3, attributionControl: false, interactive: false });
+im0.on('load', () => { const c = [DATA.base.lng, DATA.base.lat]; const ring = []; for (let a = 0; a <= 64; a++) { const t = (a / 64) * Math.PI * 2; ring.push([c[0] + 0.11 * Math.cos(t), c[1] + 0.085 * Math.sin(t)]); } im0.addSource('ring', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] } } }); im0.addLayer({ id: 'rf', type: 'fill', source: 'ring', paint: { 'fill-color': '#ff5a1f', 'fill-opacity': 0.08 } }); im0.addLayer({ id: 'rl', type: 'line', source: 'ring', paint: { 'line-color': '#a8360a', 'line-width': 1.5, 'line-dasharray': [2, 2] } }); });
+numbered(im0, P);
+numbered(makeMap('m-board', survey, P, { padding: 60, interactive: false }), P);
+rows.innerHTML = P.slice(0, 12).map((p, i) => `<div class="row"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><div class="nm">${p.name}</div><div class="k">${p.kind} · ${p.mins}′</div></div><span class="chk ${i % 3 !== 1 ? 'on' : ''}">${i % 3 !== 1 ? 'IN' : '—'}</span></div>`).join('');
+const day = DATA.days[1]; const stops = day.items.filter((i) => i.kind === 'activity').map((i) => byId[i.place]);
+const im = makeMap('m-itin', survey, stops, { padding: 90, interactive: false });
+numbered(im, stops);
+im.on('load', () => { im.addSource('r', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: stops.map((p) => [p.lng, p.lat]) } } }); im.addLayer({ id: 'r', type: 'line', source: 'r', paint: { 'line-color': '#ff5a1f', 'line-width': 4 } }, 'p'); });
+stats.innerHTML = [['Moving', '52 min'], ['Effort', 'Easy'], ['Back by', '18:40']].map(([k, v]) => `<div class="label" style="margin-left:-1px"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+tl.innerHTML = day.items.filter((i) => i.kind !== 'travel').slice(0, 6).map((i, k) => `<div class="row" style="grid-template-columns:64px 1fr auto"><span class="n">${fmt(i.start)}</span><div><div class="nm">${i.title.replace(/ — .*/, '')}</div></div><span class="mono" style="color:var(--mute)">${i.kind === 'activity' ? 'stop' : i.kind}</span></div>`).join('');
+</script>
+</body>
+</html>

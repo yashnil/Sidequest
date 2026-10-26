@@ -2,6 +2,8 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { cookies, headers } from 'next/headers';
 import { isSignedSessionToken, mintSessionToken } from './session-signature';
+import { userForSessionToken } from '../db/auth-repository';
+import { AUTH_COOKIE } from '../auth/config';
 import {
   ACTION_RATE_RULES,
   deploymentBusyCopy,
@@ -296,10 +298,49 @@ export async function presentedSessionToken(): Promise<string | null> {
  * allowance, which is worse than having none.
  */
 export async function callerKey(): Promise<string | null> {
+  /*
+   * PRODUCTION PASS — A SIGNED-IN ACCOUNT IS THE STRONGEST IDENTITY THERE IS.
+   * An identity provider vouched for it, it is not free to mint, and it is what
+   * `daily-ceiling`'s anonymous reservation is reserved *for*: every key that is
+   * not `user:` is charged to the anonymous part of the day as well.
+   */
+  const account = await signedInAccount();
+  if (account) return `user:${account}`;
   const address = await callerAddress();
   if (address) return `ip:${address}`;
   const session = await attributableSession();
   return session ? `session:${session}` : null;
+}
+
+/** The signed-in account's id, read without touching `lib/auth/session` (which imports this module). */
+async function signedInAccount(): Promise<string | null> {
+  try {
+    const jar = await cookies();
+    const token = jar.get(AUTH_COOKIE)?.value;
+    if (!token) return null;
+    return userForSessionToken(token)?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * PRODUCTION PASS — THE SECOND FENCE IN FRONT OF EVERY DOOR THAT BILLS A MODEL.
+ *
+ * The per-kind rules above are per-minute and sized for a person changing their
+ * mind. This one is per-*hour* and shared across every billed door (a scan, a
+ * model-composed build, a refinement), keyed on the same identities — the
+ * trusted address when `SIDEQUEST_TRUSTED_PROXY_HOPS` is set, the presented
+ * session cookie — plus its own deployment-wide bucket. A script cannot buy
+ * scans by alternating doors, and on a deployment with a trusted address it
+ * cannot buy them by minting cookies either. Call it only once the press is
+ * known to spend (after the attach-to-running check and, for builds, after the
+ * preflight said `model_composer`), so free work is never charged.
+ */
+export async function guardBilledAction(kind: GuardedActionKind): Promise<string | null> {
+  const first = await guardAction(kind);
+  if (first) return first;
+  return guardAction('billed_hourly');
 }
 
 /**

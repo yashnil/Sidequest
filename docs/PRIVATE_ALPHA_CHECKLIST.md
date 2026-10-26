@@ -11,8 +11,13 @@ Deployment details, the environment contract, backup and rollback are in [`DEPLO
   - [ ] Required: `SIDEQUEST_DB_PATH=/data/sidequest.db`, `SIDEQUEST_SESSION_SECRET` (64 chars), `SIDEQUEST_BASE_URL=https://…`, no fixture switches.
   - [ ] `ANTHROPIC_API_KEY` set.
   - [ ] `SIDEQUEST_FETCH_USER_AGENT` names a real contact, not `<your-email>`.
-  - [ ] `SIDEQUEST_DAILY_MODEL_CALLS` sized for the number of testers (each caller gets 10%).
+  - [ ] `SIDEQUEST_DAILY_MODEL_CALLS` set deliberately (code default is 800/day; each caller gets 10%; anonymous callers share 75% unless `SIDEQUEST_ANONYMOUS_SPEND_SHARE` says otherwise).
+  - [ ] `SIDEQUEST_TRUSTED_PROXY_HOPS=1` (Railway's edge appends the client address to `X-Forwarded-For`).
+  - [ ] `SIDEQUEST_SUPPORT_EMAIL` set to a monitored address (otherwise `/support` says none is published).
+  - [ ] Optional: `SIDEQUEST_NEW_SPENDERS_PER_HOUR` (default 30) if a launch post is expected to bring more first-time visitors an hour.
   - [ ] Recommended: `GOOGLE_MAPS_API_KEY`, `SIDEQUEST_POI_PROVIDER=overpass`, openrouteservice (key present).
+- [ ] `npm audit --omit=dev --audit-level=high` reports nothing.
+- [ ] `/privacy`, `/terms` and `/support` reviewed by the owner (and a lawyer before a public launch); remove the draft notice only then.
 - [ ] Volume `@sidequest/web-volume` is mounted at `/data`.
 - [ ] A Railway volume backup was taken (Volumes → Backups).
 - [ ] Note the current deployment id, for rollback.
@@ -29,6 +34,8 @@ Deployment details, the environment contract, backup and rollback are in [`DEPLO
   3. The same command with `SIDEQUEST_ALPHA_PHASE=verify`. The itinerary, board decision, calendar feed and share link survive; a stranger sees only the share page.
 - [ ] Share test: open the share link in a private window; no notes, references, party facts or owner controls.
 - [ ] Calendar test: the feed URL from Pack returns `BEGIN:VCALENDAR`, with URLs on `SIDEQUEST_BASE_URL`.
+- [ ] `curl -sI $URL/` shows `x-request-id`, `permissions-policy`; `curl -sI $URL/share/x` shows `x-robots-tag: noindex`; `curl -s -o /dev/null -w '%{http_code}' "$URL/_next/image?url=/icon&w=64&q=75"` is `404`.
+- [ ] Data rights: on `/profile`, "Download my data" downloads JSON; "Delete all my data" in a throwaway browser removes its trips (and, signed in, the account).
 - [ ] Logs: `railway logs … | grep sidequest_event` shows the run's `trip_created` … `build_completed` with `mode` = `planner`.
 
 ## Known limitations (tell alpha testers)
@@ -41,7 +48,8 @@ Deployment details, the environment contract, backup and rollback are in [`DEPLO
 - **Export:** PDF is the browser's print-to-PDF, not a generated file. Calendar export and feed are native (ICS).
 - **Accounts:** a trip belongs to the browser that made it unless the traveller signs in. Clearing cookies loses access.
 - **Architecture:** single-instance SQLite on one volume. Deploys have a short unavailable window, there is no high availability, and backups are manual or volume snapshots.
-- **Model allowance:** each tester gets 10% of the daily model-call ceiling. Past it, scans are refused with a plain message until the next day.
+- **Model allowance:** each tester gets 10% of the daily model-call ceiling, and testers who are not signed in share 75% of it. Past it, scans are refused with a plain message until the next day.
+- **Data rights:** download and delete are self-serve on `/profile`; without an account they cover this browser only.
 
 ## Rollback
 

@@ -30,13 +30,16 @@ import {
 import {
   Badge,
   ErrorNote,
+  FOCUS_RING,
   FitMeter,
-  Panel,
+  OVERLAY_INPUT,
   PlaceName,
   PlacePlate,
   buttonClass,
   cx,
 } from './ui';
+import { CheckIcon, ChevronIcon, InfoIcon, RouteIcon, SparkIcon } from './board/icons';
+import '@/styles/board.css';
 import {
   BoardFilterRail,
   NO_FILTERS,
@@ -64,6 +67,7 @@ import {
   type SharedFactKind,
 } from './BoardCopy';
 import { BoardMap } from './BoardMap';
+import { BoardStage, type StageFeature } from './board/BoardStage';
 import type { MapBasemap } from './map-adapter';
 import { DestinationImage, ImageCredit } from './DestinationImage';
 import { BuildTripButton, PlannerReadinessPanel } from './BuildTripButton';
@@ -100,22 +104,7 @@ const MIN_TARGET = 'min-h-11';
  */
 const MIN_TARGET_SUMMARY = 'min-h-11 py-2.5';
 
-/**
- * The card surface, spelled out rather than taken from `Panel`.
- *
- * `Panel` deliberately refuses arbitrary props — a component that silently drops
- * a `data-testid` cost this project two green-looking tests — and a card needs
- * `data-place-card` and pointer handlers so the map can find it and it can tell
- * the map what is being read. Borrowing the classes keeps the two surfaces
- * identical without loosening the component that is strict on purpose.
- */
-const CARD_SURFACE = 'rounded-[var(--radius-card)] border border-rule bg-paper-raised';
 
-/**
- * How many places come before the map on a phone. See the layout comment in the
- * board's own body.
- */
-const LEAD_CARDS = 3;
 
 /** A group as it is rendered: the compiler's group, plus where the cut fell. */
 interface RenderedGroup extends SerializedGroup {
@@ -163,7 +152,10 @@ export function DiscoveryBoardView({
   base = null,
   imageryPending = 0,
   tiles = null,
+  lead = null,
 }: {
+  /** The sheet header and the notes about the trip, set at the top of the register. */
+  lead?: React.ReactNode;
   tripId: string;
   /** How old the weather behind this board is, when the page knows. */
   weatherFreshness?: WeatherSnapshotState | 'not_fetched';
@@ -439,6 +431,34 @@ export function DiscoveryBoardView({
     });
   }
 
+  /**
+   * One decision applied to several cards — a group's "Include all" or "Clear".
+   *
+   * The same path a single press takes, once per card, so nothing reaches the
+   * store that a traveller could not have done by hand; the group button only
+   * saves them the presses. `null` withdraws a mark, exactly as un-ticking does.
+   */
+  function chooseMany(ids: readonly string[], status: SelectionStatus | null) {
+    if (ids.length === 0) return;
+    const previous = selections;
+    setError(null);
+    setFollowUp(null);
+    startTransition(async () => {
+      applyOptimistic(Object.fromEntries(ids.map((id) => [id, status ?? undefined])));
+      const results = await Promise.all(ids.map((id) => setSelectionAction(tripId, id, status, null)));
+      if (results.every((result) => result.ok)) {
+        setMirror((current) => ({
+          ...current,
+          autoPicks: current.autoPicks.filter((id) => !ids.includes(id)),
+          value: { ...current.value, ...Object.fromEntries(ids.map((id) => [id, status ?? undefined])) },
+        }));
+      } else {
+        setMirror((current) => ({ ...current, value: previous }));
+        setError('Some of those did not save. Reload to see what stuck.');
+      }
+    });
+  }
+
   function autoPick() {
     setError(null);
     setFollowUp(null);
@@ -477,22 +497,6 @@ export function DiscoveryBoardView({
   const visibleCardCount = visibleGroups.reduce((total, entry) => total + entry.candidates.length, 0);
   const filtered = anyFilterActive(filters) || onlyIncluded;
 
-  /*
-   * The board, cut once so the map can sit between the first few places and the
-   * rest. See the layout comment below for why the cut exists at all; the split
-   * itself is deliberately shallow — a heading and a handful of cards — because
-   * anything longer defeats the point on the screen it was made for.
-   */
-  const lead = visibleGroups[0];
-  const leadGroups: RenderedGroup[] = lead
-    ? [{ ...lead, candidates: lead.candidates.slice(0, LEAD_CARDS), continued: false }]
-    : [];
-  const restGroups: RenderedGroup[] = [
-    ...(lead && lead.candidates.length > LEAD_CARDS
-      ? [{ ...lead, candidates: lead.candidates.slice(LEAD_CARDS), continued: true }]
-      : []),
-    ...visibleGroups.slice(1).map((entry) => ({ ...entry, continued: false })),
-  ];
 
   /*
    * The sentences that belong to the board rather than to twenty-four copies of
@@ -533,354 +537,271 @@ export function DiscoveryBoardView({
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
+  /*
+   * THE NUMBER EVERY PLACE WEARS — on its row and on its pin.
+   *
+   * Assigned once, in board order, over the places the map draws (a "probably
+   * skip" row is listed but not mapped, so it carries no number). The same
+   * integer on both sides is what makes the stage and the register one surface.
+   */
+  const numbers = new Map<string, number>();
+  for (const candidate of allCandidates) {
+    if (candidate.group === 'weak_fit') continue;
+    numbers.set(candidate.place.id, numbers.size + 1);
+  }
+
+  const focusedCandidate = focusedId ? allCandidates.find((candidate) => candidate.place.id === focusedId) ?? null : null;
+  const feature: StageFeature | null =
+    focusedCandidate && numbers.has(focusedCandidate.place.id)
+      ? {
+          id: focusedCandidate.place.id,
+          number: numbers.get(focusedCandidate.place.id)!,
+          name: displayNameOf(focusedCandidate.place),
+          kind: focusedCandidate.place.displayKind ?? focusedCandidate.place.category.replace(/_/g, ' '),
+          meta: [focusedCandidate.place.locality, formatMinutes(focusedCandidate.place.typicalDurationMinutes) + ' there'].filter(Boolean).join(' · '),
+          why: whys[focusedCandidate.place.id] ?? null,
+          chosen: optimistic[focusedCandidate.place.id] === 'included',
+          image: cardImage(images, focusedCandidate),
+          fallback: imageryFallbackFor({ kind: 'candidate', id: focusedCandidate.place.id, name: focusedCandidate.place.name, coordinates: focusedCandidate.place.coordinates }),
+          category: focusedCandidate.place.category,
+        }
+      : null;
+
+  const fallbackMap = (
+    <BoardMap base={base} places={mapPlaces} focusedId={focusedId} onFocus={focusFromMap} tiles={tiles} />
+  );
+  const stageAvailable = tiles?.kind === 'vector';
+
   return (
-    <div data-testid="discovery-board" data-board-version={boardVersion}>
-      {/*
-        THE ACTION BAR: STICKY AT THE TOP ON A DESKTOP, PINNED TO THE BOTTOM ON A PHONE.
-
-        One element, two positions. It was `sm:sticky`, which means *not* sticky
-        at the one width where it matters: on a 390px screen the board is many
-        thousands of pixels tall and the count and the primary action scrolled
-        away after the first card.
-
-        Auto-pick now lives here rather than in the flow. It is the product's
-        answer to "there are twenty-four of these and I do not want to read them
-        all", and a control that answers that question has to be reachable from
-        the point in the page where somebody gives up.
-      */}
-      <Panel
-        className={cx(
-          // Below the product header (`z-30`), above the cards.
-          'z-20 flex flex-wrap items-center gap-x-4 gap-y-2 p-3 sm:p-4',
-          'sm:sticky sm:top-[var(--chrome-height)] sm:mb-6',
-          /*
-           * The safe area, paid for by the bar rather than assumed away.
-           * `bottom-0` on an iPhone is behind the home indicator, so the last
-           * thirty-four pixels — where the primary action sits — were not
-           * tappable.
-           */
-          'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:max-h-[70vh]',
-          'max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]',
-          'max-sm:overflow-y-auto max-sm:rounded-none max-sm:border-x-0 max-sm:border-b-0',
-          'max-sm:shadow-panel print:hidden',
-        )}
-        testId="board-action-bar"
-      >
+    <div
+      data-testid="discovery-board"
+      data-board-version={boardVersion}
+      className={cx('flex flex-col lg:grid lg:items-start lg:gap-10', stageAvailable ? 'lg:grid-cols-[minmax(0,35rem)_minmax(0,1fr)]' : 'lg:grid-cols-[minmax(0,1fr)_22rem]')}
+    >
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+        {lead}
         {/*
-          The count and the version it describes, from one object. They cannot
-          disagree because `summary` produced both.
+          THE ACTION BAR: STICKY AT THE TOP OF THE REGISTER, PINNED TO THE BOTTOM ON A PHONE.
 
-          "we suggested 18" is gone. It sat beside a header reading "We
-          pre-selected 0" — two numbers from the same computation contradicting
-          each other in one glance — and a raw target is not a thing a traveller
-          asked for anyway. What auto-pick did is now said in words, once, where
-          it was pressed.
+          One element, two positions. On a 390px screen the register is
+          thousands of pixels tall, so the count and the primary action live at
+          the thumb; on a desktop they ride the top of the column they count.
+          Auto-pick lives here: it answers "there are twenty-four of these and I
+          do not want to read them all", so it has to be reachable from wherever
+          somebody gives up.
         */}
-        {/*
-          THE FOLLOW-UP A REJECTION REASON EARNED.
-
-          On a phone it is the first row *of this bar* rather than a second
-          fixed panel stacked above it: the bar's height depends on how its
-          rows wrap, and a panel pinned at a guessed offset landed on top of
-          "Choose for me". On a wider screen it floats at the corner as before,
-          because by the time somebody has chosen a reason the card they
-          pressed may well have scrolled away — and an offer nobody sees is a
-          reason nobody used.
-        */}
-        {followUp ? (
-          <div
-            className="max-sm:order-first max-sm:basis-full max-sm:border-b max-sm:border-rule max-sm:pb-3 sm:fixed sm:right-6 sm:bottom-6 sm:z-50 sm:max-w-sm sm:rounded-[var(--radius-card)] sm:border sm:border-rule sm:bg-paper-raised sm:p-4 sm:shadow-panel print:hidden"
-            role="status"
-            data-testid="board-pass-followup"
-          >
-            <p className="text-sm leading-relaxed text-ink">
-              {alsoLikeThisPrompt(followUp.reason, followUp.ids.length)}
-            </p>
-            <p className="mt-1 text-xs text-ink-faint">Because you passed on {followUp.from}.</p>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={applyFollowUp}
-                className={cx(buttonClass('primary', 'sm'), MIN_TARGET)}
-                data-testid="board-pass-followup-apply"
-              >
-                Skip {followUp.ids.length === 1 ? 'it' : 'them'} too
-              </button>
-              <button
-                type="button"
-                onClick={() => setFollowUp(null)}
-                className={cx(buttonClass('ghost', 'sm'), MIN_TARGET)}
-              >
-                Leave them
-              </button>
-            </div>
-          </div>
-        ) : null}
-        <p className="text-sm text-ink" data-testid="board-summary" data-board-version={summary.boardVersion}>
-          <strong className="numeral font-display text-2xl text-accent-strong">{includedCount}</strong> chosen
-          {maybeCount > 0 ? <span className="text-ink-muted"> · {maybeCount} maybe</span> : null}
-          {/*
-            The denominator is dropped on a phone. Three facts and two buttons do
-            not fit across 390 pixels, and the wrap cost the bar a third of the
-            viewport — on the one screen where the bar is pinned over the content.
-          */}
-          <span className="text-ink-faint max-sm:hidden"> · {summary.onBoard} on the board</span>
-        </p>
-        {/*
-          Two controls, two rows on a phone and one on a desktop.
-
-          `BuildTripButton` is a block that carries its own hint paragraph
-          underneath ("include at least one place first"), so at 390px it cannot
-          share a row with anything: the hint sets the block's width and pushes
-          the count onto a line of its own. Giving it the full row below is the
-          layout that respects that rather than fighting it, and it puts the
-          primary action across the whole width of the thumb's reach.
-        */}
-        <button
-          type="button"
-          onClick={autoPick}
-          disabled={pending}
-          className={cx(buttonClass('secondary', 'sm'), MIN_TARGET, 'ml-auto whitespace-nowrap')}
-          data-testid="board-auto-pick"
-        >
-          {pending ? 'Choosing…' : 'Choose for me'}
-        </button>
-        <div className="max-sm:basis-full">
-          <BuildTripButton
-            tripId={tripId}
-            hasItinerary={hasItinerary}
-            includedCount={includedCount}
-            onReadiness={setReadiness}
-          />
-        </div>
-      </Panel>
-
-      {/* Below the bar, in the flow, where a long explanation may be long. */}
-      {readiness ? <PlannerReadinessPanel readiness={readiness} /> : null}
-
-      {error ? <ErrorNote>{error}</ErrorNote> : null}
-
-      {/*
-        WHAT AUTO-PICK DID, WHERE IT WAS PRESSED — and only once it has been.
-
-        Two halves of one defect. Pressing "choose for me" used to change some
-        borders far down a very long page and say nothing, so it read as a button
-        that did nothing; meanwhile the *server's* preview of what auto-pick
-        would do was rendered on first load, in the past tense, so a traveller
-        who had pressed nothing was told "we pre-selected 0". The account is now
-        rendered exactly when it is true: after the action returns, describing
-        what it stored.
-      */}
-      {autoPicked && notes.length > 0 ? (
         <div
           className={cx(
-            'mb-6 rounded-[var(--radius-card)] border-l-4 border-accent bg-accent-soft px-4 py-3',
+            'board-action-bar z-20 flex flex-wrap items-center gap-x-3 gap-y-2 print:hidden',
+            'sm:sticky sm:top-[calc(var(--chrome-height)+0.5rem)] sm:mb-6 sm:flex-nowrap sm:rounded-[20px] sm:border sm:border-ink/10 sm:px-4 sm:py-3',
+            'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:max-h-[70vh] max-sm:rounded-t-[22px] max-sm:border-t max-sm:border-ink/10 max-sm:px-4 max-sm:pt-3',
+            'max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-sm:overflow-y-auto',
           )}
-          data-testid="board-auto-pick-notes"
-          data-board-version={summary.boardVersion}
+          data-testid="board-action-bar"
         >
-          <ul className="space-y-1.5 text-sm leading-relaxed text-ink">
-            {notes.map((note) => (
-              <li key={`${summary.boardVersion}:${note}`}>{note}</li>
-            ))}
-          </ul>
+          {followUp ? (
+            <div
+              className="board-followup max-sm:order-first max-sm:basis-full max-sm:border-b max-sm:border-ink/10 max-sm:pb-3 sm:fixed sm:right-6 sm:bottom-6 sm:z-50 sm:max-w-sm sm:rounded-[18px] sm:border sm:border-ink/10 sm:bg-paper-raised sm:p-4 sm:shadow-float print:hidden"
+              role="status"
+              data-testid="board-pass-followup"
+            >
+              <p className="text-sm leading-relaxed text-ink">{alsoLikeThisPrompt(followUp.reason, followUp.ids.length)}</p>
+              <p className="mt-1 text-xs text-ink-faint">Because you passed on {followUp.from}.</p>
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={applyFollowUp} className={cx(buttonClass('primary', 'sm'), MIN_TARGET)} data-testid="board-pass-followup-apply">
+                  Skip {followUp.ids.length === 1 ? 'it' : 'them'} too
+                </button>
+                <button type="button" onClick={() => setFollowUp(null)} className={cx(buttonClass('ghost', 'sm'), MIN_TARGET)}>
+                  Leave them
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="min-w-0 shrink-0">
+            <p className="flex items-baseline gap-1.5 text-sm whitespace-nowrap text-ink" data-testid="board-summary" data-board-version={summary.boardVersion}>
+              <strong key={includedCount} className="numeral board-count font-display text-[1.9rem] leading-none font-light text-ink">{includedCount}</strong> chosen
+              <span className="text-ink-faint"> of {summary.onBoard}</span>
+              {maybeCount > 0 ? <span className="text-ink-muted"> · {maybeCount} maybe</span> : null}
+            </p>
+            {/* How much of the board is in, at a glance. Decorative: the sentence above says it. */}
+            <span aria-hidden="true" className="mt-1.5 block h-[3px] w-28 overflow-hidden rounded-full bg-ink/10">
+              <span
+                className="block h-full rounded-full bg-flare transition-[width] duration-[var(--motion-base)]"
+                style={{ width: `${summary.onBoard > 0 ? Math.round((includedCount / summary.onBoard) * 100) : 0}%` }}
+              />
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={autoPick}
+            disabled={pending}
+            className={cx(buttonClass('secondary', 'sm'), MIN_TARGET, 'ml-auto shrink-0 gap-1.5 whitespace-nowrap')}
+            data-testid="board-auto-pick"
+          >
+            <SparkIcon className={cx('h-3.5 w-3.5', pending && 'animate-spin')} />
+            {pending ? 'Choosing…' : 'Choose for me'}
+          </button>
+          <div className="shrink-0 max-sm:basis-full">
+            <BuildTripButton tripId={tripId} hasItinerary={hasItinerary} includedCount={includedCount} onReadiness={setReadiness} className="max-sm:w-full max-sm:min-h-12" />
+          </div>
         </div>
-      ) : null}
 
-      {/*
-        THE SENTENCES THAT ARE TRUE OF THE WHOLE BOARD — BEHIND ONE LINE.
+        {readiness ? <PlannerReadinessPanel readiness={readiness} /> : null}
+        {error ? <ErrorNote>{error}</ErrorNote> : null}
 
-        Said once, and *folded*. Hoisting them off the cards was right and did
-        not go far enough: a fresh reviewer opened a live board and found six
-        consecutive negative sentences between the trip header and the first
-        place, which on a phone put the first thing to do about two viewports
-        down. Honest abstention that nobody scrolls past is not honesty, it is a
-        wall.
+        {autoPicked && notes.length > 0 ? (
+          <div className="mb-6 rounded-[16px] border border-flare/30 bg-paper-raised px-4 py-3 fade-up" data-testid="board-auto-pick-notes" data-board-version={summary.boardVersion}>
+            <p className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-ink">
+              <SparkIcon className="h-3.5 w-3.5 text-flare" />
+              What Sidequest chose
+            </p>
+            <ul className="space-y-1.5 text-sm leading-relaxed text-ink">
+              {notes.map((note) => (
+                <li key={`${summary.boardVersion}:${note}`}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-        So the summary line counts them and the sentences themselves are one
-        press away. Nothing is hidden — the count is on screen, the disclosure is
-        a real control, and print opens every one of these — and the cards they
-        cover still say nothing, so the difference a card *does* carry is still
-        the only thing shouting.
-      */}
-      {shared.notes.length > 0 ? (
-        <details className="mb-6 rounded-[var(--radius-control)] bg-paper-sunk px-3" data-testid="board-weather-note">
-          <summary
+        {shared.notes.length > 0 ? (
+          <details className="group mb-5 rounded-[14px] bg-paper-sunk/50 px-3.5" data-testid="board-weather-note">
+            <summary className={cx(MIN_TARGET_SUMMARY, 'flex cursor-pointer list-none items-center gap-2 text-[13px] leading-snug text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden')}>
+              <InfoIcon className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {shared.notes.length === 1 ? 'One thing we could not check across this board' : `${shared.notes.length} things we could not check across this board`}
+                <span className="ml-1 text-ink-faint">— see what they are</span>
+              </span>
+              <ChevronIcon className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />
+            </summary>
+            <ul className="list-disc space-y-1 pb-3 pl-5 text-[13px] leading-snug text-ink-muted">
+              {shared.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+
+        <p className="sr-only" role="status" aria-live="polite" data-testid="board-status">
+          {error ? error : `Your board now has ${includedCount} places included and ${maybeCount} marked maybe, out of ${summary.onBoard}. ${visibleCardCount} showing.`}
+        </p>
+
+        {summary.carriedOver > 0 ? (
+          <p className="mb-6 text-xs leading-relaxed text-ink-faint" data-testid="board-carried-over" data-board-version={summary.boardVersion}>
+            You have also decided on {summary.carriedOver} {summary.carriedOver === 1 ? 'place' : 'places'} that is not on this board. Those choices are kept and are not counted above.
+          </p>
+        ) : null}
+
+        {/*
+          THE BOARD AT A GLANCE: jump to a group, or look at only what is in.
+
+          Each group is a pill with its count, so "how much is here, of what
+          kind" is answered before scrolling, and a press takes you there.
+        */}
+        <div className="board-jump -mx-1 mb-4 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 print:hidden">
+          <label
             className={cx(
-              MIN_TARGET_SUMMARY,
-              'flex cursor-pointer items-center text-[13px] leading-snug text-ink-muted hover:text-ink',
+              'relative inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors',
+              MIN_TARGET,
+              FOCUS_RING,
+              onlyIncluded ? 'border-ink bg-ink text-paper' : 'border-ink/15 text-ink hover:border-ink/40',
             )}
           >
-            {shared.notes.length === 1
-              ? 'One thing we could not check across this board'
-              : `${shared.notes.length} things we could not check across this board`}
-            <span className="ml-1 text-ink-faint">— see what they are</span>
-          </summary>
-          <ul className="space-y-1 pb-3 text-[13px] leading-snug text-ink-muted">
-            {shared.notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-
-      {/*
-        A polite status line, and the only thing on this board that speaks.
-
-        Phrased as a sentence rather than as a copy of the counter beside it: a
-        live region that repeats the visible summary verbatim is announced twice,
-        and "9 in, 0 maybe" read aloud out of context is a sequence of numbers.
-      */}
-      <p className="sr-only" role="status" aria-live="polite" data-testid="board-status">
-        {error
-          ? error
-          : `Your board now has ${includedCount} places included and ${maybeCount} marked maybe, out of ${summary.onBoard}. ${visibleCardCount} showing.`}
-      </p>
-
-      {/*
-        Decisions about places this board does not hold — named as history rather
-        than folded into the count.
-      */}
-      {summary.carriedOver > 0 ? (
-        <p
-          className="mb-6 text-xs leading-relaxed text-ink-faint"
-          data-testid="board-carried-over"
-          data-board-version={summary.boardVersion}
-        >
-          You have also decided on {summary.carriedOver}{' '}
-          {summary.carriedOver === 1 ? 'place' : 'places'} that is not on this board. Those choices
-          are kept and are not counted above.
-        </p>
-      ) : null}
-
-      {visibleGroups.length === 0 ? (
-        <Panel className="p-8 text-center">
-          <p className="font-display text-lg text-ink">
-            {filtered ? 'Nothing matches what you asked for' : 'Nothing here fits this trip'}
-          </p>
-          <p className="mt-2 text-sm text-ink-muted">
-            {filtered
-              ? 'Every card is still on the board — clear the filters to see them again, or let us choose a starting set.'
-              : 'Try widening how far you will travel, or moving your dates — some of what we found here is only reachable for part of the year.'}
-          </p>
-        </Panel>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_23rem]">
-          {/*
-            THE FIRST FEW PLACES, ABOVE EVERYTHING ELSE ON A PHONE.
-
-            Three grid items rather than two, and the reason is the phone. The
-            map used to be the first thing in the document, so on a 390px screen
-            the traveller met a caveat panel, a three-hundred-pixel drawing, a
-            filter rail and only then a place — about two viewports of apparatus
-            before the first thing they could actually decide on.
-
-            On a wide screen nothing moves: blocks one and three both sit in
-            column one, rows one and two, and the map takes column one's whole
-            height beside them. On a narrow one the document order does the work
-            — a few places, then the map, then the rest.
-          */}
-          <div className="lg:col-start-1 lg:row-start-1">
-            <BoardSections
-              groups={leadGroups}
-              images={images}
-              selections={optimistic}
-              autoPicks={autoPickSet}
-              focusedId={focusedId}
-              shared={shared}
-              whys={whys}
-              onChoose={choose}
-              onFocus={setFocusedId}
-              passing={passing}
-              onStartPass={setPassing}
-              onCancelPass={() => setPassing(null)}
-              onPass={passWithReason}
-            />
-          </div>
-
-          <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-[calc(var(--chrome-height)+5.5rem)] print:hidden">
-            <p className="label mb-2 text-ink-faint">The board, on the map</p>
-            <BoardMap
-              base={base}
-              places={mapPlaces}
-              focusedId={focusedId}
-              onFocus={focusFromMap}
-              tiles={tiles}
-            />
-
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-              <label
-                className={cx(
-                  'flex cursor-pointer items-center gap-2 px-1 text-sm text-ink-muted',
-                  MIN_TARGET,
-                )}
+            <input type="checkbox" checked={onlyIncluded} onChange={(event) => setOnlyIncluded(event.target.checked)} className={OVERLAY_INPUT} />
+            <CheckIcon className="h-3.5 w-3.5" />
+            Only what I chose
+          </label>
+          <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-ink/15" />
+          <nav aria-label="Jump to a group" className="flex shrink-0 items-center gap-1.5">
+            {visibleGroups.map((entry) => (
+              <a
+                key={entry.group}
+                href={`#group-${entry.group}`}
+                className={cx('inline-flex shrink-0 items-center gap-2 rounded-full px-3 text-[13px] whitespace-nowrap text-ink-muted transition-colors hover:bg-paper-sunk hover:text-ink', MIN_TARGET)}
               >
-                <input
-                  type="checkbox"
-                  checked={onlyIncluded}
-                  onChange={(event) => setOnlyIncluded(event.target.checked)}
-                  className="h-5 w-5 accent-[var(--color-accent)]"
-                />
-                Only what I chose
-              </label>
-            </div>
+                {BOARD_GROUP_HEADINGS[entry.group].title}
+                <span className="rounded-full bg-ink/8 px-1.5 py-px font-mono text-[11px] text-ink">{entry.candidates.length}</span>
+              </a>
+            ))}
+          </nav>
+        </div>
+        <BoardFilterRail facets={facets} filters={filters} onChange={setFilters} showing={visibleCardCount} total={allCandidates.length} />
 
-            <BoardFilterRail
-              facets={facets}
-              filters={filters}
-              onChange={setFilters}
-              showing={visibleCardCount}
-              total={allCandidates.length}
-            />
+        {visibleGroups.length === 0 ? (
+          <div className="ruled-strong py-10">
+            <p className="font-display text-2xl text-ink">{filtered ? 'Nothing matches what you asked for' : 'Nothing here fits this trip'}</p>
+            <p className="mt-2 max-w-md text-sm text-ink-muted">
+              {filtered
+                ? 'Every place is still on the board — clear the filters to see them again, or let us choose a starting set.'
+                : 'Try widening how far you will travel, or moving your dates — some of what we found here is only reachable for part of the year.'}
+            </p>
           </div>
-
-          <div className="lg:col-start-1 lg:row-start-2 space-y-12 lg:mt-12">
+        ) : (
+          <div className="space-y-14">
             <BoardSections
-              groups={restGroups}
+              groups={visibleGroups.map((entry) => ({ ...entry, continued: false }))}
               images={images}
               selections={optimistic}
               autoPicks={autoPickSet}
               focusedId={focusedId}
               shared={shared}
               whys={whys}
+              numbers={numbers}
               onChoose={choose}
+              onChooseMany={chooseMany}
               onFocus={setFocusedId}
               passing={passing}
               onStartPass={setPassing}
               onCancelPass={() => setPassing(null)}
               onPass={passWithReason}
             />
-
-            <WeatherBackups
-              backups={weatherBackups}
-              selections={optimistic}
-              onChoose={choose}
-              {...(weatherFreshness ? { freshness: weatherFreshness } : {})}
-            />
-
+            <WeatherBackups backups={weatherBackups} selections={optimistic} onChoose={choose} {...(weatherFreshness ? { freshness: weatherFreshness } : {})} />
             <WeatherCredit groups={groups} {...(weatherFreshness ? { freshness: weatherFreshness } : {})} />
           </div>
+        )}
+      </div>
+      {/*
+        THE STAGE — on a phone it is the first thing on the page, a window onto
+        the place; on a wide screen it is the right two-thirds, pinned, and the
+        register scrolls past it. Without a vector basemap (tests, a build with
+        no map provider) the honest SVG figure takes the same column, after the
+        places in the document so a phone meets places first.
+      */}
+      {stageAvailable ? (
+        <div className="relative -mx-5 mb-6 h-[52vh] min-h-[320px] overflow-hidden max-lg:order-first sm:-mx-8 lg:sticky lg:top-[var(--chrome-height)] lg:col-start-2 lg:row-start-1 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh_-_var(--chrome-height)_-_2rem)] lg:min-h-[560px] print:hidden">
+          <BoardStage
+            base={base}
+            places={mapPlaces.map((place) => ({
+              id: place.id,
+              number: numbers.get(place.id) ?? 0,
+              name: place.name,
+              coordinates: place.coordinates,
+              chosen: place.chosen,
+              excluded: optimistic[place.id] === 'excluded',
+            }))}
+            focusedId={focusedId}
+            feature={feature}
+            onFocus={focusFromMap}
+            fallback={fallbackMap}
+          />
+        </div>
+      ) : (
+        <div className="mt-10 lg:sticky lg:top-[calc(var(--chrome-height)+1rem)] lg:col-start-2 lg:row-start-1 lg:mt-0 print:hidden">
+          <p className="sheet-label mb-2 text-ink-muted">The board, on the map</p>
+          {fallbackMap}
         </div>
       )}
-
     </div>
   );
 }
 
 /**
- * THE GROUPS, AND THE ONE PIECE OF HIERARCHY ON THE BOARD.
+ * THE GROUPS, AS A REGISTER.
  *
- * §18 bans the endless identical card, and a uniform two-column grid is that
- * pattern's structural half: with every cell the same size the eye has no entry
- * point, so twenty-four places read as one long undifferentiated wall whatever
- * is printed inside them.
- *
- * So the strongest card in each group leads it, across the full width, with room
- * for a larger picture and larger type — and the rest follow two-up beneath it.
- * The rank is the board's own: the groups arrive sorted by fit, so the lead is
- * the card the fit model already put first. Nothing is invented to make it look
- * important, and a group too short to have a "first among several" (fewer than
- * three) gets no lead, because promoting one of two cards says nothing.
+ * Each group opens on a ruled heading with its sheet number and count. The
+ * strongest place in a group of three or more leads it as a print — the whole
+ * photograph, larger type — and the rest follow as ruled specimen rows: a
+ * number, a small print, the argument and the three decisions. No card
+ * borders anywhere: the rules and the survey grid are the structure.
  */
 function BoardSections({
   groups,
@@ -890,22 +811,24 @@ function BoardSections({
   focusedId,
   shared,
   whys,
+  numbers,
   onChoose,
+  onChooseMany,
   onFocus,
   passing,
   onStartPass,
   onCancelPass,
   onPass,
 }: {
+  onChooseMany: (placeIds: readonly string[], status: SelectionStatus | null) => void;
   groups: readonly RenderedGroup[];
   images: Record<string, ImageRecord>;
   selections: SelectionMap;
-  /** Included cards Sidequest picked rather than the traveller. */
   autoPicks: ReadonlySet<string>;
   focusedId: string | null;
   shared: SharedBoardFacts;
-  /** The sentence each card leads with, chosen across the board. */
   whys: Record<string, string | null>;
+  numbers: ReadonlyMap<string, number>;
   onChoose: (placeId: string, status: SelectionStatus) => void;
   onFocus: (placeId: string) => void;
   passing: string | null;
@@ -914,65 +837,74 @@ function BoardSections({
   onPass: (candidate: DiscoveryCandidate, reason: PassReason) => void;
 }) {
   return (
-    <div className="space-y-12">
-      {groups.map((entry) => (
-        <section
-          key={`${entry.group}${entry.continued ? ':more' : ''}`}
-          {...(entry.continued ? {} : { 'aria-labelledby': `group-${entry.group}` })}
-          {...(entry.continued ? { 'aria-label': `${BOARD_GROUP_HEADINGS[entry.group].title}, continued` } : {})}
-        >
-          {entry.continued ? null : (
-            <>
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t-2 border-ink pt-4">
-                <h2 id={`group-${entry.group}`} className="display-md text-ink">
-                  {BOARD_GROUP_HEADINGS[entry.group].title}
-                </h2>
-                <span className="numeral text-sm text-accent">{entry.candidates.length}</span>
+    <div className="space-y-14">
+      {groups.map((entry) => {
+        /* What "Include all" would add: every card that can be included and is not in yet — never one the traveller skipped. */
+        const addable = entry.candidates
+          .filter((candidate) => candidate.fit.band !== 'not_workable')
+          .filter((candidate) => selections[candidate.place.id] !== 'included' && selections[candidate.place.id] !== 'excluded')
+          .map((candidate) => candidate.place.id);
+        const inGroup = entry.candidates.filter((candidate) => selections[candidate.place.id] === 'included').map((candidate) => candidate.place.id);
+        const title = BOARD_GROUP_HEADINGS[entry.group].title;
+        return (
+        <section key={entry.group} aria-labelledby={`group-${entry.group}`} className="scroll-mt-[calc(var(--chrome-height)+6.5rem)]" id={`section-${entry.group}`}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ink/12 pb-3">
+            <h2 id={`group-${entry.group}`} className="scroll-mt-[calc(var(--chrome-height)+6.5rem)] font-display text-[1.6rem] leading-tight max-sm:basis-full max-sm:text-[1.45rem] font-light tracking-[-0.02em] text-ink">
+              {title}
+            </h2>
+            <span className="rounded-full bg-ink/8 px-2 py-0.5 font-mono text-[11px] text-ink" aria-label={`${entry.candidates.length} places, ${inGroup.length} chosen`}>
+              {inGroup.length > 0 ? `${inGroup.length}/${entry.candidates.length}` : entry.candidates.length}
+            </span>
+            {entry.group !== 'weak_fit' ? (
+              <div className="ml-auto flex items-center gap-1 print:hidden">
+                {addable.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onChooseMany(addable, 'included')}
+                    className={cx('inline-flex items-center gap-1 rounded-full px-3 text-[12px] font-medium text-ink transition-colors hover:bg-paper-sunk', MIN_TARGET)}
+                    aria-label={`Include all ${addable.length} in ${title}`}
+                    data-testid="board-group-include-all"
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                    Include all
+                  </button>
+                ) : null}
+                {inGroup.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onChooseMany(inGroup, null)}
+                    className={cx('rounded-full px-3 text-[12px] text-ink-muted transition-colors hover:bg-paper-sunk hover:text-ink', MIN_TARGET)}
+                    aria-label={`Clear the ${inGroup.length} chosen in ${title}`}
+                    data-testid="board-group-clear"
+                  >
+                    Clear
+                  </button>
+                ) : null}
               </div>
-              <p className="mt-1.5 max-w-2xl text-sm text-ink-muted">
-                {BOARD_GROUP_HEADINGS[entry.group].blurb}
-              </p>
-            </>
-          )}
+            ) : null}
+          </div>
+          <p className="mt-2 max-w-xl text-sm text-ink-muted">{BOARD_GROUP_HEADINGS[entry.group].blurb}</p>
 
-          {/*
-            THINGS TO SKIP DO NOT GET THE SAME SPACE AS THINGS TO DO.
-
-            Six full cards is about two thousand pixels arguing for places we
-            have just explained are wrong for this trip. The group is still
-            complete, still explained and still re-includable; it is simply a
-            list, because the decision it asks for is "no, unless" rather than
-            "yes or no".
-          */}
           {entry.group === 'weak_fit' ? (
-            <ul className="mt-4 space-y-2" data-testid="skip-list">
+            <ul className="mt-4 divide-y divide-ink/10 overflow-hidden rounded-[18px] border border-ink/10 bg-paper-raised/50" data-testid="skip-list">
               {entry.candidates.map((candidate) => (
                 <li key={candidate.place.id}>
-                  <SkipRow
-                    candidate={candidate}
-                    status={selections[candidate.place.id]}
-                    onChoose={onChoose}
-                  />
+                  <SkipRow candidate={candidate} status={selections[candidate.place.id]} onChoose={onChoose} />
                 </li>
               ))}
             </ul>
           ) : (
-            /*
-              Two columns from the first width that can hold them, and never
-              more. Three-up made every card a column of stacked fragments;
-              one-up at 1024 made each card six hundred pixels wide, which is a
-              paragraph pretending to be a card. The lead spans both.
-            */
-            <div className={cx('grid gap-4 sm:grid-cols-2', entry.continued ? '' : 'mt-4')}>
+            <div className="mt-4 space-y-3">
               {entry.candidates.map((candidate, index) => (
                 <PlaceCard
                   key={candidate.place.id}
                   candidate={candidate}
+                  number={numbers.get(candidate.place.id) ?? null}
                   image={cardImage(images, candidate)}
                   status={selections[candidate.place.id]}
                   pickedBy={autoPicks.has(candidate.place.id) ? 'sidequest' : 'traveller'}
                   focused={focusedId === candidate.place.id}
-                  featured={!entry.continued && index === 0 && entry.candidates.length >= 3}
+                  featured={index === 0 && entry.candidates.length >= 3}
                   shared={shared}
                   why={whys[candidate.place.id] ?? null}
                   onChoose={onChoose}
@@ -986,10 +918,12 @@ function BoardSections({
             </div>
           )}
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }
+
 
 /**
  * The identity of a set of decisions, so a change made elsewhere is visible.
@@ -999,6 +933,18 @@ function BoardSections({
  * state. Cleared entries are omitted, because `undefined` and absent are one
  * thing here.
  */
+/**
+ * A print takes the photograph's own shape — a panorama is a long strip, a
+ * portrait a tall card — so the whole file shows with no letterbox and no crop.
+ * Only an extreme portrait is held to the frame (it would push the register a
+ * screen down), and then the file is shown whole inside it.
+ */
+function printRatio(image: ImageRecord): string {
+  if (image.width <= 0 || image.height <= 0) return 'natural';
+  const ratio = image.width / image.height;
+  return ratio >= 0.62 && ratio <= 6 ? `${image.width} / ${image.height}` : 'natural';
+}
+
 function marksFingerprint(selections: SelectionMap): string {
   return summaryVersion(
     Object.entries(selections)
@@ -1033,21 +979,22 @@ function cardImage(
 }
 
 /**
- * WHAT A CARD SHOWS BEFORE YOU ASK IT ANYTHING.
+ * A PLACE, AS A SPECIMEN ROW.
  *
- * The order is the order a decision is made in: what it looks like, what it is
- * called in a script the reader can read, where it is and what getting there
- * costs, how strongly we recommend it, *why*, then the three practical numbers.
- * At most two chips, and only for facts that change what the traveller has to
- * do. Everything else — the description, the caveats, the provenance — is behind
- * one disclosure named for what is inside it.
+ * The order is the order a decision is made in: the number that finds it on
+ * the map, what it looks like, its name in a script the reader can read, where
+ * it is and what getting there costs, how strongly we recommend it, the one
+ * sentence of *why* — then the three decisions. Everything else (description,
+ * caveats, provenance) is one disclosure away.
  *
- * "Why this fits" is expanded and the negatives are collapsed. It was the other
- * way round, which on a product whose entire differentiation is personal fit
- * meant the argument was hidden and the disclaimers led.
+ * The lead row of a group is a print: the photograph whole at its own shape,
+ * larger type. Every other row keeps a small print at the side. A photograph
+ * is never cropped — share-alike files may not be — so the prints have mixed
+ * shapes, which is the rhythm of the register rather than a defect of it.
  */
 function PlaceCard({
   candidate,
+  number,
   image,
   status,
   focused,
@@ -1063,17 +1010,14 @@ function PlaceCard({
   pickedBy,
 }: {
   candidate: DiscoveryCandidate;
-  /** Null where nothing licensable was found, which is most of the world. */
+  /** The number this place wears on the map; null for a place the map does not draw. */
+  number: number | null;
   image: ImageRecord | null;
   status: SelectionStatus | undefined;
-  /** Who put an included card in the trip: Sidequest's auto-pick or the traveller. */
   pickedBy?: 'sidequest' | 'traveller';
   focused: boolean;
-  /** The strongest card in its group. See `BoardSections`. */
   featured: boolean;
-  /** Everything the board has already said, so this card does not repeat it. */
   shared: SharedBoardFacts;
-  /** The sentence this card leads with, chosen across the board. */
   why: string | null;
   onChoose: (placeId: string, status: SelectionStatus) => void;
   onFocus: (placeId: string) => void;
@@ -1088,233 +1032,213 @@ function PlaceCard({
   const chips = chipsFor(candidate, suppressed, shared.verificationMarker);
   const stats = cardStats(candidate, shared);
   const description = descriptionOf(place);
+  const fallback = imageryFallbackFor({ kind: 'candidate', id: place.id, name: place.name, coordinates: place.coordinates });
+  const label = recommendationLabel(candidate);
+
+  const badge = number !== null ? String(number).padStart(2, '0') : null;
+  const kind = place.displayKind ?? null;
+
+  const picture = image ? (
+    <DestinationImage image={image} fallback={fallback} ratio={featured ? printRatio(image) : 'natural'} credit="none" category={place.category} backdrop="paper" />
+  ) : (
+    <PlacePlate
+      category={place.category}
+      className={cx('rounded-[12px]', featured ? 'h-44 sm:h-56' : 'h-[5.5rem] max-sm:h-[4.75rem]')}
+      signature={{ intensity: place.physicalIntensity, minutes: place.typicalDurationMinutes, hiddenGemScore: place.hiddenGemScore }}
+    />
+  );
 
   return (
     <article
       data-place-card={place.id}
+      data-status={status ?? 'undecided'}
+      data-featured={featured || undefined}
+      data-focused={focused || undefined}
       className={cx(
-        CARD_SURFACE,
-        // `h-full` so every card in a row is the same height, which is what puts
-        // every row of buttons on one line.
-        //
-        // `scroll-mt` is the other half of a sticky toolbar: two bars are pinned
-        // to the top of this page, so anything the browser scrolls to the top
-        // edge lands underneath about 133px of chrome.
-        'flex h-full scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-col overflow-hidden transition-colors',
-        // The lead card takes the row. Not a decoration: it is the only thing
-        // giving a wall of equal cells somewhere for the eye to start.
-        featured && 'sm:col-span-2',
-        status === 'included' && 'border-accent shadow-[inset_0_0_0_1px_var(--color-accent)]',
-        status === 'excluded' && 'opacity-60',
-        focused && 'ring-2 ring-ink/40 ring-offset-2 ring-offset-[var(--color-paper)]',
+        'board-card relative scroll-mt-[calc(var(--chrome-height)+7rem)] rounded-[18px] border border-ink/10 bg-paper-raised/70 p-3 sm:p-4',
+        featured ? 'block' : 'grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 max-sm:grid-cols-[5rem_minmax(0,1fr)] max-sm:gap-x-3',
+        status === 'excluded' && 'opacity-55',
       )}
       onMouseEnter={() => onFocus(place.id)}
       onFocusCapture={() => onFocus(place.id)}
     >
-      <div className="relative">
-        {/*
-          A photograph when one was licensed *and* credibly of this place; the
-          generated plate otherwise.
-
-          Never cropped — a crop of a share-alike file is an adaptation, and the
-          prop type refuses one here. What changed is the *frame*: it takes the
-          file's own shape (`ratio="natural"`), so an unmodified photograph fills
-          it instead of floating as a letterboxed sliver between two coloured
-          bands. The credit moves to the foot of the card for the same reason:
-          rendered verbatim and reachable, but no longer the loudest text above
-          the name of the place.
-        */}
-        {image ? (
-          <DestinationImage
-            image={image}
-            fallback={imageryFallbackFor({
-              kind: 'candidate',
-              id: place.id,
-              name: place.name,
-              coordinates: place.coordinates,
-            })}
-            ratio="natural"
-            credit="none"
-            category={place.category}
-          />
-        ) : (
-          <PlacePlate
-            category={place.category}
-            className={featured ? 'h-56' : 'h-32'}
-            /*
-              The three facts that make one plate differ from the next. Without
-              them eleven easy walks in one city are eleven identical rectangles
-              — which is exactly what a fresh reviewer found.
-            */
-            signature={{
-              intensity: place.physicalIntensity,
-              minutes: place.typicalDurationMinutes,
-              hiddenGemScore: place.hiddenGemScore,
-            }}
-          />
-        )}
+      {/* The picture, with the number it wears on the map in its corner. */}
+      <div className={cx('relative min-w-0 self-start overflow-hidden rounded-[12px]', featured && 'mb-4')}>
+        {picture}
+        {badge ? (
+          <span aria-hidden="true" className="board-pin-badge absolute top-2 left-2">
+            {badge}
+          </span>
+        ) : null}
       </div>
 
-      <div className={cx('flex flex-1 flex-col p-4', featured && 'sm:p-5')}>
-        <h3
-          className={cx(
-            'font-display leading-snug text-ink',
-            featured ? 'text-2xl sm:text-3xl' : 'text-xl',
-          )}
-        >
-          {/*
-            English or romanised first, the native name beside it. The board
-            rendered raw local script for every card in Tokyo, on an
-            English-language interface, while the source records held romanised
-            alternates that nothing read. Nothing here translates: `PlaceName`
-            chooses between names a source actually published.
-          */}
+      <div className="min-w-0">
+        {kind || featured ? (
+          <p className="mb-0.5 text-[11.5px] font-medium tracking-[0.02em] text-ink-muted">
+            {kind}
+            {featured ? `${kind ? ' · ' : ''}${formatMinutes(place.typicalDurationMinutes)} there` : null}
+          </p>
+        ) : null}
+        <h3 className={cx('font-display leading-[1.08] tracking-[-0.015em] text-ink', featured ? 'text-[1.9rem] font-light sm:text-[2.2rem]' : 'text-[1.25rem]')}>
           <PlaceName entity={place} />
         </h3>
-
-        {/*
-          Where it is and what getting there costs, on one line. Two facts a
-          traveller uses together and which used to sit four rows apart.
-        */}
-        <p className="mt-0.5 text-xs text-ink-faint">
-          {place.locality}
-          {' · '}
-          <TravelPhrase candidate={candidate} suppressed={suppressed} />
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-ink-muted">
+          <RouteIcon className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
+          <span>
+            {place.locality ? `${place.locality} · ` : ''}
+            <TravelPhrase candidate={candidate} suppressed={suppressed} />
+          </span>
+          {label !== null && !featured ? (
+            <span
+              className={cx(
+                'ml-0.5 rounded-full px-2 py-px text-[11.5px] font-medium',
+                blocked ? 'bg-clay-soft text-clay' : 'bg-ink/6 text-ink',
+              )}
+            >
+              {label}
+            </span>
+          ) : null}
         </p>
 
-        {/*
-          The meter answers "how well does this suit you", which is a question
-          the trip has already closed for a place it cannot reach — see
-          `recommendationLabel`. Null there rather than a second verdict beside
-          the heading's.
-        */}
-        {recommendationLabel(candidate) !== null ? (
-          <div className="mt-3">
-            <FitMeter
-              band={fit.band}
-              label={recommendationLabel(candidate)!}
-              meter={FIT_BAND_METER[fit.band]}
-            />
+        {featured && label !== null ? (
+          <div className="mt-3 max-w-xs">
+            <FitMeter band={fit.band} label={label} meter={FIT_BAND_METER[fit.band]} />
           </div>
         ) : null}
+      </div>
 
-        {/*
-          THE ARGUMENT, OPEN. One sentence, never a panel of them: a card that
-          lists eight reasons has not made a case, it has made a list.
+      {/* The argument and its facts: beside the picture on a wide screen, under it on a phone where the column is too narrow to read. */}
+      <div className={cx('min-w-0', !featured && 'max-sm:col-span-2 max-sm:mt-1 sm:col-start-2')}>
 
-          Absent where there is nothing left to say that the board has not
-          already said. A card with no reason line is a card that is honest
-          about having no argument; a card padded with "A viewpoint." has
-          stopped being worth reading.
-        */}
         {why ? (
-          <p
-            className={cx('mt-2 text-sm leading-relaxed', blocked ? 'text-clay' : 'text-ink-muted')}
-            data-testid="card-why"
-          >
+          <p className={cx('mt-2 leading-relaxed', featured ? 'text-[15px]' : 'text-sm', blocked ? 'text-clay' : 'text-ink-muted')} data-testid="card-why">
             {why}
           </p>
         ) : null}
 
-        {/*
-          ONLY THE NUMBERS THIS CARD DOES NOT SHARE WITH THE BOARD.
-
-          "Time there 1 hr 30 min · Cost Free · Effort Easy", identical down
-          twenty-four cards, was named verbatim by a fresh designer as the §18
-          banned pattern. The board now states its norm once, above; what is left
-          here is the figure on which this place actually differs — which is the
-          figure somebody comparing places is looking for. A card that matches
-          the norm on all three shows none, and is no poorer for it.
-        */}
-        {stats.length > 0 ? (
-          <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs" data-testid="card-stats">
-            {stats.map((stat) => (
-              <Stat key={stat.key} label={stat.label}>
-                {stat.value}
-              </Stat>
-            ))}
-          </dl>
-        ) : null}
-
-        {chips.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-1.5" data-testid="card-chips">
-            {chips.map((chip: BoardChip) => (
-              <Badge key={chip.key} tone={chip.tone}>
-                {chip.label}
-              </Badge>
-            ))}
+        {stats.length > 0 || chips.length > 0 ? (
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            {stats.length > 0 ? (
+              <dl className="flex flex-wrap gap-1.5 text-xs" data-testid="card-stats">
+                {stats.map((stat) => (
+                  <Stat key={stat.key} label={stat.label}>
+                    {stat.value}
+                  </Stat>
+                ))}
+              </dl>
+            ) : null}
+            {chips.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5" data-testid="card-chips">
+                {chips.map((chip: BoardChip) => (
+                  <Badge key={chip.key} tone={chip.tone}>
+                    {chip.label}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {/*
-          The one practical statement that changes a decision, where there is
-          one. Access and hours are separate questions and a card that has a
-          problem with both says so once each; a card that shares its problem
-          with the whole board says nothing, because the board has said it.
-        */}
         {operating.status === 'closed_throughout' ? (
-          <p className="mt-3 rounded-[var(--radius-control)] bg-clay-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-            Shut on every day of your trip.
-          </p>
+          <p className="mt-2.5 border-l-2 border-clay pl-2.5 text-xs leading-relaxed text-ink-muted">Shut on every day of your trip.</p>
         ) : operating.status === 'open_some_days' ? (
-          <p className="mt-3 rounded-[var(--radius-control)] bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
+          <p className="mt-2.5 border-l-2 border-amber pl-2.5 text-xs leading-relaxed text-ink-muted">
             Open on {operating.openDates.length} of your {operating.byDate.length} days
-            {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''} — we will only put it on
-            one of those.
+            {operating.hoursSummary ? `, ${operating.hoursSummary}` : ''} — we will only put it on one of those.
           </p>
         ) : access.status === 'partial' ? (
-          <p className="mt-3 rounded-[var(--radius-control)] bg-amber-soft p-2.5 text-xs leading-relaxed text-ink-muted">
-            Reachable on {access.usableDates.length} of your {access.byDate.length} days — we will
-            only put it on one of those.
+          <p className="mt-2.5 border-l-2 border-amber pl-2.5 text-xs leading-relaxed text-ink-muted">
+            Reachable on {access.usableDates.length} of your {access.byDate.length} days — we will only put it on one of those.
           </p>
         ) : null}
 
-        <details className="mt-3">
-          <summary
-            className={cx(
-              MIN_TARGET_SUMMARY,
-              'cursor-pointer text-xs font-medium text-ink-muted hover:text-ink',
-            )}
-          >
+        {blocked && status === 'included' ? (
+          <p className="mt-2.5 border-l-2 border-clay pl-2.5 text-xs leading-relaxed text-clay">
+            {pickedBy === 'sidequest' ? 'We picked this' : 'You picked this'}, and it no longer works on these dates. We have kept {pickedBy === 'sidequest' ? 'it' : 'your choice'} — change your dates, your transport answers, or skip it.
+          </p>
+        ) : null}
+      </div>
+
+      {/* The decision, and everything one press deeper — the full width of the card, so a phone gets room for its thumb. */}
+      <div className={cx('min-w-0', featured ? 'mt-1' : 'max-sm:col-span-2 sm:col-start-2')}>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          {passing ? (
+            <div data-testid="card-pass-reasons" className="basis-full">
+              <p className="text-xs text-ink-muted">Why not this one?</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {PASS_REASONS.map((reason) => (
+                  <button
+                    key={reason.id}
+                    type="button"
+                    onClick={() => onPass(reason.id)}
+                    className={cx('rounded-full border border-ink/20 px-3 text-xs text-ink-muted transition-colors hover:border-clay hover:text-clay', MIN_TARGET)}
+                  >
+                    {reason.label}
+                  </button>
+                ))}
+                <button type="button" onClick={onCancelPass} className={cx('px-2 text-xs text-ink-faint underline', MIN_TARGET)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="board-decision" role="group" aria-label={`Your decision on ${displayNameOf(place)}`}>
+              {(['included', 'maybe', 'excluded'] as const).map((option) => {
+                const unavailable = blocked && option === 'included' && status !== 'included';
+                const on = status === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => (option === 'excluded' && status !== 'excluded' ? onStartPass() : onChoose(place.id, option))}
+                    disabled={unavailable}
+                    aria-pressed={on}
+                    title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
+                    className={cx(
+                      'flex items-center justify-center gap-1.5 px-4 text-xs font-medium whitespace-nowrap transition-[background-color,color,border-color] duration-[var(--motion-fast)]',
+                      'min-h-10 max-sm:min-h-11',
+                      unavailable && 'cursor-not-allowed text-ink-faint opacity-50',
+                      !unavailable && on && SEGMENT_STYLE[option],
+                      !unavailable && !on && 'text-ink-muted',
+                    )}
+                  >
+                    {option === 'included' && on ? <CheckIcon className="h-3.5 w-3.5" /> : null}
+                    {SELECTION_STATUS_LABELS[option]}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {status === 'included' && pickedBy && !passing ? (
+            <p className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink-muted" data-testid="card-picked-by" data-picked-by={pickedBy}>
+              {pickedBy === 'sidequest' ? <SparkIcon className="h-3 w-3 text-flare" /> : null}
+              {pickedBy === 'sidequest' ? "Sidequest's pick" : 'Your pick'}
+            </p>
+          ) : null}
+        </div>
+
+        <details className="group/more mt-1">
+          <summary className={cx(MIN_TARGET_SUMMARY, 'flex w-fit cursor-pointer list-none items-center gap-1 text-xs font-medium text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden')}>
             More about this place
+            <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open/more:rotate-180" />
           </summary>
-          <div className="mt-2 space-y-2">
-            {/*
-              What it is, where that is worth a sentence. §8.7 bans "A lake." and
-              "A viewpoint." as copy, and a live board carried "A easy walk."
-              eleven times — the classifier's honest minimal sentence for a
-              record nothing is published about, and a line that costs the reader
-              a fixation and returns nothing. `descriptionOf` returns null there.
-            */}
-            {description ? (
-              <p className="text-sm leading-relaxed text-ink-muted">{description}</p>
-            ) : null}
-
-            {/*
-              The weather sentence, only where it is this card's own and not the
-              board's. The verb has to match the evidence, so the sentence is
-              built where the evidence is known rather than assembled here.
-            */}
-            {candidate.weather.note && !suppressed.has('weather') ? (
-              <p className="text-xs leading-relaxed text-ink-faint">{candidate.weather.note}</p>
-            ) : null}
-
+          <div className="mt-2 space-y-2 border-l border-ink/15 pl-3">
+            {description ? <p className="text-sm leading-relaxed text-ink-muted">{description}</p> : null}
+            {candidate.weather.note && !suppressed.has('weather') ? <p className="text-xs leading-relaxed text-ink-faint">{candidate.weather.note}</p> : null}
             {fit.blockers.length > 1 ? (
-              <ul className="rounded-[var(--radius-card)] bg-clay-soft p-3 text-xs leading-relaxed text-ink-muted">
+              <ul className="space-y-1 text-xs leading-relaxed text-clay">
                 {fit.blockers.slice(1).map((blocker) => (
                   <li key={blocker.code}>{blocker.message}</li>
                 ))}
               </ul>
             ) : null}
-
             {fit.reasons.length > 1 ? (
-              <ul className="space-y-1 rounded-[var(--radius-card)] bg-paper-sunk p-3 text-xs leading-relaxed text-ink-muted">
+              <ul className="space-y-1 text-xs leading-relaxed text-ink-muted">
                 {fit.reasons.slice(1).map((reason) => (
                   <li key={reason}>{reason}</li>
                 ))}
               </ul>
             ) : null}
-
             {fit.cautions.length > 0 ? (
               <ul className="space-y-1 text-xs leading-relaxed text-ink-muted">
                 {fit.cautions.map((caution) => (
@@ -1322,23 +1246,13 @@ function PlaceCard({
                 ))}
               </ul>
             ) : null}
-
-            {operating.requiresVerification && operating.verifyNote && !suppressed.has('hours') ? (
-              <p className="text-xs leading-relaxed text-ink-muted">{operating.verifyNote}</p>
-            ) : null}
-
+            {operating.requiresVerification && operating.verifyNote && !suppressed.has('hours') ? <p className="text-xs leading-relaxed text-ink-muted">{operating.verifyNote}</p> : null}
             {place.accessGroup ? (
               <p className="text-xs leading-relaxed text-ink-faint">
-                {/*
-                  Two records that share one car park would otherwise read as two
-                  unrelated stops with similar names.
-                */}
                 Part of {place.accessGroup.label}. {place.accessGroup.note}
               </p>
             ) : null}
-
             <EvidencePanel candidate={candidate} />
-
             <p className="text-[11px] text-ink-muted">
               Source: {place.source.name}
               {place.source.url ? (
@@ -1351,121 +1265,12 @@ function PlaceCard({
           </div>
         </details>
 
-        {/*
-          The credit, at the foot of the card rather than over the name.
-
-          Rendered verbatim, in the tab order, with the file page and the licence
-          as real links — the obligation is unchanged. What changed is where it
-          sits: two to four lines of dotted-underlined attribution directly above
-          the place's name made the photographer the loudest text on a card about
-          a river.
-        */}
-        {image ? <ImageCredit image={image} className="mt-3" /> : null}
-
-        <div className="mt-auto pt-4">
-          {/*
-            A choice that has become impossible stays visible as a conflict.
-            Silently flipping it to "Skip" would rewrite what someone asked for
-            and hide the one fact they need in order to change their mind.
-          */}
-          {blocked && status === 'included' ? (
-            <p className="mb-2 rounded-[var(--radius-control)] bg-clay-soft p-2.5 text-xs leading-relaxed text-clay">
-              {pickedBy === 'sidequest' ? 'We picked this' : 'You picked this'}, and it no longer works on these dates. We have kept {pickedBy === 'sidequest' ? 'it' : 'your choice'} —
-              change your dates, your transport answers, or skip it.
-            </p>
-          ) : null}
-
-          {/*
-            WHO PUT IT IN THE TRIP.
-
-            One quiet line, only on an included card. A Sidequest pick and a
-            traveller's own pick look identical otherwise, and the difference
-            matters: un-ticking ours records "not for me" so it never comes back,
-            and the planner treats theirs as a must and ours as a suggestion.
-          */}
-          {status === 'included' && pickedBy ? (
-            <p className="mb-1.5 text-[11px] font-medium tracking-wide text-ink-faint uppercase" data-testid="card-picked-by" data-picked-by={pickedBy}>
-              {pickedBy === 'sidequest' ? "Sidequest's pick" : 'Your pick'}
-            </p>
-          ) : null}
-
-          {passing ? (
-            /*
-              THE REASON, ASKED FOR ONCE AND USED IMMEDIATELY.
-
-              In place of the buttons rather than under them: a five-way choice
-              added below a three-way one is a card that grows by sixty pixels
-              every time somebody's finger lands near "Skip".
-            */
-            <div data-testid="card-pass-reasons">
-              <p className="text-xs text-ink-muted">Why not this one?</p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {PASS_REASONS.map((reason) => (
-                  <button
-                    key={reason.id}
-                    type="button"
-                    onClick={() => onPass(reason.id)}
-                    className={cx(
-                      'rounded-[var(--radius-control)] border border-rule px-2.5 text-xs text-ink-muted transition-colors hover:border-clay hover:text-clay',
-                      MIN_TARGET,
-                    )}
-                  >
-                    {reason.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={onCancelPass}
-                  className={cx('px-2 text-xs text-ink-faint underline', MIN_TARGET)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="flex gap-1.5"
-              role="group"
-              aria-label={`Your decision on ${displayNameOf(place)}`}
-            >
-              {(['included', 'maybe', 'excluded'] as const).map((option) => {
-                // Offering "Include" on a stop we just explained is impossible
-                // would let the traveller build a plan that cannot run.
-                const unavailable = blocked && option === 'included' && status !== 'included';
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() =>
-                      option === 'excluded' && status !== 'excluded'
-                        ? onStartPass()
-                        : onChoose(place.id, option)
-                    }
-                    disabled={unavailable}
-                    aria-pressed={status === option}
-                    // The reason names the actual constraint. "Low logistics
-                    // fit" tells nobody which of their answers to change.
-                    title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
-                    className={cx(
-                      'flex flex-1 items-center justify-center rounded-[var(--radius-control)] border px-2 text-xs font-medium whitespace-nowrap transition-colors duration-[var(--motion-fast)]',
-                      MIN_TARGET,
-                      unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
-                      !unavailable && status === option
-                        ? STATUS_STYLE[option]
-                        : !unavailable && 'border-rule text-ink-muted hover:border-ink-faint hover:text-ink',
-                    )}
-                  >
-                    {SELECTION_STATUS_LABELS[option]}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {image ? <ImageCredit image={image} className="mt-0.5 text-[10.5px] leading-snug text-ink-faint" /> : null}
       </div>
     </article>
   );
 }
+
 
 /**
  * HOW LONG IT TAKES TO GET THERE, AND BY WHAT, IN A CLAUSE.
@@ -1584,7 +1389,7 @@ function WeatherBackups({
   const forecast = backups.evidence === 'forecast';
 
   return (
-    <section aria-labelledby="weather-backups" className="border-t border-rule pt-8">
+    <section aria-labelledby="weather-backups" className="rounded-[20px] border border-ink/10 bg-paper-sunk/40 p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id="weather-backups" className="font-display text-2xl text-ink">
           If the weather turns
@@ -1610,7 +1415,7 @@ function WeatherBackups({
       </p>
 
       {usable.length === 0 ? (
-        <p className="mt-4 max-w-2xl rounded-[var(--radius-control)] bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
+        <p className="mt-4 max-w-2xl rounded-[14px] bg-amber-soft p-3 text-sm leading-relaxed text-ink-muted">
           {/*
             No landform, in a sentence whose whole point is not inventing one.
             This used to end "would open up the sheltered stops down the valley"
@@ -1627,7 +1432,7 @@ function WeatherBackups({
           {usable.map((backup) => (
             <li
               key={backup.placeId}
-              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-[var(--radius-control)] border border-rule p-3"
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-[14px] border border-ink/10 bg-paper-raised/60 p-3"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{backup.name}</p>
@@ -1710,10 +1515,11 @@ function WeatherCredit({
   );
 }
 
-const STATUS_STYLE: Record<SelectionStatus, string> = {
-  included: 'border-accent bg-accent-soft text-accent-strong',
-  maybe: 'border-slate-blue bg-slate-blue-soft text-slate-blue',
-  excluded: 'border-clay bg-clay-soft text-clay',
+/** The three answers inside a card's pill control: a filled segment, no outline of its own. Ink, not flare — flare is the build. */
+const SEGMENT_STYLE: Record<SelectionStatus, string> = {
+  included: 'bg-ink text-paper shadow-[0_1px_2px_rgb(13_26_31/0.2)]',
+  maybe: 'bg-slate-blue-soft text-slate-blue',
+  excluded: 'bg-clay-soft text-clay',
 };
 
 /**
@@ -1764,9 +1570,8 @@ function SkipRow({
     <article
       data-place-card={place.id}
       className={cx(
-        CARD_SURFACE,
-        'flex scroll-mt-[calc(var(--chrome-height)+5.5rem)] flex-wrap items-start gap-x-4 gap-y-3 p-3 transition-colors',
-        status === 'included' && 'border-pine',
+        'flex scroll-mt-[calc(var(--chrome-height)+7rem)] flex-wrap items-start gap-x-4 gap-y-3 px-4 py-3.5 transition-colors',
+        status === 'included' && 'bg-paper-raised',
         status === 'excluded' && 'opacity-60',
       )}
     >
@@ -1779,9 +1584,9 @@ function SkipRow({
           <h3 className="font-display text-base leading-snug text-ink">
             <PlaceName entity={place} />
           </h3>
-          <span className="text-xs text-ink-faint">{place.locality}</span>
+          {place.locality && place.locality !== displayNameOf(place) ? <span className="text-xs text-ink-faint">{place.locality}</span> : null}
           {recommendationLabel(candidate) !== null ? (
-            <Badge tone={blocked ? 'clay' : 'neutral'}>{FIT_BAND_LABELS[fit.band]}</Badge>
+            <span className={cx('rounded-full px-2 py-px text-[11.5px] font-medium', blocked ? 'bg-clay-soft text-clay' : 'bg-ink/6 text-ink-muted')}>{FIT_BAND_LABELS[fit.band]}</span>
           ) : null}
         </div>
 
@@ -1814,11 +1619,12 @@ function SkipRow({
           </p>
         ) : null}
 
-        <details className="mt-1">
+        <details className="group/more mt-0.5">
           <summary
-            className={cx(MIN_TARGET_SUMMARY, 'cursor-pointer text-xs text-ink-muted hover:text-ink')}
+            className={cx(MIN_TARGET_SUMMARY, 'flex w-fit cursor-pointer list-none items-center gap-1 text-xs text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden')}
           >
             What it is, and everything we checked
+            <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open/more:rotate-180" />
           </summary>
           <div className="mt-2 space-y-2">
             {/* The same stub gate the full card uses. See `descriptionOf`. */}
@@ -1853,7 +1659,7 @@ function SkipRow({
       </div>
 
       <div
-        className="flex shrink-0 gap-1.5 max-sm:w-full"
+        className="board-decision shrink-0 max-sm:w-full"
         role="group"
         aria-label={`Your decision on ${displayNameOf(place)}`}
       >
@@ -1868,12 +1674,9 @@ function SkipRow({
               aria-pressed={status === option}
               title={unavailable ? (fit.blockers[0]?.message ?? undefined) : undefined}
               className={cx(
-                'flex items-center justify-center rounded-[var(--radius-control)] border px-3 text-xs font-medium whitespace-nowrap transition-colors max-sm:flex-1',
-                MIN_TARGET,
-                unavailable && 'cursor-not-allowed border-rule text-ink-faint opacity-50',
-                !unavailable && status === option
-                  ? STATUS_STYLE[option]
-                  : !unavailable && 'border-rule text-ink-muted hover:border-ink-faint hover:text-ink',
+                'flex min-h-10 items-center justify-center px-3.5 text-xs font-medium whitespace-nowrap transition-colors max-sm:min-h-11 max-sm:flex-1',
+                unavailable && 'cursor-not-allowed text-ink-faint opacity-50',
+                !unavailable && status === option ? SEGMENT_STYLE[option] : !unavailable && 'text-ink-muted',
               )}
             >
               {SELECTION_STATUS_LABELS[option]}
@@ -2027,9 +1830,9 @@ function hostOf(url: string): string {
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-ink-faint">{label}</dt>
-      <dd className="text-ink">{children}</dd>
+    <div className="inline-flex min-w-0 items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5">
+      <dt className="text-ink-muted">{label}</dt>
+      <dd className="font-medium text-ink">{children}</dd>
     </div>
   );
 }

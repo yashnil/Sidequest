@@ -217,6 +217,21 @@ describe('preflight', () => {
     const ticked = buildPreflight({ graph, intelligence: intelligence(), booked, checks: { preflight: ['offline', 'readiness:visa'], packing: ['p1', 'p2'], checklist: [] }, daysUntilTrip: 2 });
     expect(ticked.ready.map((i) => i.id)).toEqual(expect.arrayContaining(['preflight:offline', 'preflight:readiness:visa', 'preflight:packing']));
   });
+
+  it('keeps each local set-up item its own row and its own tick', () => {
+    const intel = intelligence();
+    const setup = { kind: 'local_setup', summary: 'Needed on arrival.', action: 'Set this up before you fly.', links: [], blocking: false, phase: 'one_week_out', state: 'unverified', tier: 'primary' } as const;
+    intel.readiness.entries = [...intel.readiness.entries.filter((e) => e.kind !== 'local_setup'), { ...setup, title: 'A transit card' }, { ...setup, title: 'A ride-hailing app' }] as never;
+    const graph = buildTripStateGraph({ itinerary: itinerary(), intelligence: intel, booked, now: NOW });
+    const all = (p: ReturnType<typeof buildPreflight>) => [...p.ready, ...p.attention, ...p.later];
+    const fresh = all(buildPreflight({ graph, intelligence: intel, booked, checks: { preflight: [], packing: [], checklist: [] }, daysUntilTrip: 9 })).filter((i) => i.category === 'local_setup');
+    expect(fresh.map((i) => i.title)).toEqual(['A transit card', 'A ride-hailing app']);
+    expect(new Set(fresh.map((i) => i.id)).size).toBe(2);
+    expect(fresh[0]!.detail).toMatch(/^Set this up before you fly\./);
+    const ticked = buildPreflight({ graph, intelligence: intel, booked, checks: { preflight: [], packing: [], checklist: [fresh[0]!.checkId!] }, daysUntilTrip: 9 });
+    expect(ticked.ready.map((i) => i.id)).toContain(fresh[0]!.id);
+    expect(ticked.ready.map((i) => i.id)).not.toContain(fresh[1]!.id);
+  });
 });
 
 describe('decisions and controlled alternatives', () => {

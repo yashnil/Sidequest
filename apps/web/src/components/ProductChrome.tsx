@@ -3,6 +3,7 @@ import type { ChromeAccount } from '@/lib/auth/chrome';
 import { MobileNav } from './MobileNav';
 import { ChromeFooter, NavLinks } from './NavLinks';
 import { SignOutButton } from './SignOutButton';
+import { Wordmark } from './brand/SidequestMark';
 
 /**
  * THE PRODUCT'S OWN SHELL, WHICH NO LONGER BELONGS TO THE DOCUMENT.
@@ -58,7 +59,7 @@ import { SignOutButton } from './SignOutButton';
  * string. `chromeAccount()` does the reading in the layout that mounts this, so
  * the shell stays a plain function of its props.
  */
-export function ProductChrome({ children, account }: { children: React.ReactNode; account: ChromeAccount }) {
+export function ProductChrome({ children, account, tone = 'paper' }: { children: React.ReactNode; account: ChromeAccount; tone?: 'paper' | 'night' }) {
   const user = account.user;
   const signInAvailable = account.signInAvailable;
   const initials = user ? (user.displayName ?? user.email ?? '?').trim().charAt(0).toUpperCase() : null;
@@ -90,28 +91,24 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
         filled accent action, and the account as a disc. Backdrop material only
         here, where it separates the bar from a scrolling map or a dark band.
       */}
-      <header className="sticky top-0 z-30 border-b border-rule/80 bg-paper/88 backdrop-blur-md" data-testid="product-chrome">
+      <header className={`sticky top-0 z-30 border-b border-ink/10 backdrop-blur-md ${tone === 'night' ? 'chrome-night bg-[var(--color-atlas)]/95' : 'bg-paper/85'}`} data-testid="product-chrome">
         <div className="mx-auto flex max-w-[1600px] items-center gap-1 px-5 py-1.5 sm:gap-2 sm:px-6">
           <Link
             href="/"
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 font-display text-[1.5rem] leading-none tracking-tight text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
+            className="inline-flex min-h-11 shrink-0 items-center text-[1.45rem] leading-none text-ink focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2"
             aria-label="Sidequest home"
           >
-            <span aria-hidden="true" className="relative inline-flex h-3 w-3 items-center justify-center">
-              <span className="absolute inset-0 rounded-full border border-accent/50" />
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            </span>
-            Sidequest
+            <Wordmark markSize={26} />
           </Link>
           <NavLinks items={places} />
           <span className="flex-1" />
           <Link
             href="/trips/new"
-            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-semibold text-paper shadow-[var(--shadow-card)] transition-[background-color,box-shadow,transform] duration-[var(--motion-fast)] hover:bg-accent-strong hover:shadow-[var(--shadow-raised)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 max-sm:hidden"
+            className="group inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-paper transition-[background-color,transform] duration-[var(--motion-fast)] hover:bg-ink/85 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2 max-sm:hidden"
             data-testid="nav-new-trip"
           >
-            <span aria-hidden="true" className="text-base leading-none">+</span>
-            New trip
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-flare transition-transform duration-[var(--motion-fast)] group-hover:scale-125" />
+            Plan a trip
           </Link>
           {user ? (
             <details className="relative" data-testid="nav-account">
@@ -165,7 +162,7 @@ export function ProductChrome({ children, account }: { children: React.ReactNode
         about to pay for. Hidden on the build screen, which owns its whole ground.
       */}
       <ChromeFooter>
-        Sidequest plans from published sources and freezes a plan on the day it is built. Check opening times, road status and anything you are booking before you rely on it.
+        Plans are drawn from published sources and frozen on the day they are built. Check opening times, road status and anything you book before you rely on it.
       </ChromeFooter>
       <MobileNav signedIn={Boolean(user)} canSignIn={signInAvailable} />
     </>

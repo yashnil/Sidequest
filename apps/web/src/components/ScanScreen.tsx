@@ -9,6 +9,7 @@ import type { TravellerScanView } from '@/lib/discovery-scan/view';
 import { startDiscoveryScanAction } from '@/app/(product)/trips/[id]/discover/scan-actions';
 import { retryBuildAction } from '@/app/(product)/trips/[id]/questionnaire/actions';
 import { formatElapsed } from '@/lib/build-progress/placed-projection';
+import { ScanMap } from './ScanMap';
 
 /**
  * V1 CONVERGENCE — THE DISCOVERY SCAN, AS THE STEP BETWEEN THE INTERVIEW AND THE BOARD.
@@ -24,6 +25,13 @@ import { formatElapsed } from '@/lib/build-progress/placed-projection';
  * build to follow ("Plan with smart defaults"), the screen follows the build
  * instead. A failure says what happened in the traveller's terms, what is
  * kept, and whether trying again can help — with a reference, never a cause.
+ *
+ * SURVEY ATLAS (2026-10): the night survey grid as the ground; the counts as
+ * boxed figures (proposed · placed · bases · timed · elapsed) rather than a
+ * sentence, still the scan's own numbers and never a percentage; the stages
+ * as a ruled, numbered register; the map as a survey plate with numbered
+ * specimens and a live coordinate bar (`ScanMap`). The words arrive with a
+ * short staggered rise and the pins rise as the scan places them.
  */
 
 const POLL_MS = 1_500;
@@ -155,59 +163,91 @@ export function ScanScreen({
   /* A scan that reads ready on the first paint but has no board behind it is offered again rather than looped on. */
   const idle = !running && (view.state !== 'ready' || watching === 0);
 
+  const figures: { key: string; label: string; value: string }[] = [
+    { key: 'proposed', label: 'Ideas', value: String(view.counters.proposed) },
+    { key: 'placed', label: 'Mapped', value: String(view.counters.placed) },
+    { key: 'bases', label: 'Stays', value: String(view.counters.bases) },
+    { key: 'timed', label: 'Timed', value: String(view.counters.timed) },
+  ];
+  const headingClass = 'mt-3 font-display text-[clamp(2.4rem,1.7rem+2.6vw,4rem)] leading-[0.98] font-[340] tracking-[-0.03em] text-[var(--color-atlas-ink)] focus:outline focus:outline-2 focus:outline-[var(--color-glacier)] focus:outline-offset-2';
+
   return (
-    <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14" data-testid="scan-screen" data-state={view.state}>
-      <p className="label text-accent">Discovery board</p>
+    <div className="survey-night min-h-[calc(100svh-var(--chrome-height))] text-[var(--color-atlas-ink)]" data-testid="scan-screen" data-state={view.state}>
+    <div className={cx('mx-auto px-5 py-10 sm:px-8 sm:py-14', view.map && !view.failure ? 'grid max-w-7xl gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start' : 'max-w-3xl')}>
+    <div className="min-w-0">
+      <p className="sheet-label fade-up flex min-w-0 flex-wrap gap-x-2 text-[var(--color-glacier)]">
+        <span>Step 2 of 3 · Finding places</span>
+        <span className="text-[var(--color-atlas-muted)]">· {destination}</span>
+      </p>
 
       {running || (view.state === 'ready' && !idle) ? (
         <section aria-labelledby="scan-heading" className="mt-3">
-          <p className="type-small text-ink-muted">Finding places for {destination}</p>
+          <p className="sr-only">Finding places for {destination}</p>
           {/* One polite live region: the stage name and the newest real count, so a screen reader hears each change once. */}
           <div role="status" aria-live="polite" aria-atomic="true">
-            <h1 id="scan-heading" ref={headingRef} tabIndex={-1} className="display-xl mt-2 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-2" data-testid="scan-stage">
-              {view.state === 'ready' ? (view.autoBuildPending || view.autoBuildStarted ? 'Your board is ready — building your trip' : 'Your board is ready') : (view.label ?? 'Starting the search')}
+            <h1 id="scan-heading" ref={headingRef} tabIndex={-1} className={headingClass} data-testid="scan-stage">
+              <span key={view.state === 'ready' ? 'ready' : (view.stage ?? 'start')} className="mask-rise pb-[0.06em]">
+                <span>{view.state === 'ready' ? (view.autoBuildPending || view.autoBuildStarted ? 'Your board is ready — building your trip' : 'Your board is ready') : (view.label ?? 'Starting the search')}</span>
+              </span>
             </h1>
-            {latest ? (
-              <p className="mt-4 text-base text-ink" data-testid="scan-latest">
+            {latest && latest !== view.label ? (
+              <p className="mt-4 text-base text-[var(--color-atlas-ink)]" data-testid="scan-latest">
                 {latest}
               </p>
             ) : null}
           </div>
 
-          <ol className="relative mt-8" aria-label="Stages">
+          {/* The counts as figures: what the scan has actually counted, nothing estimated, never a percentage. */}
+          <div className="mt-7 grid min-w-0 grid-cols-5 border-t border-l border-white/20" aria-label="What the scan has counted so far" role="group" data-testid="scan-figures">
+            {figures.map((figure, i) => (
+              <div key={figure.key} className="fade-up min-w-0 border-r border-b border-white/20 px-2 py-2.5 sm:px-3" style={{ ['--d' as string]: `${120 + i * 60}ms` }}>
+                <span className="block truncate font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--color-atlas-muted)] sm:text-[10px] sm:tracking-[0.12em]">{figure.label}</span>
+                <span className="mt-0.5 block font-display text-[1.35rem] leading-none tabular-nums sm:text-[1.6rem] text-[var(--color-atlas-ink)]">{figure.value}</span>
+              </div>
+            ))}
+            <div className="fade-up min-w-0 border-r border-b border-white/20 px-2 py-2.5 sm:px-3" style={{ ['--d' as string]: '360ms' }}>
+              <span className="block truncate font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--color-glacier)] sm:text-[10px] sm:tracking-[0.12em]">Elapsed</span>
+              <span className="mt-0.5 block font-mono text-[0.95rem] leading-[1.45] sm:text-[1.15rem] sm:leading-[1.4] tabular-nums text-[var(--color-atlas-ink)]">{formatElapsed(running ? elapsed : view.elapsedSeconds)}</span>
+            </div>
+          </div>
+
+          <ol className="mt-8 border-t border-white/15" aria-label="Stages">
             {view.stages.map((stage, index) => {
               const done = view.state === 'ready' || (currentIndex >= 0 && index < currentIndex);
               const now = running && index === currentIndex;
-              const last = index === view.stages.length - 1;
               return (
-                <li key={stage.id} className={cx('relative flex items-start gap-3.5', !last && 'pb-4')} aria-current={now ? 'step' : undefined} data-done={done ? 'true' : 'false'}>
-                  {!last ? <span aria-hidden="true" className={cx('absolute left-[11px] top-6 bottom-0 w-0.5 rounded-full', done ? 'bg-pine' : 'bg-rule')} /> : null}
-                  <span aria-hidden="true" className={cx('relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2', done ? 'border-pine bg-pine text-paper' : now ? 'border-pine bg-paper' : 'border-rule bg-paper')}>
+                <li key={stage.id} className="flex min-w-0 items-center gap-3.5 border-b border-white/10 py-2.5" aria-current={now ? 'step' : undefined} data-done={done ? 'true' : 'false'}>
+                  <span aria-hidden="true" className={cx('w-6 shrink-0 font-mono text-[0.7rem] tabular-nums', done ? 'text-[var(--color-glacier)]' : now ? 'text-[var(--color-flare)]' : 'text-[var(--color-atlas-muted)]/70')}>
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span className={cx('min-w-0 flex-1 text-sm leading-5', done || now ? 'text-[var(--color-atlas-ink)]' : 'text-[var(--color-atlas-muted)]', now && 'font-semibold')}>{stage.label}</span>
+                  <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center">
                     {done ? (
-                      <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-[var(--color-glacier)]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m3.5 8.5 3 3 6-7" />
                       </svg>
                     ) : now ? (
-                      <span className="breathing h-2 w-2 rounded-full bg-pine" />
-                    ) : null}
+                      <span className="breathing h-2 w-2 bg-[var(--color-flare)]" />
+                    ) : (
+                      <span className="h-px w-3 bg-white/25" />
+                    )}
                   </span>
-                  <span className={cx('pt-0.5 text-sm leading-5', done || now ? 'text-ink' : 'text-ink-muted', now && 'font-semibold')}>{stage.label}</span>
                 </li>
               );
             })}
           </ol>
 
           {view.lines.length > 1 ? (
-            <p className="mt-6 type-small text-ink-muted" data-testid="scan-counts">
+            <p className="mt-5 type-small text-[var(--color-atlas-muted)]" data-testid="scan-counts">
               {view.lines.join(' · ')}
             </p>
           ) : null}
 
-          <p className="mt-6 type-small text-ink-muted" data-testid="scan-elapsed">
-            <span className="type-figure text-base text-ink">{formatElapsed(running ? elapsed : view.elapsedSeconds)}</span> elapsed · usually a minute or two. The search carries on if you leave this page; your answers are saved either way.
+          <p className="mt-4 type-small text-[var(--color-atlas-muted)]" data-testid="scan-elapsed">
+            <span className="font-mono text-[var(--color-atlas-ink)]">{formatElapsed(running ? elapsed : view.elapsedSeconds)}</span> elapsed · usually a minute or two. The search carries on if you leave this page; your answers are saved either way.
           </p>
           {view.autoBuildPending ? (
-            <p className="mt-2 type-small text-ink-muted" data-testid="scan-auto-build-note">
+            <p className="mt-2 type-small text-[var(--color-atlas-muted)]" data-testid="scan-auto-build-note">
               You asked Sidequest to plan with smart defaults, so it will build your trip from its own picks as soon as the board is ready.
             </p>
           ) : null}
@@ -216,24 +256,30 @@ export function ScanScreen({
         <section aria-labelledby="scan-heading" className="mt-3">
           {failure ? (
             <div role="alert" data-testid="scan-failure" data-kind={failure.kind} data-retryable={failure.retryable ? 'true' : 'false'}>
-              <h1 id="scan-heading" ref={headingRef} tabIndex={-1} className="display-xl mt-2 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-2">
+              <p className="coordbar mt-4 inline-flex items-center gap-2 border border-[var(--color-flare)]/60 px-2 py-1 text-[var(--color-flare)]">
+                <span aria-hidden="true" className="h-1.5 w-1.5 bg-[var(--color-flare)]" />
+                Search stopped
+              </p>
+              <h1 id="scan-heading" ref={headingRef} tabIndex={-1} className={headingClass}>
                 {failure.heading}
               </h1>
-              <p className="mt-4 max-w-[60ch] type-body text-ink" data-testid="scan-failure-message">
+              <p className="mt-4 max-w-[60ch] type-body text-[var(--color-atlas-ink)]" data-testid="scan-failure-message">
                 {failure.message}
               </p>
               {failure.ref ? (
-                <p className="mt-3 type-small text-ink-muted" data-testid="scan-failure-ref">
-                  If it keeps happening, quote this reference: <span className="font-mono text-ink">{failure.ref}</span>
+                <p className="mt-4 border-t border-white/15 pt-3 type-small text-[var(--color-atlas-muted)]" data-testid="scan-failure-ref">
+                  If it keeps happening, quote this reference: <span className="font-mono text-[var(--color-atlas-ink)]">{failure.ref}</span>
                 </p>
               ) : null}
             </div>
           ) : (
             <>
-              <h1 id="scan-heading" ref={headingRef} tabIndex={-1} className="display-xl mt-2 text-ink focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-2">
-                Find places for {destination}
+              <h1 id="scan-heading" ref={headingRef} tabIndex={-1} className={headingClass}>
+                <span className="mask-rise pb-[0.06em]">
+                  <span>Find places for {destination}</span>
+                </span>
               </h1>
-              <p className="mt-4 max-w-[60ch] type-body text-ink-muted" data-testid="scan-intro">
+              <p className="fade-up mt-4 max-w-[56ch] type-body text-[var(--color-atlas-muted)]" style={{ ['--d' as string]: '160ms' }} data-testid="scan-intro">
                 Sidequest searches {destination} for places that fit how you travel — the classics and the quieter finds — puts each one on the map and times the distances between them. Your Discovery Board opens with Sidequest’s picks already ticked; keep them, change them, then build your trip from what you chose.
               </p>
             </>
@@ -246,16 +292,16 @@ export function ScanScreen({
               </button>
             ) : null}
             {canBuildWithoutBoard && (failure || unavailable) ? (
-              <button type="button" onClick={buildWithoutBoard} disabled={pending} className={buttonClass('secondary', 'lg')} data-testid="scan-build-without-board">
+              <button type="button" onClick={buildWithoutBoard} disabled={pending} className="inline-flex min-h-12 items-center rounded-full border border-white/20 px-6 text-base font-semibold text-[var(--color-atlas-ink)] hover:border-white/50 focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2" data-testid="scan-build-without-board">
                 Plan without the board
               </button>
             ) : null}
-            <Link href={`/trips/${tripId}/questionnaire`} className={buttonClass('ghost')} data-testid="scan-back-to-answers">
+            <Link href={`/trips/${tripId}/questionnaire`} className="inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold text-[var(--color-atlas-ink)] underline decoration-white/25 underline-offset-4 hover:decoration-[var(--color-flare)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2" data-testid="scan-back-to-answers">
               Change my answers
             </Link>
           </div>
           {unavailable ? (
-            <p id="scan-unavailable-note" className="mt-3 type-small text-ink" role="status" data-testid="scan-unavailable">
+            <p id="scan-unavailable-note" className="mt-3 type-small text-[var(--color-atlas-ink)]" role="status" data-testid="scan-unavailable">
               <strong className="font-semibold">{unavailable.heading}</strong> {unavailable.message}
             </p>
           ) : null}
@@ -263,6 +309,13 @@ export function ScanScreen({
       )}
 
       {error ? <ErrorNote>{error}</ErrorNote> : null}
+    </div>
+    {view.map && !view.failure ? (
+      <div className="fade-up h-[17rem] min-w-0 max-lg:order-first sm:h-[22rem] lg:sticky lg:top-[calc(var(--chrome-height)+2rem)] lg:h-[min(38rem,calc(100svh-var(--chrome-height)-4rem))]" style={{ ['--d' as string]: '200ms' }}>
+        <ScanMap center={view.map.center} scale={view.map.scale} points={view.map.points} />
+      </div>
+    ) : null}
+    </div>
     </div>
   );
 }

@@ -47,3 +47,61 @@ export async function register(): Promise<void> {
     /* A probe that cannot be warmed is a probe the readiness route will run on its first request. */
   }
 }
+
+/**
+ * PRODUCTION PASS — ONE STRUCTURED LINE PER SERVER ERROR.
+ *
+ * Next calls this for every error it captures in a render, a route handler, a
+ * server action or the proxy. It writes a single JSON line (Railway indexes
+ * JSON logs) with the request id the proxy minted, the edge's own id, the
+ * route *pattern* (`/trips/[id]/plan`, never the concrete path with its trip
+ * id or query string), the method, the context and the error's name, digest
+ * and a clipped message. Never headers, cookies, bodies or the query string:
+ * a log line is not a place for a session cookie or a traveller's notes.
+ */
+export function onRequestError(
+  error: unknown,
+  request: { path: string; method: string; headers: { [key: string]: string | string[] | undefined } },
+  context: { routerKind: string; routePath: string; routeType: string; renderSource?: string; revalidateReason?: string },
+): void {
+  try {
+    console.error(JSON.stringify(requestErrorRecord(error, request, context)));
+  } catch {
+    /* Logging must never be the second failure. */
+  }
+}
+
+/** The record `onRequestError` logs. Exported for the test; pure. */
+export function requestErrorRecord(
+  error: unknown,
+  request: { path: string; method: string; headers: { [key: string]: string | string[] | undefined } },
+  context: { routerKind: string; routePath: string; routeType: string; renderSource?: string },
+): Record<string, unknown> {
+  const SANE = /^[A-Za-z0-9._:-]{6,80}$/;
+  const header = (name: string): string | null => {
+    const raw = request.headers[name];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return value && SANE.test(value) ? value : null;
+  };
+  const err = error instanceof Error ? error : null;
+  const digest = typeof error === 'object' && error !== null && 'digest' in error ? String((error as { digest: unknown }).digest).slice(0, 64) : null;
+  /* Secrets are never in a message on purpose, but a provider's error text can echo a URL; strip anything key- or token-shaped. */
+  const message = (err?.message ?? String(error))
+    .replace(/(key|token|secret|authorization|password)=?[:\s]*[^\s&]+/gi, '$1=[redacted]')
+    .replace(/sk-[A-Za-z0-9_-]{10,}/g, '[redacted]')
+    .slice(0, 300);
+  return {
+    event: 'sidequest_request_error',
+    at: new Date().toISOString(),
+    requestId: header('x-request-id'),
+    edgeRequestId: header('x-railway-request-id'),
+    method: request.method,
+    route: context.routePath,
+    routeType: context.routeType,
+    routerKind: context.routerKind,
+    ...(context.renderSource ? { renderSource: context.renderSource } : {}),
+    name: err?.name ?? typeof error,
+    digest,
+    message,
+  };
+}

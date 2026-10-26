@@ -146,6 +146,14 @@ export type DestinationImageProps = {
    * hierarchy to comply has complied with the letter and broken the card.
    */
   credit?: 'below' | 'none';
+  /**
+   * What shows around a whole, uncropped file that does not fill its frame.
+   * `graphic` (the default) is the generated plate; `paper` is the white of a
+   * print, for frames that are themselves prints — a panorama on a board row
+   * reads as a print with a margin, not as a photograph floating on a drawing.
+   * The plate still stands in whenever the file itself is missing or fails.
+   */
+  backdrop?: 'graphic' | 'paper';
 } & (
   | {
       /** The frame is wider than the file, so the file gets cropped to fill it. */
@@ -187,6 +195,7 @@ export function DestinationImage({
   showLabel = false,
   category,
   credit = 'below',
+  backdrop = 'graphic',
   livePhoto = null,
 }: DestinationImageProps & {
   /**
@@ -225,12 +234,16 @@ export function DestinationImage({
           transient network failure has no business changing what a screen reader
           hears, when the name is in the heading beside it either way.
         */}
-        <FallbackGraphic
-          fallback={fallback}
-          showLabel={showLabel && !image && !live}
-          decorative={image !== null || live !== null}
-          {...(category ? { category } : {})}
-        />
+        {backdrop === 'paper' && image && loadable ? (
+          <div aria-hidden="true" className="absolute inset-0 bg-white" />
+        ) : (
+          <FallbackGraphic
+            fallback={fallback}
+            showLabel={showLabel && !image && !live}
+            decorative={image !== null || live !== null}
+            {...(category ? { category } : {})}
+          />
+        )}
         {live ? (
           /*
             A plain `img`, deliberately. The bytes are streamed by this app's own
@@ -328,12 +341,14 @@ export function ImageCredit({
   className?: string;
 }) {
   return (
-    <Tag className={cx('mt-1.5 type-meta', className)}>
+    /* One quiet line — "Photo · who · licence · creator": the attribution stays complete and linked, it just stops shouting with three dotted underlines. */
+    <Tag className={cx('mt-1.5 type-meta opacity-80 [overflow-wrap:anywhere]', className)}>
+      <span aria-hidden="true">Photo · </span>
       <a
         href={image.filePageUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="underline decoration-dotted underline-offset-2 hover:text-ink-muted"
+        className="underline-offset-2 hover:text-ink-muted hover:underline"
       >
         {image.attributionText}
       </a>
@@ -344,7 +359,7 @@ export function ImageCredit({
             href={image.licenceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline decoration-dotted underline-offset-2 hover:text-ink-muted"
+            className="underline-offset-2 hover:text-ink-muted hover:underline"
           >
             licence
           </a>
@@ -357,7 +372,7 @@ export function ImageCredit({
             href={image.creatorUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline decoration-dotted underline-offset-2 hover:text-ink-muted"
+            className="underline-offset-2 hover:text-ink-muted hover:underline"
           >
             creator
           </a>
@@ -417,63 +432,47 @@ function FallbackGraphic({
         : { role: 'img', 'aria-label': fallback.description })}
       style={{
         /*
-         * Saturation held down and the second stop kept on the *same* hue.
+         * PRODUCTION PASS — THE TOPOGRAPHIC PLATE.
          *
-         * The old form rotated 40° between the two stops, which on a 96px card
-         * turned every plate into a two-colour object and made a row of them
-         * read as a paint chart. One hue, two lightnesses: the graphic reads as
-         * material rather than as a signal competing with the semantic colours
-         * on the same card.
+         * The two-band "horizon" waves read as a placeholder on every card of
+         * the baseline board. The stand-in is now a sheet of contours — the
+         * brand's ground — tinted by the category's hue and shifted by the
+         * place's own identity so no two neighbouring cards share a pattern,
+         * with one flare waypoint where the subject sits. Still a texture, not
+         * terrain: the contours are generated noise and describe nowhere, which
+         * is why the frame's label says what it is instead of pretending.
          */
-        background: `linear-gradient(${140 + Math.round(drift * 60)}deg, hsl(${hue} 24% 88%), hsl(${hue} 20% 74%))`,
+        backgroundColor: `hsl(${hue} 22% 86%)`,
       }}
     >
-      <svg
-        viewBox="0 0 100 60"
-        preserveAspectRatio="none"
-        className="absolute inset-0 h-full w-full"
+      <div
         aria-hidden="true"
-      >
-        {/* The horizon, from the latitude. */}
-        <path
-          d={`M0 ${(y * 0.6).toFixed(2)} Q 30 ${(y * 0.6 - 5).toFixed(2)} 55 ${(y * 0.6 + 2).toFixed(2)} T 100 ${(y * 0.6 - 2).toFixed(2)} L100 60 L0 60 Z`}
-          fill={`hsl(${hue} 22% 58%)`}
-          opacity={0.55}
-        />
-        <path
-          d={`M0 ${(y * 0.6 + 9).toFixed(2)} Q 40 ${(y * 0.6 + 3).toFixed(2)} 70 ${(y * 0.6 + 11).toFixed(2)} T 100 ${(y * 0.6 + 7).toFixed(2)} L100 60 L0 60 Z`}
-          fill={`hsl(${hue} 26% 44%)`}
-          opacity={0.6}
-        />
-
-        {/*
-          One mark for a place, several for a scope.
-
-          A cluster graphic draws the number of areas the trip covers, evenly
-          spaced from the longitude-derived offset — which makes a four-base
-          country trip and a one-base city trip visibly different objects before
-          anybody has read a word.
-        */}
+        className="absolute inset-0"
+        style={{
+          backgroundColor: `hsl(${hue} 30% 30%)`,
+          opacity: 0.32,
+          WebkitMask: `url("/brand/contours.svg") ${Math.round(-drift * 960)}px ${Math.round(-horizon * 640)}px / 720px 480px repeat`,
+          mask: `url("/brand/contours.svg") ${Math.round(-drift * 960)}px ${Math.round(-horizon * 640)}px / 720px 480px repeat`,
+        }}
+      />
+      <svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden="true">
         {kind === 'cluster_graphic'
-          ? Array.from({ length: marks }, (_, index) => (
-              <circle
-                key={index}
-                cx={(((x + index * 17) % 84) + 8).toFixed(2)}
-                cy={(y * 0.6 - 6 + (index % 2) * 5).toFixed(2)}
-                r={1.8}
-                fill={`hsl(${hue} 34% 26%)`}
-                opacity={0.8}
-              />
-            ))
+          ? Array.from({ length: marks }, (_, index) => {
+              const cx = ((x + index * 17) % 84) + 8;
+              const cy = Math.min(48, Math.max(12, y * 0.45 + 6 + (index % 2) * 8));
+              return (
+                <g key={index}>
+                  {index > 0 ? <line x1={((x + (index - 1) * 17) % 84) + 8} y1={Math.min(48, Math.max(12, y * 0.45 + 6 + ((index - 1) % 2) * 8))} x2={cx} y2={cy} stroke="#ff5a1f" strokeWidth={0.6} strokeDasharray="1 1.4" opacity={0.8} /> : null}
+                  <circle cx={cx} cy={cy} r={1.9} fill="#ff5a1f" stroke={`hsl(${hue} 22% 86%)`} strokeWidth={0.7} />
+                </g>
+              );
+            })
           : marks > 0
             ? (
-                <circle
-                  cx={x.toFixed(2)}
-                  cy={(y * 0.6 - 7).toFixed(2)}
-                  r={2.4}
-                  fill={`hsl(${hue} 34% 26%)`}
-                  opacity={0.85}
-                />
+                <g>
+                  <circle cx={x} cy={Math.min(46, Math.max(14, y * 0.45 + 8))} r={5.5} fill="#ff5a1f" opacity={0.16} />
+                  <circle cx={x} cy={Math.min(46, Math.max(14, y * 0.45 + 8))} r={2.3} fill="#ff5a1f" stroke={`hsl(${hue} 22% 86%)`} strokeWidth={0.8} />
+                </g>
               )
             : null}
       </svg>

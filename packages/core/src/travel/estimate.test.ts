@@ -31,6 +31,11 @@ describe('geo estimator', () => {
     expect(estimate.minutes % 5).toBe(0);
     expect(estimate.approxKm).toBeGreaterThan(estimate.straightLineKm);
   });
+  it('never prices a road journey past a long day of driving: a sea crossing is unknown, not a 26-hour drive', () => {
+    expect(estimateLegMinutes({ from: { lat: 38.71, lng: -9.14 }, to: { lat: 37.81, lng: -25.47 }, mode: 'drive' })).toBeNull();
+    // A long but ordinary road day still gets its figure.
+    expect(estimateLegMinutes({ from: { lat: 52.52, lng: 13.4 }, to: { lat: 48.14, lng: 11.58 }, mode: 'drive' })).not.toBeNull();
+  });
   it('Dublin → Kilkenny by car lands near the real 90 minutes', () => {
     const estimate = estimateLegMinutes({ from: DUBLIN, to: KILKENNY, mode: 'drive' })!;
     expect(estimate.minutes).toBeGreaterThanOrEqual(75);

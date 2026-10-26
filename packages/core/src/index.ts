@@ -71,6 +71,7 @@ export * from './questionnaire/transform';
 export * from './interview/impact';
 export * from './interview/traits';
 export * from './interview/catalog';
+export * from './interview/recommended';
 export * from './interview/selector';
 export * from './interview/state';
 export * from './interview/review';
@@ -150,6 +151,7 @@ export * from './recommend/presentation';
 export * from './recommend/proposal';
 export * from './recommend/rank';
 export * from './recommend/shortlist';
+export * from './advisor/index';
 export * from './routing/plan';
 export * from './routing/portfolio';
 

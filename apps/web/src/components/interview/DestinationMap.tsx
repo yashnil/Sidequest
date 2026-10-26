@@ -70,6 +70,11 @@ const SCALE_KM: Record<string, number> = {
   continental: 1600,
 };
 
+/** How far out to frame a destination when nobody chose a reach: the scale rule above, as one number. */
+export function frameKmFor(geometry: DestinationGeometry): number {
+  return SCALE_KM[geometry.scale ?? ''] ?? FRAME_KM[geometry.featureType ?? ''] ?? (URBAN_FEATURES.has(geometry.featureType ?? '') ? 12 : 40);
+}
+
 export type ConceptualMovement = 'car' | 'transit_walk' | 'guided' | 'boat' | 'mixed' | null;
 
 /**

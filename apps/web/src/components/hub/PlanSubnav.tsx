@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { cx } from '../ui';
 
 /**
  * EXPERIENCE V2 — ONE LOGISTICS SECTION AT A TIME.
@@ -27,7 +26,7 @@ export function planSectionForHash(hash: string): PlanSectionId | null {
   return null;
 }
 
-export function PlanSubnav({ panels, badges = {}, initial = 'stays' }: { panels: Record<PlanSectionId, ReactNode>; badges?: Partial<Record<PlanSectionId, number>>; initial?: PlanSectionId }) {
+export function PlanSubnav({ panels, badges = {}, summaries = {}, initial = 'stays' }: { panels: Record<PlanSectionId, ReactNode>; badges?: Partial<Record<PlanSectionId, number>>; /** The one figure each section is about, read under its name (the index as a figure table). */ summaries?: Partial<Record<PlanSectionId, string>>; initial?: PlanSectionId }) {
   const [active, setActive] = useState<PlanSectionId>(initial);
   useEffect(() => {
     const apply = () => {
@@ -40,10 +39,17 @@ export function PlanSubnav({ panels, badges = {}, initial = 'stays' }: { panels:
   }, []);
   return (
     <div data-testid="plan-subnav" data-plan-section={active}>
-      <div role="tablist" aria-label="Plan sections" className="no-scrollbar -mx-5 flex gap-1 overflow-x-auto border-b border-rule px-5 sm:mx-0 sm:px-0">
-        {PLAN_SECTIONS.map((section) => {
+      {/*
+        SURVEY ATLAS — the section index is the plan's figure table: a number,
+        the section's name and the one figure it is about, in cells that share
+        their borders. The figure is aria-hidden so each tab is still named by
+        its section alone.
+      */}
+      <div role="tablist" aria-label="Plan sections" className="hv-tabs -mx-4 px-4 sm:mx-0 sm:px-0">
+        {PLAN_SECTIONS.map((section, index) => {
           const on = section.id === active;
           const badge = badges[section.id];
+          const summary = summaries[section.id];
           return (
             <button
               key={section.id}
@@ -57,13 +63,20 @@ export function PlanSubnav({ panels, badges = {}, initial = 'stays' }: { panels:
                 setActive(section.id);
                 window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${section.anchors[0]}`);
               }}
-              className={cx(
-                'pressable relative inline-flex min-h-11 shrink-0 items-center gap-1.5 px-3 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-pine',
-                on ? 'text-ink after:absolute after:inset-x-3 after:-bottom-px after:h-0.5 after:bg-[var(--color-route)]' : 'text-ink-muted hover:text-ink',
-              )}
+              className="hv-tab pressable focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-pine"
             >
-              {section.label}
-              {badge ? <span className="type-figure rounded-full bg-paper-sunk px-1.5 text-xs leading-5 text-ink-muted">{badge}</span> : null}
+              <span aria-hidden="true" className="coordbar text-ink-faint">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <span className="hv-tab-label inline-flex items-center gap-1.5">
+                {section.label}
+                {badge ? <span className="type-figure border border-current px-1 font-sans text-[10.5px] leading-4">{badge}</span> : null}
+              </span>
+              {summary ? (
+                <span aria-hidden="true" className="hv-tab-sum">
+                  {summary}
+                </span>
+              ) : null}
             </button>
           );
         })}

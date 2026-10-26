@@ -741,7 +741,14 @@ export function whysForBoard(
       continue;
     }
     const own = candidate.fit.reasons.find((reason) => !used.has(reason));
-    const why = own ?? (used.has(fallback) ? null : fallback);
+    /*
+     * Every reason spoken for: what the place *is* before silence, under the
+     * same stub gate as the card's description. The stage print reads this
+     * line, and on an open-data board it was blank for most of the places a
+     * traveller hovered while each had a sourced description going unused.
+     */
+    const described = descriptionOf(candidate.place);
+    const why = own ?? (!used.has(fallback) ? fallback : described !== null && !used.has(described) ? described : null);
     if (why !== null) used.add(why);
     chosen[candidate.place.id] = why;
   }

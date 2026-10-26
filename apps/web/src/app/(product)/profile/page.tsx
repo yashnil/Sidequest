@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { DIETARY_NEED_LABELS, FUNCTIONAL_NEED_LABELS, dietaryRulesOf, learnedHints } from '@sidequest/core';
 import { currentUser } from '@/lib/auth/session';
 import { listTravelers } from '@/lib/db/party-repository';
 import { learnedWithDismissals } from '@/lib/db/preference-evidence-repository';
 import { sessionToken } from '@/lib/net/caller';
+import { listTripsFor } from '@/lib/db/repository';
+import { authProviders } from '@/lib/auth/config';
+import { DataControls, type DataControlTrip } from './DataControls';
 import { buttonClass } from '@/components/ui';
 import { LearnedPreferences, type LearnedRow } from './LearnedPreferences';
 import { ProfileForm } from './ProfileForm';
@@ -54,10 +56,45 @@ function toldRows(usual: Record<string, unknown>, travelers: ReturnType<typeof l
   return rows;
 }
 
+function dataTrips(owner: { userId: string | null; ownerToken: string | null }): DataControlTrip[] {
+  return listTripsFor(owner).map((trip) => ({ id: trip.id, title: trip.title ?? (trip.basics.destinationInput || 'Untitled trip') }));
+}
+
 export default async function ProfilePage() {
   const user = await currentUser();
-  if (!user) redirect('/signin?returnTo=%2Fprofile');
-  const travelers = listTravelers({ userId: user.id, ownerToken: await sessionToken({ mint: false }) });
+  const ownerToken = await sessionToken({ mint: false });
+  /*
+   * Production pass — a signed-out browser still owns data (its trips), so it
+   * gets the "Your data" controls rather than a redirect: deleting and
+   * downloading must never require creating an account first.
+   */
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14" data-testid="profile-page">
+        <p className="eyebrow">Profile</p>
+        <h1 className="display-xl mt-3 text-ink">You’re planning as a guest</h1>
+        <p className="measure mt-4 type-body text-ink-muted">Everything works without an account. Your trips are kept on this browser, and you can download or delete them here at any time.</p>
+        {authProviders().any ? (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-panel)] bg-night px-5 py-4 text-[var(--color-atlas-ink)] sm:px-6" data-testid="profile-signin-offer">
+            <p className="min-w-0 text-sm leading-relaxed">
+              <span className="block font-display text-lg">Keep them everywhere</span>
+              <span className="text-[var(--color-atlas-muted)]">Sign in to save your trips to an account and keep a travel profile.</span>
+            </p>
+            <Link className={buttonClass('accent')} href="/signin?returnTo=%2Fprofile">
+              Sign in
+            </Link>
+          </div>
+        ) : null}
+        <DataControls trips={dataTrips({ userId: null, ownerToken })} signedIn={false} />
+        <div className="mt-10">
+          <Link href="/trips" className={buttonClass('secondary')}>
+            ← Back to your trips
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  const travelers = listTravelers({ userId: user.id, ownerToken });
   const usual = (user.profile.usual ?? {}) as { budgetStyle?: string; pace?: string; drives?: boolean; foodNotes?: string; lodgingNotes?: string };
   const told = toldRows(usual as Record<string, unknown>, travelers);
   const noticed = learnedWithDismissals({ userId: user.id, ownerToken: null });
@@ -128,6 +165,8 @@ export default async function ProfilePage() {
         <p className="mt-1 type-small text-ink-muted">Leanings from what you chose and changed on earlier trips. Each one nudges the next plan and can be traded away; dismiss it and it is never read again.</p>
         <LearnedPreferences rows={learnedRows} />
       </section>
+
+      <DataControls trips={dataTrips({ userId: user.id, ownerToken })} signedIn />
 
       <div className="mt-10">
         <Link href="/trips" className={buttonClass('secondary')}>

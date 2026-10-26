@@ -95,6 +95,9 @@ async function startWholeTripBuild(tripId: string, buildKey: string, caller: str
     console.warn('Build refused before it started', { tripId, door: caller, cause: preflight.failure.cause, reason: preflight.operatorReason });
     return { ok: false, error: preflight.failure.message };
   }
+  /* Production pass — only a model-composed build bills; a planner build is free and is never charged here. */
+  const billed = preflight.path === 'model_composer' ? await guardAction('billed_hourly') : null;
+  if (billed) return { ok: false, error: billed };
   before?.();
   startBuildRun({ tripId, buildKey, caller, mode: 'full' });
   revalidatePath(`/trips/${tripId}/itinerary`);

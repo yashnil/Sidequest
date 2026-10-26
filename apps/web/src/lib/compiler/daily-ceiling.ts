@@ -1,5 +1,7 @@
 import 'server-only';
 import { getDb } from '../db/client';
+import { authProviders } from '../auth/config';
+import { inspectRateToken, takeRateToken, type RateLimitRule } from '../net/rate-limit';
 
 /**
  * THE GLOBAL CEILING ON WHAT A DAY MAY SPEND, ACROSS EVERY TRIP AND EVERY
@@ -124,6 +126,81 @@ const PER_CALLER_SHARE = 0.1;
  */
 const UNATTRIBUTED_CALLER = '@unattributed';
 
+/**
+ * PRODUCTION PASS — THE PART OF THE DAY ANONYMOUS TRAFFIC MAY NEVER TAKE.
+ *
+ * Every spend not charged to a signed-in account (`user:…`) is also written to
+ * one aggregate row, and that row stops at a share of the global ceiling. A
+ * flood of anonymous identities — farmed cookies, rotated addresses — can
+ * therefore exhaust the anonymous part of the day and nothing else: the rest
+ * stays reserved for travellers an identity provider vouched for. Internal
+ * callers (absent key) are not charged here, as before.
+ *
+ * `SIDEQUEST_ANONYMOUS_SPEND_SHARE` (0..1, default 0.75). `1` turns the
+ * reservation off; garbage falls back to the default.
+ */
+const ANONYMOUS_POOL = '@anonymous';
+const DEFAULT_ANONYMOUS_SHARE = 0.75;
+
+export function anonymousSpendShare(): number {
+  const raw = process.env.SIDEQUEST_ANONYMOUS_SPEND_SHARE?.trim();
+  if (!raw) return DEFAULT_ANONYMOUS_SHARE;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) return DEFAULT_ANONYMOUS_SHARE;
+  return value;
+}
+
+function anonymousCeiling(globalCeiling: number): number {
+  return Math.floor(globalCeiling * anonymousSpendShare());
+}
+
+function isAccountKey(key: string): boolean {
+  return key.startsWith('user:');
+}
+
+/**
+ * PRODUCTION PASS — A COOKIE CANNOT RESET ITS OWN ALLOWANCE.
+ *
+ * A signed session cookie is free to obtain: any action mints one. Without a
+ * trusted proxy hop count (`SIDEQUEST_TRUSTED_PROXY_HOPS`) the session is the
+ * caller key, so a script that keeps each fresh cookie for one round trip used
+ * to get a fresh tenth of the day per cookie. Now a `session:` key that has not
+ * spent today must first be *admitted* from one deployment-wide bucket of new
+ * spenders. A returning browser is admitted once a day; a cookie farm is
+ * bounded by the admission rate, not by how many cookies it can mint.
+ *
+ * Address (`ip:`) and account (`user:`) keys are not admitted this way: an
+ * address the infrastructure vouches for cannot be rotated by minting cookies,
+ * and an account is not free to obtain. `SIDEQUEST_NEW_SPENDERS_PER_HOUR`
+ * (default 30) sizes the bucket; the burst is the same number.
+ */
+const NEWCOMER_BUCKET = 'billing_newcomer:@deployment';
+const DEFAULT_NEW_SPENDERS_PER_HOUR = 30;
+
+export function newSpenderRule(): RateLimitRule {
+  const raw = process.env.SIDEQUEST_NEW_SPENDERS_PER_HOUR?.trim();
+  const parsed = raw ? Number(raw) : NaN;
+  const perHour = Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : DEFAULT_NEW_SPENDERS_PER_HOUR;
+  return { capacity: perHour, refillPerMinute: perHour / 60 };
+}
+
+function needsAdmission(key: string | null): key is string {
+  return key !== null && key.startsWith('session:') && process.env.SIDEQUEST_ACTION_FENCES !== 'off';
+}
+
+function hasSpentToday(key: string, now: Date): boolean {
+  return dailySpendSoFar('model_calls', now, key) > 0 || dailySpendSoFar('live_compilations', now, key) > 0;
+}
+
+const NEWCOMER_REFUSED_MESSAGE =
+  'Sidequest is starting research for a lot of new travellers just now, so we did not start this one. Nothing was lost — your trip is saved. Try again in a few minutes.';
+
+function anonymousPoolMessage(): string {
+  return authProviders().any
+    ? 'Sidequest has used today’s research allowance for travellers who are not signed in. Your trip is saved — sign in to keep planning, or try again tomorrow.'
+    : CEILING_REACHED_MESSAGE;
+}
+
 function perCallerCeiling(globalCeiling: number): number {
   return Math.max(1, Math.ceil(globalCeiling * PER_CALLER_SHARE));
 }
@@ -205,7 +282,13 @@ export function recordDailySpend(
     // deployment's has not. Written in the same call as the global one because
     // a spend recorded against only one of them is a ceiling that lies.
     const key = chargeKey(caller);
-    if (key) write.run(day, callerCounter(counter, key), rounded);
+    if (key) {
+      // A session's first spend of the day takes its admission. Read before the
+      // write below, so "first" means first.
+      if (needsAdmission(key) && !hasSpentToday(key, now)) takeRateToken(NEWCOMER_BUCKET, newSpenderRule(), now);
+      write.run(day, callerCounter(counter, key), rounded);
+      if (!isAccountKey(key)) write.run(day, callerCounter(counter, ANONYMOUS_POOL), rounded);
+    }
   } catch (error) {
     // A ledger that cannot be written is a ceiling that cannot be trusted; the
     // gate below fails closed for the same reason, so the money stays bounded.
@@ -246,7 +329,10 @@ export function refundLiveCompilation(now = new Date(), caller?: string | null):
     );
     give.run(day, 'live_compilations');
     const key = chargeKey(caller);
-    if (key) give.run(day, callerCounter('live_compilations', key));
+    if (key) {
+      give.run(day, callerCounter('live_compilations', key));
+      if (!isAccountKey(key)) give.run(day, callerCounter('live_compilations', ANONYMOUS_POOL));
+    }
   } catch (error) {
     console.error('Could not refund a daily live-compilation reserve', { error });
   }
@@ -320,6 +406,17 @@ export function dailySpendGate(
       }
       if (dailySpendSoFar('model_calls', now, keyed) >= perCallerCeiling(dailyModelCallCeiling())) {
         return { allowed: false, message: SHARE_REACHED_MESSAGE };
+      }
+      if (!isAccountKey(keyed)) {
+        if (
+          dailySpendSoFar('live_compilations', now, ANONYMOUS_POOL) >= anonymousCeiling(dailyLiveCompilationCeiling()) ||
+          dailySpendSoFar('model_calls', now, ANONYMOUS_POOL) >= anonymousCeiling(dailyModelCallCeiling())
+        ) {
+          return { allowed: false, message: anonymousPoolMessage() };
+        }
+      }
+      if (needsAdmission(keyed) && !hasSpentToday(keyed, now) && !inspectRateToken(NEWCOMER_BUCKET, newSpenderRule(), now).allowed) {
+        return { allowed: false, message: NEWCOMER_REFUSED_MESSAGE };
       }
     }
     if (dailySpendSoFar('live_compilations', now) >= dailyLiveCompilationCeiling()) {

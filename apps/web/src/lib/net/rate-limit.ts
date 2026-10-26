@@ -272,6 +272,26 @@ export const ACTION_RATE_RULES = {
    * person rescanning after changing their mind, not for a loop.
    */
   scan_start: { capacity: 3, refillPerMinute: 1 },
+  /**
+   * Production pass — "Ask Sidequest" refinement: one billed model call per
+   * interpretation (Apply, Cancel and Undo are free and never reach this).
+   */
+  refine: { capacity: 4, refillPerMinute: 1 },
+  /**
+   * Production pass — one bucket shared by every door that bills a model call
+   * (scan, model-composed build, refinement), refilling over an hour rather
+   * than a minute: twelve billed presses an hour from one identity. Taken by
+   * `guardBilledAction` after the door's own rule.
+   */
+  billed_hourly: { capacity: 12, refillPerMinute: 0.2 },
+  /**
+   * Production pass — "Download my data" / "Delete all my data": local reads
+   * and deletes only, fenced so a loop cannot make the server serialise every
+   * trip it holds over and over.
+   */
+  data_rights: { capacity: 4, refillPerMinute: 1 },
+  /** Production pass — `/api/auth/google/start` writes an `auth_states` row per GET. */
+  auth_start: { capacity: 6, refillPerMinute: 3 },
   /** V8 — a browser reporting a page failure so its reference reaches the log. Local write only. */
   client_failure_report: { capacity: 6, refillPerMinute: 2 },
 } as const satisfies Record<string, RateLimitRule>;

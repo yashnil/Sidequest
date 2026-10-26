@@ -49,7 +49,11 @@ Enforced by `requiredConfigProblems` (`apps/web/src/lib/providers/capabilities.m
 | `GOOGLE_MAPS_API_KEY` | Proposed places are placed by Nominatim only. A live Seoul scan placed 16 of 27, against 30 of 32 for Tokyo with Places. |
 | `SIDEQUEST_POI_PROVIDER=overpass` (+ `SIDEQUEST_POI_URL` for your own endpoint) | Meals give area-level advice instead of named venues. |
 | `SIDEQUEST_ROUTES_GLOBAL_PROVIDER=openrouteservice` + `OPENROUTESERVICE_API_KEY` | Travel times are labelled distance estimates. |
-| `SIDEQUEST_DAILY_MODEL_CALLS` | Global model-call ceiling per day (default 20). Each caller gets 10%, i.e. 2 scans a day at the default. Raise it for an alpha with real testers. |
+| `SIDEQUEST_TRUSTED_PROXY_HOPS` | **Set to `1` on Railway.** Railway's edge appends the client address it observed to `X-Forwarded-For`, so the address is the last element (`lib/net/caller.ts` counts that many hops from the right; the client can only prepend). Without it the app cannot attribute a request to an address at all: spend falls back to the session cookie, which any script can mint, and cookie farming is bounded only by the new-spender bucket and the deployment fences. Verify after a deploy: from a known IP, check a rate-limited refusal is per-connection (or dump the header once from a debug route) — if Railway ever adds a second proxy hop, the value becomes `2`. |
+| `SIDEQUEST_DAILY_MODEL_CALLS` | Global model-call ceiling per UTC day. **Default 800** (`lib/compiler/daily-ceiling.ts`); `SIDEQUEST_DAILY_LIVE_COMPILATIONS` defaults to 60. Each caller (account, trusted address or signed cookie) gets 10%. At Opus rates 800 calls can be hundreds of dollars a day, so set it deliberately — e.g. `100` for a small alpha. |
+| `SIDEQUEST_ANONYMOUS_SPEND_SHARE` | Fraction (0–1, default `0.75`) of each daily ceiling that callers who are not signed in may use between them. The rest is reserved for signed-in accounts, so an anonymous flood cannot starve them. `1` turns the reservation off. |
+| `SIDEQUEST_NEW_SPENDERS_PER_HOUR` | How many cookie-only identities (no trusted address, not signed in) may start spending per hour, deployment-wide (default `30`). A browser is admitted once per day; this is what stops a cookie farm from getting a fresh allowance per cookie. Has no effect on `ip:` or `user:` callers. |
+| `SIDEQUEST_SUPPORT_EMAIL` | The contact address shown on `/support`, `/privacy` and `/terms`. Unset, the pages say no address has been published — Sidequest never invents one. |
 
 ### Optional
 
@@ -59,6 +63,16 @@ Enforced by `requiredConfigProblems` (`apps/web/src/lib/providers/capabilities.m
 
 `SIDEQUEST_COMPOSER_PROVIDER=fixture`, `SIDEQUEST_COMPILER_PROVIDER=fixture`, `SIDEQUEST_FIXTURES=allow`, `SIDEQUEST_FIXTURE_NOW`, `SIDEQUEST_AUTH_PROVIDER=fixture`, `SIDEQUEST_PLACES_FIXTURE`, `SIDEQUEST_ROUTES_FIXTURE`, `SIDEQUEST_SECURE_COOKIES=off`, `SIDEQUEST_ACTION_FENCES=off`.
 
+### Spend controls (what bounds an abusive client)
+
+Every billed door — a Discovery scan, a model-composed build (a planner build is free and is not charged), a refinement interpretation — passes, in order:
+
+1. its own per-minute fence (`scan_start`, `build_start`, `refine` in `lib/net/rate-limit.ts`), per identity and deployment-wide (8×);
+2. `billed_hourly`: 12 billed presses an hour per identity across all doors, plus a deployment-wide 96;
+3. the daily ledger (`lib/compiler/daily-ceiling.ts`): the caller's 10% share, the anonymous pool (`SIDEQUEST_ANONYMOUS_SPEND_SHARE`), the new-spender admission for cookie-only callers (`SIDEQUEST_NEW_SPENDERS_PER_HOUR`), then the global ceiling.
+
+The caller key is the signed-in account first, then the trusted address (`SIDEQUEST_TRUSTED_PROXY_HOPS`), then a signed session cookie the browser actually presented. A cookie can never reset its own allowance: "Delete all my data" keeps the day's ledger and rate rows, and a fresh cookie must be admitted before it spends. Still recommended before a public launch: a human check (e.g. Turnstile) or sign-in before a new identity's first billed call, and alerts at 50% / 90% of the ceiling.
+
 Check any environment with `npm run doctor -- --probe`. It ends with "Can this deployment serve a traveller right now?", using the same verdicts as `/api/readiness`.
 
 ## Ownership and sharing (what the alpha actually is)
@@ -67,6 +81,9 @@ Check any environment with `npm run doctor -- --probe`. It ends with "Can this d
 - **This is not account sync.** Clearing cookies loses access to a trip unless the traveller signed in with Google (when configured), which claims the browser's trips to the account.
 - **Share links** (`/share/<128-bit token>`) are read-only copies built for a public audience. They carry no trip id, no booking references, no notes, no party diet or accessibility facts, and no owner controls. They do show the plan's next actions, read-only, and its estimated budget ranges.
 - **Calendar feeds** (`/api/calendar/<256-bit token>`) are revocable and carry no references, notes or costs.
+- **Download and delete.** `/profile` → "Your data" (also reachable signed out) offers "Download my data" (`GET /api/me/export`, JSON, credentials stripped), "Delete this trip" and "Delete all my data" (typed confirmation). Signed in, the last deletes the account (`users` cascades sessions, people, evidence, saved ideas, dismissals and its trips); signed out, every unclaimed row the browser cookie owns. Trip rows cascade from `trips`; the three tables that name a trip without a foreign key are cleared explicitly (`lib/db/data-rights-repository.ts`, completeness checked by `data-rights.test.ts`). The day's spend ledger and rate buckets are kept. Railway volume backups still hold deleted rows until they rotate.
+- **Legal pages.** `/privacy`, `/terms` and `/support` describe what the code collects and where it is sent. They are marked **draft** and need owner/legal review before a public launch; link them from the chrome footer, `/signin` and the share page.
+- **Google sign-in** binds the OAuth `state` to the starting browser with a 10-minute httpOnly `sidequest_oauth` cookie (path `/api/auth`, one-time) and also requires the same `sidequest_session` cookie at the callback (login CSRF). `/api/auth/google/start` is rate limited (`auth_start`).
 
 ## Backup and restore
 
@@ -107,4 +124,14 @@ Railway → Deployments → pick the last good deployment → **Redeploy**, or `
 - `Build failed {ref, kind, cause, where}` is keyed by the reference the traveller is shown.
 - `Planner fallback {plannerFallbackReason}` appears whenever a trip was not planner-built.
 
-Railway keeps only the current deployment's log window. Read logs before redeploying if you need them.
+- `{"event":"sidequest_request_error",…}` is one JSON line per server error caught by Next (`instrumentation.ts#onRequestError`): `requestId` (minted by `proxy.ts` for every page, action and API request, and returned as the `x-request-id` response header), `edgeRequestId` (Railway's `x-railway-request-id`), the route *pattern*, method, context, error name, digest and a clipped, key-redacted message. Never headers, cookies, bodies or query strings. Search by the id a traveller reports: `railway logs … | grep <id>`.
+
+Railway keeps only the current deployment's log window. Read logs before redeploying if you need them. For a public launch, add a log drain with retention and an error tracker fed from `onRequestError`.
+
+## Security headers
+
+`next.config.ts` serves a CSP (map tiles from `tiles.openfreemap.org` and AWS terrain tiles from `s3.amazonaws.com` in `img-src`/`connect-src`), HSTS, `X-Frame-Options: DENY`, `nosniff`, a referrer policy and a `Permissions-Policy` that refuses camera, microphone, geolocation, payment and the other powerful features (nothing uses them). `/share/*`, `/trips/*`, `/api/*`, `/profile` and `/labs/*` also send `X-Robots-Tag: noindex, nofollow`. The image optimizer is off (`images.unoptimized`; `/_next/image` answers 404) because nothing uses `next/image`. With `SIDEQUEST_INDEXABLE=on` and `SIDEQUEST_BASE_URL` set, `robots.txt` names `/sitemap.xml`, which lists `/`, `/decide`, `/privacy`, `/terms` and `/support` only.
+
+## Dependencies
+
+Run `npm audit --omit=dev --audit-level=high` before every deploy (add it to CI). On 2026-10-24 production dependencies had 0 advisories after upgrading `next` 16.3.4 → 16.4.3, `zod` → 4.6.7, `postal-mime` 3.0.0 → 4.1.4, `sharp` → 0.35.5 and `source-map-js` → 1.2.2.

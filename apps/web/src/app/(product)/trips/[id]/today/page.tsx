@@ -57,7 +57,7 @@ export default async function TodayPage({ params }: { params: Promise<{ id: stri
   const model = await todayViewModel(trip, itinerary);
   return (
     <>
-      <TodayScreen tripId={id} destination={model.destination} today={model.today} firstDate={model.firstDate} lastDate={model.lastDate} dayCount={model.dayCount} timeZone={model.timeZone} state={model.state} directions={model.directions} reservation={model.reservation} changed={model.changed} />
+      <TodayScreen tripId={id} destination={model.destination} today={model.today} firstDate={model.firstDate} lastDate={model.lastDate} dayCount={model.dayCount} timeZone={model.timeZone} state={model.state} directions={model.directions} reservation={model.reservation} changed={model.changed} firstDay={model.firstDay} nextActions={model.nextActions} />
       <AskSidequestMount tripId={id} ready={Boolean(getTripDraft(id))} canUndo={undoTarget(id) !== null} dayCount={model.dayCount} />
     </>
   );

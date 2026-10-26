@@ -28,6 +28,7 @@ import {
   type PlannerReadiness,
 } from '@sidequest/core';
 import { getDb } from './client';
+import { deleteTripCompletely } from './data-rights-repository';
 
 /**
  * Every read parses through the schema rather than casting. A row written by an
@@ -448,7 +449,8 @@ export function tripForShareToken(token: string): Trip | null {
  * the trip — is where the judgement about *when* it is safe belongs.
  */
 export function deleteTrip(tripId: string): void {
-  getDb().prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+  /* Production pass — the cascade plus the few tables that name a trip without a foreign key (`data-rights-repository`). */
+  deleteTripCompletely(tripId);
 }
 
 function setTripStatus(tripId: string, status: TripStatus): void {

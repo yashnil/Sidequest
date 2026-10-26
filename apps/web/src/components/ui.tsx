@@ -23,13 +23,20 @@ export function cx(...values: (string | false | null | undefined)[]): string {
  * button's own edge, which on a filled primary button is invisible.
  */
 const BUTTON_BASE =
-  'pressable inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-sm font-semibold transition-[background-color,border-color,color,transform,box-shadow] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
+  'pressable inline-flex items-center justify-center gap-2 rounded-full text-sm font-semibold transition-[background-color,border-color,color,transform,box-shadow] duration-[var(--motion-fast)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
 
 const BUTTON_VARIANTS = {
-  primary: 'bg-ink text-paper shadow-[var(--shadow-card)] hover:bg-ink-muted hover:shadow-[var(--shadow-raised)]',
-  /* V8 — the one filled accent action on a screen: Build my trip, New trip, Use this timing. */
-  accent: 'bg-accent text-paper shadow-[var(--shadow-card)] hover:bg-accent-strong hover:shadow-[var(--shadow-raised)]',
-  secondary: 'border border-rule bg-paper-raised text-ink shadow-[var(--shadow-card)] hover:border-ink-faint hover:shadow-[var(--shadow-raised)]',
+  primary: 'bg-ink text-paper hover:bg-ink/85',
+  /*
+   * V8 — the one filled accent action on a screen: Build my trip, Use this timing.
+   * PRODUCTION PASS — flare with night ink (5.7:1), the brand's waypoint colour:
+   * the press that moves the trip forward looks like the dot in the mark.
+   * Disabled, it is a quiet outlined pill: a half-faded flare pill read as
+   * broken rather than as "not yet".
+   */
+  accent:
+    'bg-flare text-night hover:brightness-[1.06] shadow-[0_1px_0_rgb(13_26_31/0.25),0_8px_20px_-10px_rgb(255_90_31/0.7)] disabled:opacity-100! disabled:bg-transparent disabled:text-ink-faint disabled:shadow-none disabled:ring-1 disabled:ring-inset disabled:ring-ink/20',
+  secondary: 'border border-ink/15 bg-transparent text-ink hover:border-ink/40 hover:bg-paper-raised',
   /*
    * `text-ink-muted` here was the product's quiet *action* colour sitting at the
    * same weight as its quiet *prose* colour — 8.1:1 is a fine ratio and a bad
@@ -122,7 +129,7 @@ export function Panel({
   return (
     <Tag
       className={cx(
-        'rounded-[var(--radius-card)] border border-rule bg-paper-raised',
+        'sheet',
         className,
       )}
       {...(labelledBy ? { 'aria-labelledby': labelledBy } : {})}
@@ -294,7 +301,7 @@ export const PLATE_HUE: Record<PlaceCategory, number> = {
  */
 function plateGradient(category: PlaceCategory): string {
   const hue = PLATE_HUE[category];
-  return `linear-gradient(145deg, hsl(${hue} 22% 40%), hsl(${hue} 18% 62%))`;
+  return `linear-gradient(155deg, hsl(${hue} 26% 26%), hsl(${hue} 20% 40%))`;
 }
 
 /**
@@ -336,41 +343,6 @@ export interface PlateSignature {
   hiddenGemScore: number;
 }
 
-/** Ridge height per effort band, as a fraction of the frame. */
-const PLATE_RELIEF: Record<PlateSignature['intensity'], number> = {
-  none: 0.06,
-  easy: 0.16,
-  moderate: 0.3,
-  strenuous: 0.46,
-};
-
-/**
- * The ridge, as an SVG path across a 100×60 frame.
- *
- * Deterministic by construction rather than by seeded randomness: the crest
- * count and the height both come off the signature, so the drawing is a function
- * of the facts and re-deriving it anywhere would produce the same line.
- */
-function ridgePath(signature: PlateSignature, drop = 0): string {
-  const relief = PLATE_RELIEF[signature.intensity] * 60;
-  // Two crests for a short stop, up to five for a long one. `minutes` is the
-  // visit length the card prints, so the shape and the number agree.
-  const crests = Math.max(2, Math.min(5, Math.round(signature.minutes / 60) + 1));
-  const step = 100 / crests;
-  /*
-   * The skyline sits high enough that the ground below it is the larger part of
-   * the frame. A ridge drawn near the bottom edge leaves most of a card's plate
-   * as flat colour, which on the full-width lead card is a hundred and eighty
-   * pixels of nothing — the emptiness a first screenshot of this showed.
-   */
-  const base = 26 - relief + drop;
-  let path = `M0 ${(base + relief).toFixed(1)}`;
-  for (let index = 0; index < crests; index += 1) {
-    const peak = base + (index % 2 === 0 ? 0 : relief * 0.45);
-    path += ` Q${(step * (index + 0.5)).toFixed(1)} ${peak.toFixed(1)} ${(step * (index + 1)).toFixed(1)} ${(base + relief * (index % 2 === 0 ? 1 : 0.7)).toFixed(1)}`;
-  }
-  return path;
-}
 
 export function PlacePlate({
   category,
@@ -387,69 +359,46 @@ export function PlacePlate({
   signature?: PlateSignature;
 }) {
   const hue = PLATE_HUE[category];
+  /*
+   * PRODUCTION PASS — THE CONTOUR PLATE.
+   *
+   * The ridge-and-squiggle plate still read as a placeholder. The plate is now
+   * a cut of the brand's contour sheet over the category's own ground, and the
+   * facts it carried are carried *in* the contours, where a map reader expects
+   * them: contour spacing is effort (closer lines, steeper going — a strenuous
+   * hike is a tight sheet, a museum a loose one), the cut's position is the
+   * visit length (so two easy walks of different lengths are different
+   * sheets), and a quiet find gets a flare waypoint. Same three facts, same
+   * determinism, no hash of the id: the plate still differs only where the
+   * places differ.
+   */
+  const density = signature ? PLATE_CONTOUR_SCALE[signature.intensity] : 1;
+  const offsetX = signature ? Math.round(((signature.minutes * 7) % 960) * -1) : 0;
+  const offsetY = signature ? Math.round(((signature.minutes * 3) % 640) * -1) : 0;
+  const size = `${Math.round(960 * density)}px ${Math.round(640 * density)}px`;
+  const mask = `url("/brand/contours.svg") ${offsetX}px ${offsetY}px / ${size} repeat`;
   return (
     <div
       className={cx('relative overflow-hidden', className)}
       style={{ background: plateGradient(category) }}
       aria-hidden="true"
+      data-plate-drawing={signature ? `${mask}${signature.hiddenGemScore >= 0.6 ? '|quiet-find' : ''}` : 'category'}
     >
-      {signature ? (
-        <svg
-          viewBox="0 0 100 60"
-          className="absolute inset-0 h-full w-full"
-          preserveAspectRatio="none"
-        >
-          {/*
-            The ground under the ridge, so the line reads as terrain rather than
-            as a graph. One hue, two lightnesses — the same restraint
-            `FallbackGraphic` states.
-          */}
-          {/*
-            A second ridge behind the first, at a fixed offset. Two lines read as
-            depth rather than as a chart, and the offset is a constant so the
-            *difference* between two plates still comes only from the facts.
-          */}
-          <path
-            d={`${ridgePath(signature, 9)} L100 60 L0 60 Z`}
-            fill={`hsl(${hue} 24% 46%)`}
-            opacity={0.35}
-          />
-          <path
-            d={`${ridgePath(signature)} L100 60 L0 60 Z`}
-            fill={`hsl(${hue} 26% 34%)`}
-            opacity={0.45}
-          />
-          <path
-            d={ridgePath(signature)}
-            fill="none"
-            stroke="#fff"
-            strokeWidth={1.2}
-            strokeLinecap="round"
-            opacity={0.55}
-            /*
-              A broken line for a quiet find. Redundant with the "Quiet find"
-              chip on purpose: a chip is read once, a texture is read while
-              scanning, and this is the surface somebody scans.
-            */
-            {...(signature.hiddenGemScore >= 0.6 ? { strokeDasharray: '5 4' } : {})}
-          />
-        </svg>
+      <div className="absolute inset-0" style={{ backgroundColor: `hsl(${hue} 30% 92%)`, opacity: 0.26, WebkitMask: mask, mask }} />
+      {signature && signature.hiddenGemScore >= 0.6 ? (
+        <span className="absolute top-1/2 right-[18%] block h-3 w-3 -translate-y-1/2 rounded-full border-2 border-[hsl(var(--plate-ring,0)_0%_100%/0.85)] bg-flare shadow-[0_0_0_6px_rgb(255_90_31/0.18)]" />
       ) : null}
 
       {/*
-        The category glyph, small and cornered once there is terrain behind it.
-        Centred and large it *was* the plate, which is how eleven walks came to
-        look like one walk.
+        The category glyph, small and cornered. Centred and large it *was* the
+        plate, which is how eleven walks came to look like one walk.
       */}
       <svg
         viewBox="0 0 24 24"
-        className={cx(
-          'absolute',
-          signature ? 'top-2 left-2 h-8 w-8 opacity-45' : 'inset-0 h-full w-full opacity-30',
-        )}
+        className={cx('absolute', signature ? 'top-2.5 left-2.5 h-7 w-7 opacity-70' : 'inset-0 h-full w-full opacity-30')}
         fill="none"
         stroke="#fff"
-        strokeWidth="0.9"
+        strokeWidth="1.1"
         strokeLinecap="round"
         strokeLinejoin="round"
         preserveAspectRatio="xMidYMid meet"
@@ -459,6 +408,14 @@ export function PlacePlate({
     </div>
   );
 }
+
+/** Contour sheet scale per effort band: smaller is tighter lines, i.e. steeper ground. */
+const PLATE_CONTOUR_SCALE: Record<PlateSignature['intensity'], number> = {
+  none: 1.25,
+  easy: 0.95,
+  moderate: 0.7,
+  strenuous: 0.48,
+};
 
 export function Fieldset({
   legend,

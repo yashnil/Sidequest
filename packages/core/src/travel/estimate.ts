@@ -119,12 +119,22 @@ export function estimateLegMinutes(input: { from: { lat: number; lng: number }; 
   if (!model) return null;
   const straightLineKm = haversineKm(input.from, input.to);
   if (straightLineKm <= COLOCATED_KM) return { minutes: 0, straightLineKm, approxKm: 0, kmh: 0 };
+  /*
+   * Past a long day's drive the straight line is no evidence that a road joins
+   * the two ends at all: Lisbon to the Azores was priced as a 26-hour drive.
+   * Without a router to say so, the honest figure is none (an allowance), never
+   * a road time across the sea.
+   */
+  if (model === MODE_MODELS.drive && straightLineKm > MAX_GEO_ESTIMATE_DRIVE_KM) return null;
   const kmh = model.speedBands.find(([upto]) => straightLineKm <= upto)?.[1] ?? model.speedBands[model.speedBands.length - 1]![1];
   const approxKm = straightLineKm * model.detour;
   const raw = (approxKm / kmh) * 60 + model.overheadMinutes;
   const minutes = Math.max(5, Math.round(raw / 5) * 5);
   return { minutes, straightLineKm, approxKm: Math.round(approxKm), kmh };
 }
+
+/** Beyond this straight-line distance Sidequest will not estimate a road journey it has never seen measured. */
+export const MAX_GEO_ESTIMATE_DRIVE_KM = 900;
 
 /** Beyond this straight-line distance a "walk" between two stops is not a walk. */
 export const MAX_PLAUSIBLE_WALK_KM = 3;

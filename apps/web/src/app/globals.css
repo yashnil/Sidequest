@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./styles/onboarding.css";
+@import "./styles/hub-views.css";
 
 /*
  * Sidequest looks like a printed field guide, not a SaaS dashboard: warm paper,
@@ -11,11 +13,11 @@
    * is still warm, but it no longer reads as beige against beige: structure comes
    * from ink rules and from the deep cartographic ground under every trip.
    */
-  --color-paper: #f6f3ed;
-  --color-paper-raised: #fffdf9;
-  --color-paper-sunk: #eeeae1;
-  --color-ink: #17181a;
-  --color-ink-muted: #57534e;
+  --color-paper: #f1ebdf;
+  --color-paper-raised: #faf7f0;
+  --color-paper-sunk: #e6dece;
+  --color-ink: #0f1b20;
+  --color-ink-muted: #4a4f4d;
   /*
    * THE FAINTEST INK IS STILL BODY TEXT.
    *
@@ -35,8 +37,8 @@
    * and overflow, so no pixel test can catch a regression here. The guard is an
    * offline assertion over this parsed value — `globals.contrast.test.ts`.
    */
-  --color-ink-faint: #6e6861;
-  --color-rule: #d9d1c1;
+  --color-ink-faint: #5f625c;
+  --color-rule: #d4cab6;
 
   /*
    * THE ACCENT: ochre, reserved for the traveller's own choices and the one
@@ -45,25 +47,25 @@
    * selected card and a verified stop are never the same colour. 5.3:1 on
    * paper for the text uses; the soft tint is background only.
    */
-  --color-accent: #a94f27;
-  --color-accent-soft: #f5e3d6;
-  --color-accent-strong: #8b3f1c;
+  --color-accent: #a8360a;
+  --color-accent-soft: #fbe2d4;
+  --color-accent-strong: #8a2c08;
 
-  --color-pine: #2f5d50;
-  --color-pine-soft: #e3ede9;
-  --color-pine-strong: #234a3f;
+  --color-pine: #2b5b4c;
+  --color-pine-soft: #dfeae4;
+  --color-pine-strong: #214739;
   /*
    * 4.5:1 on --color-amber-soft is the floor, not a preference: the amber pair
    * carries the entire warning channel — "Booking needed", "Shut some of your
    * days", "Recheck hours" — at 11px, where WCAG AA demands 4.5. The previous
    * #a85c22 measured 4.20 and was the only failing tone; this measures 5.04.
    */
-  --color-amber: #96521c;
-  --color-amber-soft: #f7ead9;
-  --color-slate-blue: #3c5a77;
-  --color-slate-blue-soft: #e4ebf2;
-  --color-clay: #9a3f36;
-  --color-clay-soft: #f6e3e0;
+  --color-amber: #8f4c17;
+  --color-amber-soft: #f6e7d3;
+  --color-slate-blue: #36556f;
+  --color-slate-blue-soft: #e1e9ef;
+  --color-clay: #983a31;
+  --color-clay-soft: #f5e0dc;
 
   /*
    * Evidence states, as colour.
@@ -90,11 +92,13 @@
    * runtime fetch); the system stacks remain as fallbacks.
    */
   --font-display:
-    var(--font-newsreader), "Iowan Old Style", "Palatino Linotype",
+    var(--font-fraunces), "Iowan Old Style", "Palatino Linotype",
     Palatino, Georgia, serif;
   --font-sans:
-    var(--font-manrope), ui-sans-serif, system-ui, -apple-system,
+    var(--font-bricolage), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono:
+    var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /*
    * V8 — THE TYPE FLOOR MOVES UP, ONCE, FOR THE WHOLE PRODUCT.
@@ -118,31 +122,41 @@
    * legacy paper/pine/amber/clay names above remain the same colours and stay
    * valid throughout the codebase.
    */
-  --color-canvas: #f6f3ed;
-  --color-surface: #fffdf9;
+  --color-canvas: #f1ebdf;
+  --color-surface: #faf7f0;
   --color-surface-elevated: #ffffff;
   --color-surface-raised: #ffffff;
-  --color-surface-muted: #eeeae1;
-  --color-ink-secondary: #57534e;
-  --color-border: #dfd8ca;
-  --color-accent-muted: #f5e3d6;
-  --color-critical: #9a3f36;
+  --color-surface-muted: #e6dece;
+  --color-ink-secondary: #4a4f4d;
+  --color-border: #d9d0bd;
+  --color-accent-muted: #fbe2d4;
+  --color-critical: #983a31;
   /* The atlas: the deep cartographic ground under a trip's name, the generation screen and the map rail. */
-  --color-atlas: #101d24;
-  --color-atlas-raised: #16262f;
-  --color-atlas-ink: #e9eef0;
-  --color-atlas-muted: #9fb3bb;
-  --color-route: #1f6f8b;
-  --color-route-muted: #dbe9ee;
-  --color-route-bright: #6fc0d8;
-  --color-success: #2f5d50;
-  --color-warning: #96521c;
-  --color-danger: #9a3f36;
+  --color-atlas: #0d1a1f;
+  --color-atlas-raised: #13242b;
+  --color-atlas-ink: #f1ebdf;
+  --color-atlas-muted: #a3b1b1;
+  --color-route: #c2410c;
+  --color-route-muted: #f8dccd;
+  --color-route-bright: #ff7a45;
+  /*
+   * PRODUCTION PASS — THE BRAND FOUR, constant in both themes.
+   * Flare is the waypoint in the mark and the route on a map: fill only, with
+   * night ink on it (5.7:1), never as text on bone (2.6:1). Night and bone are
+   * the two grounds; glacier is water and cold light on night.
+   */
+  --color-flare: #ff5a1f;
+  --color-night: #0d1a1f;
+  --color-bone: #f1ebdf;
+  --color-glacier: #7fd1e0;
+  --color-success: #2b5b4c;
+  --color-warning: #8f4c17;
+  --color-danger: #983a31;
   /* Map colour is functional, not brand: a cartographic teal for the measured route, a muted umber for estimated legs and secondary geography. */
-  --color-map-route: #1f6f8b;
-  --color-map-route-soft: #dbe9ee;
-  --color-map-secondary: #8c6f4e;
-  --color-map-base: #1b1a17;
+  --color-map-route: #c2410c;
+  --color-map-route-soft: #f8dccd;
+  --color-map-secondary: #7d6a52;
+  --color-map-base: #0f1b20;
 
   /*
    * The height of the sticky product header, as a token rather than a magic
@@ -175,10 +189,17 @@
    */
   --chrome-height: calc(2.75rem + 0.75rem + 1px);
 
-  --radius-control: 0.5rem;
-  --radius-card: 0.75rem;
-  --radius-panel: 1rem;
-  --radius-plate: 1.25rem;
+  /*
+   * PRODUCTION PASS — tighter corners. A field guide's plates are cut, not
+   * moulded: rounded rectangles everywhere was the single loudest "template"
+   * signal in the baseline audit. Controls stay soft enough to read as
+   * pressable; cards and panels lose most of their radius.
+   */
+  /* SURVEY ATLAS — cut, not moulded: data sits in square sheets; only actions stay round. */
+  --radius-control: 0.1875rem;
+  --radius-card: 0.125rem;
+  --radius-panel: 0.125rem;
+  --radius-plate: 0.1875rem;
 
   /* Motion: three durations, one easing. Every transition in the product uses these. */
   --motion-fast: 160ms;
@@ -198,9 +219,9 @@
    * page. The umber tint keeps them from reading as grey smudges on cream.
    */
   --shadow-card:
-    0 1px 1px rgb(60 44 20 / 0.04), 0 2px 6px -2px rgb(60 44 20 / 0.08), 0 10px 24px -18px rgb(60 44 20 / 0.16);
+    0 1px 1px rgb(13 26 31 / 0.04), 0 2px 6px -2px rgb(13 26 31 / 0.08), 0 10px 24px -18px rgb(13 26 31 / 0.16);
   --shadow-raised:
-    0 1px 2px rgb(60 44 20 / 0.06), 0 6px 16px -6px rgb(60 44 20 / 0.14), 0 24px 40px -24px rgb(60 44 20 / 0.2);
+    0 1px 2px rgb(13 26 31 / 0.06), 0 6px 16px -6px rgb(13 26 31 / 0.14), 0 24px 40px -24px rgb(13 26 31 / 0.2);
   --shadow-float:
     0 2px 4px rgb(28 25 23 / 0.08), 0 16px 40px -12px rgb(28 25 23 / 0.28);
   --shadow-panel: var(--shadow-card);
@@ -217,51 +238,51 @@
  */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-paper: #14130f;
-    --color-paper-raised: #1e1c18;
-    --color-paper-sunk: #26231d;
-    --color-ink: #f3efe7;
-    --color-ink-muted: #b8b1a6;
-    --color-ink-faint: #918a80;
-    --color-rule: #35312a;
+    --color-paper: #0d1a1f;
+    --color-paper-raised: #13242b;
+    --color-paper-sunk: #1a2e36;
+    --color-ink: #f1ebdf;
+    --color-ink-muted: #b9b7ae;
+    --color-ink-faint: #959a95;
+    --color-rule: #24383f;
 
-    --color-accent: #e0956d;
-    --color-accent-soft: #3a2519;
-    --color-accent-strong: #f0b08c;
+    --color-accent: #ff8a5c;
+    --color-accent-soft: #3b2117;
+    --color-accent-strong: #ffab88;
 
-    --color-pine: #8cc0ad;
-    --color-pine-soft: #1e332c;
-    --color-amber: #e0a066;
-    --color-amber-soft: #37281c;
-    --color-slate-blue: #9bbcd8;
-    --color-slate-blue-soft: #1d2831;
-    --color-clay: #e29a90;
-    --color-clay-soft: #38231f;
-    --color-pine-strong: #a8d4c2;
+    --color-pine: #8cc4b0;
+    --color-pine-soft: #17302a;
+    --color-amber: #e6a568;
+    --color-amber-soft: #33261a;
+    --color-slate-blue: #9fc1dc;
+    --color-slate-blue-soft: #172936;
+    --color-clay: #eb9c91;
+    --color-clay-soft: #36211f;
+    --color-pine-strong: #a8d6c4;
 
-    --color-canvas: #14130f;
-    --color-surface: #1e1c18;
-    --color-surface-elevated: #26231d;
-    --color-surface-raised: #26231d;
-    --color-surface-muted: #26231d;
-    --color-ink-secondary: #b8b1a6;
-    --color-border: #35312a;
-    --color-accent-muted: #3a2519;
-    --color-critical: #e29a90;
-    --color-atlas: #0b1418;
-    --color-atlas-raised: #12202a;
-    --color-atlas-ink: #e9eef0;
-    --color-atlas-muted: #9fb3bb;
-    --color-route: #7fbfd6;
-    --color-route-muted: #1d2f36;
-    --color-route-bright: #9ad6ea;
-    --color-success: #8cc0ad;
-    --color-warning: #e0a066;
-    --color-danger: #e29a90;
-    --color-map-route: #7fbfd6;
-    --color-map-route-soft: #1d2f36;
-    --color-map-secondary: #c0a27f;
-    --color-map-base: #f3efe7;
+    --color-canvas: #0d1a1f;
+    --color-surface: #13242b;
+    --color-surface-elevated: #1a2e36;
+    --color-surface-raised: #1a2e36;
+    --color-surface-muted: #1a2e36;
+    --color-ink-secondary: #b9b7ae;
+    --color-border: #24383f;
+    --color-accent-muted: #3b2117;
+    --color-critical: #eb9c91;
+    --color-atlas: #08141a;
+    --color-atlas-raised: #0f2027;
+    --color-atlas-ink: #f1ebdf;
+    --color-atlas-muted: #a3b1b1;
+    --color-route: #ff7a45;
+    --color-route-muted: #3b2117;
+    --color-route-bright: #ff9a6e;
+    --color-success: #8cc4b0;
+    --color-warning: #e6a568;
+    --color-danger: #eb9c91;
+    --color-map-route: #ff7a45;
+    --color-map-route-soft: #3b2117;
+    --color-map-secondary: #c9ad88;
+    --color-map-base: #f1ebdf;
     --color-provisional: #c4b394;
     --color-provisional-soft: #2b2519;
     --color-verifying: #9bbcd8;
@@ -339,6 +360,18 @@
 @layer utilities {
   .font-display {
     font-family: var(--font-display);
+  }
+  /*
+   * Fraunces' SOFT axis, on for everything set in the display face: rounded
+   * terminals read warm and lettered rather than bookish. WONK stays off so the
+   * italic does not lean its "h", "m" and "n" at headline size.
+   */
+  :where(.font-display, .display-hero, .display-xl, .display-atlas, .display-lg, .display-md, .type-title, .type-section) {
+    font-variation-settings: "SOFT" 100, "WONK" 0;
+    font-optical-sizing: auto;
+  }
+  .font-mono {
+    font-family: var(--font-mono);
   }
 
   /*
@@ -430,11 +463,11 @@
   }
   /* Numbers a traveller reads at a glance — durations, prices, dates, counts. */
   .type-figure {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 500;
+    letter-spacing: -0.02em;
   }
   /* A hairline rule as grouping: the redesign's replacement for a bordered card around ordinary content. */
   .rule-top {
@@ -563,24 +596,26 @@
    * selected card is unmistakably a chosen one: fill, a 2 px accent edge and
    * the raised shadow, not a border colour change.
    */
-  .card {
+  /* A sheet: square, a hairline round it and an ink rule on top — the survey's one container. */
+  .card,
+  .sheet {
     background: var(--color-paper-raised);
-    border: 1px solid var(--color-rule);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+    border-top: 1.5px solid var(--color-ink);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-card);
   }
   .card-raised {
     background: var(--color-paper-raised);
-    border: 1px solid var(--color-rule);
+    border: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+    border-top: 1.5px solid var(--color-ink);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-raised);
+    box-shadow: 0 18px 36px -28px rgb(13 26 31 / 0.45);
   }
   .card-selected {
-    background: var(--color-accent-soft);
-    border: 1px solid var(--color-accent);
-    box-shadow:
-      inset 0 0 0 1px var(--color-accent),
-      var(--shadow-raised);
+    background: color-mix(in srgb, var(--color-flare) 9%, var(--color-paper-raised));
+    border: 1px solid var(--color-ink);
+    border-top: 3px solid var(--color-flare);
+    border-radius: var(--radius-card);
     color: var(--color-ink);
   }
   /* A card that lifts under the pointer: depth as affordance, never a bounce. */
@@ -592,9 +627,7 @@
   }
   @media (hover: hover) {
     .lift:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-raised);
-      border-color: var(--color-ink-faint);
+      border-color: var(--color-ink);
     }
   }
   /* A directional entrance for a question that follows another, a step that follows a step. */
@@ -682,13 +715,41 @@
   }
 
   /* Faint paper texture — enough to read as material, not enough to notice. */
+  /*
+   * PRODUCTION PASS — PAPER, NOT A DOT GRID.
+   *
+   * The 22 px dot lattice read as graph paper (a SaaS signal). The ground is now
+   * a near-invisible fractal grain — the tooth of a printed sheet — drawn by an
+   * inline SVG turbulence filter, so it costs one small data URI and no request.
+   */
   .paper-grain {
-    background-image: radial-gradient(
-      circle at 1px 1px,
-      color-mix(in srgb, var(--color-ink) 4%, transparent) 1px,
-      transparent 0
-    );
-    background-size: 22px 22px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.06 0 0 0 0 0.1 0 0 0 0 0.12 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
+
+  /*
+   * THE TOPOGRAPHIC SHEET.
+   *
+   * Isolines generated once (`scripts/generate-contours.mjs`) and used as a
+   * *mask* over the current text colour, so one asset draws ink contours on
+   * bone and bone contours on night without a second file. A texture, never a
+   * map of anywhere: it carries no place and is never presented as one.
+   * `--topo-opacity` and `--topo-size` tune it per surface.
+   */
+  .topo {
+    position: relative;
+    isolation: isolate;
+  }
+  .topo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: currentColor;
+    opacity: var(--topo-opacity, 0.09);
+    -webkit-mask: url("/brand/contours.svg") 0 0 / var(--topo-size, 960px 640px) repeat;
+    mask: url("/brand/contours.svg") 0 0 / var(--topo-size, 960px 640px) repeat;
   }
 
   /*
@@ -698,20 +759,36 @@
    * name is set on, the generation screen, the map rail's frame. One utility,
    * so every dark ground in the product is the same ground.
    */
+  /*
+   * PRODUCTION PASS — the night sheet: deep ink, a low ember of route colour
+   * from one corner, and contours (`.topo`) where a surface opts in. The
+   * graticule grid it replaces read as a dashboard.
+   */
   .atlas {
     background-color: var(--color-atlas);
     color: var(--color-atlas-ink);
     background-image:
-      linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px),
-      radial-gradient(ellipse at 80% 20%, rgb(111 192 216 / 0.14), transparent 55%);
-    background-size:
-      48px 48px,
-      48px 48px,
-      100% 100%;
+      radial-gradient(ellipse 70% 90% at 92% 0%, rgb(255 90 31 / 0.16), transparent 60%),
+      radial-gradient(ellipse 60% 80% at 0% 100%, rgb(127 209 224 / 0.08), transparent 60%);
   }
   .atlas-muted {
     color: var(--color-atlas-muted);
+  }
+  /*
+   * The header over a night hero (the landing page): the same shell with its
+   * paper tokens re-pointed at the night ground, so the bar continues the hero
+   * instead of sitting on it as a bone strip. Every utility inside reads the
+   * tokens, so nothing in the header needs a second set of classes.
+   */
+  .chrome-night {
+    --color-paper: #0d1a1f;
+    --color-paper-raised: #13242b;
+    --color-paper-sunk: #1a2e36;
+    --color-ink: #f1ebdf;
+    --color-ink-muted: #b9b7ae;
+    --color-ink-faint: #959a95;
+    --color-rule: #24383f;
+    color: var(--color-ink);
   }
   /*
    * V6 — A PHOTOGRAPH AS THE BAND'S GROUND.
@@ -837,6 +914,371 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  /*
+   * ───────────────────────────────────────────────────────────────────────
+   * SURVEY ATLAS — the creative reinvention's primitives
+   * (`docs/creative-reinvention/DIRECTION.md`).
+   *
+   * A trip is a survey of a place. The paper ground carries a hairline survey
+   * grid instead of card borders; rows are ruled, not boxed; figures are
+   * mono and read like a sheet's margin; pins are numbered specimens; photos
+   * are prints with a caption; the one flare action still moves the trip on.
+   * ───────────────────────────────────────────────────────────────────────
+   */
+  .survey {
+    --survey-cell: 96px;
+    --survey-line: color-mix(in srgb, var(--color-ink) 7%, transparent);
+    background-image:
+      linear-gradient(var(--survey-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--survey-line) 1px, transparent 1px);
+    background-size: var(--survey-cell) var(--survey-cell);
+    background-position: -1px -1px;
+  }
+  @media (max-width: 640px) {
+    .survey {
+      --survey-cell: 64px;
+    }
+  }
+  .survey-night {
+    --survey-cell: 120px;
+    background-color: var(--color-night);
+    background-image:
+      linear-gradient(rgb(241 235 223 / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(241 235 223 / 0.045) 1px, transparent 1px);
+    background-size: var(--survey-cell) var(--survey-cell);
+  }
+  /* Rows separated by a rule, never boxed. `.ruled-strong` starts with an ink rule. */
+  .ruled > * + * {
+    border-top: 1px solid color-mix(in srgb, var(--color-ink) 14%, transparent);
+  }
+  .ruled-strong {
+    border-top: 1.5px solid var(--color-ink);
+  }
+  .ruled-night > * + * {
+    border-top: 1px solid rgb(241 235 223 / 0.1);
+  }
+  /* The sheet's margin: coordinates, counts, sheet numbers. */
+  .coordbar {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .sheet-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  /* A boxed stat: key over value, sharing borders with its neighbours. */
+  .label-box {
+    border: 1px solid var(--color-ink);
+    padding: 0.55rem 0.75rem 0.6rem;
+  }
+  .label-box > :first-child {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+  }
+  .label-box > :last-child {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    line-height: 1.2;
+    margin-top: 0.1rem;
+  }
+  .label-row {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+  .label-row > .label-box + .label-box {
+    border-left: 0;
+  }
+  /* The numeral a day or a question is set in: huge, light, tight. */
+  .numeral-giant {
+    font-family: var(--font-display);
+    font-weight: 200;
+    font-variation-settings: 'SOFT' 100, 'WONK' 0;
+    letter-spacing: -0.06em;
+    line-height: 0.78;
+    font-variant-numeric: lining-nums;
+  }
+  .display-stage {
+    font-family: var(--font-display);
+    font-weight: 300;
+    font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+    letter-spacing: -0.04em;
+    line-height: 0.92;
+    font-size: clamp(2.75rem, 1.4rem + 4.6vw, 6.25rem);
+  }
+  /* A square toggle for "in the trip": ink when in, an outline when not. */
+  .chip-in {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0 0.6rem;
+    border: 1.5px solid currentColor;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition:
+      background-color var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out),
+      transform var(--motion-fast) var(--ease-spring);
+  }
+  .chip-in[aria-pressed='true'] {
+    background: var(--color-flare);
+    border-color: var(--color-flare);
+    color: var(--color-night);
+  }
+  .chip-in:active {
+    transform: scale(0.94);
+  }
+  /* A photograph as a print: a white border, a caption under it. */
+  .print-frame {
+    background: #fff;
+    padding: 6px 6px 0;
+    box-shadow:
+      0 1px 2px rgb(13 26 31 / 0.08),
+      0 14px 30px -14px rgb(13 26 31 / 0.35);
+  }
+  .print-frame > figcaption {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #5f625c;
+    padding: 6px 2px 7px;
+  }
+  /* The atlas map's pins: numbered specimens. */
+  .atlas-pin {
+    display: grid;
+    place-items: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--color-night);
+    color: var(--color-bone);
+    border: 1.5px solid var(--color-bone);
+    cursor: pointer;
+    transition:
+      transform var(--motion-fast) var(--ease-spring),
+      background-color var(--motion-fast) var(--ease-out);
+  }
+  [data-ground='survey'] .atlas-pin {
+    border-color: #fff;
+  }
+  .atlas-pin[data-state='chosen'] {
+    background: var(--color-flare);
+    color: var(--color-night);
+    border-color: var(--color-night);
+  }
+  .atlas-pin[data-state='muted'] {
+    opacity: 0.45;
+    min-width: 14px;
+    height: 14px;
+    padding: 0;
+    font-size: 0;
+  }
+  .atlas-pin[data-state='base'] {
+    border-radius: 3px;
+    background: var(--color-bone);
+    color: var(--color-night);
+    border-color: var(--color-night);
+  }
+  .atlas-pin[data-state='meal'] {
+    background: var(--color-glacier);
+    color: var(--color-night);
+    border-color: var(--color-night);
+  }
+  .atlas-pin[data-state='done'] {
+    background: #5f625c;
+  }
+  .atlas-pin[data-focused='true'] {
+    transform: scale(1.35);
+    box-shadow: 0 0 0 6px rgb(255 90 31 / 0.28);
+  }
+  .atlas-pin:hover {
+    transform: scale(1.18);
+  }
+  .atlas-pin:focus-visible {
+    outline: 2px solid var(--color-glacier);
+    outline-offset: 3px;
+  }
+  /*
+   * THE DAY SHEET AND ITS ROUTE THREAD.
+   *
+   * A day is a sheet that opens on an ink rule, not a card. Down the rail
+   * column of its timeline runs one faint thread; each leg colours its own
+   * segment by evidence (solid flare measured, dashed estimated, dotted not
+   * measured) and each stop is a flare pin carrying the same number as the map.
+   */
+  .day-sheet {
+    border-top: 1.5px solid var(--color-ink);
+  }
+  .timeline-thread [data-row-kind] {
+    position: relative;
+  }
+  .timeline-thread [data-row-kind]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(0.75rem + 3rem + 0.625rem + 0.875rem - 0.5px);
+    width: 1px;
+    background: color-mix(in srgb, var(--color-ink) 16%, transparent);
+    pointer-events: none;
+  }
+  @media (min-width: 640px) {
+    .timeline-thread [data-row-kind]::before {
+      left: calc(1.25rem + 4rem + 1rem + 0.875rem - 0.5px);
+    }
+  }
+  .timeline-thread [data-row-kind] > * {
+    position: relative;
+  }
+  .leg-thread {
+    position: relative;
+    min-height: 1.75rem;
+  }
+  .leg-thread::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    left: calc(50% - 1.25px);
+    width: 2.5px;
+  }
+  .leg-measured::before {
+    background: var(--color-flare);
+  }
+  .leg-estimated::before {
+    background: repeating-linear-gradient(to bottom, var(--color-flare) 0 5px, transparent 5px 9px);
+  }
+  .leg-unmeasured::before {
+    width: 2px;
+    left: calc(50% - 1px);
+    background: repeating-linear-gradient(to bottom, var(--color-ink-faint) 0 2px, transparent 2px 6px);
+  }
+  .stop-pin {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: var(--color-flare);
+    color: var(--color-night);
+    border: 1.5px solid var(--color-night);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .stop-dot {
+    position: relative;
+    width: 1.75rem;
+    height: 1rem;
+  }
+  .stop-dot::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    background: var(--color-ink);
+    border: 1.5px solid var(--color-paper);
+  }
+  .stop-dot-meal::after {
+    background: var(--color-glacier);
+    border-color: var(--color-night);
+  }
+  .stop-dot-free::after {
+    background: var(--color-paper);
+    border-color: var(--color-ink-faint);
+  }
+  @media print {
+    .timeline-thread [data-row-kind]::before,
+    .leg-thread::before {
+      display: none;
+    }
+  }
+
+  /* The phone's day map: only while the Days view is the one showing, and never on a wide screen. */
+  .day-map-sheet {
+    display: none;
+  }
+  body:has(#trip-hub[data-hub-view='days']) .day-map-sheet {
+    display: block;
+  }
+  @media (min-width: 1024px) {
+    body:has(#trip-hub[data-hub-view='days']) .day-map-sheet {
+      display: none;
+    }
+  }
+
+  /* A masked rise: the line arrives from under its own baseline. */
+  .mask-rise {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: bottom;
+  }
+  .mask-rise > span {
+    display: inline-block;
+    animation: sq-mask-rise 760ms var(--ease-out) both;
+    animation-delay: var(--d, 0ms);
+  }
+  @keyframes sq-mask-rise {
+    from {
+      transform: translateY(105%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  .wipe-in {
+    animation: sq-wipe 700ms var(--ease-out) both;
+    animation-delay: var(--d, 0ms);
+  }
+  @keyframes sq-wipe {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  .fade-up {
+    animation: sq-fade-up 520ms var(--ease-out) both;
+    animation-delay: var(--d, 0ms);
+  }
+  @keyframes sq-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 }
 
@@ -1236,4 +1678,13 @@
     break-inside: avoid;
     margin-top: 0.9rem !important;
   }
+}
+
+/* The advisor's "comparing" bar: one sweep, then rest when motion is reduced. */
+@keyframes advisor-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[advisor-sweep_1\.4s_ease-in-out_infinite\] { animation: none; }
 }

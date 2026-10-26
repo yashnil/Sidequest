@@ -19,7 +19,9 @@ import {
   type IntakeQuestion,
   type IntakeQuestionId,
 } from '@sidequest/core';
-import { ChoiceGroup, ErrorNote, FOCUS_RING, FieldLabel, OVERLAY_INPUT, buttonClass, cx, selectableCardClass } from './ui';
+import { ChoiceGroup, ErrorNote, FOCUS_RING, FieldLabel, OVERLAY_INPUT, buttonClass, cx } from './ui';
+import { Glyph, type GlyphId } from './interview/glyphs';
+import { ACCENT_WAITING } from './setup/StepHeading';
 import {
   saveDecisionAnswersAction,
   startDecisionAction,
@@ -164,8 +166,26 @@ export function DecisionComposer(props: DecisionComposerProps) {
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14">
       <div>
         {asked ? (
-          <section aria-labelledby="intake-question" data-intake-question={asked.id}>
-            <div className="flex items-baseline justify-between gap-4">
+          <section
+            aria-labelledby="intake-question"
+            data-intake-question={asked.id}
+            key={asked.id}
+            className="fade-up"
+            onKeyDown={(event) => {
+              /* Enter moves on, as it does in the setup — never from a control that owns Enter itself. */
+              if (event.key !== 'Enter' || event.defaultPrevented || event.shiftKey) return;
+              const target = event.target as HTMLElement;
+              if (['BUTTON', 'TEXTAREA', 'SELECT', 'A'].includes(target.tagName)) return;
+              if (!canAdvance(asked, answers)) return;
+              event.preventDefault();
+              advance(asked);
+            }}
+          >
+            <p className="sheet-label inline-flex items-center gap-2 text-accent">
+              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-flare" />
+              {asked.essential ? 'Needed to rank' : 'Optional · sharpens the ranking'}
+            </p>
+            <div className="mt-2 flex items-baseline justify-between gap-4">
               <h2 id="intake-question" className="display-md text-ink">
                 {asked.title}
               </h2>
@@ -198,7 +218,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
               ) : null}
               <button
                 type="button"
-                className={buttonClass(ready ? 'secondary' : 'accent', 'lg')}
+                className={cx(buttonClass(ready ? 'secondary' : 'accent', 'lg'), ACCENT_WAITING)}
                 onClick={() => advance(asked)}
                 disabled={!canAdvance(asked, answers)}
               >
@@ -246,7 +266,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
       </div>
 
       <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="What Sidequest understands">
-        <p className="eyebrow">Sidequest understands</p>
+        <p className="eyebrow">Your answers so far</p>
         {/*
           A PROGRESS FIGURE THAT MEANS SOMETHING.
 
@@ -262,7 +282,7 @@ export function DecisionComposer(props: DecisionComposerProps) {
           />
         </div>
         <p className="type-meta mt-2 text-ink-faint">
-          {ready ? 'Enough to rank. Everything after this sharpens it.' : 'Not yet enough to rank anywhere honestly.'}
+          {ready ? 'Enough to rank — anything more sharpens it.' : 'A couple more answers and we can rank.'}
         </p>
 
         <dl className="mt-5 space-y-3">
@@ -283,10 +303,12 @@ export function DecisionComposer(props: DecisionComposerProps) {
           ))}
         </dl>
 
-        <p className="mt-5 border-t border-rule pt-4 type-meta text-ink-faint">
-          No model chooses, orders or removes a destination. The ranking is arithmetic over sourced data, and you can open
-          every number behind it.
-          {props.climateEnabled ? '' : ' This build has no climate record, so nothing below is scored on the weather.'}
+        <p className="mt-5 flex items-start gap-2 border-t border-rule pt-4 type-meta text-ink-faint">
+          <Glyph id="check" className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span>
+            Ranked from real data, never by an AI guess — every score opens.
+            {props.climateEnabled ? '' : ' No climate records in this build, so weather is not scored.'}
+          </span>
         </p>
       </aside>
     </div>
@@ -348,6 +370,7 @@ function QuestionBody({
                 checked={answers.dateMode === value}
                 onChange={() => patch({ dateMode: value })}
                 label={label}
+                glyph={WHEN_GLYPHS[value]}
               />
             ))}
           </ChoiceGroup>
@@ -455,6 +478,7 @@ function QuestionBody({
                 })
               }
               label={TRIP_THEME_LABELS[theme]}
+              glyph={THEME_GLYPHS[theme]}
             />
           ))}
         </ChoiceGroup>
@@ -683,7 +707,7 @@ function QuestionBody({
               ['moderate', 'Moderate'],
               ['strenuous', 'Strenuous'],
             ] as const
-          ).map(([value, label]) => (
+          ).map(([value, label], index) => (
             <Option
               key={value}
               name="decideIntensity"
@@ -691,6 +715,7 @@ function QuestionBody({
               checked={answers.outdoorIntensity === value}
               onChange={() => patch({ outdoorIntensity: value })}
               label={label}
+              glyph={(['walk', 'hike', 'altitude'] as const)[index]}
             />
           ))}
         </ChoiceGroup>
@@ -913,6 +938,20 @@ function QuestionBody({
   }
 }
 
+/** One picture per theme, from the interview's own glyph set. Decoration: the label is the name. */
+const THEME_GLYPHS: Partial<Record<(typeof TRIP_THEMES)[number], GlyphId>> = {
+  outdoors: 'hike',
+  mountains: 'viewpoint',
+  water: 'lake',
+  wildlife: 'wildlife',
+  food: 'food',
+  culture: 'museum',
+  cities: 'neighbourhood',
+  quiet: 'quiet',
+};
+
+const WHEN_GLYPHS: Record<string, GlyphId> = { month: 'clock', season: 'sunrise', exact: 'check', undecided: 'compass' };
+
 const inputClass =
   'mt-2 min-h-11 w-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3.5 py-2.5 text-ink placeholder:text-ink-faint focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2';
 
@@ -934,6 +973,7 @@ function Option({
   onChange,
   label,
   type = 'radio',
+  glyph,
 }: {
   name: string;
   value: string;
@@ -941,16 +981,36 @@ function Option({
   onChange: () => void;
   label: string;
   type?: 'radio' | 'checkbox';
+  glyph?: GlyphId;
 }) {
+  /*
+   * A tactile card: a raised sheet that lifts under the pointer and presses in
+   * when chosen, filled with ink like the setup's chosen cells — the same
+   * "this one" the rest of the start of the journey uses.
+   */
   return (
-    <label className={selectableCardClass(checked, cx('flex min-h-12 cursor-pointer items-center gap-3 px-4 py-3 text-left', FOCUS_RING))}>
+    <label
+      className={cx(
+        'pressable group relative flex min-h-14 cursor-pointer items-center gap-3 rounded-[12px] border px-4 py-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-[var(--motion-fast)] active:scale-[0.985]',
+        checked
+          ? 'border-ink bg-ink text-paper shadow-[0_10px_24px_-16px_rgb(13_26_31/0.8)]'
+          : 'border-ink/15 bg-paper-raised text-ink shadow-[0_1px_0_rgb(13_26_31/0.05)] hover:-translate-y-px hover:border-ink/40 hover:shadow-[0_10px_22px_-18px_rgb(13_26_31/0.55)]',
+        FOCUS_RING,
+      )}
+    >
       <input type={type} name={name} value={value} checked={checked} onChange={onChange} className={OVERLAY_INPUT} />
+      {glyph ? (
+        <span aria-hidden="true" className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-[9px] transition-colors duration-[var(--motion-fast)]', checked ? 'bg-flare text-night' : 'bg-ink/[0.06] text-ink-muted group-hover:text-ink')}>
+          <Glyph id={glyph} className="h-5 w-5" />
+        </span>
+      ) : null}
+      <span className={cx('min-w-0 flex-1 text-[0.95rem] leading-snug', checked ? 'font-semibold' : '')}>{label}</span>
       <span
         aria-hidden="true"
         className={cx(
           'grid h-5 w-5 shrink-0 place-items-center border transition-colors duration-[var(--motion-fast)]',
           type === 'checkbox' ? 'rounded-[5px]' : 'rounded-full',
-          checked ? 'border-accent bg-accent text-paper' : 'border-rule bg-paper',
+          checked ? 'border-flare bg-flare text-night' : 'border-ink/25 bg-paper',
         )}
       >
         {checked ? (
@@ -959,7 +1019,6 @@ function Option({
           </svg>
         ) : null}
       </span>
-      <span className={cx('min-w-0 text-sm', checked ? 'font-semibold text-accent-strong' : 'text-ink')}>{label}</span>
     </label>
   );
 }

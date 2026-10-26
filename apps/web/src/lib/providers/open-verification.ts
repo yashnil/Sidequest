@@ -75,10 +75,23 @@ export async function resolveTimeZone(lat: number, lng: number): Promise<string 
 }
 
 /** Whether the geocoder actually returned what was asked for. The name is evidence only when it is actually the name. */
+/**
+ * Production pass — the words match the record when they match its own name,
+ * its English name or an untagged international / official / alternative name:
+ * the same set `aliases` carries. Reading only the primary name made "Lisbon"
+ * a *partial* match for Lisboa (whose OSM name is Portuguese) and an exact one
+ * for Lisbon, Iowa, so the capital was shown as "Not sure". Never every
+ * `name:xx` — Paris carries "Bali".
+ */
 function isExactNameMatch(query: string, place: NominatimPlace): boolean {
   const wanted = normalizeDestinationQuery(query);
-  const got = normalizeDestinationQuery(place.name ?? place.display_name.split(',')[0] ?? '');
-  return wanted === got;
+  const names = [place.name ?? place.display_name.split(',')[0] ?? '', ...ownNames(place)];
+  return names.some((name) => normalizeDestinationQuery(name) === wanted);
+}
+
+/** The record's own, English and untagged names — what a traveller's words may match. */
+function ownNames(place: NominatimPlace): string[] {
+  return [...new Set(candidatesFromNominatim(place).filter((entry) => entry.primary || entry.language === undefined || entry.language === 'en').map((entry) => entry.value))];
 }
 
 /**
@@ -141,7 +154,14 @@ export function toCandidate(place: NominatimPlace, query: string): DestinationCa
     ...(countryName ? { countryName } : {}),
     ...(place.address?.['ISO3166-2-lvl4'] ? { regionCode: place.address['ISO3166-2-lvl4']! } : {}),
     ...(firstLevelDivisionName(place) ? { regionName: firstLevelDivisionName(place)! } : {}),
-    aliases: candidatesFromNominatim(place).map((entry) => entry.value),
+    /*
+     * Production pass — the names a traveller's words may match: the record's
+     * own name, its English name and its untagged international / official /
+     * alternative names. Not every `name:xx`: Paris carries "Bali" (a
+     * romanisation of its Chinese name), and with every language an alias a
+     * 30-trip evaluation planned Bali in the Île-de-France.
+     */
+    aliases: ownNames(place),
     administrativeAreas: Object.entries(place.address ?? {})
       .filter(([key]) => ['country', 'state', 'region', 'county', 'city', 'town'].includes(key))
       .map(([, value]) => value),
@@ -161,6 +181,8 @@ export function toCandidate(place: NominatimPlace, query: string): DestinationCa
       ...(place.type ? { type: place.type } : {}),
       ...(Number.isFinite(Number(place.extratags?.population)) && Number(place.extratags?.population) > 0 ? { population: Math.round(Number(place.extratags?.population)) } : {}),
       ...(typeof place.place_rank === 'number' ? { rank: Math.max(0, Math.min(40, Math.round(place.place_rank))) } : {}),
+      ...(typeof place.importance === 'number' && Number.isFinite(place.importance) ? { importance: Math.max(0, Math.min(1, place.importance)) } : {}),
+      ...(place.extratags?.wikidata && /^Q\d+$/.test(place.extratags.wikidata.trim()) ? { wikidata: place.extratags.wikidata.trim() } : {}),
     },
   };
 }
