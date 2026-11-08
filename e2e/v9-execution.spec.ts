@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { openHubView } from './support/hub';
-import { buildFixtureTrip, visibleOpenNeed } from './support/v9';
+import { buildFixtureTrip, FUTURE_DATES, visibleOpenNeed } from './support/v9';
+import { addDays, longDate } from './support/dates';
 import { waitUntilInteractive } from './support/trip';
 
 /**
@@ -14,12 +15,14 @@ import { waitUntilInteractive } from './support/trip';
  */
 test.describe.configure({ mode: 'serial' });
 
-test('the Trip view leads with the next best action and the decision records', async ({ page }) => {
+test('the trip shows the next best action, with the decision records one press away', async ({ page }) => {
   await buildFixtureTrip(page);
   const card = page.getByTestId('next-action-card');
   await expect(card).toBeVisible();
   await expect(page.getByTestId('next-action').first()).toBeVisible();
   expect(await page.getByTestId('next-action').count()).toBeLessThanOrEqual(3);
+  /* 2026-11 — the decision records are reasoning, folded under "Why it is shaped this way". */
+  await page.getByTestId('overview-reasoning').locator(':scope > summary').click();
   await expect(page.getByTestId('decision-card').first()).toBeVisible();
   const why = page.getByTestId('decision-why').first();
   await expect(why).toBeVisible();
@@ -84,8 +87,8 @@ test('a pasted confirmation is reviewed with its affected days before it becomes
 Your booking is confirmed
 Confirmation number: 3141.592.653
 Fixture Lodge
-Check-in: 13 August 2026 (from 15:00)
-Check-out: 15 August 2026 (until 11:00)
+Check-in: ${longDate(addDays(FUTURE_DATES.start, 1))} (from 15:00)
+Check-out: ${longDate(addDays(FUTURE_DATES.start, 3))} (until 11:00)
 Total price: $420
 Card ending 4242 4242 4242 4242`);
   await page.getByTestId('import-submit').click();

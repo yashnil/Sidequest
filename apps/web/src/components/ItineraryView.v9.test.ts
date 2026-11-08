@@ -83,18 +83,20 @@ function readable(html: string): string {
 describe('the V9 hub, rendered for the owner', () => {
   const html = render('owner');
 
-  it('leads the Trip view with the Next Best Action card and its phase', () => {
+  it('shows the Next Best Action card on the trip, above its days', () => {
     expect(html).toContain('data-testid="next-action-card"');
     expect(html).toContain('data-testid="next-action-phase"');
-    /* The card sits before the thesis in document order. */
-    expect(html.indexOf('data-testid="next-action-card"')).toBeLessThan(html.indexOf('data-testid="trip-thesis"'));
+    /* 2026-11 — the trip summary sits above the days on the Itinerary tab. */
+    expect(html.indexOf('data-testid="next-action-card"')).toBeLessThan(html.indexOf('id="hub-view-days"'));
   });
 
-  it('has the six views, with Book in the nav and in the phone bar', () => {
-    for (const id of ['overview', 'days', 'map', 'plan', 'book', 'prepare']) expect(html).toContain(`data-testid="hub-link-${id}"`);
-    for (const id of ['days', 'book', 'prepare', 'map']) expect(html).toContain(`data-testid="hub-bottom-${id}"`);
-    expect(html).not.toContain('data-testid="hub-bottom-plan"');
+  it('has four tabs over the six views, the same four in the phone bar', () => {
+    for (const id of ['days', 'map', 'book', 'prepare']) expect(html).toContain(`data-testid="hub-link-${id}"`);
+    for (const id of ['days', 'map', 'book', 'prepare']) expect(html).toContain(`data-testid="hub-bottom-${id}"`);
+    for (const id of ['overview', 'plan']) expect(html).not.toContain(`data-testid="hub-link-${id}"`);
+    for (const id of ['overview', 'days', 'map', 'plan', 'book', 'prepare']) expect(html).toContain(`id="hub-view-${id}"`);
     expect(html).toContain('data-testid="hub-book"');
+    expect(html).toContain('data-testid="booking-suggestions"');
   });
 
   it('renders the decisions as records with a "Why this?" and alternative chips', () => {
@@ -106,12 +108,14 @@ describe('the V9 hub, rendered for the owner', () => {
     expect(html).toMatch(/data-key="timing" data-lock="user_explicit"/);
   });
 
-  it('leads Prepare with Preflight: a verdict, the distance to departure and the three buckets', () => {
+  it('leads Prepare with the checklist: one count, the departure in words, the action sections', () => {
     expect(html).toContain('data-testid="preflight"');
     expect(html).toMatch(/data-testid="preflight-verdict" data-verdict="(ready|nearly|not_yet)"/);
-    expect(html).toContain('data-testid="preflight-ready"');
-    expect(html).toContain('data-testid="preflight-attention"');
-    expect(html).toContain('data-testid="preflight-later"');
+    /* 2026-11 — sections by when the traveller acts, not by bucket; no giant day figure. */
+    expect(html).toContain('data-testid="hub-checklist"');
+    expect(html).toContain('data-testid="hub-before-you-go"');
+    expect(html).toMatch(/data-testid="preflight-days">Leaves /);
+    expect(html).not.toContain('hv-away');
     /* The old header id survives on the thing that replaced it. */
     expect(html).toContain('data-testid="prepare-top"');
     /* An item with a check id carries a tick for the owner. */

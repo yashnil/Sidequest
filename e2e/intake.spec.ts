@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip, openReviewLedger, reachScope, waitUntilInteractive, DEFAULT_DATES } from './support/trip';
+import { addDays } from './support/dates';
 
 /**
  * THE FOUNDER-TEST REGRESSIONS, DRIVEN THROUGH THE ORDINARY PRODUCT.
@@ -41,7 +42,7 @@ test.describe('correcting an answer without starting again', () => {
     await page.goto(`/trips/${tripId}/edit`);
     await waitUntilInteractive(page.getByTestId('destination-input'));
     await advance();
-    await page.getByTestId('timing-end').fill('2026-08-18');
+    await page.getByTestId('timing-end').fill(addDays(DEFAULT_DATES.start, 6));
     await advance();
     await advance();
     await advance();
@@ -53,7 +54,7 @@ test.describe('correcting an answer without starting again', () => {
     await page.goto(`/trips/${tripId}/edit`);
     await waitUntilInteractive(page.getByTestId('destination-input'));
     await advance();
-    await expect(page.getByTestId('timing-end')).toHaveValue('2026-08-18');
+    await expect(page.getByTestId('timing-end')).toHaveValue(addDays(DEFAULT_DATES.start, 6));
   });
 });
 

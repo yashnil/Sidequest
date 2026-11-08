@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { openDayChecks, openHubView, openPrepareNotes } from './support/hub';
 import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope, waitUntilInteractive, openReviewLedger } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * THE ADAPTIVE INTERVIEW, ACROSS DESTINATION SHAPES, IN A REAL BROWSER.
@@ -20,7 +21,8 @@ import { completeQuestionnaire, createTrip, currentInterviewQuestion, reachScope
  */
 
 const SHOT_DIR = 'test-results/interview';
-const DATES = { start: '2026-08-12', end: '2026-08-17' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const DATES = summerTrip(6);
 
 async function shot(page: Page, name: string, project: string) {
   mkdirSync(SHOT_DIR, { recursive: true });

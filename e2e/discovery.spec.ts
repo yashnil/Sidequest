@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip as makeTrip, openBoardBackstage, waitUntilInteractive, openReviewLedger } from './support/trip';
+import { seasonalTrip, summerTrip } from './support/dates';
 
 /**
  * The journey this slice promises: a traveller enters a Mammoth Lakes trip,
@@ -7,8 +8,9 @@ import { completeQuestionnaire, createTrip as makeTrip, openBoardBackstage, wait
  * Discovery Board of the Eastern Sierra that remembers what they picked.
  */
 
-const AUGUST_TRIP = { start: '2026-08-12', end: '2026-08-15' };
-const JANUARY_TRIP = { start: '2027-01-12', end: '2027-01-15' };
+/** The season is the subject here, so each trip names its own: summer opens the high country, January shuts it. */
+const AUGUST_TRIP = summerTrip(4);
+const JANUARY_TRIP = seasonalTrip({ month: 1, day: 12, days: 4 });
 
 async function createTrip(page: Page, dates: { start: string; end: string }) {
   await makeTrip(page, 'Mammoth Lakes', dates);

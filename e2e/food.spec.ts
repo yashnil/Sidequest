@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView } from './support/hub';
 import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire, createTrip, openReviewLedger } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /** Same directory the rest of the suite writes to, created before use. */
 const SHOT_DIR = 'test-results/screens';
@@ -19,7 +20,8 @@ const SHOT_DIR = 'test-results/screens';
  * here is a change in behaviour rather than a change in somebody's opening hours.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 /** A Mammoth trip walked to the interview's review screen. */
 async function startQuestionnaire(page: Page) {

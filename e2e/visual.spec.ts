@@ -7,6 +7,7 @@ import {
   expectNoRuntimeProblems,
   watchForRuntimeProblems,
 } from './support/viewports';
+import { summerTrip } from './support/dates';
 
 /**
  * Not assertions about pixels — this drives the real journey, captures each
@@ -58,7 +59,7 @@ test('captures the journey and stays free of console errors and overflow', async
   await page.getByTestId('destination-input').fill('Mammoth Lakes');
   await shot('02-setup-where');
 
-  await createTrip(page, 'Mammoth Lakes', { start: '2026-08-12', end: '2026-08-15' });
+  await createTrip(page, 'Mammoth Lakes', summerTrip(4));
   await expect(page.getByTestId('interview-understanding')).toBeVisible();
   await shot('03-understanding');
   await completeQuestionnaire(page, { answers: { iconic_crowds: 'quieter_alternative' } });

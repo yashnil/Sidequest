@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitUntilInteractive } from './support/trip';
+import { seasonalTrip } from './support/dates';
 
 /**
  * DESTINATION-AWARE INTERVIEW GLOBALITY — THE DENSE CITY, END TO END.
@@ -14,7 +15,8 @@ import { createTrip, waitUntilInteractive } from './support/trip';
  * real place; the behaviour has to come from the traits.
  */
 const SHOT_DIR = '.claude-private/artifacts/interview-globality';
-const DATES = { start: '2026-10-13', end: '2026-10-18' };
+/** Mid-October, ahead of the clock (see support/dates.ts). */
+const DATES = seasonalTrip({ month: 10, day: 13, days: 6 });
 
 async function pickSeededCity(page: Page): Promise<void> {
   // The synthetic index is seeded on this page's render.

@@ -41,10 +41,30 @@ function dueWord(due: string | undefined): string | null {
   return `by ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(then))}`;
 }
 
+const sentence = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * 2026-11 — one need, one row. The ranking can surface a decision and the
+ * feasibility item behind it as two actions whose words are the same sentence
+ * ("Settle how you get around — 2 of the 2 journeys…" above "2 of the 2
+ * journeys…"). A row whose title is already another row's explanation is the
+ * same thing said twice, and is folded into that row.
+ */
+export function distinctActions(actions: readonly NextAction[]): NextAction[] {
+  const kept: NextAction[] = [];
+  for (const action of actions) {
+    const title = sentence(action.title);
+    if (kept.some((other) => sentence(other.why).includes(title) || sentence(other.title) === title)) continue;
+    kept.push(action);
+  }
+  return kept;
+}
+
 export function NextActionCard({ nextActions, moreHref }: { nextActions: NextActions; moreHref?: string }) {
   const reduced = useReducedMotion();
   const phase = PHASE_WORD[nextActions.phase];
-  const { actions, remaining } = nextActions;
+  const actions = distinctActions(nextActions.actions);
+  const { remaining } = nextActions;
   const more = moreHref ?? (nextActions.phase === 'book' ? '#book' : '#prepare');
   return (
     <section className="card-raised p-5" aria-labelledby="next-action-heading" data-testid="next-action-card" data-phase={nextActions.phase}>

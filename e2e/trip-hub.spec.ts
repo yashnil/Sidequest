@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
 import { openHubView, openPrepareReference, useBandAction } from './support/hub';
+import { summerTrip } from './support/dates';
 
 /**
  * THE TRIP HUB, END TO END, ON FIXTURES.
@@ -12,7 +13,8 @@ import { openHubView, openPrepareReference, useBandAction } from './support/hub'
  * Zero model calls, zero paid calls: the Playwright server pins every provider
  * to fixtures.
  */
-const AUGUST = { start: '2026-08-12', end: '2026-08-16' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const AUGUST = summerTrip(5);
 
 async function buildWithDefaults(page: Page, destination = 'Mammoth Lakes'): Promise<string> {
   const id = await createTrip(page, destination, AUGUST);
@@ -31,12 +33,11 @@ test('the hub has every section, calm by default, with urgent items only where t
   // PRODUCTION UI V1 — five views under one nav; each section lives in exactly one of them.
   const nav = page.viewportSize()!.width < 640 ? page.getByTestId('trip-hub-bottom-nav') : page.getByTestId('trip-hub-nav');
   await expect(nav).toBeVisible();
-  // V9 — six views on a desktop; the phone bar holds Days · Book · Prepare · Map, Trip is the band's title link and Plan is reached through `#plan`.
+  // 2026-11 — four tabs over six views (Itinerary = trip + days, Bookings = book + plan), the same four in the phone bar.
   const phone = page.viewportSize()!.width < 640;
-  for (const id of phone ? ['days', 'book', 'prepare', 'map'] : ['overview', 'days', 'map', 'plan', 'book', 'prepare']) {
+  for (const id of ['days', 'map', 'book', 'prepare']) {
     await expect(page.getByTestId(phone ? `hub-bottom-${id}` : `hub-link-${id}`)).toBeVisible();
   }
-  if (phone) await expect(page.getByTestId('hub-overview-link')).toBeVisible();
   await expect(page.getByTestId('hub-overview')).toBeVisible();
   await openHubView(page, 'prepare');
   await openPrepareReference(page);
@@ -57,15 +58,23 @@ test('the hub has every section, calm by default, with urgent items only where t
   await expect(page.getByTestId('hub-budget')).toContainText(/Ranges, not quotes/);
   await page.getByTestId('plan-tab-bookings').click();
   await expect(page.getByTestId('hub-bookings')).toBeVisible();
+  // Stays are one grouped dependency, never one blocking row per base — settled in Book, with the actions.
+  await openHubView(page, 'book');
+  await expect(page.locator('#hub-view-book [data-testid="booking-row"][data-kind="accommodation"]').first()).toBeVisible();
+  await expect(page.locator('#hub-view-book [data-testid="hub-stays-group"]').first()).toBeVisible();
+  /*
+   * 2026-11 — Prepare is a checklist by when the traveller acts. The lodging
+   * need appears there as one row that points at Book, never as a second set
+   * of booking actions.
+   */
   await openHubView(page, 'prepare');
-  await expect(page.getByTestId('hub-book-first')).toBeVisible();
-  // Stays are one grouped dependency, never one blocking row per base.
-  await expect(page.locator('#hub-view-prepare [data-testid="hub-booking"][data-kind="accommodation"]').first()).toBeVisible();
-  await expect(page.locator('#hub-view-prepare [data-testid="hub-stays-group"]').first()).toBeVisible();
   await expect(page.getByTestId('hub-before-you-go')).toBeVisible();
-  await expect(page.getByTestId('hub-readiness-entry_documents')).toBeVisible();
-  // Nobody said their citizenship, so the visa layer needs input — never a guess.
-  await expect(page.locator('[data-testid="preflight-item"][data-kind="visa"]')).toHaveAttribute('data-state', 'needs_input');
+  await expect(page.locator('#hub-view-prepare [data-testid="preflight-item"][data-booking-kind="accommodation"]').first()).toBeVisible();
+  // Nobody said their citizenship, so the entry check needs input — one row to verify, never a guess and never five.
+  const entry = page.locator('#hub-view-prepare [data-testid="preflight-item"][data-kind="visa"]');
+  await expect(entry).toHaveAttribute('data-state', 'needs_input');
+  await expect(entry).toContainText(/coming from abroad/);
+  await expect(page.locator('#hub-view-prepare [data-testid="preflight-item"][data-kind="passport_validity"]')).toHaveCount(0);
   await expect(page.getByTestId('hub-checklist')).toBeVisible();
 
   /*
@@ -112,7 +121,7 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
   await expect(page.getByTestId('hub-base-booked').first()).toContainText(/Hotel B/);
   // The day headers now name the booked base.
   await openHubView(page, 'days');
-  await expect(page.getByText(/based in Creekside/).first()).toBeVisible();
+  await expect(page.locator('#hub-view-days [data-testid^="day-facts-"]').filter({ hasText: /Creekside/ }).first()).toBeVisible();
 
   // A booked departure flight tightens the last day.
   await openHubView(page, 'plan');
@@ -130,7 +139,7 @@ test('a booked hotel and a booked flight become facts the plan is rebuilt around
   await openHubView(page, 'plan');
   await expect(page.locator('#hub-view-plan').getByTestId('booked-item')).toHaveCount(2);
   await openHubView(page, 'days');
-  await expect(page.getByText(/based in Creekside/).first()).toBeVisible();
+  await expect(page.locator('#hub-view-days [data-testid^="day-facts-"]').filter({ hasText: /Creekside/ }).first()).toBeVisible();
 
   // The calendar carries the bookings first.
   const response = await page.request.get(`/trips/${id}/itinerary/calendar`);
@@ -146,7 +155,8 @@ test('the readiness profile changes the packet without ever confirming a legal f
   await openHubView(page, 'prepare');
   await page.getByTestId('readiness-open').click();
   await page.getByTestId('readiness-citizenship').fill('GB');
-  await page.getByTestId('readiness-passport').fill('2028-06');
+  // Comfortably valid past the trip, whichever year the trip falls in.
+  await page.getByTestId('readiness-passport').fill(`${Number(AUGUST.end.slice(0, 4)) + 2}-06`);
   await page.getByTestId('readiness-save').click();
   const visa = page.locator('[data-testid="preflight-item"][data-kind="visa"]');
   await expect(visa).toHaveAttribute('data-state', 'unverified', { timeout: 20_000 });

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { buildFixtureTrip } from './support/v9';
-import { DEFAULT_DATES } from './support/trip';
+/* The fixture clock (playwright.today.config.ts) is pinned inside this span, so it stays a literal. */
+import { FIXTURE_CLOCK_TRIP as DEFAULT_DATES } from './support/dates';
 import { expectNoHorizontalOverflow } from './support/viewports';
 
 /**

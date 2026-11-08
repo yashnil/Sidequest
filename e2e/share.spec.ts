@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { waitUntilInteractive, completeQuestionnaire, createTrip } from './support/trip';
 import { bandAction, openHubView } from './support/hub';
+import { summerTrip } from './support/dates';
 
 /**
  * THE SHARE LINK, END TO END: MINTED BY THE OWNER, READ BY A STRANGER.
@@ -17,7 +18,8 @@ import { bandAction, openHubView } from './support/hub';
  * the only key and a guess must not learn whether it was close.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 async function reachBoard(page: Page, dates = AUGUST) {
   await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { BookedPlanItem, BookingResolution, Itinerary, TravelIntelligence, TripLedger } from '@sidequest/core';
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
@@ -10,13 +11,14 @@ import { ViewHead } from './ViewHead';
  * deadline rail, what is booked, imports, money), the needs alone where there
  * is no ledger yet, and an honest empty sheet where nothing was identified.
  */
-export function BookViewLayout({ tripId, intel, booked, itinerary, honored, conflicts, resolutions, ledger, affected, pendingImports }: { tripId?: string; intel: TravelIntelligence | null; booked: readonly BookedPlanItem[]; itinerary: Itinerary; honored: readonly string[]; conflicts: readonly string[]; resolutions: readonly BookingResolution[]; ledger: TripLedger | null; affected: BookedAffectedScope | null; pendingImports: readonly BookingImport[] }) {
+export function BookViewLayout({ suggestions, tripId, intel, booked, itinerary, honored, conflicts, resolutions, ledger, affected, pendingImports }: { suggestions?: ReactNode; tripId?: string; intel: TravelIntelligence | null; booked: readonly BookedPlanItem[]; itinerary: Itinerary; honored: readonly string[]; conflicts: readonly string[]; resolutions: readonly BookingResolution[]; ledger: TripLedger | null; affected: BookedAffectedScope | null; pendingImports: readonly BookingImport[] }) {
   if (intel && ledger && affected) {
-    return <BookView {...(tripId ? { tripId } : {})} intel={intel} booked={booked} itinerary={itinerary} honored={honored} conflicts={conflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={pendingImports} />;
+    return <BookView suggestions={suggestions} {...(tripId ? { tripId } : {})} intel={intel} booked={booked} itinerary={itinerary} honored={honored} conflicts={conflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={pendingImports} />;
   }
   return (
     <section className="mx-auto max-w-6xl" data-testid="hub-book">
       <ViewHead sheet="Sheet B · What to arrange" title="Book" />
+      {suggestions}
       {intel ? (
         <BookFirstSection intel={intel} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={honored} conflicts={conflicts} resolutions={resolutions} view="book-first" />
       ) : (

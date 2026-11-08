@@ -188,7 +188,8 @@ describe('the finished plan is a document about places, not a bare schedule', ()
         coordinates: COORDINATES,
       }),
     );
-    expect(html).toContain('this is not an arrival or departure day');
+    expect(html).toContain('Everything you picked fitted better on another day');
+    expect(html, 'a mid-trip blank is not an arrival or departure day').not.toContain('on an arrival or departure day that is usually right');
   });
 
   it('does not print "nothing was checked" under a list of what the weather changed', () => {
@@ -240,7 +241,7 @@ describe('the finished plan is a document about places, not a bare schedule', ()
     );
   });
 
-  it('gives each day a colour of its own kind, and says where you are sleeping', () => {
+  it('says where you are sleeping in the day\'s one line of facts', () => {
     const html = render({
       rationale: Object.fromEntries(
         stopIdsOf(PLAN).map((placeId) => [
@@ -252,7 +253,7 @@ describe('the finished plan is a document about places, not a bare schedule', ()
         ]),
       ),
     });
-    expect(html).toContain('based in');
-    expect(html, 'no day carries a colour of its own').toMatch(/--plate-hue:\s*\d+/);
+    const facts = html.match(/data-testid="day-facts-1"[\s\S]*?<\/p>/)?.[0] ?? '';
+    expect(facts).toContain(PLAN.days[0]!.baseName);
   });
 });

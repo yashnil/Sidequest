@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headlineFigures, heroStats, shortMinutes, splitDayTheme } from './hero-stats';
+import { headlineFigures, heroStats, shortMinutes, splitDayTheme, travellerTransportLine } from './hero-stats';
 
 const totals = (travelMinutes: number, unmeasuredLegCount = 0) => ({ totals: { travelMinutes, unmeasuredLegCount } }) as never;
 
@@ -43,5 +43,14 @@ describe('a day’s short title', () => {
   it('splits the lead from the places instead of truncating one string', () => {
     expect(splitDayTheme('Arrive and settle in — Hallgrímskirkja & Harpa.')).toEqual({ title: 'Arrive and settle in', places: 'Hallgrímskirkja & Harpa' });
     expect(splitDayTheme('Departure day')).toEqual({ title: 'Departure day', places: null });
+  });
+});
+
+describe('travellerTransportLine', () => {
+  it('keeps the figures and drops the planner ledger', () => {
+    const line = travellerTransportLine('A car: stops sit up to 55 minutes from where you sleep, and a typical day has about 90 minutes of driving against your 240-minute limit.');
+    expect(line).toBe('Best by car — nothing is more than 55 min from where you sleep, and a typical day has about 90 min of driving.');
+    expect(travellerTransportLine('Public transport first: most hops between stops are rides rather than walks; a typical day has about 70 minutes of travel, estimated from distance — no timetable was consulted.')).not.toMatch(/timetable was consulted|hops/);
+    expect(travellerTransportLine('Trains between the cities, walking within them.')).toBe('Trains between the cities, walking within them.');
   });
 });

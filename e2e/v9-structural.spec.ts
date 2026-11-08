@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { openHubView } from './support/hub';
 import { buildFixtureTrip, visibleOpenNeed } from './support/v9';
 import { waitUntilInteractive } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * V9.1 — THE FOUNDER FLOW WITH A STRUCTURAL REFINEMENT, ON THE FIXTURE PATH.
@@ -11,7 +12,8 @@ import { waitUntilInteractive } from './support/trip';
  * interpreter) → the proposal's delta → Apply → reload → calendar and feed
  * consistent with the hub → Undo exact. No model anywhere.
  */
-const TEN_DAYS = { start: '2026-11-10', end: '2026-11-19' };
+/** Ten days ahead of the clock, in summer (see support/dates.ts). Was 2026-11-10…19, which the clock reached. */
+const TEN_DAYS = summerTrip(10);
 const stable = (ics: string) => ics.replace(/DTSTAMP:[^\r\n]+/g, '').replace(/SEQUENCE:\d+/g, '');
 /*
  * The subscription feed and the downloaded snapshot are the same trip, not the
@@ -65,6 +67,8 @@ test('a structural refinement is proposed with a delta, applied, reflected every
   /* The controlled alternative: one press, a proposal with a deterministic delta. */
   await page.goto(`/trips/${id}/itinerary`);
   await expect(page.getByTestId('atlas-band')).toBeVisible();
+  /* 2026-11 — the decision records sit under "Why it is shaped this way". */
+  await page.getByTestId('overview-reasoning').locator(':scope > summary').click();
   const chip = page.getByTestId('alternative-chip').filter({ hasText: 'Fewer hotel changes' }).first();
   await waitUntilInteractive(chip);
   await chip.click();

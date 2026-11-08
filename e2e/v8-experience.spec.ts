@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { VIEWPORTS, expectNoHorizontalOverflow, expectNoRuntimeProblems, watchForRuntimeProblems } from './support/viewports';
 import { completeQuestionnaire, createTrip, waitUntilInteractive } from './support/trip';
 import { openHubView } from './support/hub';
+import { seasonalTrip } from './support/dates';
 
 /**
  * V8 — THE REDESIGNED EXPERIENCE, WALKED IN A REAL BROWSER.
@@ -15,7 +16,8 @@ import { openHubView } from './support/hub';
  * Every trip runs on fixtures; nothing here spends a model call.
  */
 
-const DATES = { start: '2027-05-11', end: '2027-05-18' };
+/** Mid-May, ahead of the clock (see support/dates.ts). */
+const DATES = seasonalTrip({ month: 5, day: 11, days: 8 });
 
 async function signIn(page: Page, email: string): Promise<void> {
   await page.goto('/signin');

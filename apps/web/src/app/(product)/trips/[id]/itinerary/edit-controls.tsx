@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass } from '@/components/ui';
 import { callAction, newBuildKey } from '@/components/client-action';
@@ -30,12 +30,24 @@ export function StopEditMenu({
   placeId,
   title,
   locked,
+  navigation,
+  dayControls,
 }: {
   tripId: string;
   dayNumber: number;
   placeId: string;
   title: string;
   locked: boolean;
+  /**
+   * 2026-11 — ONE PLACE FOR EVERYTHING YOU CAN DO WITH A STOP.
+   *
+   * Directions and the move/re-time/keep controls used to be a row of links
+   * under every stop of every day — on a five-stop day, five identical rows
+   * between the things a traveller actually reads. They live behind the
+   * stop's own ⋯ now, beside lock, swap and remove.
+   */
+  navigation?: { google: string; apple: string };
+  dayControls?: ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -54,8 +66,18 @@ export function StopEditMenu({
         setOffers(null);
       }
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        setOffers(null);
+      }
+    };
     document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
   const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string }>) => {
@@ -88,8 +110,9 @@ export function StopEditMenu({
     <div ref={rootRef} className="relative print:hidden">
       <button
         type="button"
-        aria-haspopup="menu"
+        aria-haspopup="true"
         aria-expanded={open}
+        data-testid="stop-menu"
         aria-label={`Change ${title}`}
         onClick={() => {
           setOpen((value) => !value);
@@ -102,10 +125,20 @@ export function StopEditMenu({
       </button>
 
       {open ? (
-        <div
-          role="menu"
-          className="absolute right-0 z-30 mt-1 w-64 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-1 shadow-[var(--shadow-float)]"
-        >
+        <div className="slide-down absolute right-0 z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-[var(--radius-card)] border border-rule bg-paper-raised p-1 shadow-[var(--shadow-float)]">
+          {offers === null && navigation ? (
+            <p className="flex flex-wrap items-center gap-x-3 border-b border-rule px-3 pt-2 pb-2.5 text-sm" data-testid="stop-navigation">
+              <span className="text-ink-muted">Directions</span>
+              <a href={navigation.google} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">
+                Google Maps
+              </a>
+              <a href={navigation.apple} target="_blank" rel="noreferrer noopener" className="text-accent underline underline-offset-4">
+                Apple Maps
+              </a>
+            </p>
+          ) : null}
+          {offers === null && dayControls ? <div className="border-b border-rule px-1 py-1.5">{dayControls}</div> : null}
+          <div role="menu" aria-label={`Change ${title}`}>
           {offers === null ? (
             <>
               <MenuButton
@@ -149,6 +182,7 @@ export function StopEditMenu({
               ))}
             </>
           )}
+          </div>
           {status ? (
             <p role="alert" className="px-3 py-2 text-xs leading-relaxed text-clay">
               {status}

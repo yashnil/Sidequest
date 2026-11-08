@@ -141,7 +141,12 @@ describe('the trip pages, opened by a browser that did not make the trip', () =>
 
       jar.set('sidequest_session', OWNER);
       expect(await outcomeOf(() => Page(params(tripId)))).toBe(page.ownerOutcome);
-    });
+      /*
+       * The first `page.load()` compiles the page's whole module graph, which is
+       * what took this past the default five seconds on a busy machine — the
+       * boundary itself answers in milliseconds. The allowance is for the import.
+       */
+    }, 30_000);
   }
 
   it('404s every trip page for a browser with no cookie at all', async () => {
@@ -235,6 +240,10 @@ describe('the trip-mutating actions, invoked with a foreign cookie', () => {
     {
       name: 'discover/fillBoardImageryAction',
       invoke: async (id) => (await import('./discover/actions')).fillBoardImageryAction(id),
+    },
+    {
+      name: 'itinerary/refreshTripInformationAction',
+      invoke: async (id) => (await import('./itinerary/refresh-actions')).refreshTripInformationAction(id),
     },
     {
       name: 'discover/refreshWeatherAction',

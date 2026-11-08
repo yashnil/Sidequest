@@ -95,7 +95,7 @@ export function AtlasBand({
         */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(90deg,rgb(13_26_31/0.86)_0%,rgb(13_26_31/0.55)_26%,rgb(13_26_31/0.12)_46%,rgb(13_26_31/0)_58%)] lg:block" />
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-40 bg-gradient-to-t from-night/90 via-night/40 to-transparent lg:block" />
-        <div className="relative px-5 pt-5 pb-5 sm:px-8 lg:flex lg:min-h-[min(74vh,720px)] lg:max-w-[44rem] lg:flex-col lg:justify-end lg:pt-24 lg:pb-7 xl:px-12">
+        <div className="relative px-5 pt-5 pb-5 sm:px-8 lg:flex lg:min-h-[min(58vh,560px)] lg:max-w-[44rem] lg:flex-col lg:justify-end lg:pt-16 lg:pb-8 xl:px-12">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="coordbar text-bone/75">{eyebrow}</p>
             {status ? (
@@ -110,7 +110,7 @@ export function AtlasBand({
               </p>
             ) : null}
           </div>
-          <h1 className="display-stage mt-3 max-w-[12ch] text-[clamp(3rem,1.6rem+5.4vw,7rem)] text-bone [text-shadow:0_2px_24px_rgb(13_26_31/0.55)]">
+          <h1 className="display-stage mt-3 max-w-[14ch] text-[clamp(2.6rem,1.5rem+3.8vw,5.25rem)] text-bone [text-shadow:0_2px_24px_rgb(13_26_31/0.55)]">
             <span className="mask-rise"><span>{title}</span></span>
           </h1>
           {subline ? <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-bone/80 fade-up [--d:180ms]">{subline}</p> : null}
@@ -121,17 +121,12 @@ export function AtlasBand({
               sentence: the honest long form rides on each tile's title and is
               printed in full on the Trip view's Getting around card.
             */
-            <dl className="mt-5 flex flex-wrap gap-2 fade-up [--d:220ms]" data-testid="hero-stats">
+            <dl className="mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-1.5 fade-up [--d:220ms]" data-testid="hero-stats">
+              {/* 2026-11 — one quiet line, not five boxed tiles: the shape of the trip at a glance, the long form on hover. */}
               {stats.map((stat) => (
-                <div key={stat.id} className={cx('min-w-[5.75rem] flex-1 rounded-[10px] border border-white/12 bg-night/55 px-3 pt-2.5 pb-3 backdrop-blur-md', stat.id === 'travel' && 'min-w-[12rem] flex-[2]')} title={stat.detail} data-testid={`hero-stat-${stat.id}`}>
-                  <dt className="font-mono text-[10px] font-semibold tracking-[0.14em] text-bone/60 uppercase">{stat.label}</dt>
-                  <dd className="mt-1 truncate font-display text-[1.55rem] leading-none font-light text-bone">{stat.value}</dd>
-                  {stat.sub ? <dd className="mt-1.5 truncate text-[12px] leading-tight text-bone/65">{stat.sub}</dd> : null}
-                  {stat.gauge !== undefined ? (
-                    <dd aria-hidden="true" className="mt-2 h-1 overflow-hidden rounded-full bg-white/12">
-                      <span className="block h-full rounded-full bg-[var(--color-glacier)]" style={{ width: `${Math.max(6, Math.round(stat.gauge * 100))}%` }} />
-                    </dd>
-                  ) : null}
+                <div key={stat.id} className="flex items-baseline gap-1.5" title={stat.detail} data-testid={`hero-stat-${stat.id}`}>
+                  <dt className="order-2 font-mono text-[10px] font-semibold tracking-[0.14em] text-bone/60 uppercase">{stat.label}</dt>
+                  <dd className="order-1 font-display text-[1.35rem] leading-none font-light text-bone">{stat.value}</dd>
                   {stat.detail ? <dd className="sr-only">{stat.detail}</dd> : null}
                 </div>
               ))}

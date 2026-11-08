@@ -8,6 +8,7 @@ import {
   displayNameFor,
   fixtureOpenDataDeps,
   kindForTags,
+  onIsland,
   proposeFromOpenData,
   rankPlaces,
   readElement,
@@ -361,5 +362,28 @@ describe('proposeFromOpenData', () => {
     expect(out.proposal.bases.map((b) => b.name)).toEqual(['Capital', 'Harbour Town']);
     // A place is in its part, never in the whole phrase.
     expect(out.proposal.candidates.every((c) => c.locality !== 'Capital and the Isles')).toBe(true);
+  });
+});
+
+describe('an island is the island', () => {
+  const tenerife = { southWest: { lat: 27.99, lng: -16.93 }, northEast: { lat: 28.59, lng: -16.11 } };
+  it('keeps the island and its shore, and nothing across the strait', () => {
+    expect(onIsland({ lat: 28.27, lng: -16.64 }, tenerife)).toBe(true); // Teide
+    expect(onIsland({ lat: 28.297, lng: -16.856 }, tenerife)).toBe(true); // Los Gigantes, on the west coast
+    expect(onIsland({ lat: 28.126, lng: -17.237 }, tenerife)).toBe(false); // Garajonay, La Gomera
+    expect(onIsland({ lat: 28.09, lng: -17.33 }, tenerife)).toBe(false); // Valle Gran Rey, La Gomera
+  });
+
+  it('proposes nothing outside the island when the search box crosses the sea', async () => {
+    const offshore = node(900, { tourism: 'attraction', name: 'Across the Strait Park', wikidata: 'Q9900900' }, 0, 0.6);
+    const deps = fixtureOpenDataDeps('Harbour City');
+    const island = { southWest: { lat: CENTER.lat - 0.2, lng: CENTER.lng - 0.2 }, northEast: { lat: CENTER.lat + 0.2, lng: CENTER.lng + 0.2 } };
+    const withOffshore: OpenDataDeps = { ...deps, fetchGroup: async (box, selector, limit) => { const r = await deps.fetchGroup(box, selector, limit); return { ...r, elements: [...r.elements, offshore] }; } };
+    const open = await proposeFromOpenData({ envelope: { name: 'Harbour City', center: CENTER, scale: 'district' }, days: 5, priorities: [], carAvailable: true, reachKm: 120 }, withOffshore);
+    const closed = await proposeFromOpenData({ envelope: { name: 'Harbour City', center: CENTER, scale: 'district' }, days: 5, priorities: [], carAvailable: true, reachKm: 120, island }, withOffshore);
+    expect(open.ok && closed.ok).toBe(true);
+    if (!open.ok || !closed.ok) return;
+    expect(open.proposal.candidates.some((c) => c.name === 'Across the Strait Park')).toBe(true);
+    expect(closed.proposal.candidates.some((c) => c.name === 'Across the Strait Park')).toBe(false);
   });
 });

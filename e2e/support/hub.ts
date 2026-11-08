@@ -1,10 +1,9 @@
 import { expect, type Page } from '@playwright/test';
 
 /**
- * PRODUCTION UI V1 — the Trip Hub is six views under one nav (Trip · Days ·
- * Map · Plan · Book · Prepare; V9 added Book). A test that asserts on a
- * section first opens the view that holds it; the bottom bar carries Days ·
- * Book · Prepare · Map on phones, and Plan is reached from the desktop nav.
+ * The Trip Hub is six views shown under four tabs (Itinerary = Trip + Days ·
+ * Map · Bookings = Book + Plan · Prepare). A test that asserts on a section
+ * first opens the view that holds it.
  */
 export type HubView = 'overview' | 'days' | 'map' | 'plan' | 'book' | 'prepare';
 
@@ -66,26 +65,15 @@ export async function openDayChecks(page: Page, dayNumber?: number): Promise<voi
 
 export async function openHubView(page: Page, view: HubView): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
-  // EXPERIENCE V2 — on a phone the bottom bar holds four views; Overview is the band's own title link.
-  // V9 — Plan is not in the phone bar; a phone test reaches it through the address (`#plan`), which the shell honours.
-  if (width < 640 && view === 'plan') {
-    await page.evaluate(() => {
-      /*
-       * Clear it first and tell the shell outright. Assigning the hash it
-       * already holds fires no `hashchange`, so a second visit to Plan in the
-       * same page — or a load that arrived with the hash already set — would
-       * leave the view closed while the address says it is open.
-       */
-      window.location.hash = '';
-      window.location.hash = '#plan';
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
-    });
-    await expect(page.locator('#hub-view-plan')).toBeVisible({ timeout: 10_000 });
-    return;
-  }
-  const tab = width < 640 ? (view === 'overview' ? page.getByTestId('hub-overview-link') : page.getByTestId(`hub-bottom-${view}`)) : page.getByTestId(`hub-link-${view}`);
-  await expect(tab).toBeVisible({ timeout: 20_000 });
-  await tab.click();
+  /*
+   * 2026-11 — four tabs, each a group of views: Itinerary holds the trip and its
+   * days, Bookings holds what to book and the stays-and-logistics plan. A test
+   * names the view it asserts on; the tab that shows it is pressed.
+   */
+  const tab = view === 'overview' ? 'days' : view === 'plan' ? 'book' : view;
+  const control = width < 640 ? page.getByTestId(`hub-bottom-${tab}`) : page.getByTestId(`hub-link-${tab}`);
+  await expect(control).toBeVisible({ timeout: 20_000 });
+  await control.click();
   await expect(page.locator(`#hub-view-${view}`)).toBeVisible({ timeout: 10_000 });
 }
 

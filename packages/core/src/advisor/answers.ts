@@ -139,6 +139,10 @@ export const advisorAnswersSchema = z.object({
    */
   countries: z.array(z.string().regex(/^[A-Z]{2}$/)).max(40).optional(),
   wildlifeKind: z.enum(['safari', 'marine', 'birds', 'any']).optional(),
+  /** The traveller refused snow and ice ("hiking but no snow"): snowbound months are out, not merely unwanted. */
+  avoidSnow: z.boolean().optional(),
+  /** Interests the traveller explicitly refused ("no cities"): a place built around one is marked down, never ruled out. */
+  refused: z.array(z.enum(FOCUS_KEYS)).max(FOCUS_KEYS.length).optional(),
   mountainStyle: z.enum(['base_day_hikes', 'hut_to_hut', 'high_altitude']).optional(),
   swimStyle: z.enum(['warm_sea', 'lakes', 'either']).optional(),
   /** What the traveller typed, verbatim, so a reading can always be checked against it. */

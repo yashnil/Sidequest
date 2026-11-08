@@ -1,12 +1,14 @@
 import { expect, type Page } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './trip';
+import { summerTrip } from './dates';
 
 /**
  * V9 — the shortest road to a built trip on the fixture composer: the setup
  * door, the interview's smart defaults, the hub. Returns the trip id.
  */
 /** Dates ahead of the real clock, so the trip is a plan and not a memory: the engines rank nothing on a past trip. */
-export const FUTURE_DATES = { start: '2026-11-10', end: '2026-11-14' };
+/* Was the literal 2026-11-10…14, which reached the clock in November 2026. Summer, so the Mammoth Lakes fixture is fully open. */
+export const FUTURE_DATES = summerTrip(5);
 
 export async function buildFixtureTrip(page: Page, destination = 'Mammoth Lakes', dates: { start: string; end: string } = FUTURE_DATES): Promise<string> {
   const id = await createTrip(page, destination, dates);

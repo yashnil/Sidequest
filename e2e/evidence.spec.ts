@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView, openPrepareNotes } from './support/hub';
 import { compileRegion, createTrip as makeTrip, CULTURAL_INTERVIEW, completeQuestionnaire } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * WHAT A TRAVELLER SEES OF THE EVIDENCE.
@@ -14,7 +15,8 @@ import { compileRegion, createTrip as makeTrip, CULTURAL_INTERVIEW, completeQues
  * destination.
  */
 
-const DATES = { start: '2026-08-12', end: '2026-08-16' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const DATES = summerTrip(5);
 
 async function createTrip(page: Page, destination: string): Promise<string> {
   await makeTrip(page, destination, DATES);

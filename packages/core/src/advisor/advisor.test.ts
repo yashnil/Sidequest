@@ -9,6 +9,7 @@ import { ADVISOR_QUESTIONS, answerAdvisorQuestion, nextQuestion, shortlistDistan
 import { scoreDestination } from './score';
 import { selectShortlist } from './select';
 import { checkPickClimate } from './climate-check';
+import { destinationCatalog } from './catalog/index';
 import { originPointFromText } from './origin';
 
 const NOW = new Date('2026-10-26T12:00:00Z');
@@ -70,6 +71,44 @@ describe('reading what somebody typed', () => {
     expect(parsed.assumptions.join(' ')).toMatch(/June–August/);
   });
 
+  it('reads a calendar range as both when and how long, so length is never asked', () => {
+    const parsed = parseTravelRequest('march 19-27, mountains, outdoors, budget friendly', base(), NOW);
+    expect(parsed.answers.dates).toMatchObject({ mode: 'exact', startDate: '2027-03-19', endDate: '2027-03-27' });
+    expect(parsed.answers.duration).toMatchObject({ mode: 'fixed', nights: 8 });
+    expect(parsed.readings.map((r) => r.label)).toEqual(expect.arrayContaining(['March 19–27', '8 nights']));
+    const asked = new Set<string>();
+    let answers = parsed.answers;
+    for (let i = 0; i < 8; i += 1) {
+      const next = nextQuestion(answers, [entry('a'), entry('b', { cost: 1 })]).question;
+      if (!next) break;
+      asked.add(next.id);
+      answers = skipAdvisorQuestion(answers, next.id);
+    }
+    expect(asked.has('length')).toBe(false);
+    expect(asked.has('when')).toBe(false);
+  });
+
+  it.each([
+    ['19-27 march', '2027-03-19', '2027-03-27', 8],
+    ['Mar 30 to Apr 4', '2027-03-30', '2027-04-04', 5],
+    ['19th of March until the 27th', '2027-03-19', '2027-03-27', 8],
+    ['dec 28 - jan 4', '2026-12-28', '2027-01-04', 7],
+  ])('reads the date range in %s', (text, start, end, nights) => {
+    const parsed = parseTravelRequest(text, base(), NOW);
+    expect(parsed.answers.dates).toMatchObject({ mode: 'exact', startDate: start, endDate: end });
+    expect(parsed.answers.duration).toMatchObject({ mode: 'fixed', nights });
+  });
+
+  it('does not read a party size after a month as a date range', () => {
+    expect(parseTravelRequest('march 5-7 people, mountains', base(), NOW).answers.dates).toMatchObject({ mode: 'month', month: 3 });
+  });
+
+  it('does not read a length span after a month as a date range', () => {
+    const parsed = parseTravelRequest('in march for 5-7 days', base(), NOW);
+    expect(parsed.answers.dates).toMatchObject({ mode: 'month', month: 3 });
+    expect(parsed.answers.duration).toMatchObject({ mode: 'range', minNights: 4, maxNights: 6 });
+  });
+
   it('treats a bare "outdoors" as too vague to pick an interest for', () => {
     const parsed = parseTravelRequest('Somewhere outdoors in August', base());
     expect(parsed.answers.discovery?.focus).toEqual([]);
@@ -106,6 +145,148 @@ describe('reading what somebody typed', () => {
     expect(originPointFromText('San Francisco')).toMatchObject({ basis: 'city', countryCode: 'US' });
     expect(originPointFromText('la')).toMatchObject({ label: 'Los Angeles' });
     expect(originPointFromText('Atlantis')).toBeNull();
+  });
+});
+
+describe('reading negations, amounts and who is going (audit 2026-11)', () => {
+  const read = (text: string) => parseTravelRequest(text, base(), NOW);
+  const labels = (text: string) => read(text).readings.map((reading) => reading.label);
+
+  it('reads "no snow" as a refusal, never as a wish for snow', () => {
+    for (const text of ['hiking but no snow, march', 'I want to go hiking in the mountains in March but I don’t want snow', 'hiking in december, avoid snow and ice']) {
+      const parsed = read(text);
+      expect(parsed.answers.discovery?.focus, text).not.toContain('snow');
+      expect(parsed.answers.discovery?.avoidSnow, text).toBe(true);
+      expect(parsed.answers.discovery?.focus, text).toContain('hiking');
+    }
+    expect(read('skiing in february').answers.discovery?.focus).toEqual(['snow']);
+    expect(read('snowboarding in january').answers.discovery?.focus).toEqual(['snow']);
+  });
+
+  it('treats "don’t mind snow" as tolerance: neither a wish nor a refusal', () => {
+    const parsed = read('I don’t mind snow, hiking in march');
+    expect(parsed.answers.discovery?.focus).toEqual(['hiking']);
+    expect(parsed.answers.discovery?.avoidSnow).toBeUndefined();
+  });
+
+  it('puts a snowbound month out of season for somebody who refused snow, and caps a frozen one for a hiker', () => {
+    const alpine = entry('alpine', { experiences: { day_hiking: 3, high_mountains: 3, winter_snow: 3 }, season: [3, 3, 3, 2, 1, 3, 3, 3, 3, 2, 1, 3] });
+    const noSnow = profileFrom(read('hiking in the mountains in March, no snow').answers);
+    expect(scoreDestination(alpine, noSnow).exclusion?.code).toBe('out_of_season');
+    // A coast rated for its winter that is frozen in March is not a hiking month, even without a snow rating.
+    const arctic = entry('arctic', { experiences: { day_hiking: 3, coastal_scenery: 3, villages_culture: 1 }, season: [2, 2, 2, 2, 2, 3, 3, 3, 2, 1, 1, 2], highC: [-1, 0, 2, 5, 9, 12, 15, 14, 10, 6, 2, 0] });
+    expect(scoreDestination(arctic, profileFrom(read('hiking in March').answers)).bestMonths).toEqual([]);
+  });
+
+  it('reads "not too strenuous" as gentle, not as strenuous', () => {
+    for (const text of ['relaxed, not too strenuous, lakes in september', 'nothing too strenuous, lakes in june']) {
+      expect(read(text).answers.discovery?.adventure, text).toBe('comfortable');
+    }
+    expect(read('intense hiking every day, multi-day treks, august').answers.discovery?.adventure).toBe('rugged');
+    expect(read('intense hiking every day, multi-day treks, august').answers.discovery?.mountainStyle).toBe('hut_to_hut');
+    expect(read('hardcore trekking at high altitude in october').answers.discovery?.mountainStyle).toBe('high_altitude');
+  });
+
+  it('reads every way of refusing to drive as no car, and only an unrefused drive as driving', () => {
+    for (const text of ['I don’t like driving, culture and food in may', 'no driving please, lakes in august', 'don’t want to drive, hiking', 'public transport only, mountains', 'I hate driving']) {
+      expect(read(text).answers.transport, text).toBe('public_transport');
+    }
+    expect(read('happy to drive, scenic road trip in june').answers.transport).toBe('drive');
+  });
+
+  it('reads a refused interest as a soft mark against places built around it', () => {
+    const parsed = read('not too expensive, beaches in july, no cities');
+    expect(parsed.answers.discovery?.focus).toEqual(['beaches']);
+    expect(parsed.answers.discovery?.refused).toEqual(['cities']);
+    const profile = profileFrom(parsed.answers);
+    const city = entry('city', { experiences: { beaches_swimming: 3, coastal_scenery: 3, city_life: 3 }, highC: [14, 15, 17, 20, 24, 28, 31, 31, 27, 23, 18, 15], season: [1, 1, 2, 2, 3, 3, 3, 3, 3, 2, 1, 1] });
+    const quiet = entry('quiet', { experiences: { beaches_swimming: 3, coastal_scenery: 3, villages_culture: 1 }, highC: [14, 15, 17, 20, 24, 28, 31, 31, 27, 23, 18, 15], season: [1, 1, 2, 2, 3, 3, 3, 3, 3, 2, 1, 1] });
+    expect(scoreDestination(quiet, profile).score).toBeGreaterThan(scoreDestination(city, profile).score);
+  });
+
+  it('reads "anywhere but Europe" as every region except Europe', () => {
+    const regions = read('beaches in march, anywhere but europe').answers.discovery?.regions ?? [];
+    expect(regions).not.toContain('southern_europe');
+    expect(regions).toContain('caribbean');
+    expect(read('not europe this time, hiking in may').answers.discovery?.regions).not.toContain('western_europe');
+  });
+
+  it('reads money: words before amounts, an amount per night, and "no budget" as the opposite of budget', () => {
+    expect(read('under $1500 for a week of hiking in july').answers.budget).toBe('mid_range');
+    expect(read('under $1,000 for 10 days of beaches').answers.budget).toBe('budget');
+    expect(read('€300 a day, food in october').answers.budget).toBe('premium');
+    expect(read('money is no object, wildlife').answers.budget).toBe('luxury');
+    expect(read('not too expensive, beaches').answers.budget).toBe('mid_range');
+    expect(read('cheap, under $5000 for two weeks').answers.budget).toBe('budget');
+    expect(read('under $1500 for a week of hiking in july').assumptions.join(' ')).toMatch(/\$214 a night/);
+  });
+
+  it('never reads a rate as the trip length', () => {
+    const parsed = read('100 euros a day, culture in april, 10 days');
+    expect(parsed.answers.duration).toMatchObject({ mode: 'fixed', nights: 9 });
+    expect(read('€100 a day, culture in april').answers.duration.mode).toBe('unknown');
+  });
+
+  it('rules out a place two cost levels over a tight budget, and only bends a comfortable one', () => {
+    const pricey = entry('pricey', { cost: 4 });
+    expect(scoreDestination(pricey, profileFrom(read('not too expensive, hiking in july').answers)).exclusion?.code).toBe('over_budget');
+    expect(scoreDestination(pricey, profileFrom({ ...read('hiking in july').answers, budget: 'premium' })).exclusion).toBeNull();
+  });
+
+  it('reads "a week or two" as a range and the other flexible lengths', () => {
+    expect(read('a week or two in spring').answers.duration).toMatchObject({ mode: 'range', minNights: 7, maxNights: 14 });
+    expect(read('one or two weeks in the fall').answers.duration).toMatchObject({ mode: 'range', minNights: 7, maxNights: 14 });
+    expect(read('5-7 days in may').answers.duration).toMatchObject({ mode: 'range', minNights: 4, maxNights: 6 });
+  });
+
+  it('reads more ways of writing dates', () => {
+    expect(read('between the 3rd and 14th of june, beaches').answers.dates).toMatchObject({ mode: 'exact', startDate: '2027-06-03', endDate: '2027-06-14' });
+    expect(read('3/19 - 3/27 hiking').answers.dates).toMatchObject({ mode: 'exact', startDate: '2027-03-19', endDate: '2027-03-27' });
+    expect(read('19/3 - 27/3 hiking').answers.dates).toMatchObject({ mode: 'exact', startDate: '2027-03-19', endDate: '2027-03-27' });
+    // Ambiguous day and month: left for the question rather than guessed.
+    expect(read('3/4 - 3/9 hiking').answers.dates.mode).toBe('month');
+    expect(read('mid-may to early june, lakes').answers.dates).toMatchObject({ mode: 'months', months: [5, 6] });
+    expect(read('next month, hiking').answers.dates).toMatchObject({ mode: 'month', month: 11 });
+  });
+
+  it('does not read the verb "may" as a month', () => {
+    expect(read('we may go hiking in june').answers.dates).toMatchObject({ mode: 'month', month: 6 });
+    expect(read('hiking in may').answers.dates).toMatchObject({ mode: 'month', month: 5 });
+  });
+
+  it('reads who is going, so "who’s going" is never asked after it was said', () => {
+    const kids = read('family trip with two kids aged 6 and 9 in july, beaches and wildlife').answers;
+    expect(kids.children).toBe(2);
+    expect(kids.travelerNeeds).toContain('kids_under_12');
+    const teens = read('with our kids aged 14 and 16, hiking in july').answers;
+    expect(teens.children).toBe(2);
+    expect(teens.travelerNeeds).not.toContain('kids_under_12');
+    expect(read('no kids, just me and my partner, beaches').answers.children).toBe(0);
+    expect(labels('a couple of days in the alps')).not.toContain('A couple');
+    for (const text of ['group of friends, nightlife and beaches in june', 'solo, hiking, september', 'me and my partner, beaches in june', 'with two kids in july, beaches']) {
+      let answers = read(text).answers;
+      const asked: string[] = [];
+      for (let i = 0; i < 10; i += 1) {
+        const step = nextQuestion(answers, destinationCatalog());
+        if (!step.question) break;
+        asked.push(step.question.id);
+        answers = skipAdvisorQuestion(answers, step.question.id);
+      }
+      expect(asked, text).not.toContain('party');
+    }
+  });
+
+  it('reads a stated lead, so "which matters most" is not asked', () => {
+    const parsed = read('mostly hiking, some food and culture, september');
+    expect(parsed.answers.discovery?.focus[0]).toBe('hiking');
+    expect(parsed.answers.discovery?.focusRanked).toBe(true);
+  });
+
+  it('does not let one clause’s negation reach into the next', () => {
+    const parsed = read('no car, but happy to hike in the mountains in june');
+    expect(parsed.answers.discovery?.focus).toEqual(expect.arrayContaining(['hiking', 'mountains']));
+    expect(parsed.answers.transport).toBe('public_transport');
+    expect(read('not just beaches, also mountains, july').answers.discovery?.focus).toEqual(expect.arrayContaining(['beaches', 'mountains']));
   });
 });
 

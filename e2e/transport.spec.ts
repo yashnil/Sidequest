@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { openHubView, openPrepareNotes, useBandAction } from './support/hub';
 import { mkdirSync } from 'node:fs';
 import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire, createTrip, openReviewLedger } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * The journey this slice promises: a traveller's transport answers change which
@@ -10,7 +11,8 @@ import { buildBoardFromReview, changeInterviewAnswer, completeQuestionnaire, cre
  * still-executable plan.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 async function startTrip(page: Page, dates = AUGUST) {
   await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });

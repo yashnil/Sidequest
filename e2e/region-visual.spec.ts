@@ -5,6 +5,7 @@ import {
   watchForRuntimeProblems,
 } from './support/viewports';
 import { answerEveryQuestion, createTrip, requestExploration } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * THE REGION FIGURE, IN A REAL BROWSER, AGAINST REAL PORTFOLIO DATA.
@@ -28,7 +29,8 @@ import { answerEveryQuestion, createTrip, requestExploration } from './support/t
  * left out — which is half of what §19.2 asks the preview to answer.
  */
 
-const DATES = { start: '2026-08-12', end: '2026-08-16' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const DATES = summerTrip(5);
 
 async function reachRegionFigure(page: Page): Promise<void> {
   // The synthetic index is seeded on this page's render.

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { completeQuestionnaire, createTrip } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * ASK SIDEQUEST, REACHABLE AND HONEST.
@@ -17,7 +18,8 @@ import { completeQuestionnaire, createTrip } from './support/trip';
  * (§44), and the panel never appears in print.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 test.describe('Ask Sidequest', () => {
   test('is on the finished trip, opens, and answers without showing any of its own machinery', async ({ page }) => {

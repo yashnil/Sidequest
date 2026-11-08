@@ -132,3 +132,23 @@ export function splitDayTheme(theme: string): { title: string; places: string | 
   if (at > 0) return { title: clean.slice(0, at).trim(), places: clean.slice(at + 3).trim() || null };
   return { title: clean, places: null };
 }
+
+/**
+ * 2026-11 — THE PLANNER'S TRANSPORT SENTENCE, SAID THE WAY A PERSON WOULD.
+ *
+ * The planner writes its summary with its own bookkeeping in it ("…about 90
+ * minutes of driving against your 240-minute limit", "% of the hops between
+ * stops", "no timetable was consulted"). The figures are right and are parsed
+ * above; the sentence a traveller reads keeps the facts and drops the ledger.
+ * Anything not in a known planner shape is returned unchanged.
+ */
+export function travellerTransportLine(headline: string): string {
+  const car = /^A car: stops sit up to (\d+) minutes from where you sleep, and a typical day has about (\d+) minutes of driving against your \d+-minute limit\.?$/i.exec(headline);
+  if (car) return `Best by car — nothing is more than ${shortMinutes(Number(car[1]))} from where you sleep, and a typical day has about ${shortMinutes(Number(car[2]))} of driving.`;
+  const optional = /^A car is optional here: \d+% of the hops between stops are walks, and nothing is more than (\d+) minutes from where you sleep\.?$/i.exec(headline);
+  if (optional) return `A car is optional here — most stops are a short walk apart, and nothing is more than ${shortMinutes(Number(optional[1]))} from where you sleep.`;
+  if (/^On foot and by public transport: \d+% of the hops between stops are walks/i.test(headline)) return 'On foot and by public transport — most stops are a short walk apart, with a few rides between them.';
+  const transit = /^Public transport first: .*a typical day has about (\d+) minutes of travel/i.exec(headline);
+  if (transit) return `Public transport first — about ${shortMinutes(Number(transit[1]))} of travel on a typical day, estimated from distance.`;
+  return headline;
+}

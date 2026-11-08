@@ -38,11 +38,30 @@ export const HUB_VIEWS = [
 export type HubViewId = (typeof HUB_VIEWS)[number]['id'];
 
 /**
- * V9 — the phone bar holds the four things a traveller does with a plan on
- * the move, in the order they do them: Days · Book · Prepare · Map. Trip is
- * the band's own title link, Plan is reached from the others.
+ * 2026-11 — FOUR PLACES TO LOOK, NOT SIX.
+ *
+ * Six tabs with three badges asked a traveller to learn the product before
+ * they could read their trip. A tab is now a *group* of the views above:
+ * the trip and its days are one place (Itinerary), stays-and-logistics and
+ * what to book are one place (Bookings). Every view keeps its own section and
+ * id, so `#plan`, `#overview` and every legacy anchor still land, and a test
+ * scoped to `#hub-view-plan` still finds it — it is simply shown with Book.
  */
-export const HUB_BOTTOM_VIEWS: readonly HubViewId[] = ['days', 'book', 'prepare', 'map'];
+export const HUB_TABS = [
+  { id: 'days', label: 'Itinerary', short: 'Days', views: ['overview', 'days'] },
+  { id: 'map', label: 'Map', short: 'Map', views: ['map'] },
+  { id: 'book', label: 'Bookings', short: 'Book', views: ['book', 'plan'] },
+  { id: 'prepare', label: 'Prepare', short: 'Prepare', views: ['prepare'] },
+] as const satisfies readonly { id: HubViewId; label: string; short: string; views: readonly HubViewId[] }[];
+
+export function tabForView(view: HubViewId): (typeof HUB_TABS)[number] {
+  return HUB_TABS.find((tab) => (tab.views as readonly HubViewId[]).includes(view)) ?? HUB_TABS[0];
+}
+
+/** The phone bar holds the same four tabs. */
+const PANEL_NAME: Record<HubViewId, string> = { overview: 'Trip overview', days: 'Day by day', map: 'Map', plan: 'Stays, travel and food', book: 'Bookings', prepare: 'Prepare' };
+
+export const HUB_BOTTOM_VIEWS: readonly HubViewId[] = ['days', 'map', 'book', 'prepare'];
 
 /** Legacy anchors (`#book-first`, `#day-3`, `#verify`) still land on the view that holds them. */
 const LEGACY_ANCHORS: Record<string, HubViewId> = {
@@ -156,6 +175,8 @@ export function HubShell({
     document.getElementById('trip-hub')?.scrollIntoView({ block: 'start' });
   }
 
+  const activeTab = tabForView(view);
+  const shown = (id: HubViewId) => (activeTab.views as readonly HubViewId[]).includes(id);
   const indicatorTransition = reduced ? { duration: 0 } : { type: 'spring' as const, stiffness: 520, damping: 42, mass: 0.6 };
 
   return (
@@ -173,8 +194,8 @@ export function HubShell({
             <span id={labelId} className="sr-only">
               Trip hub views
             </span>
-            {HUB_VIEWS.map((entry) => {
-              const active = entry.id === view;
+            {HUB_TABS.map((entry) => {
+              const active = entry.id === activeTab.id;
               const badge = badges[entry.id];
               return (
                 <button
@@ -183,7 +204,7 @@ export function HubShell({
                   role="tab"
                   id={`hub-tab-${entry.id}`}
                   aria-selected={active}
-                  aria-controls={`hub-view-${entry.id}`}
+                  aria-controls={entry.views.map((id) => `hub-view-${id}`).join(' ')}
                   data-testid={`hub-link-${entry.id}`}
                   onClick={() => select(entry.id)}
                   className={cx(
@@ -202,15 +223,16 @@ export function HubShell({
         </div>
       </nav>
 
-      {HUB_VIEWS.map((entry) => (
+      {HUB_TABS.flatMap((tab) => tab.views).map((id) => HUB_VIEWS.find((entry) => entry.id === id)!).map((entry) => (
         <section
           key={entry.id}
           id={`hub-view-${entry.id}`}
           role="tabpanel"
-          aria-labelledby={`hub-tab-${entry.id}`}
+          /* Two views share the Itinerary and Bookings tabs, so each panel is named for itself rather than by its tab. */
+          aria-label={PANEL_NAME[entry.id]}
           data-view={entry.id}
-          data-active={entry.id === view ? 'true' : 'false'}
-          className={cx('hub-view', entry.id === view && 'enter')}
+          data-active={shown(entry.id) ? 'true' : 'false'}
+          className={cx('hub-view', shown(entry.id) && 'enter')}
         >
           {views[entry.id]}
         </section>
@@ -223,11 +245,11 @@ export function HubShell({
         the others; the bar holds Days · Book · Prepare · Map, plus Ask
         Sidequest as a fifth cell when the page has it.
       */}
-      <nav aria-label="Trip hub" className="fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-paper/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_-16px_rgb(23_24_26/0.35)] backdrop-blur-sm print:hidden sm:hidden" data-testid="trip-hub-bottom-nav">
+      <nav aria-label="Trip views" className="fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-paper/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-6px_24px_-16px_rgb(23_24_26/0.35)] backdrop-blur-sm print:hidden sm:hidden" data-testid="trip-hub-bottom-nav">
         <div className={cx('grid', askSlot ? 'grid-cols-5' : 'grid-cols-4')}>
           <div className="col-span-4 grid grid-cols-4" role="tablist" aria-label="Trip hub views">
-            {HUB_BOTTOM_VIEWS.map((id) => HUB_VIEWS.find((entry) => entry.id === id)!).map((entry) => {
-              const active = entry.id === view;
+            {HUB_TABS.map((entry) => {
+              const active = entry.id === activeTab.id;
               const badge = badges[entry.id];
               return (
                 <button
@@ -235,7 +257,7 @@ export function HubShell({
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  aria-controls={`hub-view-${entry.id}`}
+                  aria-controls={entry.views.map((id) => `hub-view-${id}`).join(' ')}
                   data-testid={`hub-bottom-${entry.id}`}
                   onClick={() => select(entry.id)}
                   className={cx('pressable relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-pine', active ? 'text-ink' : 'text-ink-faint')}

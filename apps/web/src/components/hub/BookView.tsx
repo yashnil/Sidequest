@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { BookedPlanItem, BookingItem, BookingResolution, Itinerary, TravelIntelligence, TripLedger } from '@sidequest/core';
 import type { BookedAffectedScope } from '@/lib/intelligence/booked-reconcile';
 import type { BookingImport } from '@/lib/db/execution-repository';
@@ -29,6 +30,8 @@ const RAIL_WHEN: Record<BookingItem['priority'], string> = {
  * needs and the titles of what is booked, nothing else.
  */
 export interface BookViewProps {
+  /** 2026-11 — "Book before you go": every stay, the car and the tickets, with links. */
+  suggestions?: ReactNode;
   tripId?: string;
   intel: TravelIntelligence;
   booked: readonly BookedPlanItem[];
@@ -42,7 +45,7 @@ export interface BookViewProps {
 }
 
 export function BookView(props: BookViewProps) {
-  const { tripId, intel, booked, itinerary, honored, conflicts, resolutions, ledger, affected, pendingImports } = props;
+  const { suggestions, tripId, intel, booked, itinerary, honored, conflicts, resolutions, ledger, affected, pendingImports } = props;
   const items = intel.bookings.items;
   const group = items.find((b) => b.memberIds);
   const members = group ? items.filter((b) => group.memberIds!.includes(b.id)) : [];
@@ -79,9 +82,9 @@ export function BookView(props: BookViewProps) {
 
   return (
     <section className="mx-auto max-w-6xl" aria-labelledby="book-heading" data-testid="hub-book">
-      <ViewHead sheet="Sheet B · What to arrange, in the order to arrange it" title="Book" titleId="book-heading" lede="What to arrange, in order, what you already have, and where the money stands.">
+      <ViewHead sheet="Bookings" title="Book" titleId="book-heading" lede="What to book before you go, what you already have, and where the money stands.">
         <div className="mt-6">
-          <BookingProgressLine intel={intel} nextStatedAbove={next !== null} variant="strip" />
+          <BookingProgressLine intel={intel} nextStatedAbove={next !== null || Boolean(suggestions)} variant="strip" />
         </div>
       </ViewHead>
 
@@ -92,7 +95,7 @@ export function BookView(props: BookViewProps) {
         rail below opens on — named once here, acted on below. It carries the
         flare rule because it is the one thing that moves the trip forward.
       */}
-      {next ? (
+      {next && !suggestions ? (
         <div className="mt-8 grid gap-x-8 gap-y-2 border-l-[3px] border-l-flare bg-paper-raised py-5 pl-5 pr-5 md:grid-cols-[13rem_minmax(0,1fr)]" data-testid="book-next">
           <p className="sheet-label pt-1 text-ink-muted">Book next</p>
           <div className="min-w-0">
@@ -102,7 +105,22 @@ export function BookView(props: BookViewProps) {
         </div>
       ) : null}
 
-      <div className="mt-12">
+      {suggestions}
+
+      {/*
+        2026-11 — with the cards above saying what to book and where, the rails
+        below are the ledger: the same needs, each with Mark booked / Booked
+        something else / Skip. Said once, so they read as the place to record
+        what is done rather than a second list of the same things.
+      */}
+      {suggestions && openCount > 0 ? (
+        <div className="mt-14 border-t border-rule pt-6" data-testid="book-track-heading">
+          <h2 className="font-display text-[1.75rem] leading-tight font-light text-ink">Mark what&rsquo;s done</h2>
+          <p className="mt-1 max-w-2xl type-small text-ink-muted">Booked something? Mark it here &mdash; Sidequest plans around what you hold and never moves it.</p>
+        </div>
+      ) : null}
+
+      <div className={suggestions && openCount > 0 ? 'mt-6' : 'mt-12'}>
         {openRows.map(({ copy: groupCopy, rows }) => (
           <RailSection key={groupCopy.priority} index={`${nextIndex()} · ${RAIL_WHEN[groupCopy.priority]}`} title={groupCopy.title} count={rows.length} blurb={groupCopy.blurb} testId={`book-group-${groupCopy.priority}`} quiet={groupCopy.priority === 'can_wait' || groupCopy.priority === 'keep_flexible'}>
             <ul className="ruled">

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openHubView, bandAction } from './support/hub';
 import { completeQuestionnaire, createTrip } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * EDITING A PLAN, AND TAKING IT WITH YOU.
@@ -18,7 +19,8 @@ import { completeQuestionnaire, createTrip } from './support/trip';
  * no edit engine at all.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 async function buildPlan(page: Page): Promise<string> {
   await createTrip(page, 'Mammoth Lakes', { start: AUGUST.start, end: AUGUST.end });
@@ -150,7 +152,9 @@ test('a day can be made easier, and the plan says what it did', async ({ page })
    * this easier" is a button that can only apologise — so this asserts on
    * whichever day has one, and that at least one day of a four-day plan does.
    */
-  const ease = page.getByRole('button', { name: 'Make this day easier' }).first();
+  const easeDay = page.locator('[data-testid^="day-edit-"]').filter({ has: page.getByRole('button', { name: 'Make this day easier', includeHidden: true }) }).first();
+  await easeDay.locator('summary').click();
+  const ease = easeDay.getByRole('button', { name: 'Make this day easier' });
   await expect(ease).toBeVisible();
 
   const before = await page.getByRole('button', { name: /^Change / }).count();

@@ -1373,6 +1373,17 @@ export interface FakeResearchOptions {
   temporaryClosure?: boolean;
   /** Emit facts retrieved long ago, so freshness has something to bite on. */
   staleSources?: boolean;
+  /**
+   * When the fresh documents were read, as an ISO instant. Defaults to five days
+   * before the worlds' fixed `NOW`, which is what every unit test compiles at.
+   *
+   * A caller compiling against the *real* clock — the browser suite's fixture
+   * compiler — must pass a clock-relative value. A fixed date read against the
+   * real clock ages like any other: on 2026-11-03 the default crossed the
+   * ninety-day shelf life of `hours.weekly`, every sourced calendar went stale,
+   * and the synthetic world quietly stopped carrying its booking requirements.
+   */
+  retrievedAt?: string;
   /** Emit a booking requirement with a ticket page. */
   bookingRequired?: boolean;
   /** Emit an hours claim with no excerpt, which must be discarded. */
@@ -1502,8 +1513,12 @@ export function fakeResearchProviders(
          */
         retrievedAt: options.staleSources
           ? '2024-01-01T00:00:00.000Z'
-          : '2026-08-05T00:00:00.000Z',
-        publishedAt: options.staleSources ? '2023-11-02' : '2026-08-01',
+          : (options.retrievedAt ?? '2026-08-05T00:00:00.000Z'),
+        publishedAt: options.staleSources
+          ? '2023-11-02'
+          : options.retrievedAt
+            ? new Date(Date.parse(options.retrievedAt) - 4 * 86_400_000).toISOString().slice(0, 10)
+            : '2026-08-01',
         robotsAllowed: true,
         authority: reference.expectedAuthority,
         publisher: hostOf(reference.url),

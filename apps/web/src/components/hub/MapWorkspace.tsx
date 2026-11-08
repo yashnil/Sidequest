@@ -198,9 +198,7 @@ export function MapWorkspace({
       sheet.open(
         entry.detail,
         frames[id] ?? null,
-        <a href={`#day-${entry.dayNumber}`} className="text-accent underline underline-offset-4" data-testid="map-sheet-open-day">
-          Open day {entry.dayNumber}
-        </a>,
+        <ShowInPlan dayNumber={entry.dayNumber} placeId={id} />,
       );
       return;
     }
@@ -384,4 +382,41 @@ function chip(on: boolean): string {
 function shortTheme(theme: string): string {
   const trimmed = theme.replace(/\.$/, '');
   return trimmed.length > 28 ? `${trimmed.slice(0, 26).trimEnd()}…` : trimmed;
+}
+
+/**
+ * 2026-11 — FROM A PIN TO THE MOMENT IN THE DAY.
+ *
+ * The map and the itinerary were two documents about one trip: pressing a pin
+ * opened a sheet whose only way back was "Open day 3", which landed on the
+ * day's heading and left the traveller to find the stop. This closes the
+ * sheet, switches to the itinerary, and brings the stop's own row to the
+ * middle of the screen with a brief highlight — so "where is that in my day"
+ * is one press.
+ */
+function ShowInPlan({ dayNumber, placeId }: { dayNumber: number; placeId: string }) {
+  const sheet = usePlaceSheet();
+  return (
+    <a
+      href={`#day-${dayNumber}`}
+      className="inline-flex min-h-11 items-center gap-1.5 font-medium text-accent underline underline-offset-4"
+      data-testid="map-sheet-open-day"
+      onClick={(event) => {
+        event.preventDefault();
+        sheet?.dismiss();
+        window.location.hash = `day-${dayNumber}`;
+        window.setTimeout(() => {
+          const row = document.querySelector<HTMLElement>(`#hub-view-days [data-timeline-place="${CSS.escape(placeId)}"]`);
+          if (!row) return;
+          const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          row.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+          row.focus({ preventScroll: true });
+          row.classList.add('row-flash');
+          window.setTimeout(() => row.classList.remove('row-flash'), 1800);
+        }, 120);
+      }}
+    >
+      See it in day {dayNumber} <span aria-hidden="true">→</span>
+    </a>
+  );
 }

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openDayChecks, openHubView, useBandAction } from './support/hub';
 import { completeQuestionnaire, createTrip } from './support/trip';
+import { addDays, dayLabel, seasonalTrip, span } from './support/dates';
 
 /**
  * The slice this proves: a traveller sees, before building anything, when each
@@ -20,9 +21,15 @@ import { completeQuestionnaire, createTrip } from './support/trip';
  *   conflict path and the reason the two were split apart.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/**
+ * The weekdays are the subject, so they are chosen, not inherited from a year.
+ * Both spans are in summer (the gondola and the high country are open) and
+ * ahead of the clock; MIDWEEK starts on the first Tuesday on or after 11 August.
+ */
 /** Tuesday to Thursday — Manzanar's visitor centre is shut on every one. */
-const MIDWEEK = { start: '2026-08-11', end: '2026-08-13' };
+const MIDWEEK = seasonalTrip({ month: 8, day: 11, weekday: 2, days: 3 });
+/** Wednesday to Saturday of the same week: the visitor centre opens on the Friday and the Saturday. */
+const AUGUST = span(addDays(MIDWEEK.start, 1), 4);
 /** The widest radius, which is the only one that reaches the Owens Valley. */
 const REGION_WIDE = 'best_regional';
 
@@ -293,8 +300,8 @@ test('changing the dates recalculates availability rather than reusing it', asyn
    * "Day 1 · Wed 12 Aug". The claim here is unchanged: the rebuilt plan covers
    * the new span and none of the old one.
    */
-  await expect(page.getByText('Tue 11 Aug').first()).toBeVisible();
-  await expect(page.getByText('Sat 15 Aug')).toHaveCount(0);
+  await expect(page.getByText(dayLabel(MIDWEEK.start)).first()).toBeVisible();
+  await expect(page.getByText(dayLabel(AUGUST.end))).toHaveCount(0);
 });
 
 test('a manual pick that cannot be scheduled stays visible with a way out', async ({ page }) => {
@@ -317,7 +324,9 @@ test('a manual pick that cannot be scheduled stays visible with a way out', asyn
      * rendered day heading rather than the ISO date it is built from, for the
      * same reason as the specification above: day headings are human dates now.
      */
-    await expect(page.getByText(/Fri 14 Aug|Sat 15 Aug/).first()).toBeVisible();
+    const friday = dayLabel(addDays(AUGUST.start, 2));
+    const saturday = dayLabel(AUGUST.end);
+    await expect(page.getByText(new RegExp(`${friday}|${saturday}`)).first()).toBeVisible();
   }
 });
 

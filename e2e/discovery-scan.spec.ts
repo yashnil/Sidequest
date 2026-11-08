@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { completeQuestionnaire, createTrip, waitUntilInteractive } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * V1 CONVERGENCE — THE DISCOVERY SCAN IS THE STEP BETWEEN THE INTERVIEW AND THE BUILD.
@@ -13,7 +14,8 @@ import { completeQuestionnaire, createTrip, waitUntilInteractive } from './suppo
  * spends anything.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-16' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const AUGUST = summerTrip(5);
 const DESTINATION = 'Harbour City';
 
 test('find places → a pre-picked board → build → the itinerary', async ({ page }) => {

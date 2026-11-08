@@ -142,7 +142,12 @@ export function buildPackingIntelligence(input: PackingInput): PackingIntelligen
   const remoteOutdoors = input.remote && (trailDays || camps || episodes.has('safari') || episodes.has('guided_overland'));
 
   // Documents ---------------------------------------------------------------
-  add('essential_documents', 'Passport or ID, valid for the trip', input.international === 'no' ? 'Your carrier will ask for photo ID.' : 'Required at the border; validity rules are the destination’s.');
+  /* Unknown ≠ international: without a citizenship we do not know a border is crossed, so the line says both cases rather than asserting one. */
+  add(
+    'essential_documents',
+    'Passport or ID, valid for the trip',
+    input.international === 'no' ? 'Your carrier will ask for photo ID.' : input.international === 'yes' ? 'Required at the border; validity rules are the destination’s.' : 'Photo ID for travel; a passport if you are crossing a border to get there.',
+  );
   if (input.international !== 'no') add('essential_documents', 'Printed and offline copies of bookings and documents', 'Borders and bad signal both happen.');
   else add('essential_documents', 'Offline copies of bookings', 'Signal is not guaranteed everywhere on the route.');
   if (input.international === 'yes') add('essential_documents', 'Travel insurance details and the emergency number', 'You confirmed cover in Before you go; keep the number reachable.');

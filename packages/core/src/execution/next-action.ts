@@ -83,7 +83,16 @@ function actionFor(node: TripStateNode, graph: TripStateGraph, input: { now: Dat
       break;
     case 'needs_booking':
       kind = 'book';
-      title = node.kind === 'base' ? `Book somewhere to sleep: ${node.label.replace(/^\d+ nights? in /, '')}` : `Book ${node.label}`;
+      /*
+       * A stay need ("4 nights in Lisbon") and the base it belongs to ("Lisbon")
+       * are one thing to do; both read "Book somewhere to sleep: Lisbon" so the
+       * card collapses them instead of asking twice. A common-noun label is
+       * lower-cased after the verb ("Book rental car…", not "Book Rental car…").
+       */
+      title =
+        node.kind === 'base' || /^\d+ nights? in /.test(node.label)
+          ? `Book somewhere to sleep: ${node.label.replace(/^\d+ nights? in /, '')}`
+          : `Book ${/^(Rental|Car|Train|Trains|Ferry|Ferries|Bus|Tickets?|Timed|Lodging|Accommodation|Major|Guided|Park|Entry)\b/.test(node.label) ? node.label.charAt(0).toLowerCase() + node.label.slice(1) : node.label}`;
       why = node.detail ?? (node.kind === 'base' ? 'The nights at this base depend on it.' : 'The day depends on it.');
       break;
     case 'changed':

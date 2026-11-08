@@ -220,8 +220,8 @@ test('attribution is keyboard reachable, and names the licence', async ({ page }
   await expect(credit).toBeVisible();
   await expect(credit).toHaveAttribute('href', /commons\.wikimedia\.org/);
 
-  // The words are the stored ones: a creator and a named licence.
-  await expect(credit).toContainText(/Creative Commons Attribution/);
+  // A creator and a named licence — in the short form a credit line uses ("CC BY 4.0"), linked in full.
+  await expect(credit).toContainText(/CC BY|CC0|Creative Commons/);
 
   // Reachable by tabbing, from the top of the document, without a mouse.
   await page.locator('body').press('Tab');

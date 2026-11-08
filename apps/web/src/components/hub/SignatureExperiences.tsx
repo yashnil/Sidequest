@@ -66,15 +66,13 @@ export function SignatureExperiences({ experiences }: { experiences: readonly Si
 
 function Entry({ experience, index, lead, showWhy }: { experience: SignatureExperience; index: number; lead: boolean; showWhy: boolean }) {
   return (
-    <div className={cx('min-w-0', !lead && 'grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]')}>
+    <div className={cx('min-w-0', !lead && Boolean(experience.image) && 'grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-4 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]')}>
       {experience.image ? (
         <figure className={cx('print-frame m-0 self-start', lead && 'rotate-[-0.4deg]')}>
           <div className="[&_figure]:m-0 [&_img]:rounded-none [&>div>figure>div]:rounded-none">{experience.image}</div>
           {lead && experience.credit ? <figcaption className="!font-sans !text-[10.5px] !normal-case !tracking-normal leading-snug">{experience.credit}</figcaption> : null}
         </figure>
-      ) : lead ? null : (
-        <div aria-hidden="true" className="atlas aspect-[4/3] w-full" />
-      )}
+      ) : null /* No photograph: the name stands alone rather than beside an empty frame. */}
       <a
         href={`#day-${experience.dayNumber}`}
         className={cx('group block min-w-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine', lead && Boolean(experience.image) && 'mt-5')}

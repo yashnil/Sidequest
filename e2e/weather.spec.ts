@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { openDayChecks, openHubView, openPrepareReference } from './support/hub';
 import { completeQuestionnaire, createTrip } from './support/trip';
 import { openBoardBackstage } from './support/trip';
+import { beyondForecastTrip, forecastTrip, summerTrip, type TripDates } from './support/dates';
 
 /**
  * The slice this proves: a traveller sees weather context on the board before
@@ -16,7 +17,7 @@ import { openBoardBackstage } from './support/trip';
  *
  * Two date ranges carry the weight, and they differ in kind rather than degree:
  *
- * - **AUGUST** is close enough to be inside the forecast horizon, so the plan
+ * - **NEAR** is close enough to be inside the forecast horizon, so the plan
  *   may rank one day against another.
  * - **FAR** is more than a year out, where the only honest evidence is what past
  *   years have done — and the product has to say so in those words, and must not
@@ -24,28 +25,27 @@ import { openBoardBackstage } from './support/trip';
  */
 
 /**
- * A near trip, computed rather than hardcoded — and the same lesson as
- * `washout()` below, learned twice.
+ * A near trip, inside the forecast horizon — derived from the real clock,
+ * because the weather provider reads the real clock too.
  *
  * These dates were `2026-08-03` … `2026-08-06`, and on 2026-08-06 the trip's
- * first day was three days in the past. A forecast horizon does not reach
- * backwards, so day one came back as a seasonal pattern and two assertions that
- * were about *the horizon* started failing for a reason that had nothing to do
- * with it. The comment on `washout()` already says a fixed pair of dates cannot
- * keep its properties as time passes; this pair was left fixed anyway.
+ * first day was three days in the past: a forecast horizon does not reach
+ * backwards. Now they come from `forecastTrip`, which keeps every day well
+ * inside the sixteen-day horizon whenever the suite runs.
  *
- * Derived from tomorrow, and stopping well inside the sixteen-day horizon, so
- * every day of it is genuinely a forecast today and next year.
+ * What that cannot keep is the *season*. A near trip in November is a November
+ * trip, and Minaret Vista — open June to October — is correctly refused by the
+ * board ("Usually open June to October"). So the forecast specs below never
+ * name a seasonal stop; they include whichever weather-sensitive stop is in
+ * season on these dates (`includeAClearDayStop`).
  */
-function nearTrip(): { start: string; end: string } {
-  const start = new Date();
-  start.setUTCDate(start.getUTCDate() + 2);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 3);
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
-}
-
-const AUGUST = nearTrip();
+const NEAR = forecastTrip(4);
+/**
+ * A summer trip, for the assertions that are about a *place* rather than a
+ * forecast: Minaret Vista is a view, so it needs a clear day, in any month it is
+ * open — and it is only open in summer, so the spec chooses summer.
+ */
+const SUMMER = summerTrip(4);
 /**
  * A trip whose every day is wet, computed rather than hardcoded.
  *
@@ -84,23 +84,11 @@ function washout(): { start: string; end: string } {
 const WASHOUT = washout();
 /**
  * Well beyond any forecast horizon: historical patterns, and nothing else.
- *
- * Derived for the same reason `AUGUST` now is — a fixed year eventually stops
- * being in the future, and the day it does this test starts asserting the
- * opposite of what it means.
+ * Derived, because a fixed year eventually stops being in the future.
  */
-function farTrip(): { start: string; end: string } {
-  const start = new Date();
-  start.setUTCFullYear(start.getUTCFullYear() + 1);
-  start.setUTCDate(start.getUTCDate() + 40);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 3);
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
-}
+const FAR = beyondForecastTrip(4);
 
-const FAR = farTrip();
-
-async function reachBoard(page: Page, dates = AUGUST) {
+async function reachBoard(page: Page, dates: TripDates = NEAR) {
   await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });
 
   await completeQuestionnaire(page, { priorities: ['Scenic viewpoints', 'Hiking'] });
@@ -162,6 +150,42 @@ async function include(cardLocator: ReturnType<typeof card>) {
   await expect(button).toHaveAttribute('aria-pressed', 'true');
 }
 
+/**
+ * Include a stop whose whole value is the view, that is open on the trip's
+ * dates — so the plan has something the weather can work against.
+ *
+ * This used to be `include(card(page, 'Minaret Vista'))`, which is a summer-only
+ * place on a trip whose month is whatever month the suite runs in (the forecast
+ * window follows the real clock). Out of season its Include is rightly disabled
+ * and the spec timed out pressing it. The cards say which places need a clear
+ * day and whether they can be included on these dates, so the spec reads that
+ * rather than naming a place.
+ *
+ * Returns the name included, or null when the fixture region has no
+ * view-dependent stop in season at all (Mammoth Lakes from December to March:
+ * the only year-round one, Alabama Hills, is past the default driving budget).
+ * The callers' assertions are about the forecast and the layout, which still
+ * hold; the annotation makes the gap visible in the report rather than silent.
+ */
+async function includeAClearDayStop(page: Page): Promise<string | null> {
+  const candidates = page
+    .getByRole('article')
+    .filter({ has: page.getByText('Needs a clear day', { exact: true }) })
+    .filter({ has: page.getByRole('button', { name: 'Include', disabled: false }) });
+  const count = await candidates.count();
+  if (count === 0) {
+    test.info().annotations.push({
+      type: 'season',
+      description: 'No view-dependent stop is open on these forecast dates; built without one.',
+    });
+    return null;
+  }
+  const chosen = candidates.first();
+  const name = (await chosen.getByRole('heading', { level: 3 }).first().innerText()).trim();
+  await include(card(page, name));
+  return name;
+}
+
 async function build(page: Page) {
   await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
   await expect(page).toHaveURL(/\/itinerary$/, { timeout: 30_000 });
@@ -171,7 +195,9 @@ async function build(page: Page) {
 }
 
 test('the board carries weather context for the traveller’s own dates', async ({ page }) => {
-  await reachBoard(page);
+  // Summer, chosen: the card under test is a seasonal viewpoint, and out of
+  // season the board rightly refuses it before weather has anything to say.
+  await reachBoard(page, SUMMER);
 
   // A viewpoint whose whole value is the view says the view is weather-
   // dependent. This is the badge that changes a decision.
@@ -191,7 +217,7 @@ test('the board carries weather context for the traveller’s own dates', async 
 
 test('an itinerary is built against a forecast, and says so', async ({ page }) => {
   await reachBoard(page);
-  await include(card(page, 'Minaret Vista'));
+  await includeAClearDayStop(page);
   await build(page);
 
   await openDayChecks(page);
@@ -218,7 +244,7 @@ test('a day the weather threatens is given a concrete fallback or an honest gap'
   page,
 }) => {
   await reachBoard(page);
-  await include(card(page, 'Minaret Vista'));
+  await includeAClearDayStop(page);
   await build(page);
 
   const fallback = page.getByText(/^If it turns/);
@@ -267,7 +293,7 @@ test('different dates get different weather, and a different kind of it', async 
   await reachBoard(page);
   await build(page);
   await openDayChecks(page);
-  const august = await page
+  const near = await page
     .getByRole('region', { name: 'Weather on day 1' })
     .first()
     .innerText();
@@ -283,8 +309,8 @@ test('different dates get different weather, and a different kind of it', async 
     .first()
     .innerText();
 
-  expect(far).not.toBe(august);
-  expect(august).toContain('Forecast');
+  expect(far).not.toBe(near);
+  expect(near).toContain('Forecast');
   expect(far).toMatch(/Typical|historical/);
 });
 
@@ -340,7 +366,7 @@ test('the weather surfaces read at every viewport', async ({ page }, testInfo) =
   page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
 
   await reachBoard(page);
-  await include(card(page, 'Minaret Vista'));
+  await includeAClearDayStop(page);
 
   await expect(async () => {
     const overflow = await page.evaluate(

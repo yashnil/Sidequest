@@ -248,6 +248,28 @@ export interface OpenDataProposalInput {
    * city and an archipelago is open ocean.
    */
   parts?: readonly { label: string; center: { lat: number; lng: number } }[];
+  /**
+   * 2026-11 — an island's own published extent. The search is a box around the
+   * centre, and around an island that box crosses the sea: a live "Tenerife"
+   * scan put Garajonay and Valle Gran Rey (La Gomera) on the board and then
+   * gave them a base of their own. A place outside the island's bounds (plus a
+   * small coastal margin) is on another island, so it is not proposed. Only an
+   * `island`, and only from this mechanical search — a model proposing a ferry
+   * day trip has chosen it on purpose.
+   */
+  island?: { southWest: { lat: number; lng: number }; northEast: { lat: number; lng: number } };
+}
+
+/** Inside an island's bounds, with a coastal margin of about two kilometres. */
+export function onIsland(point: { lat: number; lng: number }, bounds: NonNullable<OpenDataProposalInput['island']>): boolean {
+  const marginLat = 0.02;
+  const marginLng = 0.02 / Math.max(0.2, Math.cos((point.lat * Math.PI) / 180));
+  return (
+    point.lat >= bounds.southWest.lat - marginLat &&
+    point.lat <= bounds.northEast.lat + marginLat &&
+    point.lng >= bounds.southWest.lng - marginLng &&
+    point.lng <= bounds.northEast.lng + marginLng
+  );
 }
 
 export interface OpenDataDeps {
@@ -528,7 +550,7 @@ export async function proposeFromOpenData(input: OpenDataProposalInput, deps: Op
   const settlements = settlementElements
     .map((e) => readSettlement(e, center))
     .map((s) => (s && spread ? { ...s, distanceKm: nearestKm(s.coordinates) } : s))
-    .filter((s, i, all): s is Settlement => s !== null && s.distanceKm <= input.reachKm && all.findIndex((o) => o?.elementId === s.elementId) === i);
+    .filter((s, i, all): s is Settlement => s !== null && s.distanceKm <= input.reachKm && (!input.island || onIsland(s.coordinates, input.island)) && all.findIndex((o) => o?.elementId === s.elementId) === i);
   diagnostics.settlements = settlements.length;
 
   // --- 2. read, filter, first order -------------------------------------------------
@@ -543,6 +565,7 @@ export async function proposeFromOpenData(input: OpenDataProposalInput, deps: Op
       /* The destination itself is where the trip is, not a thing to do in it; a town at the very centre is the same. */
       if (normal(p.name) === destination) return false;
       if (p.spec.kind === 'small_town' && p.distanceKm < 5) return false;
+      if (input.island && !onIsland(p.coordinates, input.island)) return false;
       return p.distanceKm <= input.reachKm;
     });
   diagnostics.usable = usable.length;
@@ -581,10 +604,30 @@ export async function proposeFromOpenData(input: OpenDataProposalInput, deps: Op
   const positions = new Map<string, ResolvedPosition | null>();
   const nights = Math.max(1, input.days - 1);
   const towns = settlements.filter((s) => s.place === 'city' || s.place === 'town').sort((a, b) => b.population - a.population || a.distanceKm - b.distanceKm);
-  const primaryTown = broad ? towns.find((t) => t.distanceKm <= Math.max(15, halfKm * 0.35)) : undefined;
+  /*
+   * 2026-11 — THE MIDDLE OF THE PLACES, NOT THE MIDDLE OF THE MAP.
+   *
+   * "The largest town near the centre" read population tags that are often
+   * missing, and the centre of a destination's box is not where its sights
+   * are: a live Tenerife scan slept in Garachico, on the north-west tip, which
+   * left the island's north-east "beyond a day trip" and earned it a second
+   * base. The primary base is now the town with the least total distance to the
+   * places proposed (each distance capped, so one far outlier cannot drag it),
+   * population breaking near-ties. Without a pool it falls back to the old rule.
+   */
+  const centralTowns = broad ? towns.filter((t) => t.distanceKm <= Math.max(25, halfKm * 0.6)) : [];
+  const spreadCost = (t: Settlement) => pool.reduce((sum, p) => sum + Math.min(80, haversineKm(t.coordinates, p.coordinates)), 0);
+  const medoid =
+    broad && pool.length >= 4 && centralTowns.length > 0
+      ? [...centralTowns].sort((a, b) => {
+          const d = spreadCost(a) - spreadCost(b);
+          return Math.abs(d) > pool.length * 2 ? d : b.population - a.population || d;
+        })[0]
+      : undefined;
+  const primaryTown = broad ? (medoid ?? towns.find((t) => t.distanceKm <= Math.max(15, halfKm * 0.35))) : undefined;
   const bases: { name: string; coordinates: { lat: number; lng: number }; elementId?: string; wikidata?: string; fromWikidata?: boolean; nightsHint: number; why: string; near?: number }[] = [
     primaryTown
-      ? { name: primaryTown.name, coordinates: primaryTown.coordinates, elementId: primaryTown.elementId, ...townSource(primaryTown), nightsHint: nights, why: `The largest mapped town near the middle of ${envelope.name}, so most of the places below are within reach of it.` }
+      ? { name: primaryTown.name, coordinates: primaryTown.coordinates, elementId: primaryTown.elementId, ...townSource(primaryTown), nightsHint: nights, why: `A mapped town in the middle of what there is to see in ${envelope.name}, so most of the places below are within reach of it.` }
       : spread
         ? { name: anchors[0]!.label, coordinates: anchors[0]!.center, nightsHint: nights, why: `${anchors[0]!.label} itself; the places near it are measured from here.` }
         : { name: envelope.name, coordinates: center, nightsHint: nights, why: `${envelope.name} itself; the places below are measured from here.` },

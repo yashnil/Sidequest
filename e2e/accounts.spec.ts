@@ -1,8 +1,10 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { createTrip } from './support/trip';
+import { seasonalTrip } from './support/dates';
 
 /** Dates in the future, so the dashboard files these under ideas and planning rather than the past. */
-const AHEAD = { start: '2027-06-13', end: '2027-06-20' };
+/** Ahead of the clock, whenever the suite runs (see support/dates.ts). */
+const AHEAD = seasonalTrip({ month: 6, day: 13, days: 8 });
 
 /**
  * V6 §21/§22/§50 — ACCOUNTS, THE GUEST CLAIM, AND THE OWNERSHIP BOUNDARY IN

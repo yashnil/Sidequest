@@ -183,12 +183,27 @@ export function fixtureWorldsFor(query: string): readonly string[] {
  * the mix a live compilation actually produces and the one the UI has to read
  * well under.
  */
-const FIXTURE_RESEARCH = { bookingRequired: true, officialSourceCoverage: 0.6 } as const;
+const FIXTURE_RESEARCH_BASE = { bookingRequired: true, officialSourceCoverage: 0.6 } as const;
+
+/**
+ * The fixture funnel's documents are read "five days ago" by the real clock.
+ *
+ * The browser suite compiles against the real clock, and the synthetic research
+ * used to stamp a fixed retrieval date (2026-08-05). Fixed evidence ages: once
+ * it passed `hours.weekly`'s ninety-day shelf life every sourced calendar went
+ * stale, the synthetic world stopped carrying its booking requirements, and
+ * "a booking requirement is visible before the traveller commits" failed for a
+ * reason that had nothing to do with the board. Read per compilation, so a
+ * long-running test server does not age either.
+ */
+function fixtureResearch() {
+  return { ...FIXTURE_RESEARCH_BASE, retrievedAt: new Date(Date.now() - 5 * 86_400_000).toISOString() };
+}
 
 function fixtureProviders(): CompilerProviders {
   // Every non-resolver provider comes from the first world a query names, so a
   // compilation in a browser test produces a real region with real coverage.
-  const base = withOpenLicences(packBackedProviders(SYNTHETIC_WORLDS.transit_city!, FIXTURE_RESEARCH));
+  const base = withOpenLicences(packBackedProviders(SYNTHETIC_WORLDS.transit_city!, fixtureResearch()));
 
   return {
     ...base,
@@ -271,7 +286,7 @@ export function fixtureProvidersForCandidate(candidateId: string): CompilerProvi
     Object.values(SYNTHETIC_WORLDS).find((spec) => spec.id === candidateId) ??
     SYNTHETIC_WORLDS.transit_city!;
   return withOpenLicences({
-    ...packBackedProviders(world, FIXTURE_RESEARCH),
+    ...packBackedProviders(world, fixtureResearch()),
     resolver: fixtureProviders().resolver,
   });
 }

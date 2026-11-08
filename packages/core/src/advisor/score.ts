@@ -41,6 +41,7 @@ export interface AdvisorExclusion {
     | 'too_demanding'
     | 'mobility'
     | 'needs_a_car'
+    | 'over_budget'
     | 'traveller_avoided'
     | 'set_aside'
     | 'nothing_you_asked_for';
@@ -143,17 +144,71 @@ function experienceMeasure(destination: CatalogDestination, profile: AdvisorProf
   /* A ramp, not a cliff: one catalog point either side of a threshold must not swing half the score. */
   const breadth = profile.interests.reduce((sum, interest, index) => sum + interest.weight * clamp01((fit[index]!.value - 0.4) / 0.3), 0) / totalWeight;
   const strong = fit.filter((entry) => entry.value >= 0.6).length;
+  /* What they refused counts against a place built around it ("no cities" and a city break), softly: a refusal is a dislike, not a rule. */
+  const refusedValue = Math.max(0, ...profile.refused.map((interest) => interestValue(destination, interest, months)));
+  const refusal = refusedValue >= 0.5 ? 1 - 0.4 * refusedValue : 1;
   return {
-    measure: measured(0.6 * mean + 0.4 * breadth, `strong on ${strong} of the ${fit.length} things you asked for`),
+    measure: measured((0.6 * mean + 0.4 * breadth) * refusal, `strong on ${strong} of the ${fit.length} things you asked for${refusal < 1 ? ', but built around something you would rather avoid' : ''}`),
     fit,
   };
 }
 
+/** A valley high at or below this (°C) means the mountains above it are under snow. */
+const SNOWBOUND_HIGH_C = 11;
+
+/**
+ * How good one month is **for this traveller**, 0–3.
+ *
+ * The catalog's `season` is one curve per destination, and for a ski region it
+ * peaks in winter because of the skiing — Tyrol, the Dolomites and Rila all read
+ * 2–3 in March. For somebody who asked for mountains and hiking and said nothing
+ * about snow, a snowbound month is not a good month: the trails are closed and
+ * the huts shut. So a snow destination in a cold month is capped at "possible"
+ * unless the traveller wants winter.
+ */
+export function seasonLevelFor(destination: CatalogDestination, month: number, profile: AdvisorProfile): number {
+  const level = destination.season[month - 1]!;
+  const snowRegion = (destination.experiences.winter_snow ?? 0) >= 2;
+  const high = destination.highC[month - 1]!;
+  const snowbound = high <= SNOWBOUND_HIGH_C;
+  const wantsSnow = (profile.wants.winter_snow ?? 0) > 0;
+  if (wantsSnow) return level;
+  /* "Hiking but no snow" is a refusal: a snowbound month in snow country is out, and a frozen month anywhere is a poor one. */
+  if (profile.avoidSnow) {
+    if (snowRegion && snowbound) return 0;
+    if (high <= FROZEN_HIGH_C + 2) return Math.min(level, 1);
+  }
+  if (snowRegion && snowbound) return Math.min(level, 1);
+  /*
+   * A frozen month is a winter month even where the catalog does not rate the
+   * skiing — the Arctic coast in March is aurora season, not hiking season. For
+   * somebody who came to walk, it is "possible" at best.
+   */
+  if (high <= FROZEN_HIGH_C && onFootShare(profile) >= 0.3) return Math.min(level, 1);
+  return level;
+}
+
+/** A daytime high at or below this (°C) is a frozen month: trails under snow or ice. */
+const FROZEN_HIGH_C = 4;
+
+/** How much of what the traveller wants is done on foot outdoors. */
+function onFootShare(profile: AdvisorProfile): number {
+  const wants = profile.wants;
+  return (wants.day_hiking ?? 0) + (wants.multi_day_trekking ?? 0) + (wants.high_mountains ?? 0);
+}
+
+const SEASON_VALUE = [0, 0.2, 0.7, 1];
+
 function seasonMeasure(destination: CatalogDestination, profile: AdvisorProfile): { measure: FactorMeasure; best: number[]; exclusion: AdvisorExclusion | null } {
   const months = windowOf(profile);
-  const ranked = [...months].sort((a, b) => destination.season[b - 1]! - destination.season[a - 1]! || a - b);
-  const values = months.map((month) => destination.season[month - 1]! / 3);
-  const best = ranked.filter((month) => destination.season[month - 1]! >= 2);
+  const level = (month: number) => seasonLevelFor(destination, month, profile);
+  const ranked = [...months].sort((a, b) => level(b) - level(a) || a - b);
+  /*
+   * Not linear: "possible" (1) is a month you would not choose — trails under
+   * snow, the rains, the cold — so it is worth far less than a third of a good one.
+   */
+  const values = months.map((month) => SEASON_VALUE[level(month)] ?? 0);
+  const best = ranked.filter((month) => level(month) >= 2);
   if (!profile.months) {
     return { measure: measured(Math.max(...values), 'you left the timing open, so we used its best months'), best, exclusion: null };
   }
@@ -165,7 +220,7 @@ function seasonMeasure(destination: CatalogDestination, profile: AdvisorProfile)
       exclusion: { code: 'out_of_season', message: `Not a good time: ${destination.name} is off-season in ${months.map(monthWord).join(', ')}.` },
     };
   }
-  const goodCount = values.filter((v) => v >= 2 / 3).length;
+  const goodCount = values.filter((v) => v >= SEASON_VALUE[2]!).length;
   return {
     measure: measured(value, goodCount === months.length ? 'in season for your whole window' : `good in ${goodCount} of your ${months.length} months`),
     best,
@@ -195,7 +250,17 @@ function durationMeasure(destination: CatalogDestination, profile: AdvisorProfil
   }
   if (max >= d.min && min <= d.max) return { measure: measured(1, `${d.min}–${d.max} nights suits it`), exclusion: null };
   if (max < d.min) return { measure: measured(1 - (d.min - max) / d.min, `ideally ${d.min}+ nights`), exclusion: null };
-  return { measure: measured(1 - 0.75 * Math.min(1, (min - d.max) / d.max), `more time than it needs — pair it with somewhere nearby`), exclusion: null };
+  return { measure: measured(1 - Math.min(1, (min - d.max) / d.max), `more time than it needs — pair it with somewhere nearby`), exclusion: null };
+}
+
+/**
+ * A tight budget is a limit, not a taste: somebody who said "budget-conscious"
+ * or "not too expensive" is not offered a place two cost levels above it. A
+ * comfortable or luxury budget only ever bends.
+ */
+function budgetExclusion(destination: CatalogDestination, profile: AdvisorProfile): AdvisorExclusion | null {
+  if (profile.budget === null || profile.budget > 2 || destination.cost - profile.budget < 2) return null;
+  return { code: 'over_budget', message: `${destination.name} is well over the budget you gave.` };
 }
 
 function budgetMeasure(destination: CatalogDestination, profile: AdvisorProfile): FactorMeasure {
@@ -207,7 +272,8 @@ function budgetMeasure(destination: CatalogDestination, profile: AdvisorProfile)
     value = over <= 0 ? 1 : over === 1 ? 0.55 : over === 2 ? 0.15 : 0;
     notes.push(over <= 0 ? 'within your budget' : over === 1 ? 'a stretch on your budget' : 'well over your budget');
   }
-  if (profile.lodging === 'luxury' && !destination.lodging.luxury) {
+  /* Somebody who asked for luxury wants the stays to match, not merely to be inside a budget nothing could exceed. */
+  if ((profile.lodging === 'luxury' || profile.budget === 4) && !destination.lodging.luxury) {
     value *= 0.6;
     notes.push('few high-end stays');
   }
@@ -395,12 +461,17 @@ export function scoreDestination(destination: CatalogDestination, profile: Advis
   const goodMonths = season.best.length > 0 ? season.best : months;
   const experience = experienceMeasure(destination, profile, goodMonths);
   add('experience', experience.measure);
-  add('season', season.measure);
+  /*
+   * Somebody who named their dates cannot move them, so when the place is good
+   * is worth more to them than to somebody choosing a month — twice the weight.
+   */
+  add('season', season.measure, profile.months && !profile.monthsFlexible ? 2 : 1);
   add('climate', climateMeasure(destination, profile, goodMonths));
   const duration = durationMeasure(destination, profile);
   exclude(duration.exclusion);
   add('duration', duration.measure);
   add('budget', budgetMeasure(destination, profile));
+  exclude(budgetExclusion(destination, profile));
   const adventure = adventureMeasure(destination, profile);
   exclude(adventure.exclusion);
   add('adventure', adventure.measure);

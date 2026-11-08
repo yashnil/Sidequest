@@ -559,7 +559,9 @@ export function InteractiveMap({
             ref={svgRef}
             viewBox={`0 0 ${width} ${height}`}
             className={cx('relative h-auto w-full touch-none select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
-            role="img"
+            /* A group, not an image: the pins inside are buttons, and an image may not contain controls. */
+            role="group"
+            aria-roledescription="map"
             aria-label={summary}
             tabIndex={0}
             onKeyDown={onKeyDown}

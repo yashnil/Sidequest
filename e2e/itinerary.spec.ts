@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip } from './support/trip';
 import { bandAction, openHubView, useBandAction } from './support/hub';
+import { seasonalTrip, summerTrip } from './support/dates';
 
 /**
  * The slice this proves: a traveller confirms a board, presses Build my trip, and
@@ -8,7 +9,8 @@ import { bandAction, openHubView, useBandAction } from './support/hub';
  * changing their mind.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 async function reachBoard(page: Page, dates = AUGUST) {
   await createTrip(page, 'Mammoth Lakes', { start: dates.start, end: dates.end });
@@ -42,10 +44,10 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
    * number with nothing between them, so its accessible name was the single
    * token "Day 12026-08-12".
    */
-  const firstDate = page.locator('h2 time[datetime="2026-08-12"]');
+  const firstDate = page.locator(`h2 time[datetime="${AUGUST.start}"]`);
   await expect(firstDate).toBeVisible();
   await expect(firstDate).toHaveText(/^\w{3} \d{1,2} \w{3}$/);
-  await expect(page.locator('h2 time[datetime="2026-08-15"]')).toBeVisible();
+  await expect(page.locator(`h2 time[datetime="${AUGUST.end}"]`)).toBeVisible();
   // The separator is real text, so the day number cannot run into the year.
   const firstHeading = await page.getByRole('heading', { name: /^Day 1/ }).textContent();
   expect(firstHeading).toMatch(/^Day 1\s*·/);
@@ -77,9 +79,9 @@ test('board to a real day-by-day itinerary', async ({ page }) => {
   await expect(
     page.locator('#hub-view-days [data-row-kind="travel"]').filter({ hasText: /\d+ km|estimate|timing to confirm|timing not|time to confirm|schedule to confirm|arranged|own pace|frequent service/ }).first(),
   ).toBeVisible();
-  // The day says where its hours went, and free time is a deliberate block.
-  await expect(page.getByText(/(\d+ min|\d+ hr( \d+ min)?) at stops/).first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Free time' }).first()).toBeVisible();
+  // 2026-11 — the day's one line of facts says when it runs and how much of it is spent moving; free time is a deliberate block.
+  await expect(page.locator('#hub-view-days [data-testid^="day-facts-"]').filter({ hasText: /\d\d:\d\d–\d\d:\d\d/ }).first()).toBeVisible();
+  await expect(page.locator('#hub-view-days [data-row-kind="free_time"]').filter({ hasText: 'Free time' }).first()).toBeVisible();
 });
 
 test('the day rail jumps to a day on a page too long to scroll', async ({ page }) => {
@@ -170,7 +172,7 @@ test('a manual pick that cannot be scheduled is shown as a conflict, not dropped
   page,
 }) => {
   // April: Reds Meadow Road is still gated, so Devils Postpile cannot be visited.
-  await reachBoard(page, { start: '2027-04-10', end: '2027-04-13' });
+  await reachBoard(page, seasonalTrip({ month: 4, day: 10, days: 4 }));
 
   /*
    * Located by its own heading, not by text anywhere on the card.

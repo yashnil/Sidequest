@@ -55,10 +55,9 @@ export function planSummaries(intel: TravelIntelligence | null, itinerary: Itine
 }
 
 export function PlanView({ intel, tripId, itinerary, coordinates, booked, honored, conflicts, resolutions, bookSoonCount, legacyStays, transportPlan, foodPlan }: PlanViewProps) {
-  const days = itinerary.days.length;
   return (
     <div className="mx-auto max-w-6xl">
-      <ViewHead sheet={`Sheet P · ${days} ${days === 1 ? 'day' : 'days'} · ${shortDate(itinerary.startDate)} → ${shortDate(itinerary.endDate)}`} title="Plan" lede="Where you sleep, how you get around, what you eat and what it costs." />
+      <ViewHead sheet={`Trip details · ${shortDate(itinerary.startDate)} → ${shortDate(itinerary.endDate)}`} title="Stays, travel &amp; food" lede="Where you sleep, how you get around, what you eat and what it costs." />
       <div className="mt-8">
         <PlanSubnav
           initial="stays"

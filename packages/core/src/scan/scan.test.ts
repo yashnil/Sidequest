@@ -184,6 +184,35 @@ describe('discovery scan — base choice', () => {
   });
 });
 
+describe('discovery scan — a compact region keeps one base', () => {
+  const base = (id: string, nightsHint: number) => ({ id, proposal: { key: id, name: id, locality: id, nightsHint, why: '' } });
+  const place = (id: string) => ({ id, proposal: { tier: 'classic', durationMinutes: 180 } }) as never;
+  /* Three towns on one small island: every sight is closer to one of them, and all are under an hour from the north town. */
+  const island: Record<string, Record<string, number>> = {
+    north: { s1: 15, s2: 25, s3: 45, s4: 50, s5: 55, s6: 50, south: 70, west: 55 },
+    south: { s1: 70, s2: 75, s3: 15, s4: 20, s5: 50, s6: 55, north: 70, west: 45 },
+    west: { s1: 55, s2: 60, s3: 45, s4: 50, s5: 15, s6: 20, north: 55, south: 45 },
+  };
+  const minutes = (a: string, b: string) => (a === b ? 0 : island[a]?.[b] ?? island[b]?.[a] ?? null);
+  const places = ['s1', 's2', 's3', 's4', 's5', 's6'].map(place);
+
+  it('does not move hotels for sights that are an easy day trip from the first base', () => {
+    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3), base('west', 2)], places, minutes, nights: 8, maxBaseChanges: 3 });
+    expect(choice.kept.map((k) => k.id)).toEqual(['north']);
+    expect(choice.kept[0]!.nights).toBe(8);
+    expect(choice.leftOut.map((l) => l.reason)).toEqual(expect.arrayContaining([expect.stringMatching(/easy day trip/)]));
+  });
+
+  it('still moves when half a day of sights is genuinely far', () => {
+    const far = (a: string, b: string) => {
+      const m = minutes(a, b);
+      return m !== null && a !== b && ((a === 'north' && (b === 's3' || b === 's4')) || (b === 'north' && (a === 's3' || a === 's4'))) ? 150 : m;
+    };
+    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3), base('west', 2)], places, minutes: far, nights: 8, maxBaseChanges: 3 });
+    expect(choice.kept.map((k) => k.id).sort()).toEqual(['north', 'south']);
+  });
+});
+
 describe('discovery scan — car-free geography', () => {
   it('times a long car-free base transfer as public transport, never as a walk', () => {
     const normalized = normalizeScanProposal(rawProposal());

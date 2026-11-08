@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip, compileRegion } from './support/trip';
 import { bandAction, openHubView, openPrepareNotes, openPrepareReference } from './support/hub';
+import { summerTrip } from './support/dates';
 
 /**
  * THE CANONICAL GENERATION PATH, PRESSED FROM THE REAL BUTTONS.
@@ -15,7 +16,8 @@ import { bandAction, openHubView, openPrepareNotes, openPrepareReference } from 
  * a reconciled itinerary with its package, and renders it.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 async function reachMammothBoard(page: Page) {
   await createTrip(page, 'Mammoth Lakes', AUGUST);

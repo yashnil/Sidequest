@@ -29,6 +29,7 @@ import { buildPreflight } from '@/lib/planning/build-preflight';
 import { callerKey } from '@/lib/net/caller';
 import { listBookedItems } from '@/lib/db/intelligence-repository';
 import { regenerationCopy, regenerationPreview } from './regenerate-summary';
+import { planningUpgradeFor } from '@/lib/trips/planning-upgrade';
 
 export const dynamic = 'force-dynamic';
 
@@ -173,9 +174,11 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       /* V9 — the band says the trip is kept on an account only when it is; the shared copy never gets this prop. */
       savedToAccount={Boolean(trip.userId)}
       destinationName={trip.basics.destinationInput}
+      party={{ adults: trip.basics.adults, children: trip.basics.children }}
       boardAvailable={boardAvailable}
       lockedPlaceIds={locks.map((lock) => lock.placeId)}
       regeneration={regeneration}
+      planningUpgrade={planningUpgradeFor(id)}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a

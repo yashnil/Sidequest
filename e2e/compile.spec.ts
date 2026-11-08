@@ -12,6 +12,7 @@ import {
   completeQuestionnaire,
   createTrip as makeTrip,
 } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * The open-world journey, end to end, entirely offline.
@@ -25,7 +26,8 @@ import {
  * synthetic test worlds; the live path never reaches them.
  */
 
-const DATES = { start: '2026-08-12', end: '2026-08-16' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const DATES = summerTrip(5);
 
 /** The five setup screens, then the trip id from the URL the flow landed on. */
 async function createTrip(page: Page, destination: string): Promise<string> {

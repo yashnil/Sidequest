@@ -309,6 +309,7 @@ const EXCLUSION_RELAXATION: Record<AdvisorExclusion['code'], string> = {
   too_demanding: 'allowing a few harder days',
   mobility: 'looking at easier-access places',
   needs_a_car: 'being open to renting a car',
+  over_budget: 'stretching the budget a little',
   traveller_avoided: 'reconsidering what you ruled out',
   set_aside: 'bringing back places you set aside',
   nothing_you_asked_for: 'broadening what you want to do',

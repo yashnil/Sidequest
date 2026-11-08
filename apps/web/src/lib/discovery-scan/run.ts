@@ -42,6 +42,8 @@ import { boardFor, foodProviderChoice, resolveTripRegion } from '../region';
 import { seedPlannerAutoPicks } from '../planning/seed-autopicks';
 import { SCAN_INSTRUCTION, SCAN_JSON_TAG, SCAN_PROMPT_VERSION, buildScanSupplementTask, buildScanTask, buildScanUntrusted, scanCandidateTarget, scanProposalWireSchema } from './prompt';
 import { fixturePlacement, placeScanProposal } from './placement';
+import { linkWikidataIds } from '../providers/wikidata-link';
+import { providerUserAgent } from '../net/user-agent';
 import { fixtureScanProposal } from './fixture';
 import { fixtureScanFood, groundScanFood, type ScanFoodGrounding } from './food';
 import { startAutoBuildAfterScan } from './auto-build';
@@ -351,7 +353,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       console.warn(`Discovery scan for ${tripId}: the proposal model is unavailable (${fallback.cause}); proposing from open data.`);
       const deps = fixtureScan() ? fixtureOpenDataDeps(envelope.name) : liveOpenDataDeps();
       const open = await proposeFromOpenData(
-        { envelope: { name: envelope.name, center: envelope.center, ...(envelope.scale ? { scale: envelope.scale } : {}) }, days, priorities, carAvailable: canonical.movement.carAvailable, reachKm: reach, countries: conceptCountries, parts: (concept?.parts ?? []).map((part) => ({ label: part.label, center: part.center })) },
+        { envelope: { name: envelope.name, center: envelope.center, ...(envelope.scale ? { scale: envelope.scale } : {}) }, days, priorities, carAvailable: canonical.movement.carAvailable, reachKm: reach, countries: conceptCountries, parts: (concept?.parts ?? []).map((part) => ({ label: part.label, center: part.center })), ...(concept?.type === 'island' && (concept.parts ?? []).length < 2 && (concept.travelExtent?.bounds ?? (concept.extent?.source === 'published' ? concept.extent.bounds : undefined)) ? { island: (concept.travelExtent?.bounds ?? concept.extent!.bounds) } : {}) },
         deps,
       );
       if (!open.ok) return fail(fallback.cause, `${fallback.detail} | open-data fallback failed: ${open.reason} (${open.detail})`);
@@ -496,6 +498,13 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     markScanStage(tripId, scanId, 'timing', new Date());
     stageStartedAt.timing = Date.now();
     const mode: 'car' | 'foot' = canonical.movement.carAvailable === false ? 'foot' : 'car';
+    /*
+     * Photographs need identities. A stop a places provider or geocoder placed
+     * rarely carries a Wikidata item, and imagery is looked up by one, so a
+     * model-proposed board used to have almost no photographs. One bounded
+     * query, run while the matrix is measured; a failure is simply no links.
+     */
+    const linking = fixtureScan() || openData ? Promise.resolve(new Map<string, string>()) : linkScanIdentities(proposal, placement.positions);
     const timed = fixtureScan()
       ? { matrix: estimatedScanMatrix(plan.points, mode), source: 'distance estimates', measuredPairs: 0, totalPairs: plan.points.length * (plan.points.length - 1) }
       : await measureMatrix(plan.points, mode, () => false);
@@ -503,6 +512,15 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
 
     // --- 3b. somewhere to eat (open map data; never fails the scan) -------------------
     const regionId = `scan-${tripId.slice(0, 8)}-${scanId}`;
+    const linked = await linking;
+    if (linked.size > 0) {
+      const positions = new Map(placement.positions);
+      for (const [key, wikidataId] of linked) {
+        const position = positions.get(key);
+        if (position && !position.wikidataId) positions.set(key, { ...position, wikidataId });
+      }
+      placement = { ...placement, positions };
+    }
     const food = await scanFoodFor({ regionId, destinationName: envelope.name, points: plan.points, proposal, envelope: { center: envelope.center, countryCode: envelope.countryCode ?? null, countryName: envelope.countryName ?? null }, reach });
 
     // --- 4. assemble, validate, adopt ------------------------------------------------
@@ -699,4 +717,19 @@ export function stageTimings(started: number, at: Partial<Record<'proposing' | '
     out[`${stage}Ms`] = Math.max(0, next - begin);
   });
   return out;
+}
+
+/** Wikidata items for placed stops that arrived without one, by name and the item's own coordinate (`providers/wikidata-link.ts`). */
+async function linkScanIdentities(proposal: { candidates: readonly { key: string; name: string }[] }, positions: ReadonlyMap<string, ResolvedPosition | null>): Promise<Map<string, string>> {
+  const subjects = proposal.candidates.flatMap((candidate) => {
+    const position = positions.get(candidate.key);
+    return position && !position.wikidataId && !position.approximate ? [{ key: candidate.key, name: candidate.name, coordinates: position.coordinates }] : [];
+  });
+  if (subjects.length === 0) return new Map();
+  try {
+    return await linkWikidataIds(subjects, { userAgent: providerUserAgent() });
+  } catch (error) {
+    console.warn('Discovery scan: Wikidata identities unavailable', error instanceof Error ? error.message : error);
+    return new Map();
+  }
 }

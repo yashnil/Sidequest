@@ -8,6 +8,7 @@ import type {
   PlaceCategory,
 } from '@sidequest/core';
 import { PLATE_HUE, cx } from './ui';
+import { commonsSrcSet } from './commons-thumbnail';
 
 /**
  * A PHOTOGRAPH, OR THE THING THAT IS THERE INSTEAD OF ONE.
@@ -214,6 +215,14 @@ export function DestinationImage({
   const [liveFailed, setLiveFailed] = useState(false);
   const loadable = image !== null && image.thumbnailUrl !== failedUrl;
   const live = !image && livePhoto && !liveFailed ? livePhoto : null;
+  /*
+   * Smaller standard Commons widths for an uncropped frame, chosen by the
+   * browser from the frame's own laid-out width (`sizes="auto"`, which needs
+   * `loading="lazy"`; a browser without it reads `100vw`, i.e. the stored
+   * 960 px file as before). Not for a cropped frame: `object-cover` can need
+   * more source pixels than the frame is wide. See `commons-thumbnail.ts`.
+   */
+  const srcSet = image && !crop ? commonsSrcSet(image.thumbnailUrl) : null;
 
   return (
     <figure className={cx('m-0', className)}>
@@ -263,6 +272,7 @@ export function DestinationImage({
         ) : null}
         {image && loadable ? (
           <img
+            {...(srcSet ? { srcSet, sizes: 'auto, 100vw' } : {})}
             src={image.thumbnailUrl}
             alt=""
             width={image.width}
@@ -342,7 +352,7 @@ export function ImageCredit({
 }) {
   return (
     /* One quiet line — "Photo · who · licence · creator": the attribution stays complete and linked, it just stops shouting with three dotted underlines. */
-    <Tag className={cx('mt-1.5 type-meta opacity-80 [overflow-wrap:anywhere]', className)}>
+    <Tag className={cx('mt-1.5 type-meta text-ink-faint [overflow-wrap:anywhere]', className)}>
       <span aria-hidden="true">Photo · </span>
       <a
         href={image.filePageUrl}
@@ -350,7 +360,9 @@ export function ImageCredit({
         rel="noopener noreferrer"
         className="underline-offset-2 hover:text-ink-muted hover:underline"
       >
-        {image.attributionText}
+        {compactAttribution(image.attributionText)}
+        {/* The short form drops the repository's name from view; the link still says where it goes. */}
+        {/Wikimedia Commons/i.test(image.attributionText) && !/Wikimedia Commons/i.test(compactAttribution(image.attributionText)) ? <span className="sr-only">, on Wikimedia Commons</span> : null}
       </a>
       {image.licenceUrl ? (
         <>
@@ -365,21 +377,26 @@ export function ImageCredit({
           </a>
         </>
       ) : null}
-      {image.creatorUrl ? (
-        <>
-          {' · '}
-          <a
-            href={image.creatorUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline-offset-2 hover:text-ink-muted hover:underline"
-          >
-            creator
-          </a>
-        </>
-      ) : null}
     </Tag>
   );
+}
+
+/**
+ * 2026-11 — the same attribution, in the words a credit line uses: licence
+ * names in their standard short form ("CC BY-SA 3.0"), and without the
+ * repository's name, which the link itself goes to. Three lines of credit under
+ * a 160-pixel photo became one. The creator is named and the licence linked, so
+ * the attribution stays complete.
+ */
+export function compactAttribution(text: string): string {
+  return text
+    .replace(/Creative Commons Attribution-ShareAlike\s*/gi, 'CC BY-SA ')
+    .replace(/Creative Commons Attribution\s*/gi, 'CC BY ')
+    .replace(/Creative Commons Zero|CC0 1\.0 Universal(?: Public Domain Dedication)?/gi, 'CC0')
+    .replace(/,?\s*(via\s+)?Wikimedia Commons\s*$/i, '')
+    .replace(/\s+,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 /**

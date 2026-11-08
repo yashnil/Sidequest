@@ -28,7 +28,7 @@ export function OverviewCard({ eyebrow, title, children, testId, className, tone
 export function BaseCards({ bases }: { bases: readonly BaseSequenceStop[] }) {
   if (bases.length === 0) return null;
   return (
-    <ol className={cx('grid gap-3', bases.length > 1 && 'sm:grid-cols-2')} aria-label="Where you sleep, in order" data-testid="base-cards">
+    <ol className={cx('grid gap-3', bases.length === 2 && 'sm:grid-cols-2', bases.length >= 3 && 'sm:grid-cols-3')} aria-label="Where you sleep, in order" data-testid="base-cards">
       {bases.map((base, index) => (
         <li key={base.id} className="min-w-0">
           <a href={base.firstDay ? `#day-${base.firstDay}` : '#days'} className="card lift pressable flex min-h-[4.5rem] items-center gap-4 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine" data-testid="base-card">
@@ -36,7 +36,7 @@ export function BaseCards({ bases }: { bases: readonly BaseSequenceStop[] }) {
               {index + 1}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate font-display text-xl leading-tight text-ink">{base.name}</span>
+              <span className="block truncate font-display text-lg leading-tight text-ink">{base.name}</span>
               {base.insertedBySidequest ? <span className="mt-0.5 block type-meta">Added for your driving limit</span> : null}
             </span>
             <span className="shrink-0 text-right">

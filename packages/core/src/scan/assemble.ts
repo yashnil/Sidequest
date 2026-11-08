@@ -47,7 +47,7 @@ export interface ResolvedPosition {
   method: 'places' | 'geocoder' | 'locality';
   provider: string;
   providerRef?: string;
-  /** The Wikidata item the placing source named for this exact place, when it named one. Imagery reads it; nothing invents it from a name. */
+  /** The Wikidata item for this exact place: named by the placing source, or found by name and accepted only because the item's own coordinate is beside this one (`wikidata-link.ts`). Imagery reads it; a name alone never makes it. */
   wikidataId?: string;
   /** True when the point stands for the locality rather than the thing itself. */
   approximate: boolean;
@@ -274,6 +274,8 @@ const DAY_MINUTES_PER_BASE_NIGHT = 360;
 const CAR_FREE_WALK_KM = 1.6;
 /** Half a day of things to do, the least that justifies packing up and moving. */
 const MIN_BASE_CONTENT_MINUTES = 180;
+/** One way, in the trip's mode: beyond this a day trip costs enough of the day that sleeping nearer is worth a move. */
+const DAY_TRIP_REACH_MINUTES = 60;
 
 /**
  * Which bases, in what order, for how many nights. Deterministic, read off the
@@ -328,8 +330,35 @@ export function chooseScanBases(input: {
     if (id) content.set(id, (content.get(id) ?? 0) + place.proposal.durationMinutes);
   }
   const ranked = [...bases].sort((a, b) => (value.get(b.id) ?? 0) - (value.get(a.id) ?? 0) || bases.indexOf(a) - bases.indexOf(b));
-  const earns = (id: string, rank: number) => rank === 0 || places.length === 0 || (content.get(id) ?? 0) >= MIN_BASE_CONTENT_MINUTES;
-  const keptIds = new Set(ranked.filter((b, rank) => rank < cap && earns(b.id, rank)).map((b) => b.id));
+  /*
+   * Being *closer* to another base is not enough to move for. On a compact
+   * island every sight is closer to some other town while still an easy drive
+   * from the first base — which is how one small island got three hotels. A
+   * further base earns its place only with half a day of things that are beyond
+   * a comfortable day trip from every base already kept; an unmeasured leg is
+   * never evidence that a place is far.
+   */
+  const keptIds = new Set<string>();
+  const unearned = new Map<string, 'near' | 'reach'>();
+  for (const [rank, base] of ranked.entries()) {
+    if (keptIds.size >= cap) break;
+    if (rank === 0 || places.length === 0) {
+      keptIds.add(base.id);
+      continue;
+    }
+    if ((content.get(base.id) ?? 0) < MIN_BASE_CONTENT_MINUTES) {
+      unearned.set(base.id, 'near');
+      continue;
+    }
+    let beyondReach = 0;
+    for (const place of places) {
+      if (nearestBase.get(place.id) !== base.id) continue;
+      const fromKept = [...keptIds].map((id) => minutes(id, place.id)).filter((m): m is number => m !== null);
+      if (fromKept.length > 0 && Math.min(...fromKept) > DAY_TRIP_REACH_MINUTES) beyondReach += place.proposal.durationMinutes;
+    }
+    if (beyondReach >= MIN_BASE_CONTENT_MINUTES) keptIds.add(base.id);
+    else unearned.set(base.id, 'reach');
+  }
   const leftOut = ranked
     .filter((b) => !keptIds.has(b.id))
     .map((b) => ({
@@ -337,9 +366,11 @@ export function chooseScanBases(input: {
       reason:
         input.maxBaseChanges === 0
           ? 'You asked to keep to one place to sleep.'
-          : (content.get(b.id) ?? 0) < MIN_BASE_CONTENT_MINUTES && places.length > 0
+          : unearned.get(b.id) === 'near'
             ? 'Too little near it that is not already closer to another base.'
-            : 'Fewer nights than it would take to make another move worthwhile.',
+            : unearned.get(b.id) === 'reach'
+              ? 'Everything near it is an easy day trip from where you already stay, so moving hotels would cost more time than it saves.'
+              : 'Fewer nights than it would take to make another move worthwhile.',
     }));
   // Candidates of a dropped base move to the nearest kept base.
   for (const place of places) {

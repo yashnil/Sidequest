@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, openBoardBackstage, completeQuestionnaire } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * A PAGE RENDER STARTS NO EXTERNAL WORK.
@@ -22,7 +23,8 @@ import { createTrip, openBoardBackstage, completeQuestionnaire } from './support
  * the defect survived as long as it did.
  */
 
-const AUGUST_TRIP = { start: '2026-08-12', end: '2026-08-16' };
+/** A summer trip ahead of the clock (see support/dates.ts). */
+const AUGUST_TRIP = summerTrip(5);
 
 /**
  * Answer whatever this destination's questionnaire asks, and walk to the board.

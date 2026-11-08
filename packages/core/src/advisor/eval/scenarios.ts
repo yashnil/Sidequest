@@ -1,4 +1,4 @@
-import type { CatalogDestination, WorldRegion } from '../catalog/schema';
+import { WORLD_REGIONS, type CatalogDestination, type WorldRegion } from '../catalog/schema';
 import type { FocusKey } from '../answers';
 import type { QuestionId } from '../questions';
 import { REGION_GROUPS } from '../questions';
@@ -59,6 +59,7 @@ export type Check =
 const EUROPE = REGION_GROUPS.europe!;
 const ASIA = REGION_GROUPS.asia!;
 const AMERICAS = REGION_GROUPS.americas!;
+const WORLD_REGIONS_ALL: WorldRegion[] = [...WORLD_REGIONS];
 
 const ORIGINAL =
   "Find me somewhere outdoors for the summer. I love hiking, wildlife, mountains, lakes, coast and swimming. I'm flexible on duration.";
@@ -428,6 +429,102 @@ export const SCENARIOS: readonly Scenario[] = [
     persona: {},
     alreadyAnswered: ['when', 'focus', 'reach'],
     checks: [{ kind: 'in_regions', regions: ['north_america_west', 'north_america_east', 'north_america_north'] }],
+  },
+  /*
+   * Negations, amounts and phrasings a first-time traveller actually types
+   * (audit 2026-11). Each one was misread before: "no snow" became a ski trip,
+   * "not too strenuous" became rugged, "I don't like driving" became a road trip.
+   */
+  {
+    id: 'hiking-no-snow-march',
+    title: 'Mountain hiking in March, but no snow',
+    text: 'I want to go hiking in the mountains in March but I don’t want snow.',
+    persona: {},
+    alreadyAnswered: ['when', 'focus'],
+    checks: [
+      { kind: 'warmth', months: [3], min: 12 },
+      { kind: 'in_season', months: [3] },
+      { kind: 'primaries_offer', experiences: ['day_hiking', 'multi_day_trekking'], label: 'hiking' },
+    ],
+  },
+  {
+    id: 'kids-not-strenuous',
+    title: 'With two kids in April for a week, nothing too strenuous',
+    text: 'With our two kids aged 5 and 8 in April for a week. Lakes and gentle scenery, nothing too strenuous.',
+    persona: {},
+    alreadyAnswered: ['when', 'length', 'party', 'adventure', 'focus'],
+    checks: [
+      { kind: 'family', min: 2 },
+      { kind: 'max_challenge_easiest', level: 1 },
+      { kind: 'in_season', months: [4] },
+    ],
+  },
+  {
+    id: 'dislikes-driving',
+    title: 'Doesn’t like driving: culture, food and hiking in May',
+    text: 'I don’t like driving. Culture, food and some hiking in May.',
+    persona: {},
+    alreadyAnswered: ['when', 'getting_around', 'focus'],
+    checks: [{ kind: 'no_car' }, { kind: 'in_season', months: [5] }],
+  },
+  {
+    id: 'stated-amount',
+    title: 'Under $1,000 for ten days of beaches in February',
+    text: 'Under $1,000 for 10 days of beaches in February.',
+    persona: {},
+    alreadyAnswered: ['when', 'length', 'budget', 'focus'],
+    checks: [
+      { kind: 'max_cost', cost: 2 },
+      { kind: 'warmth', months: [2], min: 24 },
+      { kind: 'fits_nights', nights: 9 },
+    ],
+  },
+  {
+    id: 'snowboard-friends-cheap',
+    title: 'Snowboarding with a group of friends in January, cheap',
+    text: 'Snowboarding with a group of friends in January, cheap.',
+    persona: {},
+    alreadyAnswered: ['when', 'budget', 'party', 'focus'],
+    checks: [
+      { kind: 'primaries_offer', experiences: ['winter_snow'], label: 'snow' },
+      { kind: 'max_cost', cost: 2 },
+      { kind: 'warmth', months: [1], max: 6 },
+    ],
+  },
+  {
+    id: 'intense-trekking',
+    title: 'Intense hiking every day, multi-day treks, August',
+    text: 'Intense hiking every day and multi-day treks in August.',
+    persona: {},
+    alreadyAnswered: ['when', 'adventure', 'mountain_style', 'focus'],
+    checks: [
+      { kind: 'min_challenge_typical', level: 2 },
+      { kind: 'primaries_offer', experiences: ['multi_day_trekking'], label: 'multi-day trekking' },
+      { kind: 'in_season', months: [8] },
+    ],
+  },
+  {
+    id: 'anywhere-but-europe',
+    title: 'Beaches in March, anywhere but Europe',
+    text: 'Beaches in March, anywhere but Europe.',
+    persona: {},
+    alreadyAnswered: ['when', 'region', 'focus'],
+    checks: [
+      { kind: 'in_regions', regions: WORLD_REGIONS_ALL.filter((region) => !EUROPE.includes(region)) },
+      { kind: 'warmth', months: [3], min: 24 },
+    ],
+  },
+  {
+    id: 'week-or-two-spring',
+    title: 'A week or two in spring, hiking and lakes, not too expensive',
+    text: 'A week or two in spring, hiking and lakes, not too expensive.',
+    persona: {},
+    alreadyAnswered: ['when', 'length', 'budget', 'focus'],
+    checks: [
+      { kind: 'max_cost', cost: 3 },
+      { kind: 'in_season', months: [3, 4, 5] },
+      { kind: 'primaries_offer', experiences: ['day_hiking', 'lakes'], label: 'hiking or lakes' },
+    ],
   },
 ];
 

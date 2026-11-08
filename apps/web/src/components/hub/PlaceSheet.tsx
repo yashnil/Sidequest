@@ -68,6 +68,8 @@ export interface PlaceSheetDetail {
 
 interface SheetState {
   open: (detail: PlaceSheetDetail, image: ReactNode, actions: ReactNode) => void;
+  /** Close without returning focus to the opener — for an action that moves focus somewhere else on purpose. */
+  dismiss: () => void;
 }
 
 const Ctx = createContext<SheetState | null>(null);
@@ -94,7 +96,8 @@ export function PlaceSheetProvider({ children }: { children: ReactNode }) {
     // Back to the control that opened it, so a keyboard reader does not land at the top of the document.
     opener.current?.focus?.({ preventScroll: true });
   }, []);
-  const value = useMemo<SheetState>(() => ({ open }), [open]);
+  const dismiss = useCallback(() => setSheet(null), []);
+  const value = useMemo<SheetState>(() => ({ open, dismiss }), [open, dismiss]);
   return (
     <Ctx.Provider value={value}>
       {children}

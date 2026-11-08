@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * THE TWO BOARD SURFACES THIS PHASE ADDED AND NOTHING DROVE.
@@ -16,7 +17,8 @@ import { completeQuestionnaire, createTrip } from './support/trip';
  * stable travel times and enough places for a spatial claim to mean something.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 async function reachBoard(page: Page): Promise<void> {
   await createTrip(page, 'Mammoth Lakes', AUGUST);
@@ -69,7 +71,8 @@ test('the board draws its places, and every pin says what it is and how far', as
   const map = page.getByTestId('board-map');
   // A drawing with an accessible name, not a decorative graphic: this is the
   // only summary of the region's shape a screen-reader user gets.
-  const drawing = map.getByRole('img');
+  // A group with the "map" role description: its pins are buttons, which an image may not contain.
+  const drawing = map.locator('svg[aria-roledescription="map"]').first();
   await expect(drawing).toBeVisible();
   const summary = await drawing.getAttribute('aria-label');
   expect(summary, 'the map must describe itself in one sentence').toBeTruthy();

@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { summerTrip } from './dates';
 
 /**
  * The journey helpers, in one place.
@@ -10,7 +11,13 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * through these.
  */
 
-export const DEFAULT_DATES = { start: '2026-08-12', end: '2026-08-16' };
+/**
+ * A five-day summer trip ahead of the clock. Was the literal 2026-08-12…16, which
+ * stopped being a plan and became a memory once August passed. The fixed-clock
+ * specs use `FIXTURE_CLOCK_TRIP` from `./dates` instead, because their server's
+ * "now" is pinned inside that span.
+ */
+export const DEFAULT_DATES = summerTrip(5);
 
 /**
  * WAIT UNTIL THE APP OWNS THE CONTROL, NOT MERELY UNTIL IT IS ON SCREEN.

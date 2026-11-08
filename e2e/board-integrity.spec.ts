@@ -6,6 +6,7 @@ import {
   REGION_READY_HEADING,
   CULTURAL_INTERVIEW,
 } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * WHAT THE BOARD IS, SAID OUT LOUD.
@@ -21,7 +22,8 @@ import {
  * than saying nothing.
  */
 
-const AUGUST = { start: '2026-08-12', end: '2026-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 
 /** The authored fixture, which reaches a board with no provider switched on. */
 async function reachAuthoredBoard(page: Page): Promise<void> {

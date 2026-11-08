@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
+import { createTrip, DEFAULT_DATES, waitForLookup, waitUntilInteractive } from './support/trip';
 import { openHubView, openPrepareReference } from './support/hub';
 
 /** The hub nav that exists at this viewport: the segmented bar on desktop, the bottom bar on phones. */
@@ -30,21 +30,30 @@ async function buildWithDefaults(page: Page): Promise<string> {
 test('a stop can be moved later, a stop of your own added, and a day fixed — without a model call', async ({ page }) => {
   await buildWithDefaults(page);
   await openHubView(page, 'days');
+  // 2026-11 — a stop's controls live behind its one ⋯ menu.
+  const menu = page.locator('#hub-view-days').getByTestId('stop-menu').first();
+  await waitUntilInteractive(menu);
+  await menu.click();
   const controls = page.getByTestId('stop-day-controls').first();
-  await waitUntilInteractive(controls);
+  await expect(controls).toBeVisible();
   await controls.getByRole('button', { name: /Move, re-time or keep/ }).click();
   await page.getByTestId('stop-later').first().click();
   // The moved stop keeps its open controls (rows are keyed by item id) but is no longer first.
   await expect(page.getByRole('status').filter({ hasText: /now comes|already last/ }).first()).toBeVisible({ timeout: 15_000 });
 
-  await page.getByTestId('add-stop-open').first().click();
+  // The stop menu is a popover; close it the way a traveller would before reaching for the day's own controls.
+  await page.keyboard.press('Escape');
+  // 2026-11 — a day's edit controls sit behind "Edit this day".
+  const dayEdit = page.locator('[data-testid^="day-edit-"]').filter({ has: page.getByTestId('add-stop-open') }).first();
+  await dayEdit.locator('summary').click();
+  await dayEdit.getByTestId('add-stop-open').click();
   await page.getByTestId('add-stop-title').first().fill('Harbour swim');
   await page.getByTestId('add-stop-submit').first().click();
   await expect(page.getByText('Harbour swim').first()).toBeVisible({ timeout: 15_000 });
   // An added stop is unverified until a rebuild looks it up — never a link to a guess.
   await expect(page.getByText(/You added this yourself/).first()).toBeVisible();
 
-  const fix = page.getByTestId('fix-day').first();
+  const fix = dayEdit.getByTestId('fix-day');
   await fix.click();
   await expect(page.getByTestId('fix-day-status').first()).toContainText(/fits|still|already/, { timeout: 15_000 });
 });
@@ -54,8 +63,8 @@ test('a booking can change status and cost; the Verify section says when to look
   await openHubView(page, 'plan');
   await page.getByTestId('booked-add').first().click();
   await page.getByTestId('booked-title').fill('Hotel by the creek');
-  await page.getByTestId('booked-date').fill('2026-08-12');
-  await page.getByTestId('booked-end-date').fill('2026-08-16');
+  await page.getByTestId('booked-date').fill(DEFAULT_DATES.start);
+  await page.getByTestId('booked-end-date').fill(DEFAULT_DATES.end);
   await page.getByTestId('booked-save').click();
   // EXPERIENCE V2 — bookings are one Plan segment; the saved item lists there.
   await page.getByTestId('plan-tab-bookings').click();
@@ -87,6 +96,9 @@ test('a booking can change status and cost; the Verify section says when to look
 test('verified stops hand off to a map app, measured legs draw as routes or straight lines, and the plan opens offline', async ({ page, context }) => {
   await buildWithDefaults(page);
   await openHubView(page, 'days');
+  const stopMenu = page.locator('#hub-view-days').getByTestId('stop-menu').first();
+  await waitUntilInteractive(stopMenu);
+  await stopMenu.click();
   await expect(page.getByTestId('stop-navigation').first()).toBeVisible();
   const anchor = page.getByTestId('stop-navigation').first().getByRole('link').first();
   await expect(anchor).toHaveAttribute('href', /google\.com\/maps\/search/);

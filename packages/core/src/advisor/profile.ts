@@ -56,6 +56,10 @@ export interface AdvisorProfile {
   avoidCrowds: boolean | null;
   novelty: 'familiar' | 'unusual' | 'open' | null;
   climate: 'warm' | 'mild' | 'cold' | null;
+  /** The traveller refused snow and ice: a snowbound month is out of season for them. */
+  avoidSnow: boolean;
+  /** Interests the traveller refused, as experience mappings. */
+  refused: AdvisorInterest[];
   /** How much warmer (+) or cooler (−) than the stated climate, in refinement steps. */
   warmthShift: number;
   /** Lower-cased names the traveller asked to avoid or has already been to. */
@@ -345,6 +349,8 @@ export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
     avoidCrowds,
     novelty,
     climate,
+    avoidSnow: discovery?.avoidSnow === true && !focus.includes('snow'),
+    refused: (discovery?.refused ?? []).filter((key) => !focus.includes(key)).map((key) => ({ key, weight: 1, mapping: FOCUS_EXPERIENCES[key] })),
     warmthShift,
     avoidText: (answers.avoid ?? '').toLowerCase(),
     visited: (answers.visited ?? []).map((name) => name.toLowerCase()),

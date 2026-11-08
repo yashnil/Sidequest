@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip';
+import { FIXTURE_CLOCK_TRIP } from './support/dates';
 
 /**
  * LIVE WORLD V1 — Today mode, on a fixture clock set inside the trip's dates
@@ -7,7 +8,7 @@ import { createTrip, waitForLookup, waitUntilInteractive } from './support/trip'
  * is under way and reads the persisted plan; nothing is fetched.
  */
 test('Today mode shows now, next, the next leg with its basis, and the day’s stops', async ({ page }) => {
-  const id = await createTrip(page, 'Mammoth Lakes');
+  const id = await createTrip(page, 'Mammoth Lakes', FIXTURE_CLOCK_TRIP);
   if (/\/plan/.test(page.url())) await waitForLookup(page);
   await page.goto(`/trips/${id}/questionnaire`);
   const defaults = page.getByTestId('interview-smart-defaults');

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { preconnect } from 'react-dom';
 import Link from 'next/link';
 import type * as MapLibre from 'maplibre-gl';
 import { MAPLIBRE_MODULE_URL, ensureMaplibreStylesheet } from '../map-vendor';
@@ -49,7 +50,16 @@ import { NIGHT_ATTRIBUTION, nightAtlasStyle } from './night-style';
  * camera reaches a region (`night-style.ts`).
  */
 
-type Phase = 'poster' | 'loading' | 'live';
+/*
+ * 2026-11 — `failed` is its own phase. The designed still (`ExampleStill`) used
+ * to show during *loading* too, so every visit opened on a flat route sketch for
+ * about a second and then swapped to the globe: two different pictures, a cut
+ * instead of an arrival. Now a capable visitor sees the globe's own silhouette
+ * from the first server paint, which the live globe grows out of; the still is
+ * the answer only for a deployment without a basemap or a browser that cannot
+ * draw one.
+ */
+type Phase = 'poster' | 'loading' | 'live' | 'failed';
 
 interface MapHandle {
   flyTo: (o: Record<string, unknown>) => void;
@@ -138,6 +148,19 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
   const container = useRef<HTMLDivElement | null>(null);
   const map = useRef<MapHandle | null>(null);
   const [phase, setPhase] = useState<Phase>('poster');
+  /*
+   * Open the tile connection while the page is still arriving. The map library
+   * itself is NOT preloaded here: a render-time `preloadModule` became a
+   * `<link rel="modulepreload">` in the head, which Chrome fetches at High
+   * priority ahead of every app chunk and alongside the fonts and CSS the
+   * headline (the LCP element) needs. Measured 2026-11 with Lighthouse mobile,
+   * three runs each: simulated FCP 5.1 s with the hint vs 2.1 s without, LCP
+   * 13.4-18.6 s vs 10.5 s. The import below starts on intersection, right
+   * after hydration, which is when the bytes are first useful.
+   */
+  if (enabled) {
+    preconnect('https://tiles.openfreemap.org', { crossOrigin: 'anonymous' });
+  }
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [held, setHeld] = useState(false);
@@ -154,7 +177,11 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
     const element = host.current;
     if (!element) return;
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
-    if (saveData || !supportsWebGL2()) return;
+    if (saveData || !supportsWebGL2()) {
+      /* After this frame, so the still replaces the silhouette without a render cascade. */
+      const declined = window.setTimeout(() => setPhase('failed'), 0);
+      return () => window.clearTimeout(declined);
+    }
     let cancelled = false;
     let started = false;
     let retryTimer = 0;
@@ -169,7 +196,7 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
         if (cancelled) return;
         const delay = RETRY_DELAYS_MS[attempt];
         if (delay === undefined) {
-          setPhase('poster');
+          setPhase('failed');
           return;
         }
         retryTimer = window.setTimeout(() => boot(attempt + 1), delay);
@@ -269,10 +296,12 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
       if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 700 });
       else window.setTimeout(fn, 300);
     };
+    /* The hero is the first screen: start at once rather than waiting for the browser to go idle (that wait was most of the delay). */
+    void idle;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) {
         observer.disconnect();
-        idle(start);
+        start();
       }
     });
     observer.observe(element);
@@ -392,14 +421,27 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
     >
-      {/* The designed still: the example's real towns on the night grid, until (or unless) the globe draws. */}
-      <div aria-hidden="true" className="absolute inset-x-0 top-0 bottom-44 transition-opacity duration-[1200ms] ease-out lg:right-[22rem] lg:bottom-10 lg:left-[40%]" style={{ opacity: phase === 'live' ? 0 : 1 }}>
-        <ExampleStill tour={tour} />
-      </div>
+      {/* The designed still: only where the globe cannot draw (no basemap, no WebGL, or it declined twice). */}
+      {!enabled || phase === 'failed' ? (
+        <div aria-hidden="true" className="absolute inset-x-0 top-0 bottom-44 lg:right-[22rem] lg:bottom-10 lg:left-[40%]">
+          <ExampleStill tour={tour} />
+        </div>
+      ) : null}
+      {/*
+        The globe before it is drawn: its own silhouette at the size the live
+        globe opens at (zoom 1.35 is a sphere about 415 px across), lit from the
+        same side, breathing faintly. The map fades in over it, so the first
+        frame is already the planet.
+      */}
+      {enabled && phase !== 'failed' ? (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center transition-opacity duration-700 ease-out" style={{ opacity: phase === 'live' ? 0 : 1 }} data-testid="globe-silhouette">
+          <div className="globe-silhouette h-[415px] w-[415px] rounded-full" />
+        </div>
+      ) : null}
       <div
         aria-hidden="true"
-        className="absolute inset-0 transition-opacity duration-[1200ms] ease-out"
-        style={{ opacity: phase === 'live' ? 1 : 0 }}
+        className="absolute inset-0 transition-[opacity,transform] duration-700 ease-out"
+        style={{ opacity: phase === 'live' ? 1 : 0, transform: phase === 'live' ? 'scale(1)' : 'scale(0.985)' }}
       >
         <div ref={container} style={{ width: '100%', height: '100%' }} />
       </div>

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { completeQuestionnaire, createTrip } from './support/trip';
+import { summerTrip } from './support/dates';
 
 /**
  * WHAT EACH ROUTE CALLS ITSELF, AND WHAT THE FRONT DOOR SAYS ABOUT YOUR TRIPS.
@@ -27,7 +28,8 @@ import { completeQuestionnaire, createTrip } from './support/trip';
  * and which is why this spec's trip must not sit in a month the calendar has
  * already passed.
  */
-const AUGUST = { start: '2027-08-12', end: '2027-08-15' };
+/** Mid-August, chosen: the Mammoth Lakes fixture's seasonal places are open June to October, and the date stays ahead of the clock. */
+const AUGUST = summerTrip(4);
 const DESTINATION = 'Mammoth Lakes';
 
 /** A trip at the questionnaire, which is as far as most of these need. */

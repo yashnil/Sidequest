@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createTrip, reachScope, REGION_READY_HEADING, requestExploration, waitForLookup } from './support/trip';
+import { createTrip, DEFAULT_DATES, reachScope, REGION_READY_HEADING, requestExploration, waitForLookup } from './support/trip';
 
 /**
  * THE COMPOSER, THE SHELL AND THE PROGRESS SCREEN.
@@ -147,8 +147,8 @@ async function createTripToStep(page: Page, step: 'when' | 'nights' | 'who' | 'f
   await advance();
   if (step === 'when') return;
   await page.getByTestId('timing-exact').click();
-  await page.getByTestId('timing-start').fill('2026-08-12');
-  await page.getByTestId('timing-end').fill('2026-08-16');
+  await page.getByTestId('timing-start').fill(DEFAULT_DATES.start);
+  await page.getByTestId('timing-end').fill(DEFAULT_DATES.end);
   await advance();
   if (step === 'nights' || step === 'who') return;
   await page.getByTestId('party-couple').click();

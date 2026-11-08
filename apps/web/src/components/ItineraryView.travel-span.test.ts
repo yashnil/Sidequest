@@ -91,15 +91,15 @@ describe('what a travel row prints for its own duration', () => {
        * no floored form to look for.
        */
       if (floored < 5) continue;
-      const understated = `${spanText(floored)} ${leg.title}`;
-      expect(TEXT).not.toContain(understated);
+      expect(TEXT).not.toMatch(legPattern(spanText(floored), leg.title));
     }
   });
 
   it('prints the rounded-up duration beside the leg it describes', () => {
     for (const leg of awkwardLegs()) {
       const ceiled = Math.ceil(leg.durationMinutes / 5) * 5;
-      expect(TEXT).toContain(`${spanText(ceiled)} ${leg.title}`);
+      /* 2026-11 — the leg reads "15 min walk · 1 km"; its destination is the stop below it (and said to a screen reader). */
+      expect(TEXT).toMatch(legPattern(spanText(ceiled), leg.title));
     }
   });
 
@@ -143,3 +143,9 @@ describe('what a travel row prints for its own duration', () => {
     }
   }, 30_000);
 });
+
+/** A leg's figure and, within the same row, its destination: "15 min walk · 1 km , Walk to Quarter Market" or "15 min Walk to Quarter Market · …". */
+function legPattern(figure: string, title: string): RegExp {
+  const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${esc(figure)} (?:${esc(title)}|[^,]{0,60}, ${esc(title)})`);
+}

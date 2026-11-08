@@ -162,7 +162,7 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   return (
-    <div className="border-t border-rule px-4 py-3 print:hidden sm:px-5" data-testid="add-stop">
+    <div className={cx('print:hidden', open && 'basis-full rounded-[var(--radius-card)] border border-rule p-3')} data-testid="add-stop">
       {open ? (
         <form
           className="flex flex-wrap items-end gap-2 text-sm"

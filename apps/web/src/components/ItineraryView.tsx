@@ -1,11 +1,11 @@
 import Link from 'next/link';
+import { Fragment } from 'react';
 import { printWithAppendixHref } from './hub/print-links';
 import { planningLineFor } from './hub/planning-line';
 import {
   BOOKING_KIND_LABELS,
   DIETARY_EVIDENCE_COPY,
   DIETARY_NEED_LABELS,
-  FOOD_SERVICE_TYPE_LABELS,
   formatMinuteOfDay,
   ITINERARY_STATUS_COPY,
   MEAL_SLOT_LABELS,
@@ -57,7 +57,6 @@ import { HubShell, type HubViewId } from './hub/HubShell';
 import { DayRail } from './hub/DayRail';
 import { BaseCards, CautionsCard, CONVENIENCE_LABELS, CONVENIENCE_TONE, STRESS_LABELS, STRESS_TONE, TimingCard, TransportCard } from './hub/OverviewCards';
 import { fixNumberArticles, sameSentence } from './hub/article';
-import { DAY_PART_LABEL, groupByDayPart, partsAreMeaningful } from './hub/day-parts';
 import { clock, firstSentence, humanDate, span, timelineClock, travelSpan } from './hub/plan-format';
 import type { MapWorkspaceSheet } from './hub/MapWorkspace';
 import { DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, type DayFocusModel } from './hub/DayFocus';
@@ -76,8 +75,10 @@ import type { BookingImport } from '@/lib/db/execution-repository';
 import { assuranceSummary, dayPartFor, sameIdentity, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { CoverStage } from './hub/CoverStage';
 import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
-import { heroStats } from './hub/hero-stats';
+import { heroStats, travellerTransportLine } from './hub/hero-stats';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
+import { BookingSuggestions } from './hub/BookingSuggestions';
+import { suggestedBookings } from './hub/booking-links';
 import { MapWorkspace } from './hub/MapWorkspace';
 import { PlanView } from './hub/views/PlanView';
 import { BookViewLayout } from './hub/views/BookViewLayout';
@@ -100,6 +101,7 @@ import {
   StopEditMenu,
 } from '@/app/(product)/trips/[id]/itinerary/edit-controls';
 import { ShareControl } from '@/app/(product)/trips/[id]/itinerary/share-controls';
+import { TripRefreshControl, type PlanningUpgrade } from './hub/TripRefreshControl';
 import { isMachineWeatherLabel, travellerVoice } from './plan-language';
 
 /**
@@ -141,13 +143,6 @@ function droppedBlurb(dropped: readonly { reasonCode: string }[]): string {
 }
 
 
-const KIND_STYLE: Record<ItineraryItem['kind'], { rail: string; label: string }> = {
-  activity: { rail: 'bg-pine', label: '' },
-  travel: { rail: 'bg-slate-blue', label: '' },
-  meal: { rail: 'bg-amber', label: 'Meal' },
-  rest: { rail: 'bg-amber', label: 'Rest' },
-  free_time: { rail: 'bg-rule', label: 'Free' },
-};
 
 /**
  * What a food block actually is, said in the row's own eyebrow.
@@ -221,12 +216,14 @@ export function ItineraryView({
   renderedAt,
   baseNames,
   destinationName,
+  party,
   boardAvailable = true,
   timeZone,
   attributions = [],
   coordinates = {},
   lockedPlaceIds = [],
   regeneration,
+  planningUpgrade,
   worthSkipping = [],
   lodgingAreas = [],
   images = {},
@@ -355,6 +352,8 @@ export function ItineraryView({
   baseNames?: DisplayName;
   /** QUALITY V1 — the trip as the traveller named it; the hero uses it when the plan moves between bases. */
   destinationName?: string;
+  /** Who is going, so booking links open with the right party. Owner page only. */
+  party?: { adults: number; children: number };
   /** Whether a Discovery Board exists for this trip; without one the secondary link returns to the interview. */
   boardAvailable?: boolean;
   /**
@@ -386,6 +385,8 @@ export function ItineraryView({
   lockedPlaceIds?: readonly string[];
   /** V1 convergence — what Regenerate keeps and replaces, from `regenerate-summary.ts`. Owner page only. */
   regeneration?: { kept: string; replaced: readonly string[] };
+  /** Owner page only: set when today's planning would give this stored scan fewer bases (`scanBaseUpgrade`). Offers the explicit rebuild. */
+  planningUpgrade?: PlanningUpgrade | null;
   /**
    * Board supply the fit model marked "probably skip", from the same compiled
    * region this plan drew on. Empty when the board holds none, and the
@@ -463,7 +464,6 @@ export function ItineraryView({
   const journey = journeyModel({ itinerary, coordinates, nameOf: (placeId, fallback) => rationale[placeId]?.name ?? fallback, whyOf: (placeId) => rationale[placeId]?.why });
   const journeyPhotos: Record<string, ImageRecord> = {};
   for (const [placeId, image] of Object.entries(images)) if (image.subjectConfidence !== 'weak') journeyPhotos[placeId] = image;
-  const openBookFirst = intelligence ? intelligence.bookings.items.filter((b) => b.priority === 'book_first' && b.status === 'open' && !b.memberIds).length + (intelligence.bookings.items.some((b) => b.memberIds && b.status === 'open') ? 1 : 0) : 0;
   const stopCount = itinerary.days.reduce((sum, day) => sum + day.items.filter((item) => item.kind === 'activity').length, 0);
 
   /*
@@ -541,7 +541,6 @@ export function ItineraryView({
     .slice(0, 3)
     .map((anchor) => {
       const hit = itemsById.get(anchor.id) ?? (anchor.placeId ? [...itemsById.values()].find((entry) => entry.item.placeId === anchor.placeId) : undefined);
-      const why = (anchor.placeId ? rationale[anchor.placeId]?.why : undefined) ?? hit?.item.reason ?? anchor.note ?? '';
       const image = anchor.placeId ? placeFrame(anchor.placeId, (anchor.placeId ? rationale[anchor.placeId]?.name : undefined) ?? anchor.name, images, livePhotos, rationale, printShape(anchor.placeId ? images[anchor.placeId] : undefined), { crop: false, credit: false, backdrop: 'paper' }) : null;
       const stored = anchor.placeId ? images[anchor.placeId] : undefined;
       const credit = stored && stored.subjectConfidence !== 'weak' ? <ImageCredit image={stored} as="span" className="mt-0 inline" /> : anchor.placeId && livePhotos[anchor.placeId] ? <span>Photo &copy; Google</span> : null;
@@ -549,7 +548,7 @@ export function ItineraryView({
         id: anchor.id,
         name: (anchor.placeId ? rationale[anchor.placeId]?.name : undefined) ?? anchor.name,
         dayNumber: hit?.dayNumber ?? anchor.scheduledDayNumber ?? anchor.dayNumber,
-        why: firstSentence(why),
+        why: stopWhy(anchor.placeId ? rationale[anchor.placeId]?.why : undefined, hit?.item.reason ?? anchor.note) ?? '',
         ...(image ? { image } : {}),
         ...(credit ? { credit } : {}),
       };
@@ -568,7 +567,6 @@ export function ItineraryView({
   const visibleActions = nextActions && !tripId ? { ...nextActions, actions: nextActions.actions.filter((action) => !action.nodeId.startsWith('changed:')) } : nextActions;
   /* V9 — the Book badge counts every required need still open; Prepare's counts what Preflight says needs attention. */
   const openRequired = intelligence ? intelligence.bookings.items.filter((b) => b.status === 'open' && !b.memberIds && (b.necessity === 'required' || b.necessity === 'strongly_recommended')).length : 0;
-  const attentionCount = preflight ? preflight.attention.length : openBookFirst;
   /* V9 §17 — a split day as a structure; the booked things on that date name what needs assigning. */
   const bookedOn = (date: string) => booked.filter((b) => b.status === 'booked' && (b.date === date || (b.type === 'lodging' && b.date && b.endDate && b.date <= date && date <= b.endDate))).map((b) => b.title);
 
@@ -616,6 +614,7 @@ export function ItineraryView({
                       return index >= 0 ? { chapterOpening: { ...chapters[index]!, index: index + 1 } } : {};
                     })()}
                     episode={itinerary.package?.episodes?.find((e) => e.dayNumbers.includes(day.dayNumber)) ?? null}
+                    backups={itinerary.package?.backups ?? []}
                     renderedAt={renderedAt}
                     coordinates={coordinates}
                     tripId={tripId}
@@ -666,6 +665,8 @@ export function ItineraryView({
               ) : null}
             </Panel>
           ) : null}
+          {/* Feedback after the plan, where an opinion of it exists — not between the overview and day one. */}
+          {tripId ? <div className="mt-16"><AlphaFeedback tripId={tripId} dayCount={itinerary.days.length} /></div> : null}
         </div>
         <DayFocusMap days={dayFocusModels} tiles={tiles} journey={journey} photos={journeyPhotos} />
       </div>
@@ -709,39 +710,71 @@ export function ItineraryView({
   const transportDecision = decisions.find((d) => d.key === 'transport') ?? null;
   const timingDecision = decisions.find((d) => d.key === 'timing') ?? null;
   const planningLine = planningLineFor(itinerary.package?.planning);
+  /*
+   * 2026-11 — THE TRIP, IN ONE SCREEN, ABOVE ITS DAYS.
+   *
+   * The overview was its own tab and an argument in nine parts: next actions,
+   * thesis, purpose, route reasoning, signature experiences, base cards, the
+   * base sequence again, three decision records and a right column of five
+   * cards — with the bases drawn four times on one page. A traveller opening a
+   * finished trip wants three things before the days: what this trip is,
+   * where they sleep, and what (if anything) needs them. That is what shows.
+   * The reasoning is one press away, folded, and prints open.
+   */
   const overview = (
     <div data-testid="hub-overview">
       <div id="overview" className="scroll-mt-[calc(var(--chrome-height)+4.5rem)]" />
-      {/*
-        V9 §2 — THE NEXT BEST ACTION LEADS THE TRIP.
-        One to three things, ranked deterministically, before the argument for
-        the trip. Then what changed since the plan was written (the freshness
-        banner, owner only — it may call the recheck action once). Then the
-        thesis, the route and the bases.
-      */}
-      {visibleActions ? (
-        <div className="mt-6" id="next-action">
-          <NextActionCard nextActions={visibleActions} moreHref={visibleActions.phase === 'book' ? '#book' : '#prepare'} />
-        </div>
-      ) : null}
       {tripId ? <FreshnessBanner tripId={tripId} observations={observations} volatile={volatile} lastCheckedAt={lastCheckedAt} headline={changedHeadline} now={renderedAt} /> : null}
       {intelligence ? <HubUrgent intel={intelligence} /> : null}
       {today?.active ? <TodaySection today={today} minuteLabel={(minute) => formatMinuteOfDay(minute)} {...(tripId ? { tripId } : {})} /> : null}
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(20rem,5fr)] lg:gap-10">
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(20rem,5fr)] lg:gap-12">
         <div className="min-w-0">
-          <section aria-labelledby="trip-thesis" data-testid="trip-thesis">
-            <p className="eyebrow">Why this trip works</p>
-            <p id="trip-thesis" className="mt-2 max-w-[30ch] font-display text-[clamp(1.625rem,1.3rem+1.1vw,2.375rem)] leading-[1.12] text-ink" data-testid="trip-personality-line">
+          <section aria-labelledby="trip-thesis" data-testid="trip-thesis" className="fade-up">
+            <p className="eyebrow">This trip</p>
+            <p id="trip-thesis" className="mt-2 max-w-[34ch] font-display text-[clamp(1.5rem,1.25rem+0.9vw,2.125rem)] leading-[1.15] text-ink" data-testid="trip-personality-line">
               {headline}
             </p>
-            {/*
-              The purpose only where it says something the headline has not. On a
-              trip whose profile sentence and whose draft purpose are the same
-              sentence, printing both put one paragraph twice under itself.
-            */}
-            {purposeParagraph ? <p className="mt-4 max-w-[62ch] type-body text-ink-muted">{purposeParagraph}</p> : null}
-            {itinerary.package?.routeRationale ? <p className="mt-3 max-w-[62ch] type-body text-ink-muted" data-testid="route-rationale">{itinerary.package.routeRationale}</p> : null}
-            {/* V1 convergence — how the structure was decided, from `package.planning`; nothing on a plan that predates the record. */}
+            {purposeParagraph ? <p className="mt-3 max-w-[62ch] type-body text-ink-muted">{purposeParagraph}</p> : null}
+          </section>
+          {itinerary.package ? (
+            <section className="mt-8 fade-up [--d:80ms]" aria-labelledby="route-overview" data-testid="route-overview">
+              <h2 id="route-overview" className="eyebrow">
+                {baseSequence.length <= 1 ? 'Where you sleep' : `Where you sleep · ${baseSequence.length} stays`}
+              </h2>
+              <div className="mt-3" data-testid="route-bases">
+                <BaseCards bases={baseSequence} />
+              </div>
+            </section>
+          ) : null}
+          {signatureExperiences.length > 0 ? (
+            <div className="mt-10 fade-up [--d:140ms]">
+              <SignatureExperiences experiences={signatureExperiences} />
+            </div>
+          ) : null}
+        </div>
+        <div className="min-w-0 space-y-4">
+          {visibleActions ? (
+            <div id="next-action" className="fade-up [--d:60ms]">
+              <NextActionCard nextActions={visibleActions} moreHref={visibleActions.phase === 'book' ? '#book' : '#prepare'} />
+            </div>
+          ) : null}
+          {overviewModel.markers.length > 0 ? <TripSnapshot itinerary={itinerary} coordinates={coordinates} rationale={rationale} tiles={tiles} /> : null}
+        </div>
+      </div>
+      {/*
+        Why it is shaped this way — the route reasoning, how the structure was
+        decided, the three decision records and the dates, transport and
+        cautions cards. Reference, not the trip; one press away, open on paper.
+      */}
+      <details className="hv-fold mt-10 border-t border-rule pt-3" data-print="open" data-testid="overview-reasoning">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 type-body text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+          <span aria-hidden="true" className="text-ink-faint">+</span>
+          <span className="font-medium text-ink">Why it is shaped this way</span>
+          <span className="type-small max-sm:hidden">the route, the dates, how you get around and what to watch</span>
+        </summary>
+        <div className="mt-4 grid gap-8 pb-4 lg:grid-cols-[minmax(0,7fr)_minmax(20rem,5fr)] lg:gap-12">
+          <div className="min-w-0">
+            {itinerary.package?.routeRationale ? <p className="max-w-[62ch] type-body text-ink-muted" data-testid="route-rationale">{itinerary.package.routeRationale}</p> : null}
             {planningLine ? (
               <div className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="planning-line" data-planning-mode={itinerary.package?.planning?.mode}>
                 <p>{planningLine.summary}</p>
@@ -750,75 +783,29 @@ export function ItineraryView({
                 ))}
               </div>
             ) : null}
-          </section>
-
-          {signatureExperiences.length > 0 ? (
-            <div className="mt-10">
-              <SignatureExperiences experiences={signatureExperiences} />
-            </div>
-          ) : null}
-
-          {itinerary.package ? (
-            <section className="mt-10" aria-labelledby="route-overview" data-testid="route-overview">
-              <p className="eyebrow">Where you sleep</p>
-              <h2 id="route-overview" className="mt-1 type-section text-ink">
-                {baseSequence.length <= 1 ? 'One base for the whole trip' : `${baseSequence.length} bases, in order`}
-              </h2>
-              <div className="mt-4" data-testid="route-bases">
-                <BaseCards bases={baseSequence} />
-              </div>
-              {multiBase ? (
-                <div className="mt-4">
-                  <BaseSequence bases={baseSequence} />
+            {routeDecision || transportDecision || timingDecision ? (
+              <section className="mt-6" aria-labelledby="decisions-heading" id="decisions" data-testid="decisions">
+                <h2 id="decisions-heading" className="eyebrow">The decisions behind the days</h2>
+                <div className="mt-3 grid gap-3">
+                  {routeDecision ? <DecisionCard decision={routeDecision} askable={Boolean(tripId)} /> : null}
+                  {transportDecision ? <DecisionCard decision={transportDecision} askable={Boolean(tripId)} /> : null}
+                  {timingDecision ? <DecisionCard decision={timingDecision} askable={false} /> : null}
                 </div>
-              ) : null}
-            </section>
-          ) : null}
-          {/*
-            V9 §3 — THE DECISIONS THE DAYS HANG OFF, AS RECORDS.
-            The route, how the trip moves and when it happens: each says what
-            was chosen and, behind "Why this?", why, the facts that drove it,
-            the tradeoffs as figures and what else was on the table. The chips
-            are controlled alternatives through Ask Sidequest — owner only,
-            because the shared copy has no Ask.
-          */}
-          {routeDecision || transportDecision || timingDecision ? (
-            <section className="mt-10" aria-labelledby="decisions-heading" id="decisions" data-testid="decisions">
-              <p className="eyebrow">Why it is shaped this way</p>
-              <h2 id="decisions-heading" className="mt-1 type-section text-ink">
-                The decisions behind the days
-              </h2>
-              <div className="mt-4 grid gap-3">
-                {routeDecision ? <DecisionCard decision={routeDecision} askable={Boolean(tripId)} /> : null}
-                {transportDecision ? <DecisionCard decision={transportDecision} askable={Boolean(tripId)} /> : null}
-                {timingDecision ? <DecisionCard decision={timingDecision} askable={false} /> : null}
+              </section>
+            ) : null}
+          </div>
+          <div className="min-w-0 space-y-4">
+            {intelligence ? (
+              <div data-testid="overview-book-first">
+                <BookingProgressLine intel={intelligence} />
               </div>
-            </section>
-          ) : null}
+            ) : null}
+            <TimingCard dateLabel={dateLabel} decidedBy={timingOwner} rationale={itinerary.package?.timingRationale ?? null} seasonLine={seasonLine} />
+            <TransportCard strategy={itinerary.transportStrategy} />
+            {feasibility ? <CautionsCard items={feasibility.items} /> : null}
+          </div>
         </div>
-        <div className="min-w-0 space-y-4">
-          {overviewModel.markers.length > 0 ? <TripSnapshot itinerary={itinerary} coordinates={coordinates} rationale={rationale} tiles={tiles} /> : null}
-          {/*
-            One statement of what is left to arrange, not two. A "Book soon"
-            card listing the same three items sat directly above the booking
-            progress that already names the next one, on the same screen.
-          */}
-          {intelligence ? (
-            <div data-testid="overview-book-first">
-              <BookingProgressLine intel={intelligence} />
-              {bookSoon.length > 0 ? (
-                <a href="#book" className="mt-2 inline-block type-small text-accent-strong underline underline-offset-4">
-                  Everything to arrange
-                </a>
-              ) : null}
-            </div>
-          ) : null}
-          <TimingCard dateLabel={dateLabel} decidedBy={timingOwner} rationale={itinerary.package?.timingRationale ?? null} seasonLine={seasonLine} />
-          <TransportCard strategy={itinerary.transportStrategy} />
-          {feasibility ? <CautionsCard items={feasibility.items} /> : null}
-        </div>
-      </div>
-      {tripId ? <AlphaFeedback tripId={tripId} dayCount={itinerary.days.length} /> : null}
+      </details>
     </div>
   );
 
@@ -898,12 +885,19 @@ export function ItineraryView({
    * shared copy gets it without a trip id and therefore without a control, a
    * reference or an import.
    */
-  const book = <BookViewLayout {...(tripId ? { tripId } : {})} intel={intelligence} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={tripId ? pendingImports : []} />;
+  /* 2026-11 — what to book before you go, with links that carry the dates and party (`hub/booking-links.ts`). */
+  /* Owner only: the links carry the party, and a shared copy carries no party facts (V9.1). */
+  const bookingSuggestions = !tripId ? [] : suggestedBookings({
+    itinerary,
+    intel: intelligence,
+    adults: Math.max(1, party?.adults ?? intelligence?.budget.travellers ?? 2),
+    children: party?.children ?? 0,
+    ...(destinationName ? { regionHint: destinationName } : {}),
+  });
+  const book = <BookViewLayout suggestions={<BookingSuggestions items={bookingSuggestions} />} {...(tripId ? { tripId } : {})} intel={intelligence} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={tripId ? pendingImports : []} />;
 
-  /* V7 §12 — the local operational set-up compiled for this destination: apps, payments, permits, connectivity. */
-  const localSetup = intelligence?.readiness.entries.filter((entry) => entry.kind === 'local_setup') ?? [];
   const prepare = (
-    <PrepareView preflight={preflight} intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} readinessProfile={readinessProfile} checks={checks}>
+    <PrepareView preflight={preflight} intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} readinessProfile={readinessProfile} checks={checks} recheck={recheck}>
       {/*
         V11 §I — WHAT TO DO, THEN WHAT TO KNOW.
 
@@ -926,36 +920,9 @@ export function ItineraryView({
         <summary className="min-h-11 cursor-pointer list-none type-body text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
           <span className="sheet-label w-full text-ink-faint md:w-auto md:min-w-[15rem]">Reference · folded</span>
           <span className="font-display text-xl text-ink">Good to know</span>
-          <span className="type-small">apps and set-up, the fallback for each day, what to re-check, and the evidence behind all of it</span>
+          <span className="type-small">the fallback for each day, what to re-check, and the evidence behind the plan</span>
         </summary>
-      {localSetup.length > 0 ? (
-        <section className="card mt-8 p-5" aria-labelledby="local-setup-heading" data-testid="local-setup">
-          <p className="eyebrow">Apps and set-up</p>
-          <h2 id="local-setup-heading" className="mt-1 type-section text-ink">Set these up before you land</h2>
-          <p className="mt-1.5 text-sm text-ink-muted">What day-to-day life needs where you are going. Reference material compiled by Sidequest with a date on it; confirm at the official source before you rely on it.</p>
-          <ol className="mt-4 divide-y divide-rule">
-            {localSetup.map((entry) => (
-              <li key={entry.title} className="py-3" data-testid="local-setup-item">
-                <p className="font-medium text-ink">
-                  {entry.title}
-                  {entry.tier === 'primary' ? <span className="eyebrow ml-2 rounded-sm bg-clay-soft px-1.5 py-0.5 !text-clay">Essential</span> : null}
-                </p>
-                <p className="mt-0.5 text-sm text-ink-muted">{entry.summary}</p>
-                {entry.action ? <p className="mt-1 text-sm text-ink">{entry.action}</p> : null}
-                {entry.links.length > 0 ? (
-                  <p className="mt-1.5 flex flex-wrap gap-x-3 text-sm">
-                    {entry.links.map((link) => (
-                      <a key={link.url} href={link.url} target="_blank" rel="noreferrer nofollow" className="text-accent underline underline-offset-4">
-                        {link.name}
-                      </a>
-                    ))}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
+      {/* 2026-11 — the apps and set-up moved up into Prepare's "Install and download" checklist, where they can be ticked. */}
       <section className="mt-14" aria-labelledby="backups" data-testid="hub-backups-section">
         <div className="rule-strong pt-5 scroll-mt-[calc(var(--chrome-height)+4.5rem)]" id="backups">
           <h2 className="display-md text-ink">Backups</h2>
@@ -1191,9 +1158,9 @@ export function ItineraryView({
             /* The cover's tiles carry the shape; the line under the title only says where the trip sleeps and the trip's own sentence. */
             multiBase ? (purposeLine ?? undefined) : <>Based in <PlaceName entity={baseEntity} showLocal={false} />{purposeLine ? <> · {purposeLine}</> : null}</>
           ) : multiBase ? (
-            <>{itinerary.transportStrategy.headline}</>
+            <>{travellerTransportLine(itinerary.transportStrategy.headline)}</>
           ) : (
-            <>Based in <PlaceName entity={baseEntity} showLocal={false} /> · {itinerary.transportStrategy.headline}</>
+            <>Based in <PlaceName entity={baseEntity} showLocal={false} /> · {travellerTransportLine(itinerary.transportStrategy.headline)}</>
           )
         }
         route={multiBase ? <BaseSequence bases={baseSequence} variant="atlas" testId="hero-route" /> : undefined}
@@ -1213,8 +1180,8 @@ export function ItineraryView({
             }
           : {})}
         {...(bandFigure && !coverStage ? { figure: bandFigure } : {})}
-        {...(coverStage ? { stage: coverStage, days: itinerary.days.map((day) => ({ dayNumber: day.dayNumber, theme: day.theme, date: day.date, stops: day.items.filter((item) => item.kind === 'activity').length, intensity: day.intensity })) } : {})}
-        {...(verdict?.blurb ? { attention: { heading: verdict.blurb, items: [] } } : {})}
+        {...(coverStage ? { stage: coverStage } : {})}
+        {...(verdict?.blurb && !coverStage ? { attention: { heading: verdict.blurb, items: [] } } : {})}
         status={{ label: verdict?.label ?? status.label, tone: statusTone }}
         actions={
           /*
@@ -1265,6 +1232,7 @@ export function ItineraryView({
                     Change my answers
                   </Link>
                   {itinerary.package ? <RegenerateButton tripId={tripId} {...(regeneration ? { copy: regeneration } : {})} /> : null}
+                  <TripRefreshControl tripId={tripId} upgrade={planningUpgrade ?? null} />
                   <a href={printWithAppendixHref(tripId)} className={buttonClass('ghost', 'sm')} data-testid="print-with-appendix">
                     Print with evidence appendix
                   </a>
@@ -1281,7 +1249,7 @@ export function ItineraryView({
 
       <HubShell
         views={{ overview, days, map: mapView, plan, book, prepare }}
-        badges={{ days: itinerary.days.length, ...(openRequired > 0 ? { book: openRequired } : {}), ...(attentionCount > 0 ? { prepare: attentionCount } : {}) }}
+        badges={{ ...(openRequired > 0 ? { book: openRequired } : {}) }}
         printAppendix={printAppendix}
         initialView={initialView}
         askSlot={Boolean(tripId)}
@@ -1589,7 +1557,7 @@ function TransportPlan({ strategy }: { strategy: TransportStrategy }) {
       <h2 id="transport-plan" className="type-title text-ink">
         Getting around
       </h2>
-      <p className="mt-2 max-w-2xl font-display text-xl leading-snug text-ink">{strategy.headline}</p>
+      <p className="mt-2 max-w-2xl font-display text-xl leading-snug text-ink">{travellerTransportLine(strategy.headline)}</p>
 
       <div className="mt-4 flex flex-wrap gap-1.5">
         <Badge tone="pine">{TRANSPORT_MODE_LABELS[strategy.primaryMode]}</Badge>
@@ -2130,8 +2098,11 @@ function DayCard({
   split = null,
   previousBaseName,
   chapterOpening = null,
+  backups = [],
 }: {
   day: ItineraryDay;
+  /** The plan's own written backups; the day shows the one tied to it, if any. */
+  backups?: readonly { trigger: string; alternative: string; dayNumbers?: number[] }[];
   /** Where the traveller woke up. Absent on day one, where there is no move to describe. */
   previousBaseName?: string;
   /** V11 §E — set only on the day a chapter opens, so the card can introduce it once. */
@@ -2248,7 +2219,6 @@ function DayCard({
   const estimatedDriveMinutes = day.items.reduce((sum, item) => (item.kind === 'travel' && item.travel?.mode === 'drive' && item.travel.provenance === 'estimated' ? sum + (item.travel.minutes ?? 0) : sum), 0);
   const drivingMinutes = day.totals.driveMinutes + estimatedDriveMinutes;
   const travelApprox = day.totals.estimatedMinutes > 0 || day.totals.allowanceMinutes > 0;
-  const meaningfulStops = day.items.filter((item) => item.kind === 'activity').length;
   const weatherSensitive = day.items.some((item) => item.kind === 'activity' && item.weatherSensitive);
 
   /*
@@ -2290,7 +2260,17 @@ function DayCard({
    * counts from the warnings that change what somebody does; the counts become
    * one line and the sentences keep their words.
    */
-  const compacted = compactWarnings(day.warnings);
+  /*
+   * 2026-11 — two sentences the reconciler writes on most days are not
+   * warnings: "travel times on this day are estimates" (the ≈ on every leg
+   * already says it) and "you move from A to B today" (the facts line says
+   * "A → B"). They go to the day's notes; what stays visible changes what
+   * somebody does.
+   */
+  const allWarnings = compactWarnings(day.warnings);
+  const ROUTINE = [/^Travel times on this day are\b/i, /^You move from .+ to .+ today\.?$/i];
+  const routineNotes = allWarnings.sentences.filter((sentence) => ROUTINE.some((pattern) => pattern.test(sentence)) && !/^You move from/i.test(sentence));
+  const compacted = { ...allWarnings, sentences: allWarnings.sentences.filter((sentence) => !ROUTINE.some((pattern) => pattern.test(sentence))) };
   const hoursUnchecked = day.items.filter((item) => item.kind === 'activity' && item.placeId && !item.hours && !item.operational).length;
   const caveat =
     compacted.badges.length > 0
@@ -2299,268 +2279,152 @@ function DayCard({
         ? `Hours not checked for ${hoursUnchecked} ${hoursUnchecked === 1 ? 'stop' : 'stops'}`
         : null;
 
-  const groups = groupByDayPart(day.items);
-  const headed = partsAreMeaningful(groups);
-
-  const row = (item: ItineraryItem) => (
-    <li key={item.id}>
-      <StopFocusHandle placeId={item.kind === 'activity' ? item.placeId : undefined}>
-        <TimelineRow
-          item={item}
-          window={day.window}
-          precision={precisionByItem[item.id] ?? 'measured'}
-          {...(anchorKinds[item.id] ? { anchorKind: anchorKinds[item.id]! } : {})}
-          {...(verification[item.id] ? { verification: verification[item.id]! } : {})}
-          stopNumber={item.placeId ? (mapNumbers[item.placeId] ?? null) : null}
-          dayNumber={day.dayNumber}
-          dayLabel={`Day ${day.dayNumber} · ${humanDate(day.date)}`}
-          neighbours={neighbours[item.id] ?? {}}
-          {...(arrivalLeg[item.id] ? { arrival: arrivalLeg[item.id]! } : {})}
-          frame={item.placeId ? placeFrame(item.placeId, rationale[item.placeId]?.name ?? item.title, images, livePhotos, rationale, '16 / 9') : null}
-          /*
-           * V8 — a licensed picture of the place beside its row, where one
-           * exists and it is not already the day's own hero above. A fixed
-           * square, so a row without one is the same height as a row with.
-           */
-          thumb={item.kind === 'activity' && item.placeId && item.placeId !== identity.hero?.placeId ? placeFrame(item.placeId, rationale[item.placeId]?.name ?? item.title, images, livePhotos, rationale, '1 / 1', { credit: false, className: 'w-14 overflow-hidden rounded-[var(--radius-control)] sm:w-16' }) : null}
-          {...(item.placeId && coordinates[item.placeId] && verification[item.id] && verification[item.id] !== 'unverified'
-            ? { navigation: placeNavigationLinks({ ...coordinates[item.placeId]!, name: item.title }) }
-            : {})}
-          {...(item.placeId && rationale[item.placeId] ? { rationale: rationale[item.placeId]! } : {})}
-          menu={
+  const row = (item: ItineraryItem) => {
+    const role = anchorRoles[item.placeId ?? ''] ?? anchorRoles[item.id];
+    const navigation = item.placeId && coordinates[item.placeId] && verification[item.id] && verification[item.id] !== 'unverified' ? placeNavigationLinks({ ...coordinates[item.placeId]!, name: item.title }) : undefined;
+    const editable = tripId && item.kind === 'activity' && (item.placeId || verification[item.id]);
+    const menu = editable ? (
+      <StopEditMenu
+        tripId={tripId}
+        dayNumber={day.dayNumber}
+        placeId={item.placeId ?? item.id}
+        title={rationale[item.placeId ?? '']?.name ?? item.title}
+        locked={item.placeId ? lockedPlaceIds.has(item.placeId) : false}
+        {...(navigation ? { navigation } : {})}
+        {...(item.id.startsWith(`d${day.dayNumber}-`)
+          ? { dayControls: <StopDayControls tripId={tripId} dayNumber={day.dayNumber} stopId={item.placeId ?? item.id} title={item.title} dayCount={dayCount} {...(role ? { role } : {})} /> }
+          : {})}
+      />
+    ) : undefined;
+    return (
+      <li key={item.id}>
+        <StopFocusHandle placeId={item.kind === 'activity' ? item.placeId : undefined}>
+          <TimelineRow
+            item={item}
+            window={day.window}
+            precision={precisionByItem[item.id] ?? 'measured'}
+            {...(anchorKinds[item.id] ? { anchorKind: anchorKinds[item.id]! } : {})}
+            {...(verification[item.id] ? { verification: verification[item.id]! } : {})}
+            {...(role ? { role } : {})}
+            stopNumber={item.placeId ? (mapNumbers[item.placeId] ?? null) : null}
+            dayNumber={day.dayNumber}
+            dayLabel={`Day ${day.dayNumber} · ${humanDate(day.date)}`}
+            neighbours={neighbours[item.id] ?? {}}
+            {...(arrivalLeg[item.id] ? { arrival: arrivalLeg[item.id]! } : {})}
+            frame={item.placeId ? placeFrame(item.placeId, rationale[item.placeId]?.name ?? item.title, images, livePhotos, rationale, '16 / 9') : null}
             /*
-             * Every stop is editable, including a model-authored one
-             * nothing could verify (no `placeId`): the reconciled-plan
-             * edits address a stop by its item id where it has no place.
+             * A small licensed picture of the place, where one exists. Shown at
+             * every width now — on a phone it is the fastest way to tell five
+             * stops apart — and never a generated stand-in.
              */
-            tripId && item.kind === 'activity' && (item.placeId || verification[item.id]) ? (
-              <StopEditMenu tripId={tripId} dayNumber={day.dayNumber} placeId={item.placeId ?? item.id} title={item.title} locked={item.placeId ? lockedPlaceIds.has(item.placeId) : false} />
-            ) : undefined
-          }
-        />
-        <RowHandoff item={item} coordinates={coordinates} verification={verification[item.id]} {...(tripId ? { tripId } : {})} dayNumber={day.dayNumber} dayCount={dayCount} role={anchorRoles[item.placeId ?? ''] ?? anchorRoles[item.id]} />
-      </StopFocusHandle>
-    </li>
-  );
+            thumb={item.kind === 'activity' && item.placeId ? placeFrame(item.placeId, rationale[item.placeId]?.name ?? item.title, images, livePhotos, rationale, '1 / 1', { credit: false, className: 'w-12 overflow-hidden rounded-[var(--radius-control)] sm:w-16' }) : null}
+            {...(navigation ? { navigation } : {})}
+            {...(item.placeId && rationale[item.placeId] ? { rationale: rationale[item.placeId]! } : {})}
+            menu={menu}
+          />
+        </StopFocusHandle>
+      </li>
+    );
+  };
+
+  const moves = Boolean(previousBaseName && previousBaseName !== day.baseName);
+  const where = moves ? `${previousBaseName} → ${day.baseName}` : `${episode?.mode === 'boat' ? 'On board' : ''}${episode?.mode === 'boat' ? ' · ' : ''}${day.baseName}`;
+  const travelFact =
+    !day.totals.unmeasuredMajorTransfer && day.totals.travelMinutes > 0
+      ? `${travelApprox ? '≈' : ''}${travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} ${drivingMinutes > 0 ? 'driving' : 'travelling'}`
+      : null;
+  const backup = dayBackup(day, backups);
 
   return (
     <article className="day-sheet" data-testid={`day-card-${day.dayNumber}`}>
-      {/*
-        THE DAY'S OWN COLOUR, ACROSS THE TOP OF IT.
-
-        Eight days of identical cream panels is the §18 pattern applied to the
-        one artifact a traveller actually carries. The hue is not decoration and
-        is not a hash: it is `PLATE_HUE` for whatever kind of place the day is
-        mostly made of, the same table the board's plates use — so a day of lakes
-        is the colour lakes are on the board, and two days that are genuinely the
-        same kind of day look the same on purpose. A day with nothing scheduled
-        has no dominant anything and gets the rule colour.
-      */}
-      {/*
-        The anchor the day rail jumps to, with room above it for the two sticky
-        elements — the product chrome and the rail itself — so a jump lands on
-        the heading rather than under it.
-      */}
       <div id={`day-${day.dayNumber}`} className="scroll-mt-[calc(var(--chrome-height)+8rem)]">
         {/*
-          V8 — THE DAY AS A SCANNABLE CARD. Number and date as figures, the
-          theme in the display face, where you sleep, the two chips that decide
-          a day (how hard, how much moving), the day's own controls as real
-          buttons, and — where one of the day's places has a licensed picture —
-          that picture at a fixed ratio beside the header, never a stand-in.
-        */}
-        {/*
-          V11 §E — THE CHAPTER, WHERE IT OPENS, AND NOWHERE ELSE.
-
-          `package.chapters` has existed since V11 §2 and was read only by the
-          day rail, which is a navigation control — so a traveller scrolling the
-          plan never saw that their eleven days were three things. It is
-          introduced once, on the day the chapter starts, which is also the only
-          place it is true to introduce it.
+          V11 §E — the chapter, introduced once, on the day it opens. One quiet
+          line, not a second heading: the day below is the thing being read.
         */}
         {chapterOpening ? (
-          <div className="mb-2 border-b border-ink/15 pt-4 pb-3" data-testid={`chapter-opening-${day.dayNumber}`}>
-            <p className="eyebrow">
-              Chapter {chapterOpening.index}
-              {' · '}
-              {chapterOpening.dayNumbers.length === 1
-                ? `day ${chapterOpening.dayNumbers[0]}`
-                : `days ${chapterOpening.dayNumbers[0]}–${chapterOpening.dayNumbers[chapterOpening.dayNumbers.length - 1]}`}
-            </p>
-            <p className="mt-1 font-display text-2xl leading-tight font-light text-ink">{chapterOpening.title}</p>
-            <p className="mt-0.5 type-small text-ink-muted">{CHAPTER_ROLE_WORD[chapterOpening.role] ?? chapterOpening.role}</p>
-          </div>
+          <p className="pt-4 eyebrow text-ink-faint" data-testid={`chapter-opening-${day.dayNumber}`}>
+            Part {chapterOpening.index} · {chapterOpening.title}
+            <span className="sr-only">
+              {' '}
+              ({chapterOpening.dayNumbers.length === 1 ? `day ${chapterOpening.dayNumbers[0]}` : `days ${chapterOpening.dayNumbers[0]}–${chapterOpening.dayNumbers[chapterOpening.dayNumbers.length - 1]}`}, {CHAPTER_ROLE_WORD[chapterOpening.role] ?? chapterOpening.role})
+            </span>
+          </p>
         ) : null}
-        <div className={cx('grid gap-6 pt-5 pb-6', identity.hero && 'md:grid-cols-[minmax(0,1fr)_15rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_15rem]')}>
+        {/*
+          2026-11 — THE DAY ANSWERS FOUR QUESTIONS BEFORE ANYTHING ELSE.
+
+          Which day, what it is, where you sleep and how hard it is — in three
+          lines, then the timeline. The giant numeral, the colour swatch, the
+          clock window on its own line and the controls between heading and
+          plan made a phone scroll a full screen before the first stop.
+        */}
+        <header className={cx('grid gap-5 pt-5 pb-4', identity.hero && 'sm:grid-cols-[minmax(0,1fr)_9rem] md:grid-cols-[minmax(0,1fr)_11rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_11rem]')}>
           <div className="min-w-0">
-            {/*
-              THE DAY OPENS ON ITS NUMBER.
-
-              A giant light numeral, the way a survey sheet or a magazine
-              spread opens, so eleven days read as eleven different places in
-              the document rather than eleven identical panels. The heading a
-              screen reader navigates by still reads "Day 2 · Wed 11 Nov"; the
-              numeral is the same fact drawn for the eye.
-            */}
-            <div className="flex items-end gap-4 sm:gap-6">
-              <span aria-hidden="true" className="numeral-giant text-[5.5rem] text-ink sm:text-[7.5rem]">
-                {String(day.dayNumber).padStart(2, '0')}
-              </span>
-              <div className="min-w-0 pb-1.5">
-                {/*
-                  The day's own colour, as a swatch: `PLATE_HUE` for whatever kind of
-                  place the day is mostly made of, the table the board's plates use,
-                  so a day of lakes is the colour lakes are on the board.
-                */}
-                <span
-                  aria-hidden="true"
-                  className="mb-2 block h-2 w-8"
-                  style={identity.hue === null ? { background: 'var(--color-rule)' } : ({ '--plate-hue': identity.hue, background: 'hsl(var(--plate-hue) 30% 42%)' } as React.CSSProperties)}
-                />
-                <h2 className="sheet-label text-ink">
-                  Day {day.dayNumber}
-                  <span className="text-ink-faint">{' · '}</span>
-                  <time dateTime={day.date}>{humanDate(day.date)}</time>
-                </h2>
-                <p className="coordbar mt-1.5 text-ink-muted">
-                  {clock(day.window.startMinute, 'later')} – {clock(day.window.endMinute, 'earlier')}
-                </p>
-              </div>
-            </div>
-            <p className="mt-5 max-w-[22ch] font-display text-[clamp(1.75rem,1.2rem+1.6vw,2.6rem)] leading-[1.02] font-light tracking-[-0.025em] text-ink">{day.theme}</p>
-            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 type-small text-ink-muted">
-              {/*
-                V11 §D — WHERE THE DAY GOES, NOT ONLY WHERE IT SLEEPS.
-
-                "Based in Jasper" on the day that drives from Banff to Jasper
-                describes the end of the day as if it were the whole of it. A day
-                that moves is the single most consequential shape a day has, and
-                the header now says so in the two words the brief names.
-              */}
-              <span>
-                <span aria-hidden="true" className="mr-1.5 inline-block h-2.5 w-2.5 translate-y-[1px] border-[1.5px] border-ink" />
-                {previousBaseName && previousBaseName !== day.baseName ? (
-                  <>
-                    {previousBaseName} <span aria-hidden="true">→</span> {day.baseName}
-                  </>
-                ) : (
-                  <>
-                    {episode?.mode === 'boat' ? 'on board' : 'based in'} {day.baseName}
-                  </>
-                )}
-              </span>
-              {/* V7 §9 — a day inside a cruise, trek or safari says so, and says which day of it this is. */}
-              {episode ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-pine/40 bg-pine-soft px-2.5 py-0.5 text-xs font-medium text-pine-strong" data-testid={`day-episode-${day.dayNumber}`} data-episode-kind={episode.kind}>
-                  {EPISODE_KIND_WORD[episode.kind] ?? episode.kind.replace(/_/g, ' ')} · day {episode.dayNumbers.indexOf(day.dayNumber) + 1} of {episode.dayNumbers.length} · {episode.name}
-                </span>
-              ) : null}
-            </p>
-
-            {/*
-              V11 §8 — ONE LINE OF FACTS, NOT A CHIP CLUSTER.
-
-              This was up to six chips — state, intensity, stops, travel,
-              weather-sensitive, times-approximate — over a separate totals line,
-              on every day. Five days of that is thirty-six chips before a
-              traveller has read a single thing they will actually do, and the
-              baseline walk counted **72 pills** on this surface.
-
-              Chips are now reserved for the two facts that carry a decision: the
-              day's own state, and a base move nobody could time — which is a
-              blocker, not a nuance, and reads as one. Everything else is the
-              sentence a person would say: "Intense · 2 stops · 1 hr 10 min
-              drive · 3 hr at stops". Nothing is deleted; `title` keeps the
-              precise wording on the two that had one, and the weather and
-              timing detail live in the day's own uncertainty line and behind
-              "How this day moves and eats".
-            */}
-            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid={`day-facts-${day.dayNumber}`}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className="sheet-label text-ink">
+                Day {day.dayNumber}
+                <span className="text-ink-faint">{' · '}</span>
+                <time dateTime={day.date}>{humanDate(day.date)}</time>
+              </h2>
               {stateBadge}
+            </div>
+            <p className="mt-1.5 font-display text-[clamp(1.5rem,1.15rem+1.1vw,2.1rem)] leading-[1.08] font-light tracking-[-0.02em] text-ink text-balance">{day.theme}</p>
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 type-small text-ink-muted" data-testid={`day-facts-${day.dayNumber}`}>
+              <span className="inline-flex items-center gap-1.5 text-ink">
+                <span aria-hidden="true" className="inline-block h-2.5 w-2.5 border-[1.5px] border-ink" />
+                {where}
+              </span>
+              <span>
+                {[
+                  INTENSITY_WORD[day.intensity],
+                  isEmpty ? null : `${clock(day.window.startMinute, 'later')}–${clock(day.window.endMinute, 'earlier')}`,
+                  travelFact,
+                  day.totals.walkMinutes >= WALKING_DAY_MINUTES ? `${travelSpan(day.totals.walkMinutes)} on foot` : null,
+                ]
+                  .filter(Boolean)
+                  .map((fact, index, arr) => (
+                    /* The space between facts sits outside the no-wrap span: it is the line's only place to break. */
+                    <Fragment key={fact}>
+                      <span className="whitespace-nowrap">
+                        {fact}
+                        {index < arr.length - 1 ? <span aria-hidden="true" className="pl-1.5 text-ink-faint">·</span> : null}
+                      </span>{' '}
+                    </Fragment>
+                  ))}
+              </span>
               {day.totals.unmeasuredMajorTransfer ? (
                 <Badge tone="amber" title="This day moves base and the main transfer has not been measured, so the day cannot be timed yet">
                   main transfer not timed
                 </Badge>
               ) : null}
-              <p className="coordbar leading-relaxed !whitespace-normal text-ink-muted">
-                {[
-                  day.intensity,
-                  meaningfulStops > 0 ? `${meaningfulStops} ${meaningfulStops === 1 ? 'stop' : 'stops'}` : null,
-                  !day.totals.unmeasuredMajorTransfer && day.totals.travelMinutes > 0
-                    ? `${travelApprox ? '≈' : ''}${travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} ${drivingMinutes > 0 ? 'driving' : 'travelling'}`
-                    : null,
-                  day.totals.activityMinutes > 0 ? `${span(day.totals.activityMinutes)} at stops` : null,
-                  day.totals.freeMinutes > 0 ? `${span(day.totals.freeMinutes)} free` : null,
-                  day.totals.walkMinutes >= WALKING_DAY_MINUTES ? `${travelSpan(day.totals.walkMinutes)} on foot` : null,
-                  weatherSensitive ? 'weather matters here' : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
+            </p>
+            {episode ? (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-pine/40 bg-pine-soft px-2.5 py-0.5 text-xs font-medium text-pine-strong" data-testid={`day-episode-${day.dayNumber}`} data-episode-kind={episode.kind}>
+                {EPISODE_KIND_WORD[episode.kind] ?? episode.kind.replace(/_/g, ' ')} · day {episode.dayNumbers.indexOf(day.dayNumber) + 1} of {episode.dayNumbers.length} · {episode.name}
               </p>
-            </div>
-
-            {/*
-              One honest verb, only on days it can act on. A light day offered
-              "make this easier" is a button that can only apologise.
-            */}
-            {tripId && ((day.intensity !== 'light' && day.totals.activityMinutes > 0) || itineraryHasPackage(day)) ? (
-              <div className="mt-3 flex flex-wrap items-center gap-1 print:hidden" data-testid={`day-controls-${day.dayNumber}`}>
-                {day.intensity !== 'light' && day.totals.activityMinutes > 0 ? <EaseDayButton tripId={tripId} dayNumber={day.dayNumber} /> : null}
-                {itineraryHasPackage(day) ? <FixDayButton tripId={tripId} dayNumber={day.dayNumber} /> : null}
-              </div>
             ) : null}
           </div>
-
           {identity.hero ? (
-            /*
-              A licensed photograph of one of the day's own stops, read from the
-              same table the board reads. A fixed 4:3 plate so the header keeps
-              its shape whether the picture has loaded, and never a generated
-              stand-in for a specific place.
-            */
-            <figure className="print-frame m-0 min-w-0 self-start rotate-[0.6deg]">
-              <DestinationImage
-                image={identity.hero.image}
-                fallback={imageryFallbackFor({ kind: 'candidate', id: identity.hero.placeId, name: identity.hero.name })}
-                ratio="natural"
-                credit="none"
-                backdrop="paper"
-                {...(identity.hero.livePhotoHref ? { livePhoto: { href: identity.hero.livePhotoHref, credit: 'Photo © Google' } } : {})}
-                {...(identity.hero.category ? { category: identity.hero.category } : {})}
-              />
-              <figcaption className="!font-sans !text-[11px] !normal-case !tracking-normal leading-snug">
-                {identity.hero.name}, on this day. {identity.hero.image ? <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" /> : identity.hero.livePhotoHref ? <span>Photo &copy; Google</span> : null}
+            <figure className="m-0 hidden min-w-0 self-start overflow-hidden rounded-[var(--radius-card)] sm:block lg:hidden xl:block">
+              {placeFrame(identity.hero.placeId, identity.hero.name, images, livePhotos, rationale, '4 / 3', { credit: false })}
+              <figcaption className="sr-only">
+                {identity.hero.name}. {identity.hero.image ? <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" /> : identity.hero.livePhotoHref ? <span>Photo &copy; Google</span> : null}
               </figcaption>
             </figure>
           ) : null}
-        </div>
-        {split ? <div className="pb-5">{split}</div> : null}
-
+        </header>
+        {split ? <div className="pb-4">{split}</div> : null}
       </div>
 
       {isEmpty ? (
-        /*
-          AN EMPTY DAY IS EXPLAINED BY WHICH DAY IT IS.
-
-          This sentence was unconditional, so a completely blank Saturday in the
-          middle of a five-day trip was captioned "on an arrival or departure day
-          that is usually the honest answer" — a false statement about the day it
-          was printed on. A mid-trip blank is a different fact and deserves a
-          different sentence.
-        */
-        <div className="border-t border-ink/15 py-5 text-sm text-ink-muted">
+        <div className="border-t border-rule py-5 text-sm text-ink-muted">
           <p>
             {isFirst || isLast
-              ? 'Nothing scheduled. On an arrival or departure day that is usually the honest answer.'
-              : 'Nothing scheduled, and this is not an arrival or departure day. Everything you picked fitted better on another day or could not be reached on this one — the hours are yours. What was left off, and why, is at the foot of this plan.'}
+              ? 'Nothing scheduled — on an arrival or departure day that is usually right.'
+              : 'Nothing scheduled. Everything you picked fitted better on another day, so the hours are yours.'}
           </p>
           {plannedOff.length > 0 ? (
-            /*
-              THE DAY'S OWN HEADING MUST NOT PROMISE WHAT THE DAY DOES NOT HOLD.
-              A day themed "Departure drive" that then reads "Nothing scheduled"
-              tells the traveller two different things; the reasons are said
-              here, on the card that raised the question.
-            */
             <div className="mt-3">
               <p className="text-ink">What this day was for, and why it is not here:</p>
               <ul className="mt-2 flex flex-col gap-2">
@@ -2574,43 +2438,17 @@ function DayCard({
           ) : null}
         </div>
       ) : (
-        /*
-          V8 — THE TIMELINE IN THREE PARTS. Morning, midday and evening headings
-          where the day actually spans them, so eight rows scan as the shape of
-          a day rather than a list. A travel row sits with the stop it leads to.
-        */
-        <div className="timeline-thread border-t border-ink/15">
-          {groups.map((group) => (
-            <div key={group.part} data-day-part={group.part}>
-              {headed ? (
-                <p className="flex items-center gap-3 px-3 pt-5 pb-1.5 sm:px-5">
-                  <span className="sheet-label text-ink-muted">{DAY_PART_LABEL[group.part]}</span>
-                  <span aria-hidden="true" className="h-px flex-1 bg-ink/15" />
-                </p>
-              ) : null}
-              <ol>{group.items.map(row)}</ol>
-            </div>
-          ))}
+        <div className="timeline-thread border-t border-rule">
+          <ol className="pt-1">{withoutTrailingFreeTime(day.items).map(row)}</ol>
           {/*
-            V11 §D — WHERE THE NIGHT IS, AS ITS OWN THING.
-
-            The brief's shape ends the day at a bed, visually distinct from the
-            stops above it. There is no lodging item on the wire to render — a
-            stay is a base, not an itinerary item — so this is derived from the
-            one fact that is already true: the day ends somewhere, and on a day
-            that moves it ends somewhere new.
-
-            No clock. Nothing here knows what time anybody checks in, and a time
-            printed beside a bed would be read as one.
+            V11 §D — the night, as its own thing at the foot of the day. No
+            clock: nothing here knows when anybody checks in.
           */}
           {!isLast || endsWithNight ? (
-            <p
-              className="flex items-center gap-3 border-t border-ink/15 px-3 py-3 sm:px-5"
-              data-testid={`day-overnight-${day.dayNumber}`}
-            >
-              <span aria-hidden="true" className="ml-[3.25rem] inline-flex h-7 w-7 shrink-0 items-center justify-center border-[1.5px] border-ink bg-bone text-xs sm:ml-[5rem]">⌂</span>
+            <p className="flex items-center gap-3 px-3 pt-2 pb-3 sm:px-5" data-testid={`day-overnight-${day.dayNumber}`}>
+              <span aria-hidden="true" className="ml-[3.25rem] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-ink bg-bone text-xs sm:ml-[5rem]">⌂</span>
               <span className="type-small text-ink">
-                {previousBaseName && previousBaseName !== day.baseName ? 'Tonight, somewhere new — ' : 'Tonight — '}
+                {moves ? 'Tonight, somewhere new — ' : 'Tonight — '}
                 <span className="font-medium">{day.baseName}</span>
               </span>
               {isLast ? <span className="type-meta text-ink-faint">last night of the trip</span> : null}
@@ -2618,87 +2456,140 @@ function DayCard({
           ) : null}
         </div>
       )}
+
       {/*
-        V11 §D — TIMING & CHECKS, AFTER THE DAY RATHER THAN IN FRONT OF IT.
-
-        Opening hours, the weather read, the window note, how the day moves and
-        what it eats all used to sit in a band *between* the day's heading and
-        its first timed row. Measured in the browser, that band was most of the
-        **659 words a traveller read before the first thing they would actually
-        do** — against a §D target of 400.
-
-        Nothing is deleted and nothing is hidden behind a press that was not
-        already behind one: the same four blocks, in the same order, under the
-        timeline instead of over it, folded into the one disclosure §D names. The
-        packet prints it open, so the printed day still carries every word.
-
-        Deliberately *not* solved by shortening the copy. Each of these sentences
-        is load-bearing on the day it appears — a closure, a forecast a stop
-        depends on, a catered camp — and trimming them to hit a word count would
-        be exactly the gaming §D forbids. What was wrong was the order.
+        IF THE WEATHER TURNS — one line, on the days it matters, naming the
+        actual fallback. The full plan for every day stays in Prepare.
       */}
-      {day.items.length > 0 && (day.totals.travelMinutes > 0 || day.items.some((item) => item.food) || placedStops.length > 0 || day.window.note) ? (
-        <details className="border-t border-ink/15 py-3" data-print="open" data-testid={`day-notes-${day.dayNumber}`}>
+      {backup && (weatherSensitive || backup.authored) ? (
+        <p className="flex gap-3 rounded-[var(--radius-card)] bg-paper-sunk px-4 py-3 type-small text-ink-muted" data-testid={`day-backup-${day.dayNumber}`}>
+          <span aria-hidden="true" className="text-base leading-5 text-glacier-strong">☂</span>
+          <span>
+            <span className="font-medium text-ink">If the weather turns: </span>
+            {backup.text}
+          </span>
+        </p>
+      ) : null}
+
+      {/*
+        Specific warnings keep their words — a closure, a catered camp, a
+        forecast a stop depends on. The recurring caveats ("hours not checked",
+        "times are estimates") are one line inside the day's notes instead of an
+        amber strip on every day.
+      */}
+      {compacted.sentences.length > 0 ? (
+        <div className="mt-3 border-l-2 border-l-amber py-1 pl-3 text-sm leading-relaxed text-ink-muted" data-testid={`day-warnings-${day.dayNumber}`}>
+          <ul>
+            {compacted.sentences.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {/* The day's own actions, together and quiet, after the plan rather than in front of it. */}
+      {links || tripId ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-1 gap-y-1 print:hidden" data-testid={`day-controls-${day.dayNumber}`}>
+          {links ? (
+            <a
+              href={links.google}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={buttonClass('ghost', 'sm')}
+              data-testid={`day-route-${day.dayNumber}`}
+              title={
+                links.omitted > 0
+                  ? `The link carries the first ${links.included} stops — a maps link holds no more.`
+                  : `${links.included} of the day's places, in order. Meals and stops without a location are left out.`
+              }
+            >
+              Directions for the day <span aria-hidden="true" className="text-xs opacity-70">↗</span>
+              <span className="sr-only"> (opens Google Maps in a new tab)</span>
+            </a>
+          ) : null}
+          {tripId && ((day.intensity !== 'light' && day.totals.activityMinutes > 0) || itineraryHasPackage(day)) ? (
+            <details className="open:basis-full" data-testid={`day-edit-${day.dayNumber}`}>
+              <summary className={cx(buttonClass('ghost', 'sm'), 'cursor-pointer list-none [&::-webkit-details-marker]:hidden')}>
+                Edit this day <span aria-hidden="true" className="details-caret text-xs">▸</span>
+              </summary>
+              <div className="slide-down flex basis-full flex-wrap items-center gap-1 pt-1">
+                {day.intensity !== 'light' && day.totals.activityMinutes > 0 ? <EaseDayButton tripId={tripId} dayNumber={day.dayNumber} /> : null}
+                {itineraryHasPackage(day) ? <FixDayButton tripId={tripId} dayNumber={day.dayNumber} /> : null}
+                {itineraryHasPackage(day) ? <AddStopForm tripId={tripId} dayNumber={day.dayNumber} /> : null}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/*
+        V11 §D — TIMING & CHECKS, AFTER THE DAY. Opening hours, the weather
+        read, how the day moves and eats, and (on a phone) the day's map, in
+        one disclosure that prints open.
+      */}
+      {day.items.length > 0 && (day.totals.travelMinutes > 0 || day.items.some((item) => item.food) || placedStops.length > 0 || day.window.note || caveat || routineNotes.length > 0) ? (
+        <details className="mt-1 py-1" data-print="open" data-testid={`day-notes-${day.dayNumber}`}>
           <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 type-small text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
-            <span aria-hidden="true" className="text-xs">▸</span> Timing &amp; checks
+            <span aria-hidden="true" className="details-caret text-xs">▸</span> {placedStops.length > 0 ? 'Map, hours & weather' : 'Hours & weather'}
           </summary>
-          <DayHours day={day} />
-          <DayWeather day={day} renderedAt={renderedAt} />
-          {day.window.note ? <p className="mt-2 type-small text-ink-muted">{day.window.note}</p> : null}
-          {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
-          <DayFood day={day} />
-          {/*
-            The drawing of the day, below `lg` where the sticky map is not
-            rendered. It draws only stops whose position a source published.
-          */}
-          {placedStops.length > 0 ? (
-            <div className="mt-3 lg:hidden print:hidden">
-              <DayMap base={mapModel.base} markers={mapModel.markers} connectors={mapModel.connectors} omitted={mapModel.omitted} dayNumber={day.dayNumber} tiles={tiles} />
-            </div>
-          ) : null}
+          <div className="pb-3">
+            {placedStops.length > 0 ? (
+              <div className="mt-1 mb-4 lg:hidden print:hidden">
+                <DayMap base={mapModel.base} markers={mapModel.markers} connectors={mapModel.connectors} omitted={mapModel.omitted} dayNumber={day.dayNumber} tiles={tiles} />
+              </div>
+            ) : null}
+            {caveat ? (
+              <p className="type-small text-ink-muted" data-testid={`day-caveat-${day.dayNumber}`}>
+                {caveat}.
+              </p>
+            ) : null}
+            {routineNotes.map((note) => (
+              <p key={note} className="mt-1 type-small text-ink-muted">
+                {note} Estimated times are marked ≈.
+              </p>
+            ))}
+            <DayHours day={day} />
+            <DayWeather day={day} renderedAt={renderedAt} />
+            {day.window.note ? <p className="mt-2 type-small text-ink-muted">{day.window.note}</p> : null}
+            {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
+            <DayFood day={day} />
+            {links ? (
+              <p className="mt-3 type-small text-ink-muted print:hidden">
+                Prefer Apple Maps?{' '}
+                <a href={links.apple} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
+                  Open the day there
+                </a>{' '}
+                — it takes one destination at a time, so it runs first stop to last.
+              </p>
+            ) : null}
+          </div>
         </details>
-      ) : null}
-
-      {tripId && itineraryHasPackage(day) ? <AddStopForm tripId={tripId} dayNumber={day.dayNumber} /> : null}
-
-      {/*
-        RECURRING UNCERTAINTY AS A BADGE ROW; SPECIFIC WARNINGS AS SENTENCES.
-        "N stops have not been fully verified" and "N legs are unmeasured"
-        appeared as paragraphs under every day. They are still true and still
-        here — as one compact line — while the warnings that change what a
-        traveller does keep their words.
-      */}
-      {caveat || compacted.sentences.length > 0 ? (
-        <div className="border-t border-ink/15 border-l-2 border-l-amber py-3 pl-3 text-sm leading-relaxed text-ink-muted" data-testid={`day-warnings-${day.dayNumber}`}>
-          {caveat ? <p data-testid={`day-caveat-${day.dayNumber}`}>{caveat}.</p> : null}
-          {compacted.sentences.length > 0 ? (
-            <ul className={cx(caveat && 'mt-1.5')}>
-              {compacted.sentences.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
-      {links ? (
-        <div className="border-t border-ink/15 py-4 print:hidden">
-          <a href={links.google} target="_blank" rel="noreferrer noopener" className={buttonClass('secondary', 'sm')} data-testid={`day-route-${day.dayNumber}`}>
-            Open day {day.dayNumber} in Google Maps
-          </a>
-          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-            {links.omitted > 0
-              ? `The link carries the first ${links.included} stops of this day — a maps URL will not hold more. The remaining ${links.omitted} are on the plan above.`
-              : `${links.included} of the day's places to visit, in order. Meals and stops without a location are not in the link.`}{' '}
-            <a href={links.apple} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
-              Apple Maps
-            </a>{' '}
-            takes one destination at a time, so that link runs from the first stop straight to the last and skips what is in between.
-          </p>
-        </div>
       ) : null}
     </article>
   );
+}
+
+/** The evening's unbooked hour after the last stop or meal is not a thing to do; the day simply ends. */
+function withoutTrailingFreeTime(items: readonly ItineraryItem[]): readonly ItineraryItem[] {
+  let end = items.length;
+  while (end > 0 && items[end - 1]!.kind === 'free_time') end -= 1;
+  return end === 0 ? items : items.slice(0, end);
+}
+
+const INTENSITY_WORD: Record<ItineraryDay['intensity'], string> = { light: 'Easy day', moderate: 'Moderate', intense: 'Full day' };
+
+/**
+ * The one fallback worth saying on the day: the weather read's own backup (a
+ * real place, checked open and reachable) first, then a backup the plan wrote
+ * for this day. `authored` is true for the second kind — the plan tied it to
+ * this day, so it is shown even when no stop is marked weather-sensitive.
+ */
+function dayBackup(day: ItineraryDay, planned: readonly { trigger: string; alternative: string; dayNumbers?: number[] }[]): { text: string; authored: boolean } | null {
+  const checked = day.weather?.backups?.[0];
+  if (checked) return { text: `${checked.name}${checked.why ? ` — ${firstSentence(checked.why).replace(/\.$/, '')}` : ''}.`, authored: false };
+  const written = planned.find((entry) => entry.dayNumbers?.includes(day.dayNumber));
+  if (written) return { text: firstSentence(written.alternative), authored: true };
+  return null;
 }
 
 /**
@@ -3318,6 +3209,7 @@ function TimelineRow({
   navigation,
   precision = 'measured',
   anchorKind,
+  role,
 }: {
   item: ItineraryItem;
   window: DailyWindow;
@@ -3341,18 +3233,18 @@ function TimelineRow({
   navigation?: { google: string; apple: string };
   /** What Sidequest could establish about this stop. Absent on legacy plans and on non-stop rows. */
   verification?: VerificationState;
-  /** The quiet per-stop edit control, supplied only where editing applies. */
+  /** The stop's one ⋯ control (directions, move, re-time, keep, lock, swap, remove), only where editing applies. */
   menu?: React.ReactNode;
   /** Which mark on the day's map this row is. Null on anything not drawn. */
   stopNumber?: number | null;
   /** What the fit model says about this stop. See `StopRationale`. */
   rationale?: StopRationale;
+  /** The plan's role for this stop; an optional stop is drawn as one. */
+  role?: 'core' | 'secondary' | 'optional' | 'flex';
 }) {
-  const style = KIND_STYLE[item.kind];
   /**
    * Hours are shown only when they bear on this day. A site posted 06:00 to
-   * 22:00 on a day that runs 07:30 to 19:00 has constrained nothing, and saying
-   * so on every stop is how a traveller learns to skip the line that matters.
+   * 22:00 on a day that runs 07:30 to 19:00 has constrained nothing.
    */
   const hours =
     item.hours &&
@@ -3363,260 +3255,252 @@ function TimelineRow({
       : undefined;
 
   const sheet = item.kind === 'travel' || item.kind === 'free_time' ? null : buildPlaceSheet({ item, rationale, verification, anchorKind, precision, dayLabel, neighbours, arrival, navigation, hours: item.hours });
+  const optional = role === 'optional' || role === 'flex';
+  const name = rationale?.name ?? item.title;
 
-  return (
-    <div
-      className={cx(
-        'flex gap-2.5 px-3 sm:gap-4 sm:px-5 target:bg-pine-soft focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-[-2px]',
-        /*
-         * V11 §D — A TRAVEL LEG IS A CONNECTOR, NOT A STOP.
-         *
-         * It used to be a row exactly like the stops around it: the same
-         * padding, the same rail, its own heading element and, until §8, its own
-         * badge. Eleven days of that reads as a list of twenty-two equal things,
-         * half of which are the gaps between the other half. The brief's shape
-         * is a thin line between two stops, and thin is what it is now — half
-         * the vertical rhythm, no rail, and set in the same muted type as the
-         * duration beside it.
-         */
-        item.kind === 'travel' ? 'py-0.5' : item.kind === 'meal' ? 'py-3' : 'py-4 sm:py-5',
-      )}
-      data-row-kind={item.kind}
-      /*
-       * V11 §D — the row is addressable, because the thing §D measures is "words
-       * before the first meaningful itinerary activity" and nothing on the page
-       * said where that was.
-       *
-       * The measuring walk used to find it by looking for a heading whose text
-       * began with a clock or a `≈`, and what it actually found was the first
-       * *travel* row — the only heading on the page that began that way. A leg
-       * between two stops is not the activity the brief is asking about, and
-       * making the travel row a span (a connector is not a section) removed the
-       * anchor entirely. So the row says what it is, and the measurement stops
-       * depending on an accident of markup.
-       */
-      data-testid={`item-${item.id}`}
-      {...(item.placeId ? { 'data-timeline-place': item.placeId, tabIndex: -1 } : {})}
-      {...(dayNumber !== undefined ? { 'data-day': dayNumber } : {})}
-    >
-      <div className="w-12 shrink-0 pt-0.5 text-right sm:w-16">
-        {precision === 'band' && item.kind !== 'travel' ? (
-          <span className="block text-xs font-medium leading-tight text-ink-muted" title="A leg before this stop could not be timed, so the clock is a part of the day">
-            {dayPartFor(item.startMinute)}
+  const common = {
+    'data-row-kind': item.kind,
+    'data-testid': `item-${item.id}`,
+    ...(item.placeId ? { 'data-timeline-place': item.placeId, tabIndex: -1 } : {}),
+    ...(dayNumber !== undefined ? { 'data-day': dayNumber } : {}),
+  };
+  const focusRing = 'target:bg-pine-soft focus:outline focus:outline-2 focus:outline-pine focus:outline-offset-[-2px]';
+
+  /*
+   * 2026-11 — A TRAVEL LEG IS A CONNECTOR: one short line on the thread
+   * between two stops — how, how long, how far. The destination is the stop
+   * directly below, so the leg no longer repeats its name, and an estimate is
+   * the ≈ on its own figure rather than a chip beside it.
+   */
+  if (item.travel) {
+    const state = travelState(item.travel);
+    const line = legLine(item);
+    const chip = state.word !== 'measured' && state.word !== 'estimated' && !line.toLowerCase().includes(state.word.toLowerCase());
+    return (
+      <div className={cx('flex gap-2.5 px-3 py-0.5 sm:gap-4 sm:px-5', focusRing)} {...common}>
+        <div className="w-12 shrink-0 sm:w-16" />
+        <span aria-hidden="true" className={cx('leg-thread w-7 shrink-0 self-stretch', `leg-${legEvidence(item.travel)}`)} />
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 py-1">
+          <span className="inline-flex items-center gap-1.5 text-xs leading-snug text-ink-muted" title={`${travelLine(item)}${travelProvenanceLabel(item.travel) ? ` — ${travelProvenanceLabel(item.travel)}` : ''}${item.travel.modeCorrectedFrom ? ` — the plan said ${TRANSPORT_MODE_LABELS[item.travel.modeCorrectedFrom].toLowerCase()}; the distance says otherwise` : ''}`}>
+            <ModeGlyph mode={item.travel.mode} />
+            {line}
+            {/* The destination is the row below; a screen reader hears it here too, so a leg is never an orphaned duration. */}
+            {line.includes(item.title) ? null : <span className="sr-only">, {item.title}</span>}
           </span>
-        ) : item.kind === 'travel' ? (
-          <span aria-hidden="true" className="block text-sm text-ink-faint">
-            ↳
-          </span>
-        ) : (
-          <time className={cx('type-figure block text-[0.95rem] text-ink', item.kind === 'activity' && 'font-medium', precision === 'estimated' && 'approx')} title={precision === 'estimated' ? 'Estimated: the leg before this stop was estimated from map distance' : precision === 'fixed' ? 'Fixed by a booking or timetable' : undefined}>
-            {/* V11 §1 — an item may sit past midnight on a day that overruns; the clock says so rather than reading as morning. */}
-            {timelineClock(item.startMinute, 'later')}
-          </time>
-        )}
-        {item.kind !== 'travel' ? <span className="type-figure mt-0.5 block text-xs font-medium text-ink-faint">{span(item.durationMinutes)}</span> : null}
+          {chip ? (
+            <Badge tone={state.tone} title={travelProvenanceLabel(item.travel)}>
+              {state.word}
+            </Badge>
+          ) : null}
+          {item.travel.unverifiedScheduled || item.travel.provenance === 'modelled' ? <span className="basis-full text-xs leading-relaxed text-ink-faint">{item.reason} {travelProvenanceLabel(item.travel)}</span> : null}
+        </div>
       </div>
+    );
+  }
 
-      {/*
-        The rail, or the map's own number where this row is drawn on it.
-
-        Two surfaces showing the same day have to be tied together or they are
-        two documents about one thing: a numbered mark on the drawing above
-        answers "where is that" only if the row says which number it is.
-      */}
-      {item.kind === 'travel' ? (
-        /*
-          The connector's own segment of the route thread, drawn by its evidence:
-          solid flare where a router timed it, dashed where Sidequest estimated it
-          from distance, dotted where nothing measured it. The same three marks the
-          map uses, so a leg looks the same on both.
-        */
-        <span aria-hidden="true" className={cx('leg-thread w-7 shrink-0 self-stretch', item.travel ? `leg-${legEvidence(item.travel)}` : 'leg-unmeasured')} />
-      ) : stopNumber === null ? (
-        <span aria-hidden="true" className={cx('stop-dot mt-1 shrink-0', item.kind === 'meal' ? 'stop-dot-meal' : item.kind === 'free_time' || item.kind === 'rest' ? 'stop-dot-free' : 'stop-dot-stop', style.rail === '' && '')} />
+  const clockCell = (
+    <div className="w-12 shrink-0 pt-0.5 text-right sm:w-16">
+      {precision === 'band' ? (
+        <span className="block text-xs font-medium leading-tight text-ink-muted" title="A leg before this stop could not be timed, so the clock is a part of the day">
+          {dayPartFor(item.startMinute)}
+        </span>
       ) : (
-        <span
-          aria-hidden="true"
-          data-testid="stop-number"
-          className="stop-pin mt-0.5 shrink-0"
-        >
+        <time className={cx('type-figure block text-[0.9rem] text-ink', item.kind === 'activity' ? 'font-medium' : 'text-ink-muted', precision === 'estimated' && 'approx')} title={precision === 'estimated' ? 'Estimated: the leg before this stop was estimated from map distance' : precision === 'fixed' ? 'Fixed by a booking or timetable' : undefined}>
+          {timelineClock(item.startMinute, 'later')}
+        </time>
+      )}
+      {item.kind === 'activity' ? <span className="type-figure mt-0.5 block text-[11px] text-ink-faint">{span(item.durationMinutes)}</span> : null}
+    </div>
+  );
+
+  /* Free time and rest: a quiet line, never a paragraph explaining that nothing is booked. */
+  if (item.kind === 'free_time' || item.kind === 'rest') {
+    return (
+      <div className={cx('flex gap-2.5 px-3 py-2 sm:gap-4 sm:px-5', focusRing)} {...common}>
+        {clockCell}
+        <span aria-hidden="true" className="stop-dot stop-dot-free mt-0.5 shrink-0" />
+        <p className="min-w-0 flex-1 text-sm text-ink-muted">
+          {item.kind === 'rest' ? name : 'Free time'} <span className="type-figure text-xs text-ink-faint">· {span(item.durationMinutes)}</span>
+        </p>
+      </div>
+    );
+  }
+
+  /* A meal: one line — when, what, and only the facts that change what you do. */
+  if (item.kind === 'meal' || (item.kind !== 'activity' && item.food)) {
+    return (
+      <div className={cx('flex gap-2.5 px-3 py-2 sm:gap-4 sm:px-5', focusRing)} {...common}>
+        {clockCell}
+        <span aria-hidden="true" className="stop-dot stop-dot-meal mt-0.5 shrink-0" />
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
+          <h3 className="text-[0.95rem] text-ink">
+            {sheet ? (
+              <PlaceSheetTrigger detail={sheet} image={frame} actions={menu}>
+                {mealTitle(item, name)}
+              </PlaceSheetTrigger>
+            ) : (
+              mealTitle(item, name)
+            )}
+          </h3>
+          {item.food && FOOD_STOP_LABEL[item.food.stopKind] ? <span className="type-meta text-ink-faint">{FOOD_STOP_LABEL[item.food.stopKind]}</span> : null}
+          {item.food?.priceBand ? <span className="type-meta text-ink-faint" title={`${PRICE_BAND_WORDS[item.food.priceBand]} — ${item.food.priceEvidence ? PRICE_EVIDENCE_COPY[item.food.priceEvidence] : ''}`}>{PRICE_BAND_LABELS[item.food.priceBand]}</span> : null}
+          {item.food?.isSpecialMeal ? <Badge tone="pine">Your one big one</Badge> : null}
+          {/* Where the meal sits on the route ("near your base", "beside your last stop") — kept when it says something; the generic placeholder is not. */}
+          {stopWhy(undefined, item.reason) ? <span className="basis-full line-clamp-1 text-xs text-ink-faint">{stopWhy(undefined, item.reason)}</span> : null}
+          {item.food?.reservation && (item.food.reservation.requirement === 'required' || item.food.reservation.requirement === 'recommended') ? <Badge tone="amber">{RESERVATION_LABELS[item.food.reservation.requirement]}</Badge> : null}
+          {printableCautions(item).length > 0 ? (
+            <ul className="hidden basis-full text-xs leading-relaxed text-ink-muted print:block" data-testid="stop-print-cautions">
+              {printableCautions(item).map((entry) => (
+                <li key={entry}>{entry}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  /* A stop: the thing the day is for. Name, one honest reason, and only the chips that mean something to do. */
+  const why = stopWhy(rationale?.why, item.reason);
+  const meta = [
+    item.physicalIntensity === 'moderate' || item.physicalIntensity === 'strenuous' ? item.physicalIntensity : null,
+    optional ? 'optional' : null,
+    anchorKind && anchorKind !== 'named_place' && anchorKind !== 'flex' && !(verification && verificationNeedsChip(verification)) ? ANCHOR_KIND_WORD[anchorKind] : null,
+  ].filter((entry): entry is string => Boolean(entry));
+  return (
+    <div className={cx('flex gap-2.5 px-3 py-3.5 sm:gap-4 sm:px-5 sm:py-4', focusRing)} {...common} {...(optional ? { 'data-optional': 'true' } : {})}>
+      {clockCell}
+      {stopNumber === null ? (
+        <span aria-hidden="true" className="stop-dot stop-dot-stop mt-1 shrink-0" />
+      ) : (
+        <span aria-hidden="true" data-testid="stop-number" className={cx('stop-pin mt-0.5 shrink-0', optional && 'stop-pin-optional')}>
           {stopNumber}
         </span>
       )}
-
-      {thumb ? <div className="hidden shrink-0 sm:block">{thumb}</div> : null}
-
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {item.travel ? (
-            /*
-             * PRODUCTION UI V1 — THE TRAVEL ROW IS ONE LINE.
-             *   ↳ 1h 42m drive · 126 km            (measured)
-             *   ↳ ≈1h 45m drive · estimate         (estimated from map distance)
-             *   ↳ Drive to Kilkenny · timing to confirm
-             * The paragraph that used to explain unknown semantics under every
-             * leg is gone; the legend on the map says it once.
-             */
-            <>
-              {/*
-                A span, not a heading. A connector is not a section of the day,
-                and eleven days of travel legs put twenty-two extra headings into
-                the document outline a screen-reader user navigates by.
-              */}
-              <span className="text-xs leading-snug text-ink-muted" title={travelProvenanceLabel(item.travel) || item.reason}>
-                {travelLine(item)}
-              </span>
-              {/*
-                V11 §8 — A GOOD LEG NEEDS NO BADGE.
-
-                Every travel row used to carry a chip, and on a healthy plan
-                almost every one of them said "measured" — a badge on the normal
-                case, repeated twice per day, which is the same thing V11 already
-                settled for `partially_verified`: a label that appears on
-                everything conveys nothing and costs a line on every row.
-
-                The chip now appears only when the timing is *not* the ordinary
-                measured kind — an estimate, an operator's own hours, a timetable
-                to confirm — which is exactly when a traveller needs to know. The
-                measured case keeps its precise wording in the row's `title` and
-                in the transfers table on Getting around.
-
-                V12.1 §19 — AND NOT WHEN THE ROW ALREADY SAID IT.
-
-                The row and the chip are now built from the same journey, so an
-                untimed train reads "Travel to Kyoto · schedule to confirm" with
-                a chip beside it saying "schedule to confirm". Saying a thing
-                twice on one line is the same defect as saying it on every line:
-                it stops being read. The chip earns its place only where it adds
-                a word the row does not already carry.
-              */}
-              {(() => {
-                const state = travelState(item.travel!);
-                if (state.word === 'measured' || travelLine(item).toLowerCase().endsWith(state.word.toLowerCase())) return null;
-                return (
-                  <Badge tone={state.tone} title={travelProvenanceLabel(item.travel!)}>
-                    {state.word}
-                  </Badge>
-                );
-              })()}
-            </>
+        <h3 className="font-display text-[1.2rem] leading-[1.15] font-normal tracking-[-0.01em] text-ink sm:text-[1.35rem]">
+          {sheet ? (
+            <PlaceSheetTrigger detail={sheet} image={frame} actions={menu}>
+              {name}
+            </PlaceSheetTrigger>
           ) : (
-            <h3 className={cx('text-ink', item.kind === 'activity' ? 'font-display text-[1.45rem] leading-[1.12] font-light tracking-[-0.012em] sm:text-[1.65rem]' : item.kind === 'meal' ? 'text-[0.95rem] font-medium' : 'text-base font-medium')}>
-              {sheet ? (
-                <PlaceSheetTrigger detail={sheet} image={frame} actions={menu}>
-                  {rationale?.name ?? item.title}
-                </PlaceSheetTrigger>
-              ) : (
-                (rationale?.name ?? item.title)
-              )}
-            </h3>
+            name
           )}
-          {item.travel ? null : item.food ? (
-            <span className="eyebrow">
-              {[MEAL_SLOT_LABELS[item.food.slot], FOOD_STOP_LABEL[item.food.stopKind]]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          ) : style.label ? (
-            <span className="eyebrow">
-              {style.label}
-            </span>
-          ) : null}
-          {item.food?.serviceType && item.food.stopKind === 'venue' ? (
-            <Badge>{FOOD_SERVICE_TYPE_LABELS[item.food.serviceType]}</Badge>
-          ) : null}
-          {item.food?.priceBand ? (
-            <Badge title={`${PRICE_BAND_WORDS[item.food.priceBand]} — ${item.food.priceEvidence ? PRICE_EVIDENCE_COPY[item.food.priceEvidence] : ''}`}>
-              {PRICE_BAND_LABELS[item.food.priceBand]}
-            </Badge>
-          ) : null}
-          {item.food?.isSpecialMeal ? <Badge tone="pine">Your one big one</Badge> : null}
-          {item.food?.reservation &&
-          (item.food.reservation.requirement === 'required' ||
-            item.food.reservation.requirement === 'recommended') ? (
-            <Badge tone="amber">{RESERVATION_LABELS[item.food.reservation.requirement]}</Badge>
-          ) : null}
-          {item.physicalIntensity && item.physicalIntensity !== 'none' ? (
-            <Badge>{item.physicalIntensity}</Badge>
-          ) : null}
-          {item.weather && item.weather.suitability !== 'workable' ? (
-            <Badge tone={WEATHER_TONE[item.weather.suitability]}>
-              {WEATHER_BADGE[item.weather.suitability]}
-            </Badge>
-          ) : null}
-          {item.booking ? (
-            <Badge tone="amber">{BOOKING_KIND_LABELS[item.booking.kind]}</Badge>
-          ) : null}
-          {/*
-            V11 §8 — the chip is for the states that mean something is
-            outstanding. See `verificationNeedsChip`: "Confirmed" and "Planned"
-            are the normal case and appeared on nearly every stop of a healthy
-            plan. The tier is still stated in full, with its blurb, in the place
-            sheet this row's name opens, and counted on the confidence panel.
-          */}
-          {verification && verificationNeedsChip(verification) && (anchorKind === undefined || anchorKind === 'named_place') ? (
-            <Badge tone={VERIFICATION_CHIP_WORD[verification].tone} title={VERIFICATION_TITLE[verification]}>
-              {VERIFICATION_CHIP_WORD[verification].label}
-            </Badge>
-          ) : anchorKind && anchorKind !== 'named_place' && anchorKind !== 'flex' ? (
-            <span className="eyebrow">{ANCHOR_KIND_WORD[anchorKind]}</span>
-          ) : null}
-        </div>
-
-        {/*
-          V6 — ONE LINE, THEN A SHEET.
-
-          The row carries the name, the clock, the chips and one short reason.
-          Everything else about the stop — the picture, the full fit sentence,
-          the plan's own reason, opening hours and their source, the booking
-          note, weather and daylight cautions, the food detail, where it sits in
-          the day — is in the place sheet, which the name opens. Nine grey
-          "Why this, and the details" accordions down one page was nine
-          accordions and no hierarchy.
-        */}
+        </h3>
+        {meta.length > 0 || item.booking || (item.weather && item.weather.suitability !== 'workable') || (verification && verificationNeedsChip(verification) && (anchorKind === undefined || anchorKind === 'named_place')) ? (
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 type-meta text-ink-faint">
+            {meta.map((entry, index) => (
+              <span key={entry}>
+                {index > 0 ? <span aria-hidden="true" className="mr-2">·</span> : null}
+                {entry}
+              </span>
+            ))}
+            {item.booking ? (
+              <Badge tone="amber" title={item.booking.url ? 'You arrange this yourself — the link is in Bookings.' : 'You arrange this yourself.'}>
+                {BOOKING_KIND_LABELS[item.booking.kind]}
+              </Badge>
+            ) : null}
+            {item.weather && item.weather.suitability !== 'workable' ? <Badge tone={WEATHER_TONE[item.weather.suitability]}>{WEATHER_BADGE[item.weather.suitability]}</Badge> : null}
+            {verification && verificationNeedsChip(verification) && (anchorKind === undefined || anchorKind === 'named_place') ? (
+              <Badge tone={VERIFICATION_CHIP_WORD[verification].tone} title={VERIFICATION_TITLE[verification]}>
+                {VERIFICATION_CHIP_WORD[verification].label}
+              </Badge>
+            ) : null}
+          </p>
+        ) : null}
+        {why ? (
+          <p className="mt-1 line-clamp-2 type-small text-ink-muted" data-testid={rationale?.why && why === firstSentence(rationale.why) ? 'stop-why' : 'stop-reason'}>
+            {why}
+          </p>
+        ) : null}
         {hours ? (
-          <p className="type-figure mt-1 text-xs font-medium text-ink-faint">
+          <p className="type-figure mt-1 text-xs text-ink-faint">
             Open {clock(hours.openMinute, 'later')}–{clock(hours.closeMinute, 'earlier')}
             {hours.lastAdmissionMinute !== undefined ? ` · arrive before ${clock(hours.lastAdmissionMinute, 'earlier')}` : ''}
             {hours.periodLabel ? ` · ${hours.periodLabel}` : ''}
           </p>
-        ) : null}
-        {item.kind !== 'travel' ? (
-          <p className="mt-1 type-small text-ink-muted" data-testid={rationale?.why ? 'stop-why' : 'stop-reason'}>
-            {firstSentence(rationale?.why ?? item.reason)}
-          </p>
-        ) : item.travel?.unverifiedScheduled || item.travel?.provenance === 'modelled' ? (
-          <p className="mt-1 text-xs leading-relaxed text-ink-faint">{item.reason} {travelProvenanceLabel(item.travel)}</p>
-        ) : null}
-        {item.travel && item.travel.modeCorrectedFrom ? (
-          <p className="mt-0.5 text-xs text-ink-faint">The plan said {TRANSPORT_MODE_LABELS[item.travel.modeCorrectedFrom].toLowerCase()}; the distance says otherwise.</p>
-        ) : null}
-        {item.booking ? (
-          <p className="mt-1 text-sm font-medium text-clay">You arrange this yourself{item.booking.url ? ' · link below' : ''}.</p>
         ) : null}
         {item.operational && item.operational.outcome !== 'not_applicable' ? (
           <p className="mt-1 hidden text-xs text-ink-faint print:block" data-testid="stop-operational" data-outcome={item.operational.outcome}>
             {item.operational.note} <span className="text-ink-faint/80">{item.operational.attribution}</span>
           </p>
         ) : null}
-        {/*
-          THE PACKET STILL CARRIES WHAT SOMEBODY HAS TO ACT ON.
-          A traveller with the printed plan and no phone still needs the access
-          caution, the booking they have to make and the daylight limit. The
-          reasoning, the sources and the alternatives are the sheet's and the
-          appendix's; these four are the day's.
-        */}
         {printableCautions(item).length > 0 ? (
           <ul className="mt-1 hidden text-xs leading-relaxed text-ink-muted print:block" data-testid="stop-print-cautions">
-            {printableCautions(item).map((line) => (
-              <li key={line}>{line}</li>
+            {printableCautions(item).map((entry) => (
+              <li key={entry}>{entry}</li>
             ))}
           </ul>
         ) : null}
       </div>
-
-      {menu ? <div className="shrink-0 self-start print:hidden">{menu}</div> : null}
+      {thumb ? <div className="shrink-0 self-start print:hidden">{thumb}</div> : null}
+      {menu ? <div className="-mr-2 shrink-0 self-start print:hidden">{menu}</div> : null}
     </div>
+  );
+}
+
+/** "Lunch — Casual lunch in Wilmington" without saying lunch twice, and without the slot word when the title already is one. */
+function mealTitle(item: ItineraryItem, name: string): string {
+  return name.replace(/^(Breakfast|Lunch|Dinner|Coffee|Snack)\s+—\s+(?=(Breakfast|Lunch|Dinner|Coffee|Snack)\b)/i, '');
+}
+
+/**
+ * The one sentence a stop's row says about itself.
+ *
+ * The fit model's reach sentence ("25 min by car, inside the 60 min you were
+ * happy to travel") is true and says nothing about the place — and it is
+ * planner bookkeeping read aloud. Where that is all the rationale has, the
+ * plan's own description of the stop is the better line; a reach sentence
+ * alone is dropped rather than shown.
+ */
+function stopWhy(why: string | undefined, reason: string | undefined): string | null {
+  const reach = /^\s*\d+\s*(?:hr|h|min)\b[^.]*\b(?:you were happy to travel|of your base|from your base)\b[^.]*\.?\s*$/i;
+  /* Bookkeeping, not a reason: the open-data scan's own provenance and distance lines. */
+  const filler = /^(What to look for and where|A \w+ slot in the day|On Wikidata as\b|Minutes from where you are staying|Listed on OpenStreetMap)/i;
+  const first = why ? firstSentence(why) : '';
+  if (first && !reach.test(first) && !filler.test(first)) return first;
+  const fallback = reason ? firstSentence(reason) : '';
+  if (fallback && !filler.test(fallback) && !reach.test(fallback)) return fallback;
+  return null;
+}
+
+/**
+ * A leg in one short line: "≈30 min drive · ~9 km", "1 hr 10 min train ·
+ * timetable". Legs nobody could time keep the full sentence `travelLine`
+ * writes, because there the *kind* of unknown is the useful part.
+ */
+function legLine(item: ItineraryItem): string {
+  const travel = item.travel!;
+  if (travel.unverifiedScheduled || travel.minutes === null || (travel.provenance !== 'measured' && travel.provenance !== 'estimated')) return travelLine(item);
+  const approx = travel.provenance === 'estimated';
+  const km = approx ? (travel.estimate?.approxKm ?? null) : travel.km;
+  const mode = TRANSPORT_MODE_LABELS[travel.mode]?.toLowerCase() ?? 'travel';
+  return [
+    `${approx ? '≈' : ''}${travelSpan(travel.minutes)} ${mode}`,
+    km !== null && km > 0 ? `${approx ? '~' : ''}${Math.round(km)} km` : approx ? 'estimate' : null,
+    travel.basis === 'traffic_aware' ? 'with traffic' : travel.basis === 'scheduled' ? 'timetable' : null,
+    travel.viaBases ? 'base to base' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** A small line drawing of how the leg is made. Decorative: the words say the same. */
+function ModeGlyph({ mode }: { mode: TravelSegment['mode'] }) {
+  const path =
+    mode === 'drive' || mode === 'rideshare' || mode === 'private_transfer'
+      ? 'M5 16l1.5-5a2 2 0 0 1 1.9-1.4h7.2a2 2 0 0 1 1.9 1.4L19 16M4 16h16v3H4z'
+      : mode === 'walk'
+        ? 'M13 4a1.5 1.5 0 1 1 0 .01M10 21l2-6 3 3v3M12 15l-1-5 4 2 2 3M9 11l2-1'
+        : mode === 'ferry'
+          ? 'M3 17c3 2 6 2 9 0s6-2 9 0M5 14l1-5h12l1 5M12 4v5'
+          : mode === 'rail' || mode === 'public_bus' || mode === 'shuttle'
+            ? 'M7 4h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM5 11h14M8 21l2-4M16 21l-2-4'
+            : 'M4 12h14M14 8l4 4-4 4';
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-ink-faint" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d={path} />
+    </svg>
   );
 }
 
@@ -4194,42 +4078,3 @@ function itineraryHasPackage(day: ItineraryDay): boolean {
  * guess. The controls to move, re-time and keep a stop sit beside them, only
  * on the owner's page.
  */
-function RowHandoff({ item, coordinates, verification, tripId, dayNumber, dayCount, role }: { item: ItineraryItem; coordinates: Record<string, { lat: number; lng: number }>; verification?: VerificationState; tripId?: string; dayNumber: number; dayCount: number; role?: 'core' | 'secondary' | 'optional' | 'flex' }) {
-  const linkClass = 'inline-flex min-h-9 items-center text-xs text-ink-muted underline underline-offset-4 hover:text-ink';
-  /*
-   * V11 §7 — ONE NAVIGATION AFFORDANCE PER STOP, NOT TWO.
-   *
-   * A measured leg used to carry "Directions: Google Maps · Apple Maps" and the
-   * stop immediately beneath it carried "Open in Google Maps · Apple Maps" —
-   * the same two apps, for the same destination, twice within about a hundred
-   * and fifty pixels, on every leg-and-stop pair of every day. On a five-stop
-   * day that is ten link rows for five places.
-   *
-   * The stop's own links survive because that is where a traveller looks for
-   * them (and `stop-navigation` is what the browser suite checks); the leg's
-   * duplicate is gone. Nothing navigable is lost: every destination the leg
-   * could open is the stop directly below it.
-   */
-  if (item.kind === 'travel') return null;
-  if (item.kind !== 'activity') return null;
-  const point = item.placeId ? coordinates[item.placeId] : undefined;
-  const navigable = point && verification && verification !== 'unverified';
-  if (!navigable && !tripId) return null;
-  return (
-    <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-3 text-xs text-ink-faint print:hidden">
-      {navigable ? (
-        <span className="inline-flex items-center gap-x-2" data-testid="stop-navigation">
-          <span>Open in</span>
-          <a href={placeNavigationLinks({ ...point, name: item.title }).google} target="_blank" rel="noreferrer noopener" className={linkClass}>
-            Google Maps
-          </a>
-          <span aria-hidden="true">·</span>
-          <a href={placeNavigationLinks({ ...point, name: item.title }).apple} target="_blank" rel="noreferrer noopener" className={linkClass}>
-            Apple Maps
-          </a>
-        </span>
-      ) : null}
-      {tripId && item.id.startsWith(`d${dayNumber}-`) ? <StopDayControls tripId={tripId} dayNumber={dayNumber} stopId={item.placeId ?? item.id} title={item.title} dayCount={dayCount} {...(role ? { role } : {})} /> : null}
-    </div>
-  );
-}

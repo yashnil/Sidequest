@@ -753,6 +753,29 @@
   }
 
   /*
+   * 2026-11 — THE GLOBE BEFORE IT IS DRAWN (landing hero). The planet's own
+   * silhouette — dark ocean, a rim of atmosphere lit from the upper left, a
+   * slow breath — so the first frame is already the globe the map fades in on.
+   */
+  .globe-silhouette {
+    background:
+      radial-gradient(circle at 34% 30%, rgb(70 102 110 / 0.35) 0%, rgb(20 38 45 / 0.0) 46%),
+      radial-gradient(circle at 50% 50%, #12242b 0%, #0c1b21 62%, #0a161b 100%);
+    box-shadow:
+      0 0 0 1px rgb(159 196 204 / 0.10),
+      0 0 60px 6px rgb(120 170 182 / 0.16),
+      inset -26px -30px 60px rgb(0 0 0 / 0.45);
+    animation: globe-breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes globe-breathe {
+    0%, 100% { box-shadow: 0 0 0 1px rgb(159 196 204 / 0.10), 0 0 60px 6px rgb(120 170 182 / 0.14), inset -26px -30px 60px rgb(0 0 0 / 0.45); }
+    50% { box-shadow: 0 0 0 1px rgb(159 196 204 / 0.16), 0 0 80px 10px rgb(120 170 182 / 0.22), inset -26px -30px 60px rgb(0 0 0 / 0.45); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .globe-silhouette { animation: none; }
+  }
+
+  /*
    * EXPERIENCE V2 — THE ATLAS GROUND.
    *
    * Deep cartographic ink with a faint graticule: the surface a destination's
@@ -1189,6 +1212,32 @@
     font-size: 11px;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
+  }
+  /* An optional stop: the same number, drawn hollow, so "skip it if the day runs long" reads at a glance. */
+  /* A row the map sent you to: one soft pulse of the selection colour, then gone. */
+  .row-flash {
+    animation: sq-row-flash 1.6s var(--ease-out) both;
+  }
+  @keyframes sq-row-flash {
+    0%,
+    35% {
+      background: color-mix(in srgb, var(--color-flare) 14%, transparent);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  .stop-pin-optional {
+    background: var(--color-paper);
+    color: var(--color-ink-muted);
+    border: 1.5px dashed var(--color-ink-faint);
+  }
+  details[open] > summary .details-caret {
+    transform: rotate(90deg);
+  }
+  .details-caret {
+    display: inline-block;
+    transition: transform var(--motion-base) var(--ease-out);
   }
   .stop-dot {
     position: relative;

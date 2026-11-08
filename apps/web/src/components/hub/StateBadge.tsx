@@ -21,6 +21,18 @@ export function StateBadge({ dayNumber, state, open = [] }: { dayNumber: number;
   const word = STATE_WORDS[state];
   const title = open.length > 0 ? open.slice(0, 3).map((node) => node.label).join(' · ') : undefined;
   const settled = SETTLED.has(state);
+  /*
+   * 2026-11 — the normal case carries no badge. "Planned" on every day of a
+   * plan is a label on everything, which conveys nothing; the element stays
+   * (screen readers and the state graph's contract read it), visually quiet.
+   */
+  if (state === 'suggested' && open.length <= 1) {
+    return (
+      <span data-testid={`day-state-${dayNumber}`} data-state={state} data-settled="false" className="sr-only">
+        {word.label}
+      </span>
+    );
+  }
   return (
     <span data-testid={`day-state-${dayNumber}`} data-state={state} data-settled={settled ? 'true' : 'false'} className="inline-flex items-center gap-1.5">
       <Badge tone={word.tone} {...(title ? { title } : {})}>
@@ -31,7 +43,7 @@ export function StateBadge({ dayNumber, state, open = [] }: { dayNumber: number;
         ) : null}
         {word.label}
       </Badge>
-      {open.length > 1 ? <span className="type-meta">{open.length} open</span> : null}
+      {open.length > 1 ? <span className="type-meta" {...(title ? { title } : {})}>{open.length} things to settle</span> : null}
     </span>
   );
 }
