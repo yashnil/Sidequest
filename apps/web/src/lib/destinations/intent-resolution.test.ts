@@ -33,6 +33,9 @@ const KNOWN: Record<string, DestinationCandidate> = {
   tanzania: candidate({ id: 'r195270', displayName: 'Tanzania', entityType: 'country', breadth: 'country', center: { lat: -6.5, lng: 35.7 }, bounds: { southWest: { lat: -11.8, lng: 29.3 }, northEast: { lat: -0.98, lng: 40.4 } }, countryCode: 'TZ' }),
   edinburgh: candidate({ id: 'r1920901', displayName: 'Edinburgh', center: { lat: 55.95, lng: -3.19 }, countryCode: 'GB' }),
   'scottish highlands, united kingdom': candidate({ id: 'r-highlands', displayName: 'Highland', entityType: 'subregion', breadth: 'subregion', center: { lat: 57.5, lng: -4.7 }, bounds: { southWest: { lat: 56.5, lng: -7 }, northEast: { lat: 58.7, lng: -2.9 } }, countryCode: 'GB' }),
+  tenerife: candidate({ id: 'r-co-tenerife', displayName: 'Tenerife', center: { lat: 9.9, lng: -74.86 }, bounds: { southWest: { lat: 9.8, lng: -75.0 }, northEast: { lat: 10.0, lng: -74.7 } }, countryCode: 'CO' }),
+  'canary islands': candidate({ id: 'r-canaries', displayName: 'Canary Islands', entityType: 'state_or_province', breadth: 'region', center: { lat: 28.3, lng: -15.9 }, bounds: { southWest: { lat: 27.6, lng: -18.2 }, northEast: { lat: 29.5, lng: -13.3 } }, countryCode: 'ES' }),
+  'tenerife, canary islands': candidate({ id: 'r-es-tenerife', displayName: 'Tenerife', center: { lat: 28.29, lng: -16.63 }, bounds: { southWest: { lat: 28.0, lng: -16.93 }, northEast: { lat: 28.61, lng: -16.12 } }, countryCode: 'ES' }),
   moab: candidate({ id: 'r198930', displayName: 'Moab', center: { lat: 38.57, lng: -109.55 }, bounds: { southWest: { lat: 38.54, lng: -109.58 }, northEast: { lat: 38.6, lng: -109.52 } }, countryCode: 'US' }),
   utah: candidate({ id: 'r161993', displayName: 'Utah', entityType: 'state_or_province', breadth: 'region', center: { lat: 39.42, lng: -111.71 }, bounds: { southWest: { lat: 37.0, lng: -114.05 }, northEast: { lat: 42.0, lng: -109.04 } }, countryCode: 'US' }),
   'zurich, switzerland': candidate({ id: 'r1682248', displayName: 'Zurich', center: { lat: 47.37, lng: 8.54 }, bounds: { southWest: { lat: 47.32, lng: 8.45 }, northEast: { lat: 47.43, lng: 8.63 } }, countryCode: 'CH' }),
@@ -170,6 +173,16 @@ describe('a place and the area it sits in (V1)', () => {
     expect(outcome.graph.children[0]!.within).toBe('Utah');
     expect(semantics.type).toBe('settlement');
     expect(semantics.extent?.bounds.northEast.lat).toBeLessThan(39);
+  });
+
+  it('"Tenerife, Canary Islands": a namesake abroad does not turn an address into two destinations', async () => {
+    const log: string[] = [];
+    const { outcome, semantics } = await resolveDestinationPhrase({ text: 'Tenerife, Canary Islands', resolver: fakeResolver(log), now: NOW, interpreter: null });
+    expect(log).toContain('Tenerife, Canary Islands');
+    expect(outcome.graph.children).toHaveLength(1);
+    expect(outcome.graph.children[0]!.within).toBe('Canary Islands');
+    expect(semantics.countries).toEqual(['ES']);
+    expect(semantics.extent!.bounds.southWest.lat).toBeGreaterThan(27);
   });
 
   it('"Tokyo, Kyoto" stays two places: neither sits inside the other', async () => {

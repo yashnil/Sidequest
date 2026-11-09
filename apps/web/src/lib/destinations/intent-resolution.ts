@@ -303,7 +303,32 @@ export async function resolveIntentGraph(input: {
    * Kyoto" stays two cities because neither sits inside the other.
    */
   let working = input.graph;
-  const containment = containedPart(input.graph, resolutions);
+  let containment = containedPart(input.graph, resolutions);
+  /*
+   * "Tenerife, Canary Islands": asked alone, the first name can answer as a
+   * namesake on another continent, and the union of the two then spans an ocean.
+   * Before a comma pair is believed to be two destinations, the whole phrase is
+   * asked once, as the address it may be. It counts only if the answer really
+   * lies inside the second place — "Tokyo, Kyoto" names nothing of the kind.
+   */
+  if (!containment && input.resolver && input.graph.children.length === 2 && input.graph.relationship !== 'corridor' && /^[^,]+,\s*[^,]+$/.test(input.graph.rawText) && !/\band\b/i.test(input.graph.rawText)) {
+    const place = input.graph.children[0]!;
+    const whole = place.kind === 'country' || !resolutions.has(input.graph.children[1]!.id) ? null : await ask(input.graph.rawText);
+    const addressed = whole ? rankCandidates(place, whole.candidates).find((r) => r.assessment.verdict !== 'incompatible') ?? null : null;
+    if (addressed) {
+      const tentative = new Map(resolutions);
+      tentative.set(place.id, resolutionFromCandidate(addressed.candidate));
+      const confirmed = containedPart(input.graph, tentative);
+      if (confirmed) {
+        containment = confirmed;
+        resolutions.set(place.id, resolutionFromCandidate(addressed.candidate));
+        partResolutions.set(place.id, whole!);
+        leads.set(place.id, addressed);
+        approved.set(place.id, [addressed]);
+        noteDivision(addressed.candidate);
+      }
+    }
+  }
   if (containment) {
     const { place, container } = containment;
     working = { ...input.graph, children: [{ ...place, within: container.label }], relationship: 'single' };
