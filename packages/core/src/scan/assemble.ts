@@ -833,7 +833,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
    */
   const matrixIds = new Set(matrix.ids);
   const foodVenues = (input.food?.dataset?.venues ?? []).filter((venue) => matrixIds.has(venue.routingId)).map((venue) => ({ ...venue, regionId: input.regionId }));
-  const food: FoodDataset | null = foodVenues.length > 0 ? { version: 1, regionId: input.regionId, venues: foodVenues, gaps: [] } : null;
+  const food: FoodDataset | null = foodVenues.length > 0 ? { version: 1, regionId: input.regionId, venues: foodVenues, gaps: [], ...(input.food?.dataset?.searched ? { searched: input.food.dataset.searched } : {}) } : null;
   const blocking = computeBlocking(dimensions, { drivingPlanned: mode === 'car' });
 
   const compiled: CompiledRegion = {

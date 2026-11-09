@@ -73,6 +73,13 @@ import {
   anchorKindOf,
   lookupPriorityFor,
   mealSlotOf,
+  isChainVenue,
+  mealAlternativeFor,
+  mealRankAdjustment,
+  readCuisineWishes,
+  venueHoursFit,
+  LOCAL_CUISINE_TAG,
+  type CuisineWishes,
   estimateLegMinutes,
   MAX_GEO_ESTIMATE_DRIVE_KM,
   COLOCATED_KM,
@@ -2430,8 +2437,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       ...(context.profile.food.dietaryNeeds.length > 0 ? { dietaryDisclosure: dietaryDisclosureFor(context.profile) } : {}),
       specialMealsPlanned: 0,
       specialMealBudget: context.profile.food.specialMealBudget,
-      groceryDayNumbers: [],
-      packedDayNumbers: [],
+      groceryDayNumbers: days.filter((day) => day.items.some((i) => i.food?.stopKind === 'grocery')).map((day) => day.dayNumber),
+      packedDayNumbers: days.filter((day) => day.items.some((i) => i.food?.stopKind === 'packed')).map((day) => day.dayNumber),
       daysWithoutVerifiedOption: days.filter((day) => day.items.some((i) => i.kind === 'meal') && !day.items.some((i) => i.food?.stopKind === 'venue')).map((day) => day.dayNumber),
       localSpecialties: [...new Set(days.flatMap((day) => day.items.map((i) => i.food?.localSpecialty).filter((v): v is string => Boolean(v))))],
       unusedChoices: [],
@@ -3714,10 +3721,22 @@ function dietaryDisclosureFor(profile: TravelerProfile): string {
   return `${base} Where nobody has said either way, we say so rather than assume.`;
 }
 
-function venueHoursOn(venue: FoodVenue, date: string): ItineraryItem['food'] extends infer F ? (F extends { hours?: infer H } ? H | null : never) : never {
+/** What the record lets us say about why this venue: each clause reads a field, none claims it is good. */
+function mealWhyClause(venue: FoodVenue, wishes: CuisineWishes, independentAsClose: boolean): string {
+  const cuisine = venue.cuisines[0];
+  const parts: string[] = [];
+  if (cuisine && venue.cuisines.some((c) => wishes.liked.has(c.toLowerCase()))) parts.push(`listed as ${cuisine}, which you said you like`);
+  else if (cuisine && venue.tags.includes(LOCAL_CUISINE_TAG)) parts.push(`listed as ${cuisine}, unusually common around here`);
+  else if (cuisine) parts.push(`listed as ${cuisine}`);
+  if (isChainVenue(venue)) parts.push(independentAsClose ? 'part of a chain' : 'part of a chain, and the closest choice on record');
+  return parts.length > 0 ? `; ${parts.join('; ')}` : '';
+}
+
+function venueHoursOn(venue: FoodVenue, date: string, atMinute?: number): ItineraryItem['food'] extends infer F ? (F extends { hours?: infer H } ? H | null : never) : never {
   if (venue.hours.kind !== 'scheduled') return null;
   const on = operatingOn(venue.hours, date);
-  const first = on.windows[0];
+  // The window this meal falls in: a dinner must not show the lunch service's hours.
+  const first = on.windows.find((window) => atMinute !== undefined && atMinute >= window.openMinute && atMinute <= window.closeMinute) ?? on.windows[0];
   if (on.status !== 'open' || !first) return null;
   return {
     openMinute: first.openMinute,
@@ -3725,7 +3744,8 @@ function venueHoursOn(venue: FoodVenue, date: string): ItineraryItem['food'] ext
     ...(on.periodLabel ? { periodLabel: on.periodLabel } : {}),
     confidence: venue.hours.hoursConfidence,
     sourceKind: venue.source.kind === 'official' ? 'official' : venue.source.kind === 'curated' ? 'authored' : 'estimated',
-    sourceName: venue.source.name,
+    // Whoever recorded the hours, which on a merged venue is not whoever recorded the venue.
+    sourceName: venue.hours.provenance.sourceName,
     ...(venue.source.url ? { sourceUrl: venue.source.url } : {}),
     ...(venue.source.lastVerified ? { lastVerified: venue.source.lastVerified } : {}),
   };
@@ -3747,13 +3767,19 @@ const FRESH_VENUE_DETOUR_KM = 1.5;
  * when it is still close; a declared diet can pull the choice up to 2 km
  * further. Pure, for the tests.
  */
-export function pickMealVenue<T extends { venue: { id: string }; km: number }>(candidates: readonly T[], venueUse: ReadonlyMap<string, number>, supports: (venue: T['venue']) => boolean): T | undefined {
+export function pickMealVenue<T extends { venue: { id: string }; km: number }>(candidates: readonly T[], venueUse: ReadonlyMap<string, number>, supports: (venue: T['venue']) => boolean, adjustKm: (entry: T) => number = () => 0): T | undefined {
   const nearestAny = candidates[0];
   const fresh = candidates.filter((entry) => (venueUse.get(entry.venue.id) ?? 0) === 0);
   const nearestFresh = fresh[0];
   const pool = nearestAny && nearestFresh && nearestFresh.km <= Math.max(nearestAny.km + FRESH_VENUE_DETOUR_KM, nearestAny.km * 2) ? fresh : candidates;
   const nearest = pool[0];
-  return nearest ? (pool.find((entry) => supports(entry.venue) && entry.km <= nearest.km + 2) ?? nearest) : undefined;
+  if (!nearest) return undefined;
+  const supported = pool.find((entry) => supports(entry.venue) && entry.km <= nearest.km + 2);
+  if (supported) return supported;
+  // Taste, cuisine, hours and independence, all priced in kilometres (`MEAL_RANK_KM`). The earliest wins a tie.
+  let best = nearest;
+  for (const entry of pool) if (entry.km + adjustKm(entry) < best.km + adjustKm(best)) best = entry;
+  return best;
 }
 
 export function nameVenuesForDay(
@@ -3770,12 +3796,18 @@ export function nameVenuesForDay(
   /** Lunch and dinner at the same table on one day is a gap in the data, not a recommendation. */
   const namedToday = new Set<string>();
   const bandCeiling = PRICE_BAND_ORDER[profile.food.everydayPriceBand];
+  const wishes = readCuisineWishes([...Object.values(profile.preferenceNotes ?? {}), profile.food.dietaryNotes], food.venues.flatMap((venue) => venue.cuisines));
+  const cuisineUses = new Map<string, number>();
+  for (const venue of food.venues) {
+    const uses = venueUse.get(venue.id) ?? 0;
+    if (uses > 0) for (const cuisine of venue.cuisines) cuisineUses.set(cuisine.toLowerCase(), (cuisineUses.get(cuisine.toLowerCase()) ?? 0) + uses);
+  }
   for (const [index, item] of items.entries()) {
     if (item.kind !== 'meal') continue;
     const slot: 'lunch' | 'dinner' | null = item.id.endsWith('lunch') ? 'lunch' : item.id.endsWith('dinner') ? 'dinner' : null;
     if (!slot) continue;
-    // The plan said to carry this one ("Pack a lunch — food is thin out here"); naming a restaurant would contradict it.
-    if (/\b(pack(ed)? (a )?lunch|picnic|carry (your )?(own )?food)\b/i.test(item.title)) continue;
+    // The plan said to carry this one ("Pack a lunch — food is thin out here"): only a table right beside the stop overrules that.
+    const plannedToCarry = /\b(pack(ed)? (a )?lunch|picnic|carry (your )?(own )?food)\b/i.test(item.title);
     // Where the traveller is at this meal: the last stop before it, or the base.
     let near: { lat: number; lng: number } | null = null;
     for (let i = index - 1; i >= 0; i -= 1) {
@@ -3798,6 +3830,8 @@ export function nameVenuesForDay(
       }
     }
     const nextPoint = after ?? base;
+    // Dinner with nothing after it happens back at the base, however far away the last stop was.
+    const backAtBase = slot === 'dinner' && after === null && base !== null;
     const declaredNeeds = profile.food.dietaryNeeds;
     /* V1 — on foot and by transit a meal is a walk or a short ride away; 25 km is a road-trip radius, and it named a Shibuya restaurant for dinner in Asakusa. */
     const venueSearchKm = carFree ? CAR_FREE_VENUE_SEARCH_KM : VENUE_SEARCH_KM;
@@ -3805,12 +3839,16 @@ export function nameVenuesForDay(
       .filter((venue) => venue.mealPeriods.includes(slot))
       // A venue whose record says it cannot do one of the traveller's needs is never named for them.
       .filter((venue) => !venue.dietary.some((claim) => claim.evidence === 'venue_states_unsuitable' && declaredNeeds.includes(claim.need)))
-      .filter((venue) => PRICE_BAND_ORDER[venue.priceBand] <= bandCeiling)
+      // Only a published band can rule a venue out; one inferred from the kind of place is a nudge, in the ranking.
+      .filter((venue) => venue.priceEvidence === 'format_inferred' || PRICE_BAND_ORDER[venue.priceBand] <= bandCeiling)
       .filter((venue) => (venueUse.get(venue.id) ?? 0) < MAX_TIMES_ONE_VENUE_IS_NAMED && !namedToday.has(venue.id))
-      .filter((venue) => venue.hours.kind === 'unknown' || venue.hours.kind === 'always_open' || operatingOn(venue.hours, day.date).status !== 'closed')
+      .filter((venue) => venueHoursFit(venue, day.date, item.startMinute + venue.walkMinutesFromRouting, item.endMinute) !== 'closed')
+      .filter((venue) => !plannedToCarry || kmBetween(origin, venue.coordinates) <= 2)
       .flatMap((venue) => {
         const fit = mealVenueFit({ origin, next: nextPoint, venue: venue.coordinates, carFree, searchKm: venueSearchKm });
-        return fit ? [{ venue, ...fit }] : [];
+        if (fit) return [{ venue, ...fit, aroundBase: false }];
+        const nearBase = backAtBase ? mealVenueFit({ origin: base, next: null, venue: venue.coordinates, carFree, searchKm: venueSearchKm }) : null;
+        return nearBase ? [{ venue, ...nearBase, nextKm: nearBase.km, aroundBase: true }] : [];
       })
       .sort((a, b) => a.km - b.km);
     /*
@@ -3829,18 +3867,26 @@ export function nameVenuesForDay(
      * distance); diversity never sends anyone across town. A repeat happens
      * only where nothing new is in reach, and never more than the cap.
      */
-    const best = pickMealVenue(candidates, venueUse, supports);
-    if (!best) continue;
+    const everydayPriceBand = profile.food.everydayPriceBand;
+    const best = pickMealVenue(candidates, venueUse, supports, (entry) => mealRankAdjustment({ venue: entry.venue, slot, carFree, wishes, cuisineUses, everydayPriceBand, hoursFit: venueHoursFit(entry.venue, day.date, item.startMinute + entry.venue.walkMinutesFromRouting, item.endMinute) }));
+    if (!best) {
+      const firstActivity = items.find((candidate) => candidate.kind === 'activity' && anchorCoordinates.has(candidate.id));
+      const previousActivity = items.slice(0, index).reverse().find((candidate) => candidate.kind === 'activity');
+      const alternative = mealAlternativeFor({ slot, food, date: day.date, dayNumber: day.dayNumber, origin: backAtBase ? base : origin, base, baseName: day.baseName, firstStop: firstActivity ? anchorCoordinates.get(firstActivity.id)! : null, nearName: previousActivity?.title ?? null, carFree, plannedToCarry });
+      if (alternative) items[index] = { ...item, ...(alternative.title ? { title: alternative.title } : {}), reason: alternative.reason, food: alternative.food };
+      continue;
+    }
     const { venue } = best;
+    for (const cuisine of venue.cuisines) cuisineUses.set(cuisine.toLowerCase(), (cuisineUses.get(cuisine.toLowerCase()) ?? 0) + 1);
     venueUse.set(venue.id, (venueUse.get(venue.id) ?? 0) + 1);
     namedToday.add(venue.id);
-    const hours = venueHoursOn(venue, day.date);
+    const hours = venueHoursOn(venue, day.date, item.startMinute + venue.walkMinutesFromRouting);
     const declared = profile.food.dietaryNeeds;
     const claims = venue.dietary.filter((claim) => declared.includes(claim.need) && claim.evidence !== 'venue_states_unsuitable');
     const unverified = declared.filter((need) => !claims.some((claim) => claim.need === need));
     const besideLast = kmBetween(origin, venue.coordinates) <= 2;
     const besideNext = !besideLast && best.nextKm <= 2;
-    const routeContext = atBase ? 'at_base' : besideLast || besideNext || best.detour <= 1 ? 'on_route' : 'near_route';
+    const routeContext = atBase || best.aroundBase ? 'at_base' : besideLast || besideNext || best.detour <= 1 ? 'on_route' : 'near_route';
     /*
      * V11 §N — "11 km off the route, on the way" said both things at once.
      *
@@ -3851,6 +3897,10 @@ export function nameVenuesForDay(
      */
     const where = atBase
       ? 'near your base'
+      : best.aroundBase
+        ? best.km <= 2
+          ? 'near your base, at the end of the day'
+          : `${Math.round(best.km)} km from your base`
       : besideLast
         ? 'beside your last stop'
         : besideNext
@@ -3861,7 +3911,7 @@ export function nameVenuesForDay(
     items[index] = {
       ...item,
       title: `${slot === 'lunch' ? 'Lunch' : 'Dinner'} — ${venue.name}`,
-      reason: `${venue.name} is ${where}${venue.localSpecialty ? `; ${venue.localSpecialty.note}` : ''}. ${venue.source.kind === 'osm' ? 'Named from OpenStreetMap map data (© OpenStreetMap contributors), not a review or a booking site' : venue.source.kind === 'overture' ? 'Named from open place data (© Overture Maps Foundation), not a review or a booking site' : "Named from the region's own food data"}; we have not checked today that it is open, and nothing is booked.`,
+      reason: `${venue.name} is ${where}${venue.localSpecialty ? `; ${venue.localSpecialty.note}` : ''}${mealWhyClause(venue, wishes, candidates.some((entry) => !isChainVenue(entry.venue) && entry.km <= best.km))}. ${venue.source.kind === 'osm' ? 'Named from OpenStreetMap map data (© OpenStreetMap contributors), not a review or a booking site' : venue.source.kind === 'overture' ? 'Named from open place data (© Overture Maps Foundation), not a review or a booking site' : "Named from the region's own food data"}; ${venue.hours.kind === 'unknown' ? 'its hours are not confirmed, and ' : hours ? 'the hours on record cover this meal, but ' : ''}we have not checked today that it is open, and nothing is booked.`,
       food: {
         slot,
         stopKind: 'venue',

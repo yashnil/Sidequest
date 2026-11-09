@@ -281,7 +281,8 @@ describe('grounding meals in Overture venues first', () => {
     expect(result.detail).toMatch(/described rather than named/);
   });
 
-  it('prefers independents over chains where there are a few independents', async () => {
+  // Changed in the food pass: the owner asked that chains not be excluded categorically. They are kept, ranked last, a couple per box, and tagged.
+  it('ranks independents first and keeps a couple of chains, tagged, for the meal step to weigh', async () => {
     const result = await groundScanFood(input({ points: [BASE] }), {
       cache: noCache,
       geocodeArea: null,
@@ -299,7 +300,36 @@ describe('grounding meals in Overture venues first', () => {
         ...boxes.slice(1).map(() => null),
       ],
     });
-    expect(result.dataset!.venues.map((v) => v.name).every((n) => n.startsWith('Local'))).toBe(true);
+    const venues = result.dataset!.venues;
+    expect(venues.slice(0, 4).every((v) => v.name.startsWith('Local'))).toBe(true);
+    const chains = venues.filter((v) => v.name.startsWith('Burger'));
+    expect(chains).toHaveLength(2);
+    expect(chains.every((v) => v.tags.includes('chain'))).toBe(true);
+  });
+
+  it('does not treat two different non-Latin names beside each other as one venue', async () => {
+    const result = await groundScanFood(input({ points: [BASE] }), { cache: noCache, geocodeArea: null, overpass: false, overture: async () => [{ rows: [orow('a', 46, 7, { name: '鮨鶴' }), orow('b', 46.0002, 7, { name: '丸亀食堂' })], bytes: 1, ms: 1, cacheHit: false }] });
+    expect(result.dataset!.venues).toHaveLength(2);
+  });
+
+  it('merges what OSM knows onto the Overture record of the same venue, and credits OSM', async () => {
+    const result = await groundScanFood(input({ points: [BASE] }), {
+      cache: noCache,
+      geocodeArea: null,
+      overture: async () => [{ rows: [orow('a', 46, 7, { name: 'Casa Pepe' })], bytes: 1, ms: 1, cacheHit: false }],
+      fetchMeals: async () => answer([node(46.0001, 7, { amenity: 'restaurant', name: 'Casa Pepe', opening_hours: 'Mo-Sa 12:00-22:00; Su off', 'diet:vegan': 'yes' })]),
+    });
+    const [venue] = result.dataset!.venues;
+    expect(result.dataset!.venues).toHaveLength(1);
+    expect(venue!.hours.kind).toBe('scheduled');
+    expect(venue!.dietary.map((c) => c.need)).toEqual(['vegan']);
+    expect(result.source).toBe('overture+openstreetmap');
+  });
+
+  it('records which boxes answered and how many places to eat each held; a failed box is absent, not empty', async () => {
+    const result = await groundScanFood(input(), { cache: noCache, geocodeArea: null, overpass: false, overture: async (boxes) => [{ rows: [orow('a', boxes[0]!.south + 0.006, 7), orow('g', boxes[0]!.south + 0.007, 7, { serviceType: 'grocery', shop: 'grocery' })], bytes: 1, ms: 1, cacheHit: false }, null] });
+    expect(result.dataset!.searched).toEqual([expect.objectContaining({ mealVenues: 1 })]);
+    expect(result.dataset!.venues.find((v) => v.serviceType === 'grocery')!.mealPeriods).toEqual(['snack']);
   });
 });
 
@@ -382,6 +412,20 @@ describe('an Overture place row as a food venue', () => {
     expect(overtureFoodRow({ ...base, basic_category: 'fast_food_restaurant', taxonomy: { primary: 'fast_food_restaurant' } })!.cuisine).toBeUndefined();
     expect(overtureFoodRow({ ...base, brand: { names: { primary: 'Starbucks' }, wikidata: 'Q37158' } })!.chain).toBe(true);
     expect(overtureFoodRow({ ...base, sources: [{ dataset: 'foursquare', license: 'Apache-2.0' }] })!.licenceId).toBe('Apache-2.0');
+  });
+  it('believes a brand with a Wikidata item or a branch of the brand, not a bare brand on an unrelated venue', () => {
+    expect(overtureFoodRow({ ...base, brand: { names: { primary: 'The Crown, Walney' } } })!.chain).toBe(false);
+    expect(overtureFoodRow({ ...base, brand: { names: { primary: 'Casa Pepe' } } })!.chain).toBe(false);
+    expect(overtureFoodRow({ ...base, names: { primary: 'Casa Pepe Centro' }, brand: { names: { primary: 'Casa Pepe' } } })).toMatchObject({ chain: true, chainEvidence: 'brand_name' });
+  });
+  it('keeps pubs, food shops, stated diets and the town on the address; refuses a liquor store', () => {
+    expect(overtureFoodRow({ ...base, basic_category: 'bar', taxonomy: { primary: 'pub' } })).toMatchObject({ serviceType: 'restaurant', pub: true });
+    expect(overtureFoodRow({ ...base, basic_category: 'bar', taxonomy: { primary: 'cocktail_bar' } })).toBeNull();
+    expect(overtureFoodRow({ ...base, basic_category: 'food_and_beverage_store', taxonomy: { primary: 'grocery_store' } })).toMatchObject({ serviceType: 'grocery', shop: 'grocery' });
+    expect(overtureFoodRow({ ...base, basic_category: 'convenience_store', taxonomy: { primary: 'convenience_store' } })).toMatchObject({ shop: 'convenience' });
+    expect(overtureFoodRow({ ...base, basic_category: 'food_and_beverage_store', taxonomy: { primary: 'liquor_store' } })).toBeNull();
+    expect(overtureFoodRow({ ...base, taxonomy: { primary: 'vegan_restaurant' } })!.dietary).toEqual(['vegan', 'vegetarian']);
+    expect(overtureFoodRow({ ...base, addresses: [{ locality: 'KESWICK' }] })!.locality).toBe('Keswick');
   });
 });
 

@@ -1,7 +1,7 @@
 import type { FoodDataset, ItineraryDay, ScanPoint, TravelerProfile } from '@sidequest/core';
 import { nameVenuesForDay } from '../../planning/reconcile';
 import type { OverpassResult } from '../../providers/overpass';
-import { chainKey, markChainsFromBox, overtureFoodRow, type OvertureFoodBoxResult, type OvertureFoodRow } from '../../providers/overture-food';
+import { brandEvidenceOf, chainKey, markChainsFromBox, overtureFoodRow, type OvertureFoodBoxResult, type OvertureFoodRow } from '../../providers/overture-food';
 import type { BoundingBox } from '../../providers/overture/scan';
 import { groundScanFood, type ScanFoodGrounding } from '../food';
 import { asOverpassElement, asOvertureRow, overpassAnswer, recordedBoxFor, type RecordedFoodFixture } from './replay';
@@ -21,12 +21,12 @@ const noCache = { read: () => null, write: () => undefined };
 function replayOvertureBox(fixture: RecordedFoodFixture, box: BoundingBox): OvertureFoodBoxResult | null {
   const recorded = recordedBoxFor(fixture, box);
   if (!recorded?.overture) return null;
-  const brandedKeys = new Set<string>(recorded.overture.brandedKeys);
+  const brandedKeys = new Set<string>();
   const seenKeys = new Map<string, number>();
   const rows: OvertureFoodRow[] = [];
   for (const raw of recorded.overture.rows) {
     const key = chainKey(raw.name);
-    if (key && (raw.brand || raw.brandWikidata)) brandedKeys.add(key);
+    if (key && brandEvidenceOf(raw.name, { names: { primary: raw.brand ?? null }, wikidata: raw.brandWikidata ?? null })) brandedKeys.add(key);
     if (key) seenKeys.set(key, (seenKeys.get(key) ?? 0) + 1);
     const row = overtureFoodRow(asOvertureRow(raw));
     if (row) rows.push(row);

@@ -112,6 +112,8 @@ export * from './food/quality';
 export * from './food/provider';
 export * from './food/discovery-rank';
 export * from './food/party-fit';
+export * from './food/identity';
+export * from './food/meal-rank';
 export * from './preference/evidence';
 export * from './preference/extract';
 

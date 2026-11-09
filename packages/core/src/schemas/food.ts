@@ -710,6 +710,15 @@ export const foodDatasetSchema = z
     venues: z.array(foodVenueSchema),
     /** Places we know have nothing, with the source that says so. */
     gaps: z.array(foodGapSchema).default([]),
+    /**
+     * Where the food step actually looked and got an answer, and how many
+     * places to eat that answer held. The difference between "we read this
+     * ground and it lists nowhere to eat" and "nobody looked here", which a plan
+     * must never confuse. Absent on anything written before it existed.
+     */
+    searched: z
+      .array(z.object({ center: z.object({ lat: z.number(), lng: z.number() }), radiusKm: z.number().positive(), mealVenues: z.number().int().min(0) }))
+      .optional(),
   })
   .superRefine((dataset, ctx) => {
     const seen = new Set<string>();

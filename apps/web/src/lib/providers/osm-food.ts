@@ -1,5 +1,5 @@
 import 'server-only';
-import type { FoodVenue } from '@sidequest/core';
+import { chainTags, parseOsmOpeningHours, type FoodVenue } from '@sidequest/core';
 import type { NormalizedOsmPlace } from './overpass';
 
 /**
@@ -16,10 +16,9 @@ import type { NormalizedOsmPlace } from './overpass';
  * Three fields carry almost all the risk here, and all three default to the
  * cautious answer:
  *
- * - **hours** start `unknown`, which the food planner refuses to schedule. A
- *   restaurant whose hours nobody confirmed is a fifty-fifty chance of a locked
- *   door at dinnertime, and the product would rather hold the time than name a
- *   place it cannot stand behind.
+ * - **hours** are the map's `opening_hours` when the whole tag can be read
+ *   (`parseOsmOpeningHours`), and `unknown` otherwise, which says so on the plan
+ *   rather than guessing.
  * - **price** is `format_inferred` from the kind of venue, never a band anybody
  *   published, and the label says so.
  * - **dietary** claims come only from explicit `diet:*` tags, and land at
@@ -78,7 +77,7 @@ export function osmFoodVenue(
     locality: target.destinationName,
     shortDescription: `${FOOD_SERVICE_WORDS[serviceType]} recorded in the map data for ${target.destinationName}.`,
     coordinates: osm.coordinates,
-    tags: [osm.primaryTag],
+    tags: [osm.primaryTag, ...(osm.planningTags['brand:wikidata'] ? chainTags('brand_wikidata') : osm.planningTags.brand ? chainTags('brand_name') : [])],
     source: {
       name: 'OpenStreetMap',
       kind: 'osm',
@@ -111,21 +110,26 @@ export function osmFoodVenue(
      */
     provisioning: 'none',
     dietary,
-    hours: {
-      kind: 'unknown',
-      hoursConfidence: 'unverified',
-      note: 'Nobody publishes hours for this that we could read.',
-      provenance: {
-        kind: 'estimated',
-        sourceName: 'OpenStreetMap contributors',
-        confidence: 0.3,
-        volatility: 'dynamic',
-        recheckNote: 'We have no confirmed hours for this. Check before you go.',
-      },
-    },
+    hours: osmHours(osm.planningTags.opening_hours),
     routingId,
     walkMinutesFromRouting: 0,
   };
+}
+
+/**
+ * What the map says about when it is open, kept only when the whole tag can be
+ * read (`parseOsmOpeningHours`). Community-recorded, so `unverified` and with a
+ * recheck note: enough to avoid a door the map says is shut, not a promise.
+ */
+function osmHours(tag: string | undefined): FoodVenue['hours'] {
+  const parsed = tag ? parseOsmOpeningHours(tag) : null;
+  const provenance = (confidence: number, recheckNote: string) => ({ kind: 'estimated' as const, sourceName: 'OpenStreetMap contributors', confidence, volatility: 'dynamic' as const, recheckNote });
+  if (!parsed) {
+    return { kind: 'unknown', hoursConfidence: 'unverified', note: 'Nobody publishes hours for this that we could read.', provenance: provenance(0.3, 'We have no confirmed hours for this. Check before you go.') };
+  }
+  const recorded = provenance(0.55, 'Hours as recorded on OpenStreetMap, which may be out of date. Check before you go.');
+  if (parsed.kind === 'always_open') return { kind: 'always_open', hoursConfidence: 'unverified', provenance: recorded };
+  return { kind: 'scheduled', hoursConfidence: 'unverified', periods: parsed.periods, closedAnnualDates: [], provenance: recorded };
 }
 
 export const FOOD_SERVICE_BY_TAG: Record<string, FoodVenue['serviceType'] | undefined> = {
@@ -179,4 +183,5 @@ export const DIET_TAGS: readonly [string, FoodVenue['dietary'][number]['need']][
   ['diet:vegan', 'vegan'],
   ['diet:gluten_free', 'gluten_free'],
   ['diet:halal', 'halal'],
+  ['diet:kosher', 'kosher'],
 ];

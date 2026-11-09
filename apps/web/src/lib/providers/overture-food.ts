@@ -1,5 +1,5 @@
 import 'server-only';
-import type { FoodVenue, LicenceId } from '@sidequest/core';
+import { LOCAL_CUISINE_TAG, chainNameKey, chainTags, genericNameTokens, type ChainEvidence, type DietaryClaim, type DietaryNeed, type FoodVenue, type LicenceId } from '@sidequest/core';
 import { readProviderCache, writeProviderCache } from '../db/compiler-repository';
 import { CatalogError, fileIntersects, latestRelease, themeFiles, type CatalogFile, type FetchOptions } from './overture/catalog';
 import { ScanError, pointOf, rowPointInBox, scanFile, type BoundingBox, type ScanCounters } from './overture/scan';
@@ -35,7 +35,7 @@ export const MIN_OVERTURE_FOOD_CONFIDENCE = 0.7;
 const BOX_BYTE_BUDGET = 24_000_000;
 const BOX_DEADLINE_MS = 20_000;
 const BOX_CONCURRENCY = 4;
-const COLUMNS = ['id', 'names', 'confidence', 'operating_status', 'basic_category', 'taxonomy', 'brand', 'websites', 'sources', 'bbox'] as const;
+const COLUMNS = ['id', 'names', 'confidence', 'operating_status', 'basic_category', 'taxonomy', 'brand', 'websites', 'sources', 'addresses', 'bbox'] as const;
 
 /** Overture's `basic_category` → the food schema's service type. Absent → not a meal venue. */
 export const OVERTURE_FOOD_SERVICE: Readonly<Record<string, FoodVenue['serviceType']>> = {
@@ -57,6 +57,18 @@ export interface OvertureFoodRow {
   cuisine?: string;
   confidence: number;
   chain: boolean;
+  /** How the row was recognised as a chain, when it was. */
+  chainEvidence?: ChainEvidence;
+  /** Somewhere to buy food rather than sit down: the row is a shop, and which kind. */
+  shop?: 'grocery' | 'convenience' | 'market';
+  /** Filed as a pub: food is likely and not stated. */
+  pub?: boolean;
+  /** Filed as a coffee shop rather than a café with a kitchen. */
+  coffeeShop?: boolean;
+  /** Needs the row's own category states (`vegan_restaurant`, …). */
+  dietary?: DietaryNeed[];
+  /** The town on the row's address, when it has one. */
+  locality?: string;
   website?: string;
   licenceId: LicenceId;
   /** The newest `update_time` among the row's sources. */
@@ -84,6 +96,19 @@ export interface OvertureFoodDeps {
  */
 const NOT_A_MEAL_LEAF = /^(dessert_shop|donut_shop|ice_cream_shop|frozen_yogurt_shop|candy_store|chocolatier|internet_cafe|juice_bar|bubble_tea_shop|convenience_store)$/;
 
+/** Somewhere to buy lunch, by Overture's own leaf. Liquor, tobacco and supplement shops share the branch and are not food for a day out. */
+const GROCERY_LEAF = /^(grocery_store|supermarket|[a-z]+_grocery_store|produce_store|health_food_store|specialty_foods_store|food_and_beverage_store)$/;
+const MARKET_LEAF = /^(farmers_market|public_market|night_market)$/;
+
+/** Needs a category states outright. A vegan kitchen is by definition a vegetarian one; nothing else is widened. */
+const DIET_LEAF: Readonly<Record<string, readonly DietaryNeed[]>> = {
+  vegetarian_restaurant: ['vegetarian'],
+  vegan_restaurant: ['vegan', 'vegetarian'],
+  halal_restaurant: ['halal'],
+  kosher_restaurant: ['kosher'],
+  gluten_free_restaurant: ['gluten_free'],
+};
+
 const NOT_A_VENUE = /\b(vacanc(y|ies)|we('| a)re hiring|jobs? at|careers?)\b|вакансии|ваканси[яй]|求人|delivery only|dark kitchen|ghost kitchen/i;
 
 /**
@@ -98,12 +123,30 @@ export function chainKey(name: string): string {
 }
 
 /**
+ * What a row's `brand` proves. A brand with a Wikidata item is a real one. A bare
+ * brand name is noisy (in the recorded corpus about a third of them are
+ * unrelated to the venue they sit on), so it counts only when the venue's own
+ * name is that brand plus a branch word or place; a brand identical to the name
+ * says only that the place has a page.
+ */
+export function brandEvidenceOf(name: string, brand: { names?: { primary?: unknown } | null; wikidata?: unknown } | null | undefined): ChainEvidence | null {
+  if (typeof brand?.wikidata === 'string' && brand.wikidata) return 'brand_wikidata';
+  const brandName = brand?.names?.primary;
+  if (typeof brandName !== 'string' || !brandName) return null;
+  const nameKey = chainNameKey(name);
+  const brandKey = chainNameKey(brandName);
+  return brandKey.length >= 3 && nameKey !== brandKey && nameKey.startsWith(`${brandKey} `) ? 'brand_name' : null;
+}
+
+/**
  * Mark rows as chains where the source did not: the same name three times
  * across the trip's boxes, or twice inside one. Overture leaves `brand` empty
  * for most branches (a live Tokyo read named Saizeriya, Sukiya and Denny's as
  * the "local" picks), and a repeated name is the evidence that is there.
  */
 export function markRepeatedNamesAsChains(boxes: readonly (readonly OvertureFoodRow[])[]): OvertureFoodRow[][] {
+  // "Cafe" four times is a word, not a chain.
+  const generic = genericNameTokens(boxes.flatMap((rows) => rows.map((row) => row.name)));
   const across = new Map<string, number>();
   const within = new Set<string>();
   for (const rows of boxes) {
@@ -120,7 +163,8 @@ export function markRepeatedNamesAsChains(boxes: readonly (readonly OvertureFood
   }
   return boxes.map((rows) => rows.map((row) => {
     const key = chainKey(row.name);
-    return row.chain || (key && (within.has(key) || (across.get(key) ?? 0) >= 3)) ? { ...row, chain: true } : row;
+    if (row.chain || !key || generic.has(key)) return row;
+    return within.has(key) || (across.get(key) ?? 0) >= 3 ? { ...row, chain: true, chainEvidence: 'repeated_name' as const } : row;
   }));
 }
 
@@ -130,7 +174,7 @@ export function markChainsFromBox(rows: readonly OvertureFoodRow[], brandedKeys:
     const key = chainKey(row.name);
     // A branch name glued to the brand ("丸亀製麺吉祥院店") still starts with it.
     const branded = brandedKeys.has(key) || [...brandedKeys].some((k) => k.length >= 3 && key.startsWith(k));
-    return !row.chain && key && (branded || (seenKeys.get(key) ?? 0) >= 2) ? { ...row, chain: true } : row;
+    return !row.chain && key && (branded || (seenKeys.get(key) ?? 0) >= 2) ? { ...row, chain: true, chainEvidence: branded ? ('brand_name' as const) : ('repeated_name' as const) } : row;
   });
 }
 
@@ -154,7 +198,13 @@ function httpUrl(value: unknown): string | undefined {
 /** One Overture place row → a food row, or null when it is not somewhere to eat we can stand behind. */
 export function overtureFoodRow(row: Record<string, unknown>): OvertureFoodRow | null {
   const category = typeof row.basic_category === 'string' ? row.basic_category : null;
-  let serviceType = category ? OVERTURE_FOOD_SERVICE[category] : undefined;
+  const taxonomy = row.taxonomy as { primary?: unknown; hierarchy?: unknown } | null | undefined;
+  const leaf = typeof taxonomy?.primary === 'string' ? taxonomy.primary : '';
+  const hierarchy = Array.isArray(taxonomy?.hierarchy) ? taxonomy.hierarchy.filter((h): h is string => typeof h === 'string') : [];
+  const shop: OvertureFoodRow['shop'] =
+    category === 'convenience_store' || leaf === 'convenience_store' ? 'convenience' : category === 'food_and_beverage_store' && GROCERY_LEAF.test(leaf) ? 'grocery' : MARKET_LEAF.test(leaf) || category === 'farmers_market' ? 'market' : undefined;
+  const pub = category === 'bar' && (leaf === 'pub' || leaf === 'irish_pub');
+  let serviceType: FoodVenue['serviceType'] | undefined = shop === 'market' ? 'market' : shop ? 'grocery' : pub ? 'restaurant' : leaf === 'tea_room' ? 'cafe' : category === 'food_truck_stand' ? 'takeaway' : category ? OVERTURE_FOOD_SERVICE[category] : undefined;
   if (!serviceType) return null;
   const status = typeof row.operating_status === 'string' ? row.operating_status : null;
   if (status && status !== 'open') return null;
@@ -169,21 +219,23 @@ export function overtureFoodRow(row: Record<string, unknown>): OvertureFoodRow |
   const id = typeof row.id === 'string' ? row.id : null;
   if (!id) return null;
 
-  const taxonomy = row.taxonomy as { primary?: unknown; hierarchy?: unknown } | null | undefined;
-  const leaf = typeof taxonomy?.primary === 'string' ? taxonomy.primary : '';
-  const hierarchy = Array.isArray(taxonomy?.hierarchy) ? taxonomy.hierarchy.filter((h): h is string => typeof h === 'string') : [];
   /*
    * Somewhere for a sweet, not a meal: a donut or ice-cream shop is filed as a
    * "casual eatery", and a live Kyoto plan named Mister Donut for dinner. An
    * internet café is not a café either.
    */
-  if ([leaf, ...hierarchy].some((h) => NOT_A_MEAL_LEAF.test(h))) return null;
+  if (!shop && [leaf, ...hierarchy].some((h) => NOT_A_MEAL_LEAF.test(h))) return null;
   if (leaf === 'bakery' || hierarchy.includes('bakery')) serviceType = 'bakery';
   if (leaf === 'delicatessen' || leaf === 'sandwich_shop') serviceType = 'takeaway';
   const cuisine = leaf.endsWith('_restaurant') && leaf !== 'fast_food_restaurant' ? leaf.slice(0, -'_restaurant'.length).replace(/_/g, ' ') : undefined;
 
   const brand = row.brand as { names?: { primary?: unknown } | null; wikidata?: unknown } | null | undefined;
-  const chain = Boolean((typeof brand?.names?.primary === 'string' && brand.names.primary) || (typeof brand?.wikidata === 'string' && brand.wikidata));
+  const chainEvidence = brandEvidenceOf(name, brand);
+  const dietary = [...new Set([leaf, ...hierarchy].flatMap((h) => DIET_LEAF[h] ?? []))];
+  const addresses = Array.isArray(row.addresses) ? (row.addresses as { locality?: unknown }[]) : [];
+  const rawLocality = typeof addresses[0]?.locality === 'string' ? addresses[0].locality.trim() : '';
+  // An address written in capitals is a data-entry habit, not the town's name.
+  const locality = rawLocality && rawLocality === rawLocality.toUpperCase() && /\p{Lu}/u.test(rawLocality) ? rawLocality.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : rawLocality;
 
   const websites = Array.isArray(row.websites) ? row.websites : [];
   const website = websites.map(httpUrl).find((url): url is string => Boolean(url));
@@ -204,7 +256,13 @@ export function overtureFoodRow(row: Record<string, unknown>): OvertureFoodRow |
     serviceType,
     ...(cuisine ? { cuisine } : {}),
     confidence,
-    chain,
+    chain: chainEvidence !== null,
+    ...(chainEvidence ? { chainEvidence } : {}),
+    ...(shop ? { shop } : {}),
+    ...(pub ? { pub } : {}),
+    ...(category === 'coffee_shop' ? { coffeeShop: true } : {}),
+    ...(dietary.length > 0 ? { dietary } : {}),
+    ...(locality ? { locality } : {}),
     ...(website ? { website } : {}),
     licenceId,
     ...(sourceTimestamp ? { sourceTimestamp } : {}),
@@ -264,7 +322,7 @@ async function liveReadBox(box: BoundingBox, limits: { deadlineMs: number }): Pr
         if (typeof name === 'string') {
           const key = chainKey(name);
           const brand = row.brand as { names?: { primary?: unknown } | null; wikidata?: unknown } | null | undefined;
-          if (key && ((typeof brand?.names?.primary === 'string' && brand.names.primary) || (typeof brand?.wikidata === 'string' && brand.wikidata))) brandedKeys.add(key);
+          if (key && brandEvidenceOf(name, brand)) brandedKeys.add(key);
           if (key) seenKeys.set(key, (seenKeys.get(key) ?? 0) + 1);
         }
         return overtureFoodRow(row);
@@ -281,7 +339,7 @@ const defaultCache: NonNullable<OvertureFoodDeps['cache']> = {
 };
 
 export function overtureFoodCacheKey(box: BoundingBox): string {
-  return ['overture-food', 'v2', MIN_OVERTURE_FOOD_CONFIDENCE, box.south, box.west, box.north, box.east].map((v) => (typeof v === 'number' ? v.toFixed(4) : v)).join('|');
+  return ['overture-food', 'v3', MIN_OVERTURE_FOOD_CONFIDENCE, box.south, box.west, box.north, box.east].map((v) => (typeof v === 'number' ? v.toFixed(4) : v)).join('|');
 }
 
 /**
@@ -333,7 +391,7 @@ export async function fetchOvertureFood(
 /** One food row → a `FoodVenue` (before snapping and schema parsing, which the caller does). */
 export function overtureFoodVenue(
   row: OvertureFoodRow,
-  target: { regionId: string; destinationName: string; routingId: string; today: string },
+  target: { regionId: string; destinationName: string; routingId: string; today: string; localCuisine?: ReadonlySet<string> },
 ): FoodVenue {
   const words: Record<FoodVenue['serviceType'], string> = {
     restaurant: 'A restaurant',
@@ -342,7 +400,7 @@ export function overtureFoodVenue(
     takeaway: 'A takeaway',
     food_hall: 'A food hall',
     market: 'A market',
-    grocery: 'A food shop',
+    grocery: row.shop === 'convenience' ? 'A convenience store' : 'A grocery',
   };
   const periods: Record<FoodVenue['serviceType'], FoodVenue['mealPeriods']> = {
     restaurant: ['lunch', 'dinner'],
@@ -350,18 +408,25 @@ export function overtureFoodVenue(
     bakery: ['breakfast', 'coffee'],
     takeaway: ['lunch', 'dinner'],
     food_hall: ['lunch', 'dinner'],
-    market: ['lunch'],
-    grocery: ['lunch'],
+    // Somewhere to buy food, never a table the meal-naming step may seat anyone at.
+    market: ['snack'],
+    grocery: ['snack'],
   };
   const minutes: Record<FoodVenue['serviceType'], number> = { restaurant: 75, cafe: 30, bakery: 20, takeaway: 30, food_hall: 45, market: 45, grocery: 20 };
   return {
     id: `food-overture-${row.id}`,
     regionId: target.regionId,
     name: row.name,
-    locality: target.destinationName,
-    shortDescription: `${row.cuisine ? `${words[row.serviceType]} (${row.cuisine})` : words[row.serviceType]} listed in open place data for ${target.destinationName}.`,
+    locality: row.locality ?? target.destinationName,
+    shortDescription: `${row.pub ? 'A pub' : row.cuisine ? `${words[row.serviceType]} (${row.cuisine})` : words[row.serviceType]} listed in open place data for ${row.locality ?? target.destinationName}.${row.pub ? ' Check that it is serving food.' : ''}`,
     coordinates: row.coordinates,
-    tags: [`overture:${row.serviceType}`],
+    tags: [
+      `overture:${row.shop ?? row.serviceType}`,
+      ...(row.coffeeShop ? ['overture:coffee_shop'] : []),
+      ...(row.pub ? ['overture:pub'] : []),
+      ...(row.chain ? chainTags(row.chainEvidence ?? 'repeated_name') : []),
+      ...(target.localCuisine && row.cuisine && target.localCuisine.has(row.cuisine) ? [LOCAL_CUISINE_TAG] : []),
+    ],
     source: {
       name: 'Overture Maps',
       kind: 'overture',
@@ -384,7 +449,7 @@ export function overtureFoodVenue(
     reservation: { requirement: 'unknown' },
     takeaway: 'unknown',
     provisioning: 'none',
-    dietary: [],
+    dietary: (row.dietary ?? []).map((need): DietaryClaim => ({ need, evidence: 'menu_lists_options', note: `Open place data files this as a ${need.replace(/_/g, '-')} restaurant. Confirm with the venue if it matters.` })),
     hours: {
       kind: 'unknown',
       hoursConfidence: 'unverified',

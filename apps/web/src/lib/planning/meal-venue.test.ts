@@ -24,6 +24,15 @@ describe('meal venues: a new table before the same one again (V1)', () => {
   });
 });
 
+describe('meal venues: a stated ranking (food pass, 2026-11)', () => {
+  it('an adjustment moves the choice among close venues; a stated diet still comes first', () => {
+    const adjust = (entry: { venue: { id: string } }) => (entry.venue.id === 'chain' ? 0.8 : 0);
+    expect(pickMealVenue([v('chain', 0.2), v('local', 0.6)], new Map(), none, adjust)?.venue.id).toBe('local');
+    expect(pickMealVenue([v('chain', 0.2), v('local', 2.5)], new Map(), none, adjust)?.venue.id).toBe('chain');
+    expect(pickMealVenue([v('chain', 0.2), v('vegan', 1.9)], new Map(), (x) => x.id === 'chain', () => 5)?.venue.id).toBe('chain');
+  });
+});
+
 describe('a named meal sits on the leg it interrupts (release pass, 2026-11)', () => {
   // About 0.009° of latitude per kilometre.
   const north = (km: number) => ({ lat: 28 + km * 0.009, lng: -16.5 });

@@ -3,7 +3,10 @@ import {
   FOOD_DATASET_VERSION,
   MODELLED_WALK_KMH,
   foodVenueSchema,
+  genericNameTokens,
   haversineKm,
+  localCuisines,
+  sameVenue,
   snapFoodRouting,
   type DietaryClaim,
   type DietaryNeed,
@@ -49,8 +52,20 @@ import { isPoiProviderEnabled } from '../providers/switches';
  * stays an honest intent. The scan never fails for food.
  */
 
-export const MAX_FOOD_BOXES = 8;
-export const MAX_FOOD_VENUES = 60;
+/*
+ * Food-pass (2026-11): 8 boxes and 60 venues covered 54% of the scan points with
+ * food around them on the recorded corpus. Overture reads four boxes at a time
+ * in 1.3–3 s each, so sixteen boxes stay inside the stage budget.
+ */
+export const MAX_FOOD_BOXES = 16;
+export const MAX_FOOD_VENUES = 120;
+/** A base feeds several dinners; everywhere else feeds one lunch. */
+const BASE_BOX_VENUES = 16;
+/** Shops are kept apart from the meal allowance: one per box is all a remote day needs. */
+const SHOPS_PER_BOX = 3;
+const MAX_CHAINS_PER_BOX = 2;
+/** How far from a box centre its answer speaks for: the box's own corner, near enough. */
+const SEARCHED_RADIUS_KM = 1;
 /** Half the side of a box. 0.75 km keeps nearly every venue inside the 1.5 km door walk of the point it was drawn around. */
 export const FOOD_BOX_HALF_KM = 0.75;
 const FOOD_STAGE_BUDGET_MS = 40_000;
@@ -59,7 +74,7 @@ const MIN_BOX_SEPARATION_KM = 1.2;
 /** A food area further than this from every scan point cannot yield a venue the matrix can price. */
 const FOOD_AREA_REACH_KM = 2;
 const MAX_FOOD_AREAS = 3;
-const MAX_BASE_BOXES = 3;
+const MAX_BASE_BOXES = 5;
 const CONSECUTIVE_FAILURES_BEFORE_STOPPING = 2;
 
 export type ScanFoodStatus = 'grounded' | 'partial' | 'empty' | 'unavailable' | 'disabled' | 'fixture';
@@ -142,11 +157,8 @@ const DIET_TAG_NEEDS: readonly [string, DietaryNeed][] = [
   ['diet:vegan', 'vegan'],
   ['diet:gluten_free', 'gluten_free'],
   ['diet:halal', 'halal'],
+  ['diet:kosher', 'kosher'],
 ];
-
-function normalName(name: string): string {
-  return name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
 
 export interface GroundScanFoodInput {
   regionId: string;
@@ -217,18 +229,41 @@ const OVERPASS_SUPPLEMENT_BUDGET_MS = 12_000;
  * `mixByMeal` then interleaves meals and coffee.
  */
 function rankOverture(rows: readonly OvertureFoodRow[]): OvertureFoodRow[] {
-  const locals = rows.filter((r) => !r.chain);
-  const pool = locals.length >= MIN_LOCAL_VENUES ? locals : [...rows];
-  return pool.sort((a, b) => b.confidence + (b.website ? 0.05 : 0) - (a.confidence + (a.website ? 0.05 : 0)) || a.name.localeCompare(b.name));
+  const quality = (r: OvertureFoodRow) => r.confidence + (r.website ? 0.05 : 0) - (r.pub ? 0.05 : 0) + (r.dietary ? 1 : 0);
+  const sorted = [...rows].sort((a, b) => quality(b) - quality(a) || a.name.localeCompare(b.name));
+  const locals = sorted.filter((r) => !r.chain);
+  const chains = sorted.filter((r) => r.chain);
+  /*
+   * Independents first; a chain stays in the running rather than being deleted,
+   * because the meal step may find it is materially the practical choice. Only
+   * a few per box where independents abound, so they cannot crowd the list.
+   */
+  return [...locals, ...(locals.length >= MIN_LOCAL_VENUES ? chains.slice(0, MAX_CHAINS_PER_BOX) : chains)];
+}
+
+/** Take one venue per cuisine in turn, so a box's share is not eight of the same thing. Order within a cuisine is the rank. */
+function diversifyByCuisine(rows: readonly OvertureFoodRow[], local: ReadonlySet<string>): OvertureFoodRow[] {
+  const groups = new Map<string, OvertureFoodRow[]>();
+  for (const row of rows) {
+    if (row.chain) continue;
+    const key = row.cuisine ?? '';
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  // Stable sort: the cuisines this ground has unusually much of go round first, the rest in rank order.
+  const queues = [...groups.entries()].sort(([a], [b]) => Number(local.has(b)) - Number(local.has(a))).map(([, list]) => [...list]);
+  const out: OvertureFoodRow[] = [];
+  while (queues.some((queue) => queue.length > 0)) for (const queue of queues) if (queue.length > 0) out.push(queue.shift()!);
+  return [...out, ...rows.filter((row) => row.chain)];
 }
 
 /**
  * Interleave sit-down meals and coffee so a box's share is not all cafés (or all
  * restaurants): roughly two meals for every café.
  */
-function mixByMeal(rows: readonly OvertureFoodRow[]): OvertureFoodRow[] {
-  const meals = rows.filter((r) => r.serviceType === 'restaurant' || r.serviceType === 'food_hall' || r.serviceType === 'takeaway');
-  const light = rows.filter((r) => !meals.includes(r));
+function mixByMeal(rows: readonly OvertureFoodRow[], local: ReadonlySet<string> = new Set()): OvertureFoodRow[] {
+  const allMeals = rows.filter((r) => r.serviceType === 'restaurant' || r.serviceType === 'food_hall' || r.serviceType === 'takeaway');
+  const meals = diversifyByCuisine(allMeals, local);
+  const light = rows.filter((r) => !allMeals.includes(r));
   const out: OvertureFoodRow[] = [];
   while (meals.length > 0 || light.length > 0) {
     for (let k = 0; k < 2 && meals.length > 0; k += 1) out.push(meals.shift()!);
@@ -271,18 +306,34 @@ export async function groundScanFood(input: GroundScanFoodInput, deps: GroundSca
   if (geocodeArea && input.foodAreas.length > 0) foodAreas = await placeFoodAreas(input, geocodeArea, deadline);
 
   const boxes = planFoodBoxes({ points: input.points, foodAreas });
-  const perBox = Math.max(8, Math.ceil(MAX_FOOD_VENUES / Math.max(1, boxes.length)));
+  const evenShare = Math.max(8, Math.ceil(MAX_FOOD_VENUES / Math.max(1, boxes.length)));
+  const perBoxOf = (index: number) => (boxes[index]!.kind === 'base' ? Math.max(evenShare, BASE_BOX_VENUES) : evenShare);
   const venues: FoodVenue[] = [];
   const keptPerBox = boxes.map(() => 0);
   const seenIds = new Set<string>();
   let unroutable = 0;
   let farFromBox = 0;
+  let osmEvidenceMerged = 0;
+  /** Box index → places to eat its answer held, whether or not they were kept. An unanswered box is absent, never zero. */
+  const answered = new Map<number, number>();
+  let generic: ReadonlySet<string> = new Set();
 
   /** Snap, dedupe and parse one built venue into box `index`. Returns whether it was kept. */
   const admit = (index: number, built: FoodVenue | null, snap: { routingId: string; walkMinutesFromRouting: number }, extraDietary: DietaryClaim[] = []): boolean => {
     if (!built || seenIds.has(built.id)) return false;
-    // The same venue twice (a node and its building, or one venue in both sources) — one name, a few metres apart.
-    if (venues.some((v) => normalName(v.name) === normalName(built.name) && haversineKm(v.coordinates, built.coordinates) <= 0.15)) return false;
+    // The same venue twice (a node and its building, or one venue in both sources). What the second record knows that the first does not is kept.
+    const twin = venues.findIndex((v) => sameVenue(v, built, generic));
+    if (twin >= 0) {
+      const kept = venues[twin]!;
+      const dietary = [...kept.dietary, ...built.dietary, ...extraDietary].filter((claim, i, all) => all.findIndex((c) => c.need === claim.need) === i);
+      const gainsHours = kept.hours.kind === 'unknown' && built.hours.kind !== 'unknown';
+      const gainsCuisine = kept.cuisines.length === 0 && built.cuisines.length > 0;
+      if (gainsHours || gainsCuisine || dietary.length > kept.dietary.length) {
+        venues[twin] = { ...kept, dietary, ...(gainsHours ? { hours: built.hours } : {}), ...(gainsCuisine ? { cuisines: built.cuisines } : {}) };
+        if (built.source.kind === 'osm') osmEvidenceMerged += 1;
+      }
+      return false;
+    }
     const parsed = foodVenueSchema.safeParse({
       ...built,
       priceBand: SCAN_PRICE_BY_SERVICE[built.serviceType],
@@ -305,23 +356,42 @@ export async function groundScanFood(input: GroundScanFoodInput, deps: GroundSca
   if (useOverture && boxes.length > 0) {
     const results = await (deps.overture ?? fetchOvertureFood)(boxes.map((b) => foodBoxAround(b.center)), { deadlineMs: stageDeadline - 8_000 });
     const marked = markRepeatedNamesAsChains(results.map((r) => r?.rows ?? []));
+    const allRows = marked.flat();
+    generic = genericNameTokens(allRows.map((row) => row.name));
+    const local = localCuisines([...new Map(allRows.map((row) => [row.id, row])).values()].flatMap((row) => (row.cuisine && !row.shop ? [row.cuisine] : [])));
+    const consider = (index: number, row: OvertureFoodRow): boolean => {
+      if (haversineKm(row.coordinates, boxes[index]!.center) > FOOD_BOX_HALF_KM * 1.5) {
+        farFromBox += 1;
+        return false;
+      }
+      const snap = snapFoodRouting({ coordinates: row.coordinates, anchors, walkKmh: MODELLED_WALK_KMH });
+      if (!snap) {
+        unroutable += 1;
+        return false;
+      }
+      return admit(index, overtureFoodVenue(row, { regionId: input.regionId, destinationName: input.destinationName, routingId: snap.routingId, today: input.today, localCuisine: local }), snap);
+    };
     results.forEach((result, index) => {
       if (!result) return;
       overtureBoxesAnswered += 1;
       overtureBytes += result.bytes;
       overtureMs = Math.max(overtureMs, result.ms);
-      for (const row of mixByMeal(rankOverture(marked[index]!))) {
-        if (keptPerBox[index]! >= perBox || venues.length >= MAX_FOOD_VENUES) break;
-        if (haversineKm(row.coordinates, boxes[index]!.center) > FOOD_BOX_HALF_KM * 1.5) {
-          farFromBox += 1;
-          continue;
+      const eateries = marked[index]!.filter((row) => !row.shop);
+      answered.set(index, eateries.length);
+      for (const row of mixByMeal(rankOverture(eateries), local)) {
+        if (keptPerBox[index]! >= perBoxOf(index) || venues.length >= MAX_FOOD_VENUES) break;
+        if (consider(index, row)) overtureVenues += 1;
+      }
+      // Shops sit outside the meal allowance: full groceries first, the most certain of each kind.
+      const shops = marked[index]!.filter((row) => row.shop).sort((a, b) => Number(a.shop === 'convenience') - Number(b.shop === 'convenience') || b.confidence - a.confidence || a.name.localeCompare(b.name));
+      let shopsKept = 0;
+      for (const row of shops) {
+        if (shopsKept >= SHOPS_PER_BOX) break;
+        if (consider(index, row)) {
+          shopsKept += 1;
+          overtureVenues += 1;
+          keptPerBox[index]! -= 1;
         }
-        const snap = snapFoodRouting({ coordinates: row.coordinates, anchors, walkKmh: MODELLED_WALK_KMH });
-        if (!snap) {
-          unroutable += 1;
-          continue;
-        }
-        if (admit(index, overtureFoodVenue(row, { regionId: input.regionId, destinationName: input.destinationName, routingId: snap.routingId, today: input.today }), snap)) overtureVenues += 1;
       }
     });
   }
@@ -346,7 +416,7 @@ export async function groundScanFood(input: GroundScanFoodInput, deps: GroundSca
       attempted += 1;
       let result: OverpassResult;
       try {
-        result = await fetchMeals(foodBoxAround(box.center), { limit: perBox * 3, retries: 0, deadlineMs: supplementDeadline, cache, requestTimeoutMs: Math.max(1_000, Math.min(OVERPASS_SUPPLEMENT_TIMEOUT_MS, supplementDeadline - now())) });
+        result = await fetchMeals(foodBoxAround(box.center), { limit: perBoxOf(index) * 3, retries: 0, deadlineMs: supplementDeadline, cache, requestTimeoutMs: Math.max(1_000, Math.min(OVERPASS_SUPPLEMENT_TIMEOUT_MS, supplementDeadline - now())) });
         calls += result.calls;
         consecutiveFailures = 0;
         if (result.failedGroups.length > 0) failedBoxes += 1;
@@ -356,16 +426,16 @@ export async function groundScanFood(input: GroundScanFoodInput, deps: GroundSca
         continue;
       }
       /*
-       * Local places over chains. A plan that sends somebody to a national chain
-       * for lunch in a city full of food has not done the one thing a food
-       * recommendation is for; where the box holds at least a few independent
-       * venues, branded chains (OSM `brand` / `brand:wikidata`) are left out. In a
-       * food desert a chain is better than nothing and stays.
+       * Local places first. Chains (OSM `brand` / `brand:wikidata`) stay in the
+       * running, a couple per box where independents abound, because a chain can
+       * be materially the practical choice; the meal step weighs that.
        */
       const locals = result.elements.filter((element) => !isChain(element));
-      const candidates = locals.length >= MIN_LOCAL_VENUES ? locals : result.elements;
+      const brandedElements = result.elements.filter((element) => isChain(element));
+      answered.set(index, (answered.get(index) ?? 0) + result.elements.filter((element) => element.tags?.amenity !== 'bar').length);
+      const candidates = [...locals, ...(locals.length >= MIN_LOCAL_VENUES ? brandedElements.slice(0, MAX_CHAINS_PER_BOX) : brandedElements)];
       for (const element of candidates) {
-        if (keptPerBox[index]! >= perBox || venues.length >= MAX_FOOD_VENUES) break;
+        if (keptPerBox[index]! >= perBoxOf(index) || venues.length >= MAX_FOOD_VENUES) break;
         const normalized = normalizeElement(element);
         if (!normalized) continue;
         // A bar is somewhere to drink, not a meal the plan can promise.
@@ -393,16 +463,18 @@ export async function groundScanFood(input: GroundScanFoodInput, deps: GroundSca
   const overtureFailed = useOverture ? boxes.length - overtureBoxesAnswered : 0;
   const anyFailure = failedBoxes > 0 || stoppedEarly || (overtureFailed > 0 && unanswered > 0);
   const status: ScanFoodStatus = boxes.length === 0 ? 'empty' : venues.length === 0 ? (anyFailure ? 'unavailable' : 'empty') : anyFailure ? 'partial' : 'grounded';
-  const source: ScanFoodGrounding['source'] = venues.length === 0 ? null : overtureVenues > 0 && osmVenues > 0 ? 'overture+openstreetmap' : overtureVenues > 0 ? 'overture' : 'openstreetmap';
+  // OSM evidence merged onto an Overture venue is still OSM data, and its licence and credit travel with it.
+  const source: ScanFoodGrounding['source'] = venues.length === 0 ? null : overtureVenues > 0 && osmVenues + osmEvidenceMerged > 0 ? 'overture+openstreetmap' : overtureVenues > 0 ? 'overture' : 'openstreetmap';
+  const shopCount = venues.filter((v) => v.serviceType === 'grocery' || v.serviceType === 'market').length;
   const from = source === 'overture+openstreetmap' ? 'Overture Maps and OpenStreetMap' : source === 'overture' ? 'Overture Maps' : 'OpenStreetMap';
   const detail =
     status === 'unavailable'
       ? 'The open place data did not answer for food, so meals are described rather than named.'
       : status === 'empty'
         ? `The open place data records no restaurants or cafés within a short walk of the ${boxes.length} spot${boxes.length === 1 ? '' : 's'} we checked; meals are described rather than named.`
-        : `${venues.length} restaurants, cafés and takeaways from ${from}, within a short walk of the bases and stops${status === 'partial' ? ` (${unanswered} of ${boxes.length} areas returned nothing)` : ''}. Hours and prices are not confirmed.`;
+        : `${venues.length - shopCount} restaurants, cafés and takeaways${shopCount > 0 ? ` and ${shopCount} food shops` : ''} from ${from}, within a short walk of the bases and stops${status === 'partial' ? ` (${unanswered} of ${boxes.length} areas returned nothing)` : ''}. Hours and prices are not confirmed.`;
   return {
-    dataset: venues.length > 0 ? { version: FOOD_DATASET_VERSION, regionId: input.regionId, venues, gaps: [] } : null,
+    dataset: venues.length > 0 ? { version: FOOD_DATASET_VERSION, regionId: input.regionId, venues, gaps: [], searched: [...answered.entries()].map(([index, mealVenues]) => ({ center: boxes[index]!.center, radiusKm: SEARCHED_RADIUS_KM, mealVenues })) } : null,
     status,
     source,
     providerName: source === 'overture' ? 'overture-places' : source === 'openstreetmap' ? 'openstreetmap-overpass' : source ? 'overture-places+openstreetmap-overpass' : undefined,

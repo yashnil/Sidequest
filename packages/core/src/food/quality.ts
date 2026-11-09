@@ -90,7 +90,8 @@ export function foodDistinctiveness(
   nameCounts: ReadonlyMap<string, number>,
 ): FoodDistinctiveness {
   const outletsHere = nameCounts.get(foldVenueName(venue.name)) ?? 1;
-  const chainOutlet = outletsHere > 1;
+  // The scan's brand and repetition evidence (see `identity.ts`) sees further than this region's own list.
+  const chainOutlet = outletsHere > 1 || venue.tags.includes('chain');
 
   let score = 0.5;
   /*

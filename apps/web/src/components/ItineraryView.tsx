@@ -3144,7 +3144,7 @@ function buildPlaceSheet({
   if (item.food) {
     for (const claim of item.food.dietary.filter((entry) => entry.evidence !== 'unknown')) {
       // A community map tag is not the venue's menu: say only what the map records.
-      notes.push({ title: `${DIETARY_NEED_LABELS[claim.need]} —`, body: /community map data/i.test(claim.note) ? claim.note : `${DIETARY_EVIDENCE_COPY[claim.evidence]}. ${claim.note}` });
+      notes.push({ title: `${DIETARY_NEED_LABELS[claim.need]} —`, body: /community map data|open place data/i.test(claim.note) ? claim.note : `${DIETARY_EVIDENCE_COPY[claim.evidence]}. ${claim.note}` });
     }
     /*
      * A twenty-minute shop is not a meal. Asking a supermarket to confirm how
