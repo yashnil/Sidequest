@@ -558,6 +558,9 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     if (!user && stops.some((o) => o !== s && o.dayTrip && (leg(day.baseId, o.id) ?? 0) > reach)) return fail('capacity', 'That day is a day trip elsewhere.');
     if (slot === 'sunrise') {
       if (day.isFirst || day.relocation || stops.some((o) => o !== s && slotOf(o) === 'sunrise')) return fail('capacity', 'No free sunrise.');
+      /* A 5:30 start is a treat once. Two in a row is a schedule, unless the traveller asked for this stop or travels fast. */
+      const dawn = (i: number) => i >= 0 && i < days.length && stopsOf(i).some((o) => slotOf(o) === 'sunrise');
+      if (!user && input.pace !== 'fast' && (dawn(day.index - 1) || dawn(day.index + 1))) return fail('capacity', 'Two sunrise starts back to back is more than you asked for.');
     }
     if (slot === 'sunset' || slot === 'night') {
       if (day.isLast || stops.some((o) => o !== s && (slotOf(o) === 'sunset' || slotOf(o) === 'night'))) return fail('capacity', 'No free evening.');

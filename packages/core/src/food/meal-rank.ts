@@ -29,6 +29,8 @@ export const MEAL_RANK_KM = {
   cuisineAlreadyEaten: 0.3,
   /** An outlet of something: an independent wins unless it is this much further. */
   chain: 0.8,
+  /** On top of `chain`: an evening is the meal people remember, and a chain outlet is seldom what they came for. */
+  chainAtDinner: 0.8,
   /** A coffee shop can feed you at lunch; a kitchen is better. */
   coffeeShopAtLunch: 1,
   /** A takeaway counter is fuel, a weak dinner. */
@@ -68,7 +70,7 @@ export function mealRankAdjustment(input: MealRankInput): number {
   if (hoursFit === 'open') discount += t.hoursConfirmed;
   if (cuisines.some((c) => wishes.disliked.has(c))) penalty += t.dislikedCuisine;
   penalty += Math.min(3, Math.max(0, ...cuisines.map((c) => cuisineUses.get(c) ?? 0))) * t.cuisineAlreadyEaten;
-  if (isChainVenue(venue)) penalty += t.chain;
+  if (isChainVenue(venue)) penalty += t.chain + (slot === 'dinner' ? t.chainAtDinner : 0);
   if (slot === 'lunch' && venue.tags.includes('overture:coffee_shop')) penalty += t.coffeeShopAtLunch;
   if (slot === 'dinner' && venue.serviceType === 'takeaway') penalty += t.takeawayAtDinner;
   if (venue.tags.includes('overture:pub')) penalty += t.pubFoodNotConfirmed;
