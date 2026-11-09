@@ -151,7 +151,9 @@ export async function expectNothingIdentifying(page: Page, where: string): Promi
   const payload = await page.evaluate(() =>
     [...document.querySelectorAll('script')].map((node) => node.textContent ?? '').join('\n'),
   );
-  const inPayload = [...new Set(forbiddenTokensIn(payload))];
+  /* The inlined stylesheet travels in the payload too. A CSS rule body opens with a bare property name; a JSON object's first key is quoted, so data can never match. */
+  const withoutCss = payload.replace(/[^\s{}"]*\{-{0,2}[a-z][\w-]*:[^{}]*\}/g, '');
+  const inPayload = [...new Set(forbiddenTokensIn(withoutCss))];
   expect(
     inPayload,
     `${where} sends identifying words in its payload: ${inPayload.join(', ')}`,
