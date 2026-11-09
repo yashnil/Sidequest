@@ -2,7 +2,7 @@
   "label": "baseline",
   "seams": "overtureFoodRow + markChainsFromBox → groundScanFood → reconcile.nameVenuesForDay",
   "startDate": "2027-05-10",
-  "chainReferenceNames": 101,
+  "chainReferenceNames": 100,
   "scenarios": [
     {
       "label": "tokyo-kyoto",
@@ -140,6 +140,7 @@
               "venue_named_beyond_reach": 2,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 4,
               "silent": 0
@@ -155,6 +156,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -229,6 +231,7 @@
               "venue_named_beyond_reach": 2,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 4,
               "silent": 0
@@ -244,6 +247,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -319,6 +323,7 @@
               "venue_named_beyond_reach": 2,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 4,
               "silent": 0
@@ -334,6 +339,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -483,6 +489,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 1,
               "silent": 0
@@ -498,6 +505,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -567,6 +575,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 1,
               "silent": 0
@@ -582,6 +591,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -652,6 +662,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 1,
               "silent": 0
@@ -667,6 +678,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -813,6 +825,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 7,
               "silent": 0
@@ -828,6 +841,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -903,6 +917,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 7,
               "silent": 0
@@ -918,6 +933,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -993,6 +1009,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 7,
               "silent": 0
@@ -1008,6 +1025,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -1159,6 +1177,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 2,
               "silent": 0
@@ -1174,6 +1193,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -1244,6 +1264,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 2,
               "silent": 0
@@ -1259,6 +1280,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -1329,6 +1351,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 2,
               "silent": 0
@@ -1344,6 +1367,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -1352,6 +1376,94 @@
           "examples": [
             "coverage miss: lunch, day 3 — 1 places within reach in the recorded world; told \"Casual lunch in Honister Slate Mine, near the midday stop\"",
             "coverage miss: lunch, day 4 — 86 places within reach in the recorded world; told \"Casual lunch in Ambleside, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "budget traveller",
+          "meals": {
+            "total": 9,
+            "lunches": 5,
+            "dinners": 4
+          },
+          "named": {
+            "n": 4,
+            "pct": 44.4
+          },
+          "proximity": {
+            "withinTenMinutes": 4,
+            "pct": 100,
+            "medianKmFromRoute": 0.19,
+            "p90KmFromRoute": 3.29,
+            "maxKmFromRoute": 3.29
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 3,
+            "repeats": 1,
+            "cuisineLabelled": 0,
+            "distinctCuisines": 0,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 4,
+            "namedWithoutEvidence": 4
+          },
+          "coverageMiss": {
+            "meals": 5,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "says_not_checked": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 5,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "says_not_checked": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: dinner, day 1 — 63 places within reach in the recorded world; told \"Dinner in Keswick\"",
+            "coverage miss: lunch, day 3 — 1 places within reach in the recorded world; told \"Casual lunch in Honister Slate Mine, near the midday stop\"",
+            "coverage miss: dinner, day 3 — 65 places within reach in the recorded world; told \"Dinner in Keswick\"",
+            "coverage miss: lunch, day 4 — 86 places within reach in the recorded world; told \"Casual lunch in Ambleside, near the midday stop\"",
+            "coverage miss: dinner, day 4 — 66 places within reach in the recorded world; told \"Dinner in Keswick\""
           ]
         }
       ]
@@ -1489,6 +1601,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 1,
               "prose_claims_a_meal_there": 4,
               "silent": 0
@@ -1504,6 +1617,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 4,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -1581,6 +1695,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 1,
               "prose_claims_a_meal_there": 4,
               "silent": 0
@@ -1596,6 +1711,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 4,
               "prose_claims_a_meal_there": 0,
               "silent": 0
@@ -1748,6 +1864,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 3,
               "silent": 0
@@ -1763,6 +1880,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 1,
               "prose_claims_a_meal_there": 1,
               "silent": 0
@@ -1836,6 +1954,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 3,
               "silent": 0
@@ -1851,6 +1970,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 1,
               "prose_claims_a_meal_there": 1,
               "silent": 0
@@ -1924,6 +2044,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 0,
               "prose_claims_a_meal_there": 3,
               "silent": 0
@@ -1939,6 +2060,7 @@
               "venue_named_beyond_reach": 0,
               "shop_named": 0,
               "advice_from_data": 0,
+              "says_not_checked": 0,
               "generic_pack_advice": 1,
               "prose_claims_a_meal_there": 1,
               "silent": 0
@@ -1966,13 +2088,13 @@
     "venuesWhoseLocalityIsTheDestinationNamePct": 100,
     "provisionShops": 0,
     "scanPointsWithFoodCoveredPct": 54.1,
-    "meals": 211,
-    "mealsNamedPct": 64.5,
-    "namedWithinTenMinutesPct": 97.8,
+    "meals": 220,
+    "mealsNamedPct": 63.6,
+    "namedWithinTenMinutesPct": 97.9,
     "namedChainPct": 0,
     "avoidableChainMeals": 0,
     "practicalChainPassedOver": 0,
-    "repeatedVenueMeals": 6,
+    "repeatedVenueMeals": 7,
     "sameCuisineBackToBack": 6,
     "cuisinePreferenceMatched": 0,
     "cuisinePreferenceAchievable": 7,
@@ -1982,17 +2104,20 @@
     "dietaryNamedAtUnsuitable": 0,
     "namedWithHoursEvidencePct": 0,
     "scheduledOutsideHours": 0,
-    "namedWithoutHoursEvidence": 136,
-    "hoursSaidNotConfirmed": 136,
+    "namedWithoutHoursEvidence": 140,
+    "hoursSaidNotConfirmed": 140,
     "dinnerAtCafeOrBakery": 0,
-    "coverageMissMeals": 67,
-    "coverageMissToldAMealIsThere": 59,
+    "coverageMissMeals": 72,
+    "coverageMissToldAMealIsThere": 64,
+    "coverageMissSaysNotChecked": 0,
     "coverageMissToldToPack": 2,
     "sparseMeals": 14,
     "sparseDays": 14,
     "sparseWithAShopNearBaseOrOnTheWay": 14,
     "sparseToldShopNamed": 0,
     "sparseToldAdviceFromData": 0,
+    "sparseSaysNotChecked": 0,
+    "budgetTravellerNamedPct": 44.4,
     "sparseToldGenericPackAdvice": 11,
     "sparseToldAMealIsThere": 3,
     "sparseToldDistantVenue": 0,

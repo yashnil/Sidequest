@@ -55,7 +55,7 @@ const DINNER_AT = 19 * 60;
 export function foldName(name: string): string {
   return name
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{M}+/gu, '')
     .toLowerCase()
     .replace(/[(（][^)）]*[)）]/g, ' ')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
@@ -144,7 +144,7 @@ export function buildChainReference(fixtures: readonly RecordedFoodFixture[]): C
   return { isChain: (name) => evidence(name) !== null, evidence, size: wikidata.size + repeated.size };
 }
 
-const isLatin = (text: string) => !/[^ -ɏḀ-ỿ -⁯]/.test(text);
+const isLatin = (text: string) => !/[^\p{Script=Latin}\p{N}\p{P}\p{S}\p{Z}]/u.test(text);
 const SHOP_SERVICE = new Set<FoodVenue['serviceType']>(['grocery', 'market']);
 
 /** How far a named meal may be from the day it interrupts and still count as "within about ten minutes". */
@@ -369,8 +369,8 @@ function quantile(values: number[], q: number): number | null {
   return round2(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!);
 }
 
-export type Told = 'venue_named_beyond_reach' | 'shop_named' | 'advice_from_data' | 'generic_pack_advice' | 'prose_claims_a_meal_there' | 'silent';
-const emptyTold = (): Record<Told, number> => ({ venue_named_beyond_reach: 0, shop_named: 0, advice_from_data: 0, generic_pack_advice: 0, prose_claims_a_meal_there: 0, silent: 0 });
+export type Told = 'venue_named_beyond_reach' | 'shop_named' | 'advice_from_data' | 'says_not_checked' | 'generic_pack_advice' | 'prose_claims_a_meal_there' | 'silent';
+const emptyTold = (): Record<Told, number> => ({ venue_named_beyond_reach: 0, shop_named: 0, advice_from_data: 0, says_not_checked: 0, generic_pack_advice: 0, prose_claims_a_meal_there: 0, silent: 0 });
 
 export interface DatasetReport {
   status: string;
@@ -606,8 +606,10 @@ function planReport(scenario: FoodScenario, traveller: ScenarioTraveller, datase
           ? 'venue_named_beyond_reach'
           : shopNamed
             ? 'shop_named'
-            : food?.stopKind === 'packed' || food?.stopKind === 'grocery' || food?.stopKind === 'unplanned'
+            : food?.stopKind === 'packed' || food?.stopKind === 'grocery'
               ? 'advice_from_data'
+              : food?.stopKind === 'unplanned'
+                ? 'says_not_checked'
               : /pack (a )?lunch|picnic|carry/i.test(item.title)
                 ? 'generic_pack_advice'
                 : /\b(lunch|dinner) in\b/i.test(item.title)
@@ -725,12 +727,15 @@ export async function evaluateFood(label: string): Promise<FoodEvalReport> {
     dinnerAtCafeOrBakery: sum((p) => p.mealType.dinnerAtCafeOrBakery),
     coverageMissMeals: sum((p) => p.coverageMiss.meals),
     coverageMissToldAMealIsThere: sum((p) => p.coverageMiss.told.prose_claims_a_meal_there),
+    coverageMissSaysNotChecked: sum((p) => p.coverageMiss.told.says_not_checked),
     coverageMissToldToPack: sum((p) => p.coverageMiss.told.generic_pack_advice + p.coverageMiss.told.advice_from_data + p.coverageMiss.told.shop_named),
     sparseMeals: sum((p) => p.sparse.meals),
     sparseDays: sum((p) => p.sparse.days),
     sparseWithAShopNearBaseOrOnTheWay: sum((p) => p.sparse.shopNearBaseOrOnTheWay),
     sparseToldShopNamed: sum((p) => p.sparse.told.shop_named),
     sparseToldAdviceFromData: sum((p) => p.sparse.told.advice_from_data),
+    sparseSaysNotChecked: sum((p) => p.sparse.told.says_not_checked),
+    budgetTravellerNamedPct: pct(plans.filter((p) => p.traveller.startsWith('budget')).reduce((n, p) => n + p.named.n, 0), plans.filter((p) => p.traveller.startsWith('budget')).reduce((n, p) => n + p.meals.total, 0)),
     sparseToldGenericPackAdvice: sum((p) => p.sparse.told.generic_pack_advice),
     sparseToldAMealIsThere: sum((p) => p.sparse.told.prose_claims_a_meal_there),
     sparseToldDistantVenue: sum((p) => p.sparse.told.venue_named_beyond_reach),

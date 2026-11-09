@@ -118,7 +118,7 @@ export const FOOD_SCENARIOS: readonly FoodScenario[] = [
       p('Grasmere', 54.4597, -3.0244, 120),
       p('Ambleside', 54.432, -2.962, 90),
     ],
-    travellers: [OMNIVORE, VEGETARIAN, { label: 'vegan', dietaryNeeds: ['vegan'], cuisines: [], everydayPriceBand: 'moderate' }],
+    travellers: [OMNIVORE, VEGETARIAN, { label: 'vegan', dietaryNeeds: ['vegan'], cuisines: [], everydayPriceBand: 'moderate' }, { label: 'budget traveller', dietaryNeeds: [], cuisines: [], everydayPriceBand: 'budget' }],
   },
   {
     label: 'torres-del-paine',
