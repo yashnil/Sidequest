@@ -1,0 +1,2001 @@
+{
+  "label": "baseline",
+  "seams": "overtureFoodRow + markChainsFromBox → groundScanFood → reconcile.nameVenuesForDay",
+  "startDate": "2027-05-10",
+  "chainReferenceNames": 101,
+  "scenarios": [
+    {
+      "label": "tokyo-kyoto",
+      "kind": "dense_city",
+      "destination": "Tokyo and Kyoto",
+      "carFree": true,
+      "days": 7,
+      "fixture": {
+        "recordedAt": "2026-11-09T15:16:30.783Z",
+        "overtureRelease": "2026-10-21.0",
+        "boxes": 21,
+        "overtureRows": 4971,
+        "osmElements": 0,
+        "osmBoxesUnanswered": 21,
+        "world": {
+          "meal": 2860,
+          "light": 775,
+          "shop": 577,
+          "duplicatePairs": 13
+        }
+      },
+      "dataset": {
+        "status": "partial",
+        "source": "overture",
+        "boxesPlanned": 8,
+        "boxesFailed": 5,
+        "venues": 40,
+        "byServiceType": {
+          "restaurant": 27,
+          "cafe": 12,
+          "takeaway": 1
+        },
+        "mealVenues": 40,
+        "provisionShops": 0,
+        "pointsCovered": {
+          "n": 13,
+          "ofPointsWithFoodInWorld": 30,
+          "pct": 43.3,
+          "allPoints": 30
+        },
+        "basesWithDinnerVenue": {
+          "n": 2,
+          "of": 2
+        },
+        "duplicatePairs": 0,
+        "duplicateExamples": [],
+        "chain": {
+          "venues": 1,
+          "pct": 2.5,
+          "byEvidence": {
+            "repeated_name": 1
+          },
+          "flaggedByProduct": 0,
+          "pctOfWorld": 5.7
+        },
+        "nonLatinNames": {
+          "kept": 24,
+          "pctOfKept": 60,
+          "pctOfWorld": 73.9
+        },
+        "hoursEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "dietaryEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "cuisine": {
+          "labelled": 21,
+          "pct": 52.5,
+          "distinct": 9
+        },
+        "localityIsDestinationName": {
+          "venues": 40,
+          "pct": 100
+        }
+      },
+      "plans": [
+        {
+          "traveller": "no stated needs",
+          "meals": {
+            "total": 13,
+            "lunches": 7,
+            "dinners": 6
+          },
+          "named": {
+            "n": 9,
+            "pct": 69.2
+          },
+          "proximity": {
+            "withinTenMinutes": 8,
+            "pct": 88.9,
+            "medianKmFromRoute": 0.4,
+            "p90KmFromRoute": 1.38,
+            "maxKmFromRoute": 1.38
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 9,
+            "repeats": 0,
+            "cuisineLabelled": 5,
+            "distinctCuisines": 2,
+            "sameCuisineBackToBack": 2
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 9,
+            "namedWithoutEvidence": 9
+          },
+          "coverageMiss": {
+            "meals": 6,
+            "told": {
+              "venue_named_beyond_reach": 2,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 4,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 2 — 449 places within reach in the recorded world; told \"Casual lunch in Imperial Palace East Gardens, near the midday stop\"",
+            "coverage miss: lunch, day 3 — 327 places within reach in the recorded world; told \"Casual lunch in Senso-ji, near the midday stop\"",
+            "coverage miss: lunch, day 4 — 220 places within reach in the recorded world; told \"Casual lunch in Kamakura, near the midday stop\"",
+            "coverage miss: lunch, day 5 — 10 places within reach in the recorded world; told \"Lunch — coto cafe\"",
+            "coverage miss: lunch, day 6 — 398 places within reach in the recorded world; told \"Lunch — Coffee Base Kanondo\"",
+            "coverage miss: lunch, day 7 — 239 places within reach in the recorded world; told \"Casual lunch in Fushimi Inari Taisha, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "vegetarian",
+          "meals": {
+            "total": 13,
+            "lunches": 7,
+            "dinners": 6
+          },
+          "named": {
+            "n": 9,
+            "pct": 69.2
+          },
+          "proximity": {
+            "withinTenMinutes": 8,
+            "pct": 88.9,
+            "medianKmFromRoute": 0.4,
+            "p90KmFromRoute": 1.38,
+            "maxKmFromRoute": 1.38
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 9,
+            "repeats": 0,
+            "cuisineLabelled": 5,
+            "distinctCuisines": 2,
+            "sameCuisineBackToBack": 2
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegetarian"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 9,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 9,
+            "namedWithoutEvidence": 9
+          },
+          "coverageMiss": {
+            "meals": 6,
+            "told": {
+              "venue_named_beyond_reach": 2,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 4,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 2 — 449 places within reach in the recorded world; told \"Casual lunch in Imperial Palace East Gardens, near the midday stop\"",
+            "coverage miss: lunch, day 3 — 327 places within reach in the recorded world; told \"Casual lunch in Senso-ji, near the midday stop\"",
+            "coverage miss: lunch, day 4 — 220 places within reach in the recorded world; told \"Casual lunch in Kamakura, near the midday stop\"",
+            "coverage miss: lunch, day 5 — 10 places within reach in the recorded world; told \"Lunch — coto cafe\"",
+            "coverage miss: lunch, day 6 — 398 places within reach in the recorded world; told \"Lunch — Coffee Base Kanondo\"",
+            "coverage miss: lunch, day 7 — 239 places within reach in the recorded world; told \"Casual lunch in Fushimi Inari Taisha, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "likes ramen and sushi",
+          "meals": {
+            "total": 13,
+            "lunches": 7,
+            "dinners": 6
+          },
+          "named": {
+            "n": 9,
+            "pct": 69.2
+          },
+          "proximity": {
+            "withinTenMinutes": 8,
+            "pct": 88.9,
+            "medianKmFromRoute": 0.4,
+            "p90KmFromRoute": 1.38,
+            "maxKmFromRoute": 1.38
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 9,
+            "repeats": 0,
+            "cuisineLabelled": 5,
+            "distinctCuisines": 2,
+            "sameCuisineBackToBack": 2
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [
+              "ramen",
+              "sushi"
+            ],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 9,
+            "namedWithoutEvidence": 9
+          },
+          "coverageMiss": {
+            "meals": 6,
+            "told": {
+              "venue_named_beyond_reach": 2,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 4,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 2 — 449 places within reach in the recorded world; told \"Casual lunch in Imperial Palace East Gardens, near the midday stop\"",
+            "coverage miss: lunch, day 3 — 327 places within reach in the recorded world; told \"Casual lunch in Senso-ji, near the midday stop\"",
+            "coverage miss: lunch, day 4 — 220 places within reach in the recorded world; told \"Casual lunch in Kamakura, near the midday stop\"",
+            "coverage miss: lunch, day 5 — 10 places within reach in the recorded world; told \"Lunch — coto cafe\"",
+            "coverage miss: lunch, day 6 — 398 places within reach in the recorded world; told \"Lunch — Coffee Base Kanondo\"",
+            "coverage miss: lunch, day 7 — 239 places within reach in the recorded world; told \"Casual lunch in Fushimi Inari Taisha, near the midday stop\""
+          ]
+        }
+      ]
+    },
+    {
+      "label": "tenerife-car-b",
+      "kind": "island",
+      "destination": "Tenerife",
+      "carFree": false,
+      "days": 7,
+      "fixture": {
+        "recordedAt": "2026-11-09T15:16:49.898Z",
+        "overtureRelease": "2026-10-21.0",
+        "boxes": 24,
+        "overtureRows": 2254,
+        "osmElements": 0,
+        "osmBoxesUnanswered": 24,
+        "world": {
+          "meal": 1164,
+          "light": 216,
+          "shop": 176,
+          "duplicatePairs": 10
+        }
+      },
+      "dataset": {
+        "status": "partial",
+        "source": "overture",
+        "boxesPlanned": 8,
+        "boxesFailed": 1,
+        "venues": 56,
+        "byServiceType": {
+          "restaurant": 43,
+          "cafe": 13
+        },
+        "mealVenues": 56,
+        "provisionShops": 0,
+        "pointsCovered": {
+          "n": 14,
+          "ofPointsWithFoodInWorld": 25,
+          "pct": 56,
+          "allPoints": 32
+        },
+        "basesWithDinnerVenue": {
+          "n": 2,
+          "of": 2
+        },
+        "duplicatePairs": 0,
+        "duplicateExamples": [],
+        "chain": {
+          "venues": 0,
+          "pct": 0,
+          "byEvidence": {},
+          "flaggedByProduct": 0,
+          "pctOfWorld": 2.1
+        },
+        "nonLatinNames": {
+          "kept": 0,
+          "pctOfKept": 0,
+          "pctOfWorld": 0.1
+        },
+        "hoursEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "dietaryEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "cuisine": {
+          "labelled": 26,
+          "pct": 46.4,
+          "distinct": 14
+        },
+        "localityIsDestinationName": {
+          "venues": 56,
+          "pct": 100
+        }
+      },
+      "plans": [
+        {
+          "traveller": "no stated needs",
+          "meals": {
+            "total": 13,
+            "lunches": 7,
+            "dinners": 6
+          },
+          "named": {
+            "n": 12,
+            "pct": 92.3
+          },
+          "proximity": {
+            "withinTenMinutes": 12,
+            "pct": 100,
+            "medianKmFromRoute": 0.62,
+            "p90KmFromRoute": 7.15,
+            "maxKmFromRoute": 12.86
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 12,
+            "repeats": 0,
+            "cuisineLabelled": 7,
+            "distinctCuisines": 7,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 12,
+            "namedWithoutEvidence": 12
+          },
+          "coverageMiss": {
+            "meals": 1,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 1,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 3 — 21 places within reach in the recorded world; told \"Casual lunch in Playa de las Teresitas, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "vegetarian",
+          "meals": {
+            "total": 13,
+            "lunches": 7,
+            "dinners": 6
+          },
+          "named": {
+            "n": 12,
+            "pct": 92.3
+          },
+          "proximity": {
+            "withinTenMinutes": 12,
+            "pct": 100,
+            "medianKmFromRoute": 0.62,
+            "p90KmFromRoute": 7.15,
+            "maxKmFromRoute": 12.86
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 12,
+            "repeats": 0,
+            "cuisineLabelled": 7,
+            "distinctCuisines": 7,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegetarian"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 12,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 12,
+            "namedWithoutEvidence": 12
+          },
+          "coverageMiss": {
+            "meals": 1,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 1,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 3 — 21 places within reach in the recorded world; told \"Casual lunch in Playa de las Teresitas, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "likes seafood and Spanish cooking",
+          "meals": {
+            "total": 13,
+            "lunches": 7,
+            "dinners": 6
+          },
+          "named": {
+            "n": 12,
+            "pct": 92.3
+          },
+          "proximity": {
+            "withinTenMinutes": 12,
+            "pct": 100,
+            "medianKmFromRoute": 0.62,
+            "p90KmFromRoute": 7.15,
+            "maxKmFromRoute": 12.86
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 12,
+            "repeats": 0,
+            "cuisineLabelled": 7,
+            "distinctCuisines": 7,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [
+              "seafood",
+              "spanish"
+            ],
+            "matched": 0,
+            "achievable": 7,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 12,
+            "namedWithoutEvidence": 12
+          },
+          "coverageMiss": {
+            "meals": 1,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 1,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 3 — 21 places within reach in the recorded world; told \"Casual lunch in Playa de las Teresitas, near the midday stop\""
+          ]
+        }
+      ]
+    },
+    {
+      "label": "scotland-road-trip",
+      "kind": "rural_road_trip",
+      "destination": "Scottish Highlands and the Isle of Skye",
+      "carFree": false,
+      "days": 9,
+      "fixture": {
+        "recordedAt": "2026-11-09T15:17:09.615Z",
+        "overtureRelease": "2026-10-21.0",
+        "boxes": 34,
+        "overtureRows": 543,
+        "osmElements": 0,
+        "osmBoxesUnanswered": 34,
+        "world": {
+          "meal": 216,
+          "light": 110,
+          "shop": 58,
+          "duplicatePairs": 5
+        }
+      },
+      "dataset": {
+        "status": "partial",
+        "source": "overture",
+        "boxesPlanned": 8,
+        "boxesFailed": 2,
+        "venues": 34,
+        "byServiceType": {
+          "takeaway": 2,
+          "restaurant": 19,
+          "cafe": 12,
+          "bakery": 1
+        },
+        "mealVenues": 33,
+        "provisionShops": 0,
+        "pointsCovered": {
+          "n": 11,
+          "ofPointsWithFoodInWorld": 22,
+          "pct": 50,
+          "allPoints": 39
+        },
+        "basesWithDinnerVenue": {
+          "n": 3,
+          "of": 4
+        },
+        "duplicatePairs": 0,
+        "duplicateExamples": [],
+        "chain": {
+          "venues": 0,
+          "pct": 0,
+          "byEvidence": {},
+          "flaggedByProduct": 0,
+          "pctOfWorld": 4.9
+        },
+        "nonLatinNames": {
+          "kept": 0,
+          "pctOfKept": 0,
+          "pctOfWorld": 0
+        },
+        "hoursEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "dietaryEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "cuisine": {
+          "labelled": 14,
+          "pct": 41.2,
+          "distinct": 7
+        },
+        "localityIsDestinationName": {
+          "venues": 34,
+          "pct": 100
+        }
+      },
+      "plans": [
+        {
+          "traveller": "no stated needs",
+          "meals": {
+            "total": 17,
+            "lunches": 9,
+            "dinners": 8
+          },
+          "named": {
+            "n": 10,
+            "pct": 58.8
+          },
+          "proximity": {
+            "withinTenMinutes": 10,
+            "pct": 100,
+            "medianKmFromRoute": 0.64,
+            "p90KmFromRoute": 17.54,
+            "maxKmFromRoute": 17.54
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 10,
+            "repeats": 0,
+            "cuisineLabelled": 5,
+            "distinctCuisines": 3,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 10,
+            "namedWithoutEvidence": 10
+          },
+          "coverageMiss": {
+            "meals": 7,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 7,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 4 — 3 places within reach in the recorded world; told \"Casual lunch in Talisker Distillery, near the midday stop\"",
+            "coverage miss: dinner, day 4 — 22 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: dinner, day 5 — 22 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: lunch, day 6 — 2 places within reach in the recorded world; told \"Casual lunch in Applecross Pass (Bealach na Ba), near the midday stop\"",
+            "coverage miss: dinner, day 6 — 28 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: dinner, day 8 — 135 places within reach in the recorded world; told \"Dinner in Inverness\"",
+            "coverage miss: lunch, day 9 — 3 places within reach in the recorded world; told \"Casual lunch in Falls of Foyers, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "vegetarian",
+          "meals": {
+            "total": 17,
+            "lunches": 9,
+            "dinners": 8
+          },
+          "named": {
+            "n": 10,
+            "pct": 58.8
+          },
+          "proximity": {
+            "withinTenMinutes": 10,
+            "pct": 100,
+            "medianKmFromRoute": 0.64,
+            "p90KmFromRoute": 17.54,
+            "maxKmFromRoute": 17.54
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 10,
+            "repeats": 0,
+            "cuisineLabelled": 5,
+            "distinctCuisines": 3,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegetarian"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 10,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 10,
+            "namedWithoutEvidence": 10
+          },
+          "coverageMiss": {
+            "meals": 7,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 7,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 4 — 3 places within reach in the recorded world; told \"Casual lunch in Talisker Distillery, near the midday stop\"",
+            "coverage miss: dinner, day 4 — 22 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: dinner, day 5 — 22 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: lunch, day 6 — 2 places within reach in the recorded world; told \"Casual lunch in Applecross Pass (Bealach na Ba), near the midday stop\"",
+            "coverage miss: dinner, day 6 — 28 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: dinner, day 8 — 135 places within reach in the recorded world; told \"Dinner in Inverness\"",
+            "coverage miss: lunch, day 9 — 3 places within reach in the recorded world; told \"Casual lunch in Falls of Foyers, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "gluten-free",
+          "meals": {
+            "total": 17,
+            "lunches": 9,
+            "dinners": 8
+          },
+          "named": {
+            "n": 10,
+            "pct": 58.8
+          },
+          "proximity": {
+            "withinTenMinutes": 10,
+            "pct": 100,
+            "medianKmFromRoute": 0.64,
+            "p90KmFromRoute": 17.54,
+            "maxKmFromRoute": 17.54
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 10,
+            "repeats": 0,
+            "cuisineLabelled": 5,
+            "distinctCuisines": 3,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "gluten_free"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 10,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 10,
+            "namedWithoutEvidence": 10
+          },
+          "coverageMiss": {
+            "meals": 7,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 7,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 4 — 3 places within reach in the recorded world; told \"Casual lunch in Talisker Distillery, near the midday stop\"",
+            "coverage miss: dinner, day 4 — 22 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: dinner, day 5 — 22 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: lunch, day 6 — 2 places within reach in the recorded world; told \"Casual lunch in Applecross Pass (Bealach na Ba), near the midday stop\"",
+            "coverage miss: dinner, day 6 — 28 places within reach in the recorded world; told \"Dinner in Portree\"",
+            "coverage miss: dinner, day 8 — 135 places within reach in the recorded world; told \"Dinner in Inverness\"",
+            "coverage miss: lunch, day 9 — 3 places within reach in the recorded world; told \"Casual lunch in Falls of Foyers, near the midday stop\""
+          ]
+        }
+      ]
+    },
+    {
+      "label": "keswick-lake-district",
+      "kind": "small_town",
+      "destination": "Keswick and the northern Lake District",
+      "carFree": false,
+      "days": 5,
+      "fixture": {
+        "recordedAt": "2026-11-09T15:17:14.250Z",
+        "overtureRelease": "2026-10-21.0",
+        "boxes": 13,
+        "overtureRows": 286,
+        "osmElements": 0,
+        "osmBoxesUnanswered": 13,
+        "world": {
+          "meal": 121,
+          "light": 56,
+          "shop": 32,
+          "duplicatePairs": 1
+        }
+      },
+      "dataset": {
+        "status": "partial",
+        "source": "overture",
+        "boxesPlanned": 8,
+        "boxesFailed": 2,
+        "venues": 13,
+        "byServiceType": {
+          "restaurant": 8,
+          "takeaway": 1,
+          "cafe": 4
+        },
+        "mealVenues": 13,
+        "provisionShops": 0,
+        "pointsCovered": {
+          "n": 6,
+          "ofPointsWithFoodInWorld": 11,
+          "pct": 54.5,
+          "allPoints": 14
+        },
+        "basesWithDinnerVenue": {
+          "n": 1,
+          "of": 1
+        },
+        "duplicatePairs": 0,
+        "duplicateExamples": [],
+        "chain": {
+          "venues": 0,
+          "pct": 0,
+          "byEvidence": {},
+          "flaggedByProduct": 0,
+          "pctOfWorld": 1.7
+        },
+        "nonLatinNames": {
+          "kept": 0,
+          "pctOfKept": 0,
+          "pctOfWorld": 0
+        },
+        "hoursEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "dietaryEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "cuisine": {
+          "labelled": 5,
+          "pct": 38.5,
+          "distinct": 4
+        },
+        "localityIsDestinationName": {
+          "venues": 13,
+          "pct": 100
+        }
+      },
+      "plans": [
+        {
+          "traveller": "no stated needs",
+          "meals": {
+            "total": 9,
+            "lunches": 5,
+            "dinners": 4
+          },
+          "named": {
+            "n": 7,
+            "pct": 77.8
+          },
+          "proximity": {
+            "withinTenMinutes": 7,
+            "pct": 100,
+            "medianKmFromRoute": 0.16,
+            "p90KmFromRoute": 0.94,
+            "maxKmFromRoute": 0.94
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 7,
+            "repeats": 0,
+            "cuisineLabelled": 3,
+            "distinctCuisines": 3,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 7,
+            "namedWithoutEvidence": 7
+          },
+          "coverageMiss": {
+            "meals": 2,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 2,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 3 — 1 places within reach in the recorded world; told \"Casual lunch in Honister Slate Mine, near the midday stop\"",
+            "coverage miss: lunch, day 4 — 86 places within reach in the recorded world; told \"Casual lunch in Ambleside, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "vegetarian",
+          "meals": {
+            "total": 9,
+            "lunches": 5,
+            "dinners": 4
+          },
+          "named": {
+            "n": 7,
+            "pct": 77.8
+          },
+          "proximity": {
+            "withinTenMinutes": 7,
+            "pct": 100,
+            "medianKmFromRoute": 0.16,
+            "p90KmFromRoute": 0.94,
+            "maxKmFromRoute": 0.94
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 7,
+            "repeats": 0,
+            "cuisineLabelled": 3,
+            "distinctCuisines": 3,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegetarian"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 7,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 7,
+            "namedWithoutEvidence": 7
+          },
+          "coverageMiss": {
+            "meals": 2,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 2,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 3 — 1 places within reach in the recorded world; told \"Casual lunch in Honister Slate Mine, near the midday stop\"",
+            "coverage miss: lunch, day 4 — 86 places within reach in the recorded world; told \"Casual lunch in Ambleside, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "vegan",
+          "meals": {
+            "total": 9,
+            "lunches": 5,
+            "dinners": 4
+          },
+          "named": {
+            "n": 7,
+            "pct": 77.8
+          },
+          "proximity": {
+            "withinTenMinutes": 7,
+            "pct": 100,
+            "medianKmFromRoute": 0.16,
+            "p90KmFromRoute": 0.94,
+            "maxKmFromRoute": 0.94
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 7,
+            "repeats": 0,
+            "cuisineLabelled": 3,
+            "distinctCuisines": 3,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegan"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 7,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 7,
+            "namedWithoutEvidence": 7
+          },
+          "coverageMiss": {
+            "meals": 2,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 2,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 0,
+            "lunches": 0,
+            "dinners": 0,
+            "days": 0,
+            "shopNearBaseOrOnTheWay": 0,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: lunch, day 3 — 1 places within reach in the recorded world; told \"Casual lunch in Honister Slate Mine, near the midday stop\"",
+            "coverage miss: lunch, day 4 — 86 places within reach in the recorded world; told \"Casual lunch in Ambleside, near the midday stop\""
+          ]
+        }
+      ]
+    },
+    {
+      "label": "torres-del-paine",
+      "kind": "remote_park",
+      "destination": "Torres del Paine",
+      "carFree": false,
+      "days": 6,
+      "fixture": {
+        "recordedAt": "2026-11-09T15:17:21.930Z",
+        "overtureRelease": "2026-10-21.0",
+        "boxes": 11,
+        "overtureRows": 113,
+        "osmElements": 0,
+        "osmBoxesUnanswered": 11,
+        "world": {
+          "meal": 41,
+          "light": 15,
+          "shop": 10,
+          "duplicatePairs": 0
+        }
+      },
+      "dataset": {
+        "status": "partial",
+        "source": "overture",
+        "boxesPlanned": 8,
+        "boxesFailed": 2,
+        "venues": 9,
+        "byServiceType": {
+          "restaurant": 7,
+          "cafe": 2
+        },
+        "mealVenues": 9,
+        "provisionShops": 0,
+        "pointsCovered": {
+          "n": 3,
+          "ofPointsWithFoodInWorld": 4,
+          "pct": 75,
+          "allPoints": 12
+        },
+        "basesWithDinnerVenue": {
+          "n": 1,
+          "of": 1
+        },
+        "duplicatePairs": 0,
+        "duplicateExamples": [],
+        "chain": {
+          "venues": 0,
+          "pct": 0,
+          "byEvidence": {},
+          "flaggedByProduct": 0,
+          "pctOfWorld": 0
+        },
+        "nonLatinNames": {
+          "kept": 0,
+          "pctOfKept": 0,
+          "pctOfWorld": 0
+        },
+        "hoursEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "dietaryEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "cuisine": {
+          "labelled": 3,
+          "pct": 33.3,
+          "distinct": 3
+        },
+        "localityIsDestinationName": {
+          "venues": 9,
+          "pct": 100
+        }
+      },
+      "plans": [
+        {
+          "traveller": "no stated needs",
+          "meals": {
+            "total": 11,
+            "lunches": 6,
+            "dinners": 5
+          },
+          "named": {
+            "n": 2,
+            "pct": 18.2
+          },
+          "proximity": {
+            "withinTenMinutes": 2,
+            "pct": 100,
+            "medianKmFromRoute": 0.3,
+            "p90KmFromRoute": 0.3,
+            "maxKmFromRoute": 0.3
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 2,
+            "repeats": 0,
+            "cuisineLabelled": 1,
+            "distinctCuisines": 1,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 2,
+            "namedWithoutEvidence": 2
+          },
+          "coverageMiss": {
+            "meals": 5,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 1,
+              "prose_claims_a_meal_there": 4,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 4,
+            "lunches": 4,
+            "dinners": 0,
+            "days": 4,
+            "shopNearBaseOrOnTheWay": 4,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 4,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "sparse lunch, day 2 (generic_pack_advice): \"Pack a lunch — food is thin out near Laguna Amarga\"",
+            "coverage miss: dinner, day 2 — 39 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "sparse lunch, day 3 (generic_pack_advice): \"Pack a lunch — food is thin out near Base Torres trailhead\"",
+            "coverage miss: dinner, day 3 — 40 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "sparse lunch, day 4 (generic_pack_advice): \"Pack a lunch — food is thin out near Lago Pehoé\"",
+            "coverage miss: dinner, day 4 — 39 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "coverage miss: lunch, day 5 — 1 places within reach in the recorded world; told \"Pack a lunch — food is thin out near Lago Grey\"",
+            "coverage miss: dinner, day 5 — 39 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "sparse lunch, day 6 (generic_pack_advice): \"Pack a lunch — food is thin out near Laguna Azul\""
+          ]
+        },
+        {
+          "traveller": "vegetarian",
+          "meals": {
+            "total": 11,
+            "lunches": 6,
+            "dinners": 5
+          },
+          "named": {
+            "n": 2,
+            "pct": 18.2
+          },
+          "proximity": {
+            "withinTenMinutes": 2,
+            "pct": 100,
+            "medianKmFromRoute": 0.3,
+            "p90KmFromRoute": 0.3,
+            "maxKmFromRoute": 0.3
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 2,
+            "repeats": 0,
+            "cuisineLabelled": 1,
+            "distinctCuisines": 1,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegetarian"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 2,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 2,
+            "namedWithoutEvidence": 2
+          },
+          "coverageMiss": {
+            "meals": 5,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 1,
+              "prose_claims_a_meal_there": 4,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 4,
+            "lunches": 4,
+            "dinners": 0,
+            "days": 4,
+            "shopNearBaseOrOnTheWay": 4,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 4,
+              "prose_claims_a_meal_there": 0,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "sparse lunch, day 2 (generic_pack_advice): \"Pack a lunch — food is thin out near Laguna Amarga\"",
+            "coverage miss: dinner, day 2 — 39 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "sparse lunch, day 3 (generic_pack_advice): \"Pack a lunch — food is thin out near Base Torres trailhead\"",
+            "coverage miss: dinner, day 3 — 40 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "sparse lunch, day 4 (generic_pack_advice): \"Pack a lunch — food is thin out near Lago Pehoé\"",
+            "coverage miss: dinner, day 4 — 39 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "coverage miss: lunch, day 5 — 1 places within reach in the recorded world; told \"Pack a lunch — food is thin out near Lago Grey\"",
+            "coverage miss: dinner, day 5 — 39 places within reach in the recorded world; told \"Dinner in Puerto Natales\"",
+            "sparse lunch, day 6 (generic_pack_advice): \"Pack a lunch — food is thin out near Laguna Azul\""
+          ]
+        }
+      ]
+    },
+    {
+      "label": "karakol-issyk-kul",
+      "kind": "sparse_non_latin",
+      "destination": "Karakol and Issyk-Kul",
+      "carFree": false,
+      "days": 6,
+      "fixture": {
+        "recordedAt": "2026-11-09T15:17:29.558Z",
+        "overtureRelease": "2026-10-21.0",
+        "boxes": 9,
+        "overtureRows": 12,
+        "osmElements": 0,
+        "osmBoxesUnanswered": 9,
+        "world": {
+          "meal": 2,
+          "light": 3,
+          "shop": 1,
+          "duplicatePairs": 0
+        }
+      },
+      "dataset": {
+        "status": "partial",
+        "source": "overture",
+        "boxesPlanned": 8,
+        "boxesFailed": 2,
+        "venues": 5,
+        "byServiceType": {
+          "restaurant": 2,
+          "cafe": 3
+        },
+        "mealVenues": 5,
+        "provisionShops": 0,
+        "pointsCovered": {
+          "n": 6,
+          "ofPointsWithFoodInWorld": 6,
+          "pct": 100,
+          "allPoints": 12
+        },
+        "basesWithDinnerVenue": {
+          "n": 1,
+          "of": 1
+        },
+        "duplicatePairs": 0,
+        "duplicateExamples": [],
+        "chain": {
+          "venues": 0,
+          "pct": 0,
+          "byEvidence": {},
+          "flaggedByProduct": 0,
+          "pctOfWorld": 0
+        },
+        "nonLatinNames": {
+          "kept": 3,
+          "pctOfKept": 60,
+          "pctOfWorld": 60
+        },
+        "hoursEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "dietaryEvidence": {
+          "venues": 0,
+          "pct": 0
+        },
+        "cuisine": {
+          "labelled": 1,
+          "pct": 20,
+          "distinct": 1
+        },
+        "localityIsDestinationName": {
+          "venues": 5,
+          "pct": 100
+        }
+      },
+      "plans": [
+        {
+          "traveller": "no stated needs",
+          "meals": {
+            "total": 11,
+            "lunches": 6,
+            "dinners": 5
+          },
+          "named": {
+            "n": 6,
+            "pct": 54.5
+          },
+          "proximity": {
+            "withinTenMinutes": 6,
+            "pct": 100,
+            "medianKmFromRoute": 0.19,
+            "p90KmFromRoute": 0.26,
+            "maxKmFromRoute": 0.26
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 4,
+            "repeats": 2,
+            "cuisineLabelled": 2,
+            "distinctCuisines": 1,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 0,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 6,
+            "namedWithoutEvidence": 6
+          },
+          "coverageMiss": {
+            "meals": 3,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 3,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 2,
+            "lunches": 2,
+            "dinners": 0,
+            "days": 2,
+            "shopNearBaseOrOnTheWay": 2,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 1,
+              "prose_claims_a_meal_there": 1,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: dinner, day 3 — 1 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "coverage miss: dinner, day 4 — 2 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "sparse lunch, day 5 (generic_pack_advice): \"Pack a lunch — food is thin out near Skazka Canyon\"",
+            "coverage miss: dinner, day 5 — 1 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "sparse lunch, day 6 (prose_claims_a_meal_there): \"Casual lunch in Cholpon-Ata petroglyphs, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "vegetarian",
+          "meals": {
+            "total": 11,
+            "lunches": 6,
+            "dinners": 5
+          },
+          "named": {
+            "n": 6,
+            "pct": 54.5
+          },
+          "proximity": {
+            "withinTenMinutes": 6,
+            "pct": 100,
+            "medianKmFromRoute": 0.19,
+            "p90KmFromRoute": 0.26,
+            "maxKmFromRoute": 0.26
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 4,
+            "repeats": 2,
+            "cuisineLabelled": 2,
+            "distinctCuisines": 1,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "vegetarian"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 6,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 6,
+            "namedWithoutEvidence": 6
+          },
+          "coverageMiss": {
+            "meals": 3,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 3,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 2,
+            "lunches": 2,
+            "dinners": 0,
+            "days": 2,
+            "shopNearBaseOrOnTheWay": 2,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 1,
+              "prose_claims_a_meal_there": 1,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: dinner, day 3 — 1 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "coverage miss: dinner, day 4 — 2 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "sparse lunch, day 5 (generic_pack_advice): \"Pack a lunch — food is thin out near Skazka Canyon\"",
+            "coverage miss: dinner, day 5 — 1 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "sparse lunch, day 6 (prose_claims_a_meal_there): \"Casual lunch in Cholpon-Ata petroglyphs, near the midday stop\""
+          ]
+        },
+        {
+          "traveller": "halal",
+          "meals": {
+            "total": 11,
+            "lunches": 6,
+            "dinners": 5
+          },
+          "named": {
+            "n": 6,
+            "pct": 54.5
+          },
+          "proximity": {
+            "withinTenMinutes": 6,
+            "pct": 100,
+            "medianKmFromRoute": 0.19,
+            "p90KmFromRoute": 0.26,
+            "maxKmFromRoute": 0.26
+          },
+          "chains": {
+            "named": 0,
+            "pctOfNamed": 0,
+            "avoidable": 0,
+            "practicalButPassedOver": 0
+          },
+          "variety": {
+            "distinctVenues": 4,
+            "repeats": 2,
+            "cuisineLabelled": 2,
+            "distinctCuisines": 1,
+            "sameCuisineBackToBack": 0
+          },
+          "mealType": {
+            "dinnerAtCafeOrBakery": 0,
+            "mealAtShop": 0
+          },
+          "preferences": {
+            "cuisineAsked": [],
+            "matched": 0,
+            "achievable": 0,
+            "dietaryAsked": [
+              "halal"
+            ],
+            "withEvidence": 0,
+            "achievableWithEvidence": 0,
+            "saidNotConfirmed": 6,
+            "namedAtUnsuitable": 0
+          },
+          "hours": {
+            "namedWithEvidence": 0,
+            "pctOfNamed": 0,
+            "scheduledOutsideHours": 0,
+            "saidNotConfirmed": 6,
+            "namedWithoutEvidence": 6
+          },
+          "coverageMiss": {
+            "meals": 3,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 0,
+              "prose_claims_a_meal_there": 3,
+              "silent": 0
+            }
+          },
+          "sparse": {
+            "meals": 2,
+            "lunches": 2,
+            "dinners": 0,
+            "days": 2,
+            "shopNearBaseOrOnTheWay": 2,
+            "told": {
+              "venue_named_beyond_reach": 0,
+              "shop_named": 0,
+              "advice_from_data": 0,
+              "generic_pack_advice": 1,
+              "prose_claims_a_meal_there": 1,
+              "silent": 0
+            }
+          },
+          "examples": [
+            "coverage miss: dinner, day 3 — 1 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "coverage miss: dinner, day 4 — 2 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "sparse lunch, day 5 (generic_pack_advice): \"Pack a lunch — food is thin out near Skazka Canyon\"",
+            "coverage miss: dinner, day 5 — 1 places within reach in the recorded world; told \"Dinner in Karakol\"",
+            "sparse lunch, day 6 (prose_claims_a_meal_there): \"Casual lunch in Cholpon-Ata petroglyphs, near the midday stop\""
+          ]
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "venues": 157,
+    "duplicatePairsInDataset": 0,
+    "chainVenuePct": 0.6,
+    "chainVenuesFlaggedByProduct": 0,
+    "venuesWithHoursEvidencePct": 0,
+    "venuesWithDietaryEvidencePct": 0,
+    "venuesWithCuisinePct": 44.6,
+    "venuesWhoseLocalityIsTheDestinationNamePct": 100,
+    "provisionShops": 0,
+    "scanPointsWithFoodCoveredPct": 54.1,
+    "meals": 211,
+    "mealsNamedPct": 64.5,
+    "namedWithinTenMinutesPct": 97.8,
+    "namedChainPct": 0,
+    "avoidableChainMeals": 0,
+    "practicalChainPassedOver": 0,
+    "repeatedVenueMeals": 6,
+    "sameCuisineBackToBack": 6,
+    "cuisinePreferenceMatched": 0,
+    "cuisinePreferenceAchievable": 7,
+    "dietaryWithEvidence": 0,
+    "dietaryAchievableWithEvidence": 0,
+    "dietarySaidNotConfirmed": 69,
+    "dietaryNamedAtUnsuitable": 0,
+    "namedWithHoursEvidencePct": 0,
+    "scheduledOutsideHours": 0,
+    "namedWithoutHoursEvidence": 136,
+    "hoursSaidNotConfirmed": 136,
+    "dinnerAtCafeOrBakery": 0,
+    "coverageMissMeals": 67,
+    "coverageMissToldAMealIsThere": 59,
+    "coverageMissToldToPack": 2,
+    "sparseMeals": 14,
+    "sparseDays": 14,
+    "sparseWithAShopNearBaseOrOnTheWay": 14,
+    "sparseToldShopNamed": 0,
+    "sparseToldAdviceFromData": 0,
+    "sparseToldGenericPackAdvice": 11,
+    "sparseToldAMealIsThere": 3,
+    "sparseToldDistantVenue": 0,
+    "sparseToldNothing": 0
+  }
+}

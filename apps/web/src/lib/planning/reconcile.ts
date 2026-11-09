@@ -3756,7 +3756,7 @@ export function pickMealVenue<T extends { venue: { id: string }; km: number }>(c
   return nearest ? (pool.find((entry) => supports(entry.venue) && entry.km <= nearest.km + 2) ?? nearest) : undefined;
 }
 
-function nameVenuesForDay(
+export function nameVenuesForDay(
   day: ItineraryDay,
   food: FoodDataset,
   profile: TravelerProfile,
