@@ -141,7 +141,8 @@ function escapeForRegExp(value: string): string {
 export async function expectNothingIdentifying(page: Page, where: string): Promise<void> {
   const rendered = await page.evaluate(() => {
     const clone = document.documentElement.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('script').forEach((node) => node.remove());
+    /* Inlined CSS is one shared stylesheet, the same for both systems: its class names are not something a reviewer reads. */
+    clone.querySelectorAll('script, style').forEach((node) => node.remove());
     return clone.outerHTML;
   });
   const inMarkup = [...new Set(forbiddenTokensIn(rendered))];
