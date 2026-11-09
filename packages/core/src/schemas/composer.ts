@@ -421,10 +421,9 @@ export const tripComposerAnswersSchema = z.object({
    * parses with every field absent, which reads correctly as "nobody asked".
    *
    * Every one of these changes the ranking. Nothing is collected for its own
-   * sake: which question is worth asking next is decided by
-   * `shortlistSeparation`, which reports the dimensions no candidate could be
-   * measured on because the traveller has not said — heaviest weight first — so
-   * the intake asks for the answer that would actually break the tie.
+   * sake: which question is worth asking next is decided by the advisor's
+   * interview (`advisor/questions.ts#nextQuestion`), which asks the one whose
+   * answer is expected to change the shortlist most and stops when none would.
    */
   /** How far the traveller will fly to get there. */
   flightTolerance: z.enum(['short', 'moderate', 'long', 'any']).optional(),

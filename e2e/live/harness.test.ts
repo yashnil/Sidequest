@@ -723,8 +723,10 @@ describe('leak 3 — counts taken against markup that was never rendered', () =>
 
 describe('leak 4 — a count taken after the surface failed to appear', () => {
   /*
-   * `decide.eval.ts` is a script rather than a module, so the property is
-   * asserted here as the rule it now follows: `locator.count()` does not throw
+   * The live script this leak was found in counted a shortlist (it measured
+   * the previous destination ranker and went with it), and a script is not a
+   * module, so the property is asserted here as the rule every live count
+   * follows: `locator.count()` does not throw
    * on a list that is not there — it answers `0` — so a `.catch(() => null)`
    * around it catches nothing, and the guard has to be the presence of the
    * container. This is the same shape as leak 3 and it is proved the same way.

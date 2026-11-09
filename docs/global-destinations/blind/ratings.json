@@ -1,0 +1,2207 @@
+[
+ {
+  "id": "karakoram-budget-trek",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X has Hunza (the Karakoram itself) plus rain-shadow Ladakh; Y offers Peru, Romania and Kyrgyzstan, none of them the Karakoram."
+ },
+ {
+  "id": "karakoram-pakistan-mountains",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X stays in northern Pakistan (Gilgit-Baltistan), though Khyber Pass and a China-labelled KKH are weak; Y is three expensive ranges on other continents."
+ },
+ {
+  "id": "hawaii-volcano-beach",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X is three Hawaiian islands including the Big Island for volcanoes; Y is not in Hawaii at all."
+ },
+ {
+  "id": "hawaii-family",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X is in Hawaii (Maui and Oahu ideal for families; Molokai a weak third); Y is Jamaica, Tenerife and Seychelles."
+ },
+ {
+  "id": "japan-spring-culture",
+  "X": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X leads with Kyoto & Nara at blossom time and adds Chugoku and Tohoku; Y has no Japan at all."
+ },
+ {
+  "id": "japan-autumn-quiet",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is in Japan with Kumano Kodo and Tohoku as quieter picks (Tokyo is off-brief); Y is Spain, Seychelles and Dubai."
+ },
+ {
+  "id": "central-asia-remote-hiking",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X is three genuinely Central Asian remote ranges (Karakol, Fann, Song-Kul); Y drifts to the Caucasus and Turkey."
+ },
+ {
+  "id": "central-asia-silk-road",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y includes the Uzbekistan Silk Road cities, the heart of the request; X has no Silk Road city and adds Ladakh, which is not Central Asia."
+ },
+ {
+  "id": "indonesia-islands",
+  "X": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y is Indonesia without Bali (Flores, Sumba; East Java is less of a beach pick); X is Polynesia, Corsica and Sao Tome."
+ },
+ {
+  "id": "indonesia-diving",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y names Komodo and Raja Ampat, Indonesia's marquee dive regions, in season for October; X has nowhere in Indonesia."
+ },
+ {
+  "id": "europe-city-break-spring",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X is three real cities with food and museums a short flight from London; Y pads with Amalfi Coast and the Loire, which are not city breaks."
+ },
+ {
+  "id": "europe-city-break-winter",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X at least gives cities, though none is a classic Christmas-market city; Y gives Tuscany and the Loire, regions with little market tradition."
+ },
+ {
+  "id": "europe-city-break-underrated",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y is three actual cities with cheap, walkable Skopje apt; X includes Picos de Europa, a mountain range, for a city-break request."
+ },
+ {
+  "id": "africa-safari-august",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Both strong; Y's Serengeti (northern river crossings, dense lion and cheetah) is the better big-cat pick for August than Laikipia & Samburu."
+ },
+ {
+  "id": "africa-safari-february",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X's Maasai Mara is a good dry-spell February cat destination; Y swaps it for Rajasthan, a looser reading of 'safari'."
+ },
+ {
+  "id": "africa-safari-budget",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 1
+  },
+  "preferred": "X",
+  "note": "Kruger is the right lead in both; X adds Okavango-Chobe as a real self-drive option, Y offers no alternative at all."
+ },
+ {
+  "id": "patagonia-summer",
+  "X": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Same three places; Y leads with El Chalten and Torres del Paine (glaciers, towers), X leads with Bariloche, the weakest match."
+ },
+ {
+  "id": "patagonia-roadtrip",
+  "X": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y includes the Carretera Austral, the definitive Patagonian road trip; X's Peninsula Valdes is the better wildlife stop, so it is close."
+ },
+ {
+  "id": "alpine-hiking-september",
+  "X": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y has the Tour du Mont Blanc and Japanese Alps, both true hut-to-hut in September; X has no real hut network beyond the Atlas refuges."
+ },
+ {
+  "id": "alps-september-quiet",
+  "X": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "X leads with Chamonix, which the traveller excluded, then leaves the Alps; Y gives the Julian and Bavarian Alps."
+ },
+ {
+  "id": "winter-sports-february",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Tyrol (St Anton, Ischgl) answers 'lively village' better than the Bernese Oberland; other two picks identical."
+ },
+ {
+  "id": "winter-sports-budget",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X leads with Bansko/Borovets, the canonical cheap-ski answer, plus Hokkaido snow; Y's Tatras and Almaty are cheap but less snow-sure."
+ },
+ {
+  "id": "winter-sports-japan",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X stays in Japan with Niseko, Tohoku (powder and onsen) and Beppu; Y adds Tenerife and the Engadin to a Japan request."
+ },
+ {
+  "id": "rainforest-wildlife",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Neither offers sloths (Costa Rica/Amazon); X's three are at least rainforest-wildlife places, Y includes Tenerife."
+ },
+ {
+  "id": "rainforest-borneo-like",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Both weak: no Borneo or Sumatra, so no orangutans; Y's Madagascar is at least rainforest trekking with primates in season."
+ },
+ {
+  "id": "amazon-august",
+  "X": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X gives Cuyabeno and Iquitos, real Amazon lodge bases; Y is Kruger, Komodo and Gabon."
+ },
+ {
+  "id": "family-limited-driving",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "Same three; X leads with the Dalmatian islands (ferries, short hops), a safer family lead than long-haul Zanzibar."
+ },
+ {
+  "id": "family-no-car-europe",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X includes the Bernese Oberland, the best car-free lakes-and-trains family base in Europe; Y's Dolomites are harder without a car."
+ },
+ {
+  "id": "rail-multi-country",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Both weak, no Alpine rail route; X's Germany and Italian Lakes are at least rail-rich, Y's Dalmatian Coast has almost no trains."
+ },
+ {
+  "id": "rail-asia",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Identical places with only the 2nd and 3rd swapped; all are reasonable rail-linked November picks."
+ },
+ {
+  "id": "like-dolomites-cheaper",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y offers cheap, uncrowded mountain ranges (Pirin's limestone is the closest analogue); X gives Amalfi, Banff and the Barrier Reef."
+ },
+ {
+  "id": "like-amalfi-quieter",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X's Dalmatian Coast is a sound cheaper Amalfi analogue and Costa Verde a stretch; Y is tropical Indonesia and Zanzibar."
+ },
+ {
+  "id": "like-iceland-cheaper",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "Both weak; X's Song-Kul highlands are a fair stark, cheap, untouristed analogue, Y gives pricey Bernese Oberland, Rio and Porto."
+ },
+ {
+  "id": "like-santorini-uncrowded",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Neither names a small Cycladic alternative; X leads with Crete, Y leads with French Polynesia."
+ },
+ {
+  "id": "like-banff-quiet",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X's Wind Rivers, Rila lakes and Ala-Kul are quiet, lake-studded and cheaper; Y is good (North Cascades) but the Engadin is neither quiet nor cheap."
+ },
+ {
+  "id": "remote-mountains-september",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Cordillera Blanca delivers the lakes-and-hiking brief better than X's Avenue of the Volcanoes; other picks shared."
+ },
+ {
+  "id": "himalaya-october",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y is the three classic Nepal teahouse treks in peak season; X has only Everest plus Morocco and Tenerife."
+ },
+ {
+  "id": "andes-trek-june",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X leads with the Cordillera Blanca, ideal in June, then leaves the Andes; Y's Chile is winter-bound and Salta/Jujuy are near-duplicates."
+ },
+ {
+  "id": "caucasus-hiking",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X gives Tusheti and Svaneti, the two village-to-village classics; Y has Svaneti then Ecuador and Albania."
+ },
+ {
+  "id": "spring-hiking-no-snow",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Identical lists in identical order; Crete, Tenerife and Madeira are exactly right for snow-free April hiking."
+ },
+ {
+  "id": "march-mountains-budget",
+  "X": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Two shared picks; High Atlas (cheap, some snow up high) and Santo Antao (snow-free, pricier to reach) are equally good thirds."
+ },
+ {
+  "id": "winter-sun-walking",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y includes Tenerife, the obvious direct-from-Manchester winter walking answer; X's Phoenix, Siwa and Sao Tome are impractical for a week."
+ },
+ {
+  "id": "usa-national-parks-autumn",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y stays in the US Southwest (Utah, Grand Canyon, Colorado); X pairs Utah with Jordan and Argentina."
+ },
+ {
+  "id": "scandinavia-summer-hiking",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "Same three; X ranks fjord-cut Lofoten above fjordless Swedish Lapland, which suits 'hiking and fjords' better."
+ },
+ {
+  "id": "new-zealand-february",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Identical lists; Queenstown/Wanaka, Fiordland and Mackenzie are the right South Island answers."
+ },
+ {
+  "id": "africa-mountains",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "Y leads with Kilimanjaro, which was explicitly excluded, though its Rwenzori is the best single answer; X has no violation."
+ },
+ {
+  "id": "balkans-hiking-cheap",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X's Zagori is firmly Balkan and wild; Y's Transylvania is arguably outside the Balkans and still snowy up high in June."
+ },
+ {
+  "id": "japan-alps-hike",
+  "X": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is all Japanese mountain areas with onsen (Kamikochi, Matsumoto, Yatsugatake); Y adds Reunion and Tenerife."
+ },
+ {
+  "id": "volcano-hikes",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Vanuatu (Yasur on Tanna) offers visible lava in the dry season; X's whole-country New Zealand is vaguer and heading into winter."
+ },
+ {
+  "id": "glaciers-easy",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y leads with Iceland (Jokulsarlon icebergs from the car park); X has Jungfrau glaciers but then Rio and Kruger; Altai is too rough for 70s."
+ },
+ {
+  "id": "caribbean-january",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X's Guadeloupe suits shore snorkelling and avoids big-resort feel; Y's Jamaica is the giant resort island the traveller ruled out."
+ },
+ {
+  "id": "caribbean-hurricane-season",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y includes Aruba, outside the hurricane belt and the correct answer; X offers only Turks & Caicos, squarely in peak storm season."
+ },
+ {
+  "id": "med-islands-june",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X gives actual islands (Dalmatian, Cyclades, Crete); Y's Mediterranean Turkey and Israel are not islands."
+ },
+ {
+  "id": "warm-sea-november",
+  "X": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 1
+  },
+  "preferred": "Y",
+  "note": "Both weak; Y's Tel Aviv is at least a ~4h flight with a warm sea, X's three are all long-haul from Berlin."
+ },
+ {
+  "id": "thailand-islands-august",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y correctly picks the Gulf side (Samui, Pha-ngan) for August, though Pattaya is a poor third; X has no Thailand."
+ },
+ {
+  "id": "thailand-islands-january",
+  "X": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is three Thai coasts all workable in January; Y has only Krabi, after Jamaica and the Maldives."
+ },
+ {
+  "id": "philippines-islands",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is Palawan, Cebu and Mindoro, all Philippines; Y surrounds Palawan with Mexico and South Africa."
+ },
+ {
+  "id": "pacific-islands",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X adds Vanuatu, a genuinely less-developed option; Y pairs the Society Islands with Croatia and Rio."
+ },
+ {
+  "id": "indian-ocean-honeymoon",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Both weak; X has Seychelles, the one true luxury answer, with two wrong oceans; Y is the right ocean but no luxury-honeymoon island."
+ },
+ {
+  "id": "red-sea-diving",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Y is three Egyptian Red Sea dive bases (Marsa Alam and Port Ghalib overlap); X has nowhere on the Red Sea."
+ },
+ {
+  "id": "surf-winter",
+  "X": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y names surf towns, with Rincon in prime winter season; X gives Dubai and an inland Costa Rica region with no surf."
+ },
+ {
+  "id": "cold-water-coast",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "tie",
+  "note": "Both fail: tropical and Mediterranean islands instead of Ireland, Scotland, Brittany, Faroe or Newfoundland."
+ },
+ {
+  "id": "whales",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 5
+  },
+  "preferred": "Y",
+  "note": "Y's Kenai Peninsula and Shiretoko pair summer whales with good hiking; X's Kaikoura is in midwinter in August."
+ },
+ {
+  "id": "greek-islands-october",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is all Greek islands (Rhodes the warmest in mid October); Y has Crete flanked by Zanzibar and Samoa."
+ },
+ {
+  "id": "atlantic-islands-winter",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "tie",
+  "note": "Both fail: no Canaries, Madeira, Azores or Cape Verde; Colombia, South Africa, Sydney and Maui are not Atlantic islands near Madrid."
+ },
+ {
+  "id": "gorillas",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Each has one gorilla park among irrelevant picks; Y leads with Volcanoes NP, X buries Bwindi third behind Denali and Kazbegi."
+ },
+ {
+  "id": "india-tigers",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y is in India (Karnataka gives Nagarhole plus Mysore Palace; Maharashtra has Tadoba), though state-sized and missing Rajasthan/MP; X has no India."
+ },
+ {
+  "id": "bears-north-america",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Kenai Peninsula is the one place with bears, salmon runs and tidewater glaciers together; X's picks each miss one of the three."
+ },
+ {
+  "id": "birding-neotropics",
+  "X": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Both weak; Y at least includes Costa Rica, a top cloud-forest hummingbird destination, among Borneo and Seychelles."
+ },
+ {
+  "id": "penguins",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X's Galapagos and Kangaroo Island do have wild penguins; none of Y's three (Tongariro, Baja, El Chalten) does."
+ },
+ {
+  "id": "madagascar-like",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "Both lead with Madagascar; X's Komodo dragons are more 'nowhere else' than Y's Shiretoko, though Y's Borneo is strong. Close."
+ },
+ {
+  "id": "arctic-wildlife",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X gives Svalbard plus high-Arctic Canada (very hard to reach, but expedition-apt); Y is Zambia, Komodo and the Amazon."
+ },
+ {
+  "id": "food-city-asia",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Neither names Bangkok, Penang or Taipei; X's Hong Kong is a real Asian food city, Y's Rajasthan is a state, not a city."
+ },
+ {
+  "id": "latin-america-colonial",
+  "X": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y is all Latin America though country-sized and Peru is wet in February; X has excellent Yucatan but adds India and Cape Town."
+ },
+ {
+  "id": "ancient-ruins-spring",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Both weak (no Greece, Turkey, Jordan, Egypt); Pompeii via Amalfi is shared, and Y's Mesa Verde beats X's Buenos Aires."
+ },
+ {
+  "id": "wine-region",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "tie",
+  "note": "Identical lists and both weak: none of Amalfi, Santa Fe or Istanbul is a wine region."
+ },
+ {
+  "id": "middle-east-culture-winter",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is Jordan, Oman and Israel, history and desert in season; Y has nothing in the Middle East."
+ },
+ {
+  "id": "india-first-time",
+  "X": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y is Rajasthan plus gentle Kerala, an ideal first-timer pairing; X surrounds Rajasthan with Jamaica and Yucatan."
+ },
+ {
+  "id": "china-off-beaten",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y is in China (Yunnan, Xi'an, Fujian), though it misses the Guilin/Guizhou karst; X has no China."
+ },
+ {
+  "id": "south-america-cities",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X is three lively South American cities; Y has Buenos Aires third after Spain and Mexico."
+ },
+ {
+  "id": "north-africa-medinas",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X stays in North Africa (Morocco, Tunisia, Cairo), if country-sized; Y follows the High Atlas with Namibia and South Africa."
+ },
+ {
+  "id": "usa-city-weekend",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Neither names New Orleans, Nashville or Austin; X is at least three US cities, Y includes Oaxaca in Mexico."
+ },
+ {
+  "id": "southeast-asia-first",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y gives destination-scale picks covering beaches and temples (Krabi, Luang Prabang; Bali is wet in January); X just lists countries."
+ },
+ {
+  "id": "eastern-europe-winter-city",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y leads with Budapest, the thermal-bath answer, plus Sofia; X is Andalusia, Porto and Crete."
+ },
+ {
+  "id": "small-towns-italy",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Both weak (no Umbria, Le Marche, Abruzzo); Y is at least all Italy, X adds Kyoto and Santa Fe."
+ },
+ {
+  "id": "spain-winter",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y is Granada, Ronda and the Malaga coast, all Andalusia by rail; X has no Spain."
+ },
+ {
+  "id": "road-trip-western-us",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "Both have only Utah right; X leads with it and stays in the US, Y leads with Provence and adds Scotland."
+ },
+ {
+  "id": "road-trip-europe-coast",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X's Montenegrin coast is a better third coastal drive than Y's Tenerife; Crete and Corsica shared."
+ },
+ {
+  "id": "iceland-ring-road",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X answers inside Iceland (north: Godafoss, aurora), though only one pick; Y leaves Iceland for Switzerland, Svalbard and Lapland."
+ },
+ {
+  "id": "desert-stargazing",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 5
+  },
+  "preferred": "X",
+  "note": "Both excellent; X's Atacama is the world's benchmark for stargazing and Erg Chebbi the classic desert camp."
+ },
+ {
+  "id": "namibia-like",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Gobi matches empty landscapes and dunes; X's Transylvania has neither dunes nor emptiness."
+ },
+ {
+  "id": "australia-outback",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y is in Australia (Top End, Ningaloo reef, Queensland); X is three South Pacific island groups."
+ },
+ {
+  "id": "scotland-like-drive",
+  "X": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "Both weak, no Scotland or Ireland; X's are at least scenic driving loops, Y includes Turks & Caicos."
+ },
+ {
+  "id": "northern-lights",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X has Swedish Lapland and Tromso, both aurora and dog-sledding hubs; Y's Bernese Oberland and Niseko have no aurora."
+ },
+ {
+  "id": "fall-colours",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "tie",
+  "note": "Identical lists; only the Smokies has foliage (early for peak), Tenerife and Crete have none."
+ },
+ {
+  "id": "lakes-swimming-summer",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Only the Julian Alps truly fit in both; Y's Issyk-Kul is at least swimmable in July, X's Ladakh lakes are icy and trainless."
+ },
+ {
+  "id": "canada-lakes-canoe",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X's Adirondacks and Finnish Lakeland are real canoe-camping country; Y swaps in the Italian Lakes. Neither names Quetico/Algonquin."
+ },
+ {
+  "id": "cheap-anywhere-warm-feb",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X's Kerala is a superb cheap, warm, good-food February pick; Y's ideas are fine but offered as whole countries."
+ },
+ {
+  "id": "luxury-safari-beach",
+  "X": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Both add odd beach picks (Crete, Barrier Reef); X's Okavango is the definitive money-no-object safari, Y's South Luangwa close behind."
+ },
+ {
+  "id": "backpacking-south-america",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y covers ruins (Machu Picchu) and the cheap Andean trail; X is three trekking ranges with no ruins, two of them adjacent."
+ },
+ {
+  "id": "short-haul-from-nyc",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Dominica and Guadeloupe actually deliver hiking with beaches; X's Turks & Caicos and Yucatan are flat."
+ },
+ {
+  "id": "short-haul-from-singapore",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X's Taman Negara is a workable long-weekend nature trip; Y leads with a tiny Thai waterfall park; both include far-off Ningaloo."
+ },
+ {
+  "id": "from-sydney-winter-escape",
+  "X": {
+   "fit": 4,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Same two good picks; X adds Port Moresby, which no advisor would recommend for a snorkelling holiday."
+ },
+ {
+  "id": "from-delhi-mountains",
+  "X": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y includes the Indian Himalaya (the obvious answer) and Bhutan; X sends a one-week Delhi escape to Yunnan, Khumbu and Kyrgyzstan."
+ },
+ {
+  "id": "from-sao-paulo",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y gives Chapada Diamantina and the Pantanal, both in dry-season prime; X is Romania, Zambia and Washington State."
+ },
+ {
+  "id": "from-nairobi-beach",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X is Zanzibar, Mombasa and Diani, all short hops; Y's Seychelles and Mauritius are longer flights and not East Africa."
+ },
+ {
+  "id": "wheelchair-scenery",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "X is three ordinary towns (Brighton, Narrabri, Watsonville) with no spectacular scenery; Y's Italian Lakes and vehicle-based Kruger work."
+ },
+ {
+  "id": "seniors-gentle",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "tie",
+  "note": "Each has one ideal lake-and-train pick (Salzkammergut / Italian Lakes), the trainless Azores, and one miss (Almaty / Palawan)."
+ },
+ {
+  "id": "toddler-beach",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X leads with Grace Bay (shallow, calm, 15 min from the airport); Y's Samoa and Rio surf are poor for a toddler."
+ },
+ {
+  "id": "teenagers-adventure",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Sabah offers rafting, Kinabalu and orangutans in season; X's Victoria is in midwinter."
+ },
+ {
+  "id": "solo-female-first",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "Shared Andalusia and Bali; X's Yunnan is an easier, safer first solo pick than Y's Rajasthan."
+ },
+ {
+  "id": "honeymoon-quiet",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Lycian Coast is more precise than 'Mediterranean Turkey' and Seychelles is a first-rate October honeymoon."
+ },
+ {
+  "id": "friends-group-cheap-summer",
+  "X": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y's Crete has beaches, gorge hikes and nightlife; X's three have almost no nightlife and one has no beach. Baku is odd."
+ },
+ {
+  "id": "digital-detox",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "X includes Corsica, at its most crowded in August; Y's Reunion (roadless Mafate, gites) fits cabins and disconnection."
+ },
+ {
+  "id": "hidden-gems-europe",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Identical lists; Ohrid, Peneda-Geres and Zagori are exactly the brief."
+ },
+ {
+  "id": "hidden-gems-asia",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "X offers two Nepal treks to someone who said they have done Nepal; Y avoids Nepal and Japan."
+ },
+ {
+  "id": "hidden-gems-americas",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 2,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y at least tries for overlooked nature (Caribbean Nicaragua, northern Mexico; Western Kansas is a stretch); X is BA, Turks & Caicos, Yucatan."
+ },
+ {
+  "id": "monsoon-avoid-july",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Y's Bali and Java are in their dry season, the cleanest answer, though all Indonesia; X is varied but Kazbegi is barely Asia."
+ },
+ {
+  "id": "ski-april",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y's Chamonix has high lift-served snow in mid April; X is all Arctic, mostly ski-touring rather than resort skiing."
+ },
+ {
+  "id": "hike-may-alps",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X stays in the Alps with lower, earlier-clearing areas; Y answers with Morocco, Peru and Scotland."
+ },
+ {
+  "id": "southern-hemisphere-ski",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 1
+  },
+  "preferred": "X",
+  "note": "X gives Queenstown and Bariloche (Svalbard is wrong for August); Y returned nothing for a request with obvious answers."
+ },
+ {
+  "id": "beach-europe-april",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X includes Tenerife, the only pick with a swimmable April sea; Y's Dalmatia is around 15C."
+ },
+ {
+  "id": "safari-april-rains",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "Same three; X leads with southern Africa as its rains end, Y leads with Sri Lanka's Yala."
+ },
+ {
+  "id": "desert-summer",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 5,
+   "variety": 5
+  },
+  "preferred": "X",
+  "note": "X's three are all in southern-hemisphere winter, so reliably mild; Y's Gobi can be hot, though Lencois Maranhenses is inspired."
+ },
+ {
+  "id": "himalaya-monsoon",
+  "X": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 1
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "tie",
+  "note": "Both fail: X names Namche, which is not in the rain shadow; Y leaves the Himalaya. Ladakh, Spiti, Mustang and Dolpo are missing."
+ },
+ {
+  "id": "patagonia-winter",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "tie",
+  "note": "Each has only Peninsula Valdes right; X adds non-Patagonian places, Y mislabels El Impenetrable (Chaco) as Patagonia."
+ },
+ {
+  "id": "japan-summer-cool",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X has Hokkaido and Tohoku, the cool-summer answers (Tokyo is wrong); Y has no Japan."
+ },
+ {
+  "id": "christmas-snow-not-ski",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Both weak, no Lapland; Y's are at least snowy in December (but ski resorts), X is midsummer Tasmania/NZ and Tenerife."
+ },
+ {
+  "id": "shoulder-season-med",
+  "X": {
+   "fit": 4,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "tie",
+  "note": "Crete and Lycia shared; X's Israel is culture-rich but hard to recommend unqualified, Y's Gulf of Orosei is thin on culture."
+ },
+ {
+  "id": "vague-somewhere-nice",
+  "X": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Nothing to match against; both are varied, pleasant, defensible sets."
+ },
+ {
+  "id": "vague-surprise",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "X",
+  "note": "X's Azores, Borneo and Salta are varied, in season and fill two weeks; Y's Bantry is a small town and Outback NSW a hard sell."
+ },
+ {
+  "id": "vague-nature",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X's Bialowieza and Copper Canyon are quiet nature; Y's 'East Coast and Midlands' of Ireland includes Dublin. Both carry resort-heavy TCI."
+ },
+ {
+  "id": "contradiction-cheap-luxury",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Both miss cheap-luxury places (Bali, Thailand); X is bizarre (Melrose, Pello, Aceh), Y at least names places with luxury lodging."
+ },
+ {
+  "id": "contradiction-remote-easy",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "X has the best fit (North Cascades) and the worst (Machu Picchu); Y is evenly middling. Net equal."
+ },
+ {
+  "id": "everything",
+  "X": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 4
+  },
+  "preferred": "tie",
+  "note": "Impossible brief; each list offers three partial matches and neither names a one-stop answer such as Morocco, Chile or California."
+ },
+ {
+  "id": "negation",
+  "X": {
+   "fit": 5,
+   "defensible": 5,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 3
+  },
+  "preferred": "X",
+  "note": "X's Kyoto in November is a superb non-beach, non-hiking pick; Y's Sydney is beach-centred."
+ },
+ {
+  "id": "typos",
+  "X": {
+   "fit": 2,
+   "defensible": 1,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Neither offers beaches with hiking; Y's are cheap hiking places, X includes Ubon Ratchathani and the K2 Baltoro expedition."
+ },
+ {
+  "id": "one-word-diving",
+  "X": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 4
+  },
+  "preferred": "Y",
+  "note": "Y's Vanuatu (Coolidge wreck) is a better dive pick than X's Dalmatian Coast; other two shared."
+ },
+ {
+  "id": "specific-niche-tea",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 3,
+   "defensible": 3,
+   "variety": 3
+  },
+  "preferred": "Y",
+  "note": "Y leads with the Sri Lanka Hill Country, the exact answer; X is Dubai, Tenerife and the Florida Keys."
+ },
+ {
+  "id": "specific-niche-fjords",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "Both weak; X names kayakable inlets but Geiranger is the cruise-ship fjord and NZ is in winter; Y has no fjords."
+ },
+ {
+  "id": "specific-niche-hot-springs",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "tie",
+  "note": "Both weak, no Japan, Iceland or Rockies; each has a plausible Andean or Central American spring pick plus Tenerife."
+ },
+ {
+  "id": "specific-niche-caves",
+  "X": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 4
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "X names three real karst areas with underground rivers (Moravian Karst, Mole Creek, Jingxi); Y has none."
+ },
+ {
+  "id": "specific-niche-monasteries",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "X",
+  "note": "Both weak, no Ladakh, Spiti or Bhutan; X's northwest Yunnan has Tibetan monasteries and high passes, Y has none."
+ },
+ {
+  "id": "specific-niche-waterfalls",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 2
+  },
+  "preferred": "Y",
+  "note": "Both weak, no Iguazu or Victoria Falls; Y has Niagara, X has no waterfalls at all."
+ },
+ {
+  "id": "specific-niche-cycling",
+  "X": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "Y": {
+   "fit": 2,
+   "defensible": 2,
+   "variety": 3
+  },
+  "preferred": "tie",
+  "note": "Identical lists; adventurous trekking ranges rather than road-cycling country like the Pyrenees or Alps."
+ },
+ {
+  "id": "long-trip-sabbatical",
+  "X": {
+   "fit": 4,
+   "defensible": 4,
+   "variety": 5
+  },
+  "Y": {
+   "fit": 5,
+   "defensible": 4,
+   "variety": 5
+  },
+  "preferred": "Y",
+  "note": "Both good; Y's Sri Lanka Hill Country is in its best season and ideal for cheap slow living, edging X's Wild Coast."
+ },
+ {
+  "id": "two-nights",
+  "X": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "Y": {
+   "fit": 1,
+   "defensible": 1,
+   "variety": 2
+  },
+  "preferred": "tie",
+  "note": "Both fail: flights to Marrakech, Cappadocia, Cardiff or Naples instead of Loire, Burgundy, Champagne or Normandy by train."
+ }
+]

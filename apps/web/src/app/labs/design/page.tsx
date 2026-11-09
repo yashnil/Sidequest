@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { ASSURANCE_COPY, ASSURANCE_TIERS, RERANK_LABELS, RERANK_CONTROLS, type AssuranceTier } from '@sidequest/core';
+import { ASSURANCE_COPY, ASSURANCE_TIERS, REFINEMENT_LABELS, REFINEMENTS, type AssuranceTier } from '@sidequest/core';
 import { Badge, Panel, buttonClass, cx } from '@/components/ui';
 
 /**
@@ -215,11 +215,11 @@ export default function DesignLabPage() {
           </Panel>
         </Section>
 
-        <Section id="rerank" title="Reranking controls" note="Each one re-weights a dimension already measured, so pressing it is instant and needs no new evidence.">
+        <Section id="refine" title="Refinement controls" note="One tap each. A refinement changes the answers and re-ranks the same destinations — no model, no restart, and nothing already said is lost.">
           <Row label="Controls">
-            {RERANK_CONTROLS.map((control) => (
-              <button key={control} type="button" className={buttonClass('secondary', 'sm')}>
-                {RERANK_LABELS[control]}
+            {REFINEMENTS.map((refinement) => (
+              <button key={refinement} type="button" className="min-h-11 rounded-full border border-ink/20 px-3.5 py-2 text-sm text-ink transition-colors hover:border-ink">
+                {REFINEMENT_LABELS[refinement]}
               </button>
             ))}
           </Row>

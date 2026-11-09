@@ -1,9 +1,11 @@
 import type { TripComposerAnswers } from '../schemas/composer';
 import { EXPERIENCE_LABELS, type CatalogDestination, type Experience } from './catalog/schema';
 import { FOCUS_LABELS, type FocusKey } from './answers';
+import { arrayWorld, type Destination, type DestinationWorld } from './destination';
 import { profileFrom, type AdvisorProfile, type FactorId } from './profile';
-import { compareScored, monthWord, scoreDestination, type AdvisorExclusion, type ScoredDestination } from './score';
+import { GOOD_MONTH, compareScored, monthWord, scoreDestination, seasonModelFor, type AdvisorExclusion, type ScoredDestination } from './score';
 import { selectShortlist, similarity } from './select';
+import { travellerSeason, type Activity } from '../atlas/seasonality';
 import { ADVISOR_SHORTLIST_VERSION, type AdvisorPick, type AdvisorShortlist } from './shortlist-schema';
 
 /**
@@ -35,20 +37,65 @@ export interface Ranking {
   profile: AdvisorProfile;
   ranked: ScoredDestination[];
   excluded: ScoredDestination[];
+  /** How many places the world holds, and how many the first pass handed to the detailed scorer. */
+  worldSize: number;
+  considered: number;
 }
 
-export function rankCatalog(answers: TripComposerAnswers, catalog: readonly CatalogDestination[]): Ranking {
+/** How many candidates the detailed scorer reads. Enough that the first pass never decides a shortlist; few enough to stay interactive. */
+export const DETAILED_CANDIDATES = 900;
+
+export type DestinationSource = readonly (CatalogDestination | Destination)[] | DestinationWorld;
+
+function worldOf(source: DestinationSource): DestinationWorld {
+  return Array.isArray(source) ? arrayWorld(source as readonly (CatalogDestination | Destination)[]) : (source as DestinationWorld);
+}
+
+/**
+ * Two stages. The world narrows itself to the candidates worth reading closely
+ * (a cheap pass over everything it holds: scope, what the place offers, the
+ * words of the request, resemblance to a named place); then every candidate
+ * gets the full factor-by-factor reading, hard constraints included. A plain
+ * array is scored whole.
+ */
+export function rankCatalog(answers: TripComposerAnswers, source: DestinationSource, limit = DETAILED_CANDIDATES, include: readonly string[] = []): Ranking {
+  const world = worldOf(source);
   const profile = profileFrom(answers);
-  const target = profile.similarTo ? catalog.find((entry) => entry.id === profile.similarTo) ?? null : null;
+  const target = profile.similarTo ? world.byId(profile.similarTo) : null;
+  const withinTargets = profile.within ? profile.within.map((id) => world.byId(id)).filter((entry): entry is Destination => entry !== null) : null;
+  const outsideTargets = profile.outside.map((id) => world.byId(id)).filter((entry): entry is Destination => entry !== null);
+  /* A named place is a scope or a comparison, never the answer: it and whatever contains it are left out. */
+  const notAnswers = new Set<string>();
+  if (target) notAnswers.add(target.id);
+  for (const scope of withinTargets ?? []) {
+    notAnswers.add(scope.id);
+    for (const parent of scope.parents) notAnswers.add(parent);
+  }
+  const candidates = world.candidates({
+    wants: profile.wants,
+    regions: profile.regions,
+    countries: profile.countries,
+    within: withinTargets && withinTargets.length > 0 ? withinTargets.map((entry) => entry.id) : null,
+    similarTo: target?.id ?? null,
+    terms: profile.terms,
+    ...(profile.phrase ? { phrase: profile.phrase } : {}),
+    months: profile.months,
+    excluded: profile.excluded,
+    limit,
+    include,
+  });
   const ranked: ScoredDestination[] = [];
   const excluded: ScoredDestination[] = [];
-  for (const destination of catalog) {
-    if (target && destination.id === target.id) continue;
-    const scored = scoreDestination(destination, profile, { similarTarget: target });
+  const scopedCountries = profile.countries && profile.countries.length <= 3 ? new Set(profile.countries) : null;
+  for (const destination of candidates) {
+    if (notAnswers.has(destination.id)) continue;
+    /* "Islands in the Philippines" is not answered with "the Philippines". */
+    if (scopedCountries && destination.kind === 'country' && destination.countries.every((code) => scopedCountries.has(code))) continue;
+    const scored = scoreDestination(destination, profile, { similarTarget: target, withinTargets, outsideTargets });
     (scored.exclusion ? excluded : ranked).push(scored);
   }
   ranked.sort(compareScored);
-  return { profile, ranked, excluded };
+  return { profile, ranked, excluded, worldSize: world.size, considered: candidates.length };
 }
 
 /** Contiguous month runs as words: [6,7,8] → "June–August". Wraps across December. */
@@ -86,10 +133,11 @@ const FOCUS_WORDS: Record<FocusKey, RegExp> = {
   snow: /ski|snow|aurora|northern lights|husky|winter/i,
   culture_food: /village|town|food|market|monaster|temple|wine|culture|church|castle|old town|cuisine|tea/i,
   cities: /city|old town|museum|market|food|bar|neighbourhood|district/i,
+  rail: /rail|train|railway|line|station|funicular|tram/i,
 };
 
 /** Highlights chosen for this traveller: the ones that speak to their interests first, in their order. */
-function relevantHighlights(destination: CatalogDestination, focus: readonly FocusKey[]): string[] {
+function relevantHighlights(destination: Destination, focus: readonly FocusKey[]): string[] {
   const scored = destination.highlights.map((highlight, index) => {
     let score = 0;
     focus.forEach((key, rank) => {
@@ -103,9 +151,11 @@ function relevantHighlights(destination: CatalogDestination, focus: readonly Foc
     .map((entry) => entry.highlight);
 }
 
-function characterOf(destination: CatalogDestination): string {
-  const effort = ['Gentle days', 'Easy-to-moderate days out', 'Big days on foot', 'Expedition-grade'][destination.challenge.typical]!;
-  const remote = ['well served', 'some quiet corners', 'remote', 'very remote'][destination.remoteness]!;
+const level = (value: number): number => Math.min(3, Math.max(0, Math.round(value)));
+
+function characterOf(destination: Destination): string {
+  const effort = ['Gentle days', 'Easy-to-moderate days out', 'Big days on foot', 'Expedition-grade'][level(destination.challenge.typical)]!;
+  const remote = ['well served', 'some quiet corners', 'remote', 'very remote'][level(destination.remoteness)]!;
   const easier =
     destination.challenge.easiest < destination.challenge.typical ? `; gentler versions exist` : '';
   return `${effort}, ${remote}${easier}`;
@@ -113,7 +163,7 @@ function characterOf(destination: CatalogDestination): string {
 
 const COST_LABELS = ['', 'Easy on the budget', 'Moderate costs', 'Pricey on the ground', 'Expensive'];
 
-function nightsFor(destination: CatalogDestination, profile: AdvisorProfile): AdvisorPick['nights'] {
+function nightsFor(destination: Destination, profile: AdvisorProfile): AdvisorPick['nights'] {
   const { min, ideal, max } = destination.nights;
   if (!profile.nights) return { suggested: ideal, min, max };
   const suggested = Math.min(Math.max(ideal, profile.nights.min), Math.max(min, profile.nights.max));
@@ -187,11 +237,58 @@ function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile): strin
 
 function unverifiedFor(scored: ScoredDestination, profile: AdvisorProfile): string[] {
   const out: string[] = [];
+  const d = scored.destination;
+  /* An advisory short of "do not travel" is the traveller's call, and they should make it knowingly. */
+  if (d.advisory && d.advisory.level === 3) out.push(`${d.advisory.source} advises reconsidering travel to parts of the country (as of ${d.advisory.asOf}) — read the current advisory for this region.`);
+  if (d.origin !== 'editorial') out.push('What it offers is read from open travel guides and map data, not checked by an editor.');
   if (!profile.origin) out.push('How long it takes to get there from you — we don’t know where you’re starting.');
   if (profile.budget === null) out.push('Whether it fits your budget — you haven’t said one.');
   out.push('Prices, opening dates and permits for your exact dates.');
-  for (const caution of scored.destination.cautions) if (out.length < 4) out.push(caution);
-  return out;
+  for (const caution of d.cautions) if (out.length < 4) out.push(caution);
+  return out.slice(0, 5);
+}
+
+const ACTIVITY_WORDS: Record<Activity, string> = {
+  hike_low: 'Walking and day hikes',
+  hike_high: 'The high trails',
+  beach: 'Swimming',
+  dive: 'Snorkelling and diving',
+  ski: 'Skiing',
+  winter: 'Snow on the ground',
+  safari: 'Game viewing',
+  wild: 'Wildlife and forest',
+  city: 'Towns and culture',
+  desert: 'The desert',
+  drive: 'Driving',
+  paddle: 'Lakes and paddling',
+  sky: 'Night skies',
+  scenery: 'Coast and scenery',
+  any: 'A visit',
+};
+
+/**
+ * When, by activity — the sentence a single "in season" badge cannot say.
+ *
+ * For the two activities that matter most to this traveller here, the months a
+ * typical year makes them good, from the place's own normals: "The high
+ * trails: usually July–September. Walking and day hikes: May–October." Always
+ * "usually": it is a climate normal, and the card says where it came from.
+ */
+export function seasonNoteFor(scored: ScoredDestination, profile: AdvisorProfile): string | null {
+  const destination = scored.destination;
+  const model = seasonModelFor(destination);
+  const { drivers } = travellerSeason(model, profile.wants, destination.experiences);
+  const parts: string[] = [];
+  for (const activity of drivers.slice(0, 2)) {
+    if (activity === 'any') continue;
+    const good = model.fit[activity].map((month, index) => (month.value >= GOOD_MONTH ? index + 1 : 0)).filter((month) => month > 0);
+    if (good.length === 12) parts.push(`${ACTIVITY_WORDS[activity]}: good all year`);
+    else if (good.length === 0) parts.push(`${ACTIVITY_WORDS[activity]}: no month is reliably good`);
+    else parts.push(`${ACTIVITY_WORDS[activity]}: usually ${monthsLabel(good)}`);
+  }
+  if (parts.length === 0) return null;
+  const source = destination.measured ? 'from 1981–2010 climate normals' : 'from our own reading of its climate';
+  return `${parts.join('. ')} (${source}).`;
 }
 
 function differsBy(scored: ScoredDestination, earlier: readonly ScoredDestination[]): string | null {
@@ -218,18 +315,32 @@ function matchOf(scored: ScoredDestination): AdvisorPick['match'] {
 }
 
 function gettingThere(scored: ScoredDestination, profile: AdvisorProfile): string {
-  const airports = scored.destination.access.airports.join(', ');
-  const hops = ['Direct flights from major hubs', 'One connection from most hubs', 'A connection plus a regional flight or long transfer', 'Several connections or a long overland leg'][scored.destination.access.reach]!;
+  const d = scored.destination;
+  const nearest = d.airports[0];
+  /* Derived records state what was measured — the nearest scheduled airport and how far — rather than a count of connections nobody counted. */
+  if (d.origin !== 'editorial' && nearest) {
+    const hub = d.airports.find((airport) => airport.size === 'large');
+    const first = `Nearest airport with scheduled flights: ${nearest.name} (${nearest.iata}), about ${Math.round(nearest.km / 10) * 10 || 10} km away`;
+    const second = hub && hub.iata !== nearest.iata ? `; nearest major hub ${hub.name} (${hub.iata}), about ${Math.round(hub.km / 10) * 10} km` : '';
+    const far = scored.distanceKm !== null && profile.origin ? ` · about ${(Math.round(scored.distanceKm / 100) * 100).toLocaleString('en-US')} km from ${profile.origin.label}` : '';
+    return `${first}${second}${far}.`;
+  }
+  const airports = d.access.airports.join(', ');
+  const hops = ['Direct flights from major hubs', 'One connection from most hubs', 'A connection plus a regional flight or long transfer', 'Several connections or a long overland leg'][level(d.access.reach)]!;
   const distance = scored.distanceKm !== null && profile.origin ? ` · about ${(Math.round(scored.distanceKm / 100) * 100).toLocaleString('en-US')} km from ${profile.origin.label}` : '';
-  return `${hops} (${airports})${distance}.`;
+  return `${hops}${airports ? ` (${airports})` : ''}${distance}.`;
 }
 
 export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, role: AdvisorPick['role'], earlier: readonly ScoredDestination[]): AdvisorPick {
   const d = scored.destination;
-  const windowMonths = scored.bestMonths.filter((month) => d.season[month - 1]! >= (Math.max(...scored.bestMonths.map((m) => d.season[m - 1]!)) >= 3 ? 3 : 2));
-  const windowLabel = monthsLabel(windowMonths.length > 0 ? windowMonths : scored.bestMonths);
+  const monthValue = (month: number) => scored.seasonMonths[month - 1]?.value ?? 0;
+  const peak = Math.max(0, ...scored.bestMonths.map(monthValue));
+  const windowMonths = scored.bestMonths.filter((month) => monthValue(month) >= (peak >= 0.85 ? 0.85 : GOOD_MONTH)).sort((a, b) => a - b);
+  /* No good month inside the window: say so, rather than "timing to confirm". */
+  const windowLabel = windowMonths.length > 0 || scored.bestMonths.length > 0 ? monthsLabel(windowMonths.length > 0 ? windowMonths : scored.bestMonths) : profile.months ? `Not at its best in ${monthsLabel(profile.months)}` : 'Timing to confirm';
   const versusBudget =
-    profile.budget === null ? null : d.cost <= profile.budget ? 'Within what you said' : d.cost - profile.budget === 1 ? 'A stretch on what you said' : 'Well above what you said';
+    profile.budget === null ? null : d.cost - profile.budget <= 0.25 ? 'Within what you said' : d.cost - profile.budget <= 1.25 ? 'A stretch on what you said' : 'Well above what you said';
+  const costLevel = Math.min(4, Math.max(1, Math.round(d.cost)));
   return {
     id: d.id,
     name: d.name,
@@ -254,7 +365,7 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     character: characterOf(d),
     gettingThere: gettingThere(scored, profile),
     gettingAround: d.access.note,
-    cost: { level: d.cost, label: COST_LABELS[d.cost]!, versusBudget },
+    cost: { level: costLevel, label: `${COST_LABELS[costLevel]!}${d.basis.cost === 'estimated' ? ' (estimated from national price levels)' : ''}`, versusBudget },
     bases: [...d.bases],
     tradeoffs: tradeoffsFor(scored, profile),
     unverified: unverifiedFor(scored, profile),
@@ -270,6 +381,11 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     })),
     references: [...d.evidence.references],
     signature: null,
+    basis: d.origin === 'editorial' ? 'editorial' : d.origin === 'research' ? 'research' : 'open_data',
+    confidence: Math.round(d.confidence * 100) / 100,
+    seasonNote: seasonNoteFor(scored, profile),
+    measured: d.measured !== null,
+    suggested: false,
   };
 }
 
@@ -313,6 +429,8 @@ const EXCLUSION_RELAXATION: Record<AdvisorExclusion['code'], string> = {
   traveller_avoided: 'reconsidering what you ruled out',
   set_aside: 'bringing back places you set aside',
   nothing_you_asked_for: 'broadening what you want to do',
+  advisory: 'checking the current travel advisories yourself',
+  home: 'looking a little further from home',
 };
 
 function driversOf(profile: AdvisorProfile, picks: readonly ScoredDestination[]): string[] {
@@ -374,7 +492,7 @@ function signaturesOf(picks: readonly ScoredDestination[], profile: AdvisorProfi
 
 function spreadOf(picks: readonly AdvisorPick[], profile: AdvisorProfile): string | null {
   if (picks.length < 2) return null;
-  const narrowed = profile.regions !== null || profile.countries !== null;
+  const narrowed = profile.regions !== null || profile.countries !== null || profile.within !== null;
   const lines = picks.map((pick) => (pick.signature ? `${pick.name} for ${pick.signature}` : pick.name));
   const regions = new Set(picks.map((pick) => pick.worldRegion)).size;
   if (narrowed) return `All in the part of the world you asked for: ${lines.join('; ')}.`;
@@ -384,26 +502,33 @@ function spreadOf(picks: readonly AdvisorPick[], profile: AdvisorProfile): strin
 
 export interface BuildInput {
   answers: TripComposerAnswers;
-  catalog: readonly CatalogDestination[];
+  catalog: DestinationSource;
   catalogVersion: string;
   now: Date;
   previous?: AdvisorShortlist | null;
   assumptions?: readonly string[];
+  /**
+   * Destination ids a research model proposed for this request. They are read
+   * closely alongside the world's own candidates and ranked by the same scorer;
+   * a pick that came from here says so on its card.
+   */
+  research?: { ids: readonly string[]; proposed: number; note: string } | null;
 }
 
 export function buildAdvisorShortlist(input: BuildInput): AdvisorShortlist {
   const started = Date.now();
-  const { profile, ranked, excluded } = rankCatalog(input.answers, input.catalog);
+  const proposed = new Set(input.research?.ids ?? []);
+  const { profile, ranked, excluded, worldSize, considered } = rankCatalog(input.answers, input.catalog, DETAILED_CANDIDATES, [...proposed]);
   const selection = selectShortlist(ranked, profile);
   const earlier: ScoredDestination[] = [];
   const signatures = signaturesOf(selection.picks, profile);
   const picks = selection.picks.map((scored, index) => {
-    const pick = { ...pickFrom(scored, profile, 'primary', earlier), signature: signatures[index] || null };
+    const pick = { ...pickFrom(scored, profile, 'primary', earlier), signature: signatures[index] || null, suggested: proposed.has(scored.destination.id) };
     earlier.push(scored);
     return pick;
   });
   const alternateSignatures = signaturesOf([...selection.picks, ...selection.alternates], profile).slice(selection.picks.length);
-  const alternates = selection.alternates.map((scored, index) => ({ ...pickFrom(scored, profile, 'alternate', selection.picks), signature: alternateSignatures[index] || null }));
+  const alternates = selection.alternates.map((scored, index) => ({ ...pickFrom(scored, profile, 'alternate', selection.picks), signature: alternateSignatures[index] || null, suggested: proposed.has(scored.destination.id) }));
 
   const excludedCounts: Record<string, number> = {};
   for (const entry of excluded) excludedCounts[entry.exclusion!.code] = (excludedCounts[entry.exclusion!.code] ?? 0) + 1;
@@ -415,7 +540,10 @@ export function buildAdvisorShortlist(input: BuildInput): AdvisorShortlist {
     const pressing = leadPressure(ranked, profile);
     relaxation = `Only ${served === 0 ? 'no place' : served === 1 ? 'one place' : `${served} places`} fit ${lead} with everything else you said${pressing ? ` — ${pressing} rules most of the rest out` : ''}. The ${selection.leadShort === 1 ? 'other pick is' : 'other picks are'} strong on your other interests instead.`;
   }
-  if (picks.length < 3) {
+  if (selection.stretched) {
+    const pressing = leadPressure(ranked, profile) ?? (profile.months ? 'the season' : null);
+    relaxation = `Nothing fits everything you asked well${pressing ? ` — ${pressing} holds every option back` : ''}. These are the closest; treat them as a starting point, not a recommendation.`;
+  } else if (picks.length < 3) {
     const worst = Object.entries(excludedCounts)
       .filter(([code]) => code !== 'set_aside')
       .sort((a, b) => b[1] - a[1])[0];
@@ -456,12 +584,21 @@ export function buildAdvisorShortlist(input: BuildInput): AdvisorShortlist {
       closeCalls: selection.closeCalls.map((scored) => scored.destination.name),
     },
     stats: {
-      catalog: input.catalog.length,
+      catalog: worldSize,
+      considered,
       eligible: ranked.length,
       excluded: excludedCounts,
       lambda: selection.lambda,
       climateChecked: 0,
       climateVerified: 0,
+      research: input.research
+        ? {
+            proposed: input.research.proposed,
+            resolved: proposed.size,
+            shown: [...selection.picks, ...selection.alternates].filter((scored) => proposed.has(scored.destination.id)).length,
+            note: input.research.note,
+          }
+        : null,
     },
     changes,
     previousIds,

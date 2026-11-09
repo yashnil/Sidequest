@@ -10,12 +10,14 @@ import {
 /**
  * THE SHAPE "HELP ME CHOOSE" COLLECTS, AND HOW IT BECOMES A TRIP.
  *
- * Lifted out of the server action for one reason: the intake screen has to read
- * the same conversion the server writes. The intake ladder
- * (`@sidequest/core` → `recommend/intake`) decides what to ask next from a
- * `TripComposerAnswers`, so the browser needs to build one from the answers in
- * hand — and a second, client-side copy of that conversion is how two forms
- * start disagreeing about what was asked.
+ * Lifted out of the server action for one reason: the screen and the server
+ * have to agree on this shape. A surface that already knows something about
+ * the traveller (`/decide`, `AdvisorStart`, a posture handed over from
+ * `/explore`) passes it as `prefill`; `startAdvisorAction` parses it strictly
+ * with this schema and converts it to the `TripComposerAnswers` the advisor's
+ * interview (`@sidequest/core` → `advisor/questions`) then reads — and a
+ * second copy of the shape or of the conversion is how two forms start
+ * disagreeing about what was asked.
  *
  * A plain module, deliberately: a `'use server'` file may export only async
  * functions, so a schema living there could never be shared with the screen.
@@ -47,11 +49,11 @@ const answersSchema = z.object({
   avoid: z.string().max(600),
 
   /*
-   * V11 §A1 — the intake ladder's own answers.
+   * V11 §A1 — the recommender's own answers.
    *
-   * Every one is optional, because the intake stops the moment the ranking has
-   * enough signal and a traveller who stopped early must not be rejected by a
-   * schema that expected the whole ladder. They are carried onto the composer
+   * Every one is optional, because an interview stops the moment the ranking
+   * has enough signal and a traveller who stopped early must not be rejected
+   * by a schema that expected every answer. They are carried onto the composer
    * record unchanged — `TripComposerAnswers` has held these fields since V11 §3
    * precisely so that a chosen recommendation needs no mapping layer.
    */
@@ -67,7 +69,7 @@ const answersSchema = z.object({
   budgetPerPerson: z.number().int().min(0).max(1_000_000).optional(),
   budgetIncludesFlights: z.boolean().optional(),
   travelerNeeds: z.array(z.string().min(1)).max(12).optional(),
-  /** Questions the traveller passed over, so the ladder does not re-ask them. */
+  /** Questions the traveller passed over, so they are not asked again. */
   skipped: z.array(z.string().min(1).max(40)).max(40).optional(),
 });
 
@@ -159,7 +161,7 @@ const THEME_VALUES = new Set([
 
 export { answersSchema as decisionAnswersSchema, toComposerAnswers as decisionAnswersToComposer };
 
-/** A blank intake. The ladder reads the composer form of this and asks for "when". */
+/** A blank intake: the composer form of this says nothing the traveller did not, so the interview starts from its first question. */
 export function emptyDecisionAnswers(): DecisionAnswersInput {
   return {
     dateMode: 'month',

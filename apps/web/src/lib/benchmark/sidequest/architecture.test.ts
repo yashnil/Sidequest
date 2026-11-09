@@ -51,7 +51,7 @@ const PRODUCTION_ROOTS = [
   join(REPO, 'packages', 'compiler', 'src'),
   join(REPO, 'packages', 'core', 'src', 'scoring'),
   join(REPO, 'packages', 'core', 'src', 'discovery'),
-  join(REPO, 'packages', 'core', 'src', 'recommend'),
+  join(REPO, 'packages', 'core', 'src', 'atlas'),
   join(REPO, 'packages', 'core', 'src', 'quality'),
 ];
 

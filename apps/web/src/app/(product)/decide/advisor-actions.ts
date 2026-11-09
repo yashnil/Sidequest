@@ -8,8 +8,10 @@ import {
   REFINEMENTS,
   adoptionWindow,
   datesInWindow,
-  destinationCatalog,
+  ADVISOR_QUESTIONS,
   emptyAdvisorAnswers,
+  needsResearch,
+  nextQuestion,
   emptyComposerAnswers,
   parseTravelRequest,
   tripBasicsSchema,
@@ -31,7 +33,9 @@ import { guardAction, sessionToken } from '@/lib/net/caller';
 import { currentUserId } from '@/lib/auth/session';
 import { decisionAccessRefusal } from '@/lib/net/decision-access';
 import { saveComposerAnswers, saveDestinationQuery } from '@/lib/db/compiler-repository';
-import { adviseFor } from '@/lib/destinations/advisor';
+import { adviseFor, widenWithResearch } from '@/lib/destinations/advisor';
+import { advisorWorld } from '@/lib/atlas/world';
+import { advisorResearchChoice } from '@/lib/providers/switches';
 import { advisorImageSubjects } from '@/lib/destinations/advisor-images';
 import { decisionAnswersSchema, decisionAnswersToComposer, emptyDecisionAnswers, type DecisionAnswersInput } from '@/lib/destinations/decision-answers';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
@@ -70,7 +74,8 @@ export async function startAdvisorAction(input: { text: string; prefill?: Partia
   const base: TripComposerAnswers = prefilled
     ? { ...prefilled, discovery: emptyAdvisorAnswers() }
     : { ...emptyComposerAnswers('help_me_decide', now), dates: { mode: 'month', wantsRecommendation: false }, discovery: emptyAdvisorAnswers() };
-  const { answers } = parseTravelRequest(text, base);
+  /* The atlas reads the place names: "in the Karakoram" is a scope, "like the Dolomites" a comparison, "not Bali" a refusal. */
+  const { answers } = parseTravelRequest(text, base, now, advisorWorld().atlas ?? undefined);
   const owner = await sessionToken({ mint: true });
   const id = createDecisionSession({ ...answers, updatedAt: now.toISOString() }, owner, now);
   redirect(`/decide/${id}`);
@@ -114,6 +119,85 @@ export async function buildAdvisorShortlistAction(id: string): Promise<AdvisorRe
   return { ok: true };
 }
 
+/**
+ * Wider research, after the list is already on screen.
+ *
+ * Runs only when the stored list is weak enough to warrant one model call
+ * (`needsResearch`) and has not been widened yet. Whatever happens — no
+ * credential, a timeout, nothing usable — the deterministic list stays.
+ */
+export async function widenAdvisorShortlistAction(id: string): Promise<AdvisorResult> {
+  const foreign = await decisionAccessRefusal(id);
+  if (foreign) return { ok: false, error: foreign };
+  const session = getDecisionSession(id);
+  if (!session?.advisor || session.resolvedTripId) return { ok: false };
+  if (session.advisor.stats.research !== null || advisorResearchChoice() === 'off' || !needsResearch(session.answers, session.advisor)) return { ok: true };
+  const limited = await guardAction('decide_shortlist');
+  if (limited) return { ok: false };
+  try {
+    const { shortlist, outcome } = await widenWithResearch(session.answers, session.advisor, new Date(), await sessionToken({ mint: false }).catch(() => null));
+    console.warn('advisor research', { source: outcome.source, proposed: outcome.proposed, resolved: outcome.ids.length, modelCalls: outcome.modelCalls });
+    if (shortlist !== session.advisor) saveDecisionShortlist(id, shortlist, new Date());
+  } catch (error) {
+    console.error('Advisor research failed', { id, error });
+    return { ok: false };
+  }
+  revalidatePath(`/decide/${id}`);
+  return { ok: true };
+}
+
+/** What the interview screen needs after every answer: the next question and who is leading. */
+export interface AdvisorStepView {
+  ok: boolean;
+  questionId: string | null;
+  ready: boolean;
+  stopReason: 'essentials_missing' | 'asking' | 'low_value' | 'enough_asked' | 'nothing_left';
+  /** How much each open question is expected to move the list, 0–1. */
+  values: { id: string; value: number }[];
+  followUpsAsked: number;
+  /** The destinations currently leading, best first. */
+  leaders: { id: string; name: string; context: string; lat: number; lng: number }[];
+  /** How many destinations the world holds. */
+  worldSize: number;
+  ms: number;
+}
+
+/**
+ * One step of the interview, on the server.
+ *
+ * The interview used to run in the browser, which meant shipping every
+ * destination to it — fine for 234, impossible for the atlas. The questions and
+ * their options still live in the client (they are pure patches on the
+ * answers); what the server works out is which question would change the list
+ * most, and who is leading. Reads no stored row, so it needs no owner check;
+ * it is rate-fenced like every other advisor action.
+ */
+export async function advisorStepAction(raw: unknown): Promise<AdvisorStepView> {
+  const started = Date.now();
+  const empty: AdvisorStepView = { ok: false, questionId: null, ready: false, stopReason: 'essentials_missing', values: [], followUpsAsked: 0, leaders: [], worldSize: 0, ms: 0 };
+  const limited = await guardAction('decide_step');
+  if (limited) return empty;
+  const parsed = tripComposerAnswersSchema.safeParse(raw);
+  if (!parsed.success) return empty;
+  const { world } = advisorWorld();
+  const step = nextQuestion(parsed.data, world);
+  const leaders = step.current
+    .map((candidate) => world.byId(candidate))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .map((entry) => ({ id: entry.id, name: entry.name, context: entry.context, lat: entry.center.lat, lng: entry.center.lng }));
+  return {
+    ok: true,
+    questionId: step.question && ADVISOR_QUESTIONS.some((question) => question.id === step.question!.id) ? step.question.id : null,
+    ready: step.ready,
+    stopReason: step.stopReason,
+    values: step.values,
+    followUpsAsked: step.followUpsAsked,
+    leaders,
+    worldSize: world.size,
+    ms: Date.now() - started,
+  };
+}
+
 export type RefineInput =
   | { refinement: Refinement }
   | { similarTo: string }
@@ -134,7 +218,8 @@ export async function refineAdvisorAction(id: string, input: RefineInput): Promi
   if (!session) return { ok: false, error: 'We could not find that.' };
   if (session.resolvedTripId) return { ok: false, error: 'You have already chosen for this one.' };
 
-  const catalogIds = new Set(destinationCatalog().map((entry) => entry.id));
+  const { world } = advisorWorld();
+  const catalogIds = { has: (candidate: string) => world.byId(candidate) !== null };
   const discovery: AdvisorAnswers = session.answers.discovery ?? emptyAdvisorAnswers();
   let next: AdvisorAnswers = discovery;
   if ('refinement' in input) {

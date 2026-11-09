@@ -2536,15 +2536,15 @@ export const INDEX_MIGRATIONS: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_provisional_selections_pending
      ON provisional_selections(trip_id, reconciliation_state)`,
   /**
-   * The shortlist's per-country bucket read, in the order it asks for.
+   * One country's entries of one feature type, already in `rank` order.
    *
-   * Building a shortlist used to scan the whole destination index — `IS NOT NULL`
-   * on the leading index column plus a full window sort — on the click that
-   * produces it. The query is now a bounded per-(country, feature type) read, and
-   * this is the index that makes it *bounded to read* rather than merely bounded
-   * to return: `LIMIT n` only stops an index walk early when the index is already
-   * in the order the query asks for, so without `rank DESC` here SQLite reads
-   * every row of the range into a temporary b-tree and hands back three.
+   * Written for the previous destination ranker's per-country bucket read,
+   * which is gone (the advisor ranks its own atlas and never reads this
+   * table). Kept because it is already on every database and it is the index
+   * the country-scoped reads that remain (`entriesInCountry`) are ordered by:
+   * `LIMIT n` only stops an index walk early when the index is already in the
+   * order the query asks for, so without `rank DESC` here SQLite reads every
+   * row of the range into a temporary b-tree and hands back a few.
    *
    * Here rather than in `SCHEMA_SQL` because it is applied in the same pass as the
    * other post-migration indexes, and keeping one place for them beats two.

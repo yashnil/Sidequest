@@ -86,7 +86,10 @@ For when you know *when* and *what for*, but not *where*.
 - **Only the questions that matter.** Each next question is the one most likely to change your shortlist ("If it could only be brilliant at one thing…", "Warm sea or mountain lakes?"). It stops when another answer wouldn't change much — usually two to five taps. Skip anything, or jump to results.
 - **A live world map** shows the places taking the lead as you answer.
 - **Three different answers, argued for.** Each pick says why it fits *you*, three highlights, best months, trip length, difficulty, costs, getting there and around, where you'd stay, the catch, and what hasn't been checked.
-- **Real places only.** A catalog of 234 multi-day destinations — national parks, mountain ranges, coasts, island groups — across 24 parts of the world. Famous places get no bonus unless you ask for classics; little-known ones get none unless you ask for something unusual.
+- **The whole world, not a list.** About 36,600 destinations in 227 countries and territories — cities, islands, parks, ranges, coasts — read from open travel guides and map data (Wikivoyage, Wikidata, climate normals, terrain, airports, price levels), alongside 234 curated picks. Famous places get no bonus unless you ask for classics; little-known ones get none unless you ask for something unusual.
+- **Name a place and it is understood.** "Trekking in the Karakoram", "like the Dolomites but cheaper", "islands in Indonesia, not Bali", "from Delhi" — a named place sets where to look, what to resemble, what to leave out or where you start. It is never just handed back to you.
+- **In season for what you want to do.** Ski season is not hiking season: each card says when the walking, the high trails, the swimming or the snow is usually good, from thirty-year climate normals, sea temperatures and a modelled snowpack — and says "usually".
+- **It says how it knows.** Every card is marked as Sidequest's own reading or as read from open data, with its sources linked, costs labelled as estimates, and a note of what has not been checked.
 - **Weather checked** against twenty years of climate records for the places on screen.
 - **Nudge it**: warmer, cheaper, less crowded, closer, more wildlife, more unusual, easier logistics, "more like this one", or "something completely different".
 - **Plan this trip** turns a pick into an ordinary trip with everything you said carried over.
@@ -196,7 +199,7 @@ flowchart TB
     end
     subgraph Server["Next.js server (Node 22)"]
       ACT[Server actions & API routes]
-      ADV[Destination advisor<br/>catalog · interview · ranking]
+      ADV[Destination advisor<br/>world atlas · interview · ranking]
       SCAN[Discovery scan<br/>1 AI proposal → places → router]
       PLAN[Structure planner<br/>no AI call]
       VER[Verification<br/>geocoder · router · hours · weather]
@@ -267,7 +270,7 @@ SIDEQUEST_CLIMATE_PROVIDER=fixture
 SIDEQUEST_AUTH_PROVIDER=fixture
 ```
 
-*Help me choose* works fully offline in any mode — its catalog ships with the app.
+*Help me choose* works fully offline in any mode — its world atlas ships with the app (`packages/atlas/data/`, about 16 MB; how it is built: [`packages/atlas/README.md`](packages/atlas/README.md), how it is evaluated: [`docs/global-destinations/REPORT.md`](docs/global-destinations/REPORT.md)).
 
 </details>
 
@@ -317,6 +320,7 @@ apps/web/                 the Next.js product
   src/components/         UI: advisor, board, hub, journey explorer, maps, landing
   src/lib/                server logic: scan, planning, providers, intelligence, db
 packages/core/            shared schemas, destination advisor, travel intelligence
+packages/atlas/           the global destination atlas: offline build pipeline + shipped artifact
 packages/planner/         planning primitives
 packages/geo/             geometry and distance utilities
 packages/compiler/        optional deep region compiler

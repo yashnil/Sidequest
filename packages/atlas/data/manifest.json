@@ -1,0 +1,654 @@
+{
+ "format": 1,
+ "version": "2026-11.1",
+ "builtAt": "2026-11-09T07:04:47.151Z",
+ "counts": {
+  "destinations": 36782,
+  "scopes": 34,
+  "fromGuides": 28978,
+  "fromDataOnly": 7804,
+  "curatedTwins": 216,
+  "curated": 234,
+  "withMeasuredClimate": 36616,
+  "withHighCountry": 12843,
+  "withSeaTemperature": 18065,
+  "withPriceLevel": 35507,
+  "vocabulary": 55762,
+  "airports": 3233,
+  "byKind": {
+   "city": 4193,
+   "town": 17181,
+   "travel_region": 4287,
+   "island_group": 947,
+   "national_park": 3151,
+   "protected_area": 1551,
+   "coast": 238,
+   "island": 2322,
+   "route": 371,
+   "country": 207,
+   "mountain_range": 1655,
+   "desert": 99,
+   "lake_district": 399,
+   "ski_area": 215
+  },
+  "byWorldRegion": {
+   "western_europe": 2289,
+   "northern_europe": 3524,
+   "east_asia": 2532,
+   "caribbean": 376,
+   "middle_east": 1008,
+   "pacific_islands": 541,
+   "south_america_north": 1540,
+   "caucasus_central_asia": 619,
+   "north_america_west": 2447,
+   "south_asia": 2302,
+   "oceania": 1777,
+   "north_america_east": 5297,
+   "east_africa": 456,
+   "west_central_africa": 1119,
+   "southern_europe": 3107,
+   "north_africa": 409,
+   "mexico_central_america": 1190,
+   "southeast_asia": 2244,
+   "south_america_south": 523,
+   "southern_africa": 645,
+   "central_eastern_europe": 1801,
+   "north_america_north": 309,
+   "indian_ocean": 191,
+   "polar": 570
+  }
+ },
+ "estimators": {
+  "experiences": {
+   "method": "non-negative linear model per experience over four evidence signals (own guide text, children, Wikidata features in extent, terrain/climate proxy), fitted to curated editorial labels; 5-fold held-out agreement below",
+   "fittedOn": 216,
+   "agreement": [
+    {
+     "experience": "day_hiking",
+     "weights": {
+      "text": 0.3,
+      "children": 0,
+      "features": 0.16,
+      "terrain": 0.35,
+      "bias": 0.15
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.62,
+      "maeOn0to3": 0.7,
+      "strongLabelled": 141,
+      "strongRecall": 0.85,
+      "strongPrecision": 0.79
+     }
+    },
+    {
+     "experience": "multi_day_trekking",
+     "weights": {
+      "text": 0.13,
+      "children": 0,
+      "features": 0.18,
+      "terrain": 0.38,
+      "bias": 0.14
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.45,
+      "maeOn0to3": 0.89,
+      "strongLabelled": 77,
+      "strongRecall": 0.29,
+      "strongPrecision": 0.71
+     }
+    },
+    {
+     "experience": "high_mountains",
+     "weights": {
+      "text": 0.09,
+      "children": 0,
+      "features": 0.22,
+      "terrain": 0.56,
+      "bias": 0
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.76,
+      "maeOn0to3": 0.59,
+      "strongLabelled": 67,
+      "strongRecall": 0.75,
+      "strongPrecision": 0.79
+     }
+    },
+    {
+     "experience": "glaciers_ice",
+     "weights": {
+      "text": 0.27,
+      "children": 0.1,
+      "features": 0.32,
+      "terrain": 0.42,
+      "bias": 0.03
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.82,
+      "maeOn0to3": 0.26,
+      "strongLabelled": 27,
+      "strongRecall": 0.56,
+      "strongPrecision": 0.94
+     }
+    },
+    {
+     "experience": "volcanoes_geothermal",
+     "weights": {
+      "text": 0.49,
+      "children": 0.25,
+      "features": 0.3,
+      "terrain": 0,
+      "bias": 0.01
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.86,
+      "maeOn0to3": 0.2,
+      "strongLabelled": 20,
+      "strongRecall": 0.6,
+      "strongPrecision": 1
+     }
+    },
+    {
+     "experience": "lakes",
+     "weights": {
+      "text": 0.38,
+      "children": 0,
+      "features": 0.37,
+      "terrain": 0,
+      "bias": 0.1
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.54,
+      "maeOn0to3": 0.76,
+      "strongLabelled": 63,
+      "strongRecall": 0.4,
+      "strongPrecision": 0.71
+     }
+    },
+    {
+     "experience": "beaches_swimming",
+     "weights": {
+      "text": 0.23,
+      "children": 0.09,
+      "features": 0.17,
+      "terrain": 0.38,
+      "bias": 0.03
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.75,
+      "maeOn0to3": 0.5,
+      "strongLabelled": 59,
+      "strongRecall": 0.75,
+      "strongPrecision": 0.76
+     }
+    },
+    {
+     "experience": "coastal_scenery",
+     "weights": {
+      "text": 0.28,
+      "children": 0,
+      "features": 0.18,
+      "terrain": 0.33,
+      "bias": 0
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.76,
+      "maeOn0to3": 0.56,
+      "strongLabelled": 74,
+      "strongRecall": 0.88,
+      "strongPrecision": 0.79
+     }
+    },
+    {
+     "experience": "snorkel_dive",
+     "weights": {
+      "text": 0.22,
+      "children": 0.35,
+      "features": 0.05,
+      "terrain": 0.26,
+      "bias": 0
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.76,
+      "maeOn0to3": 0.34,
+      "strongLabelled": 35,
+      "strongRecall": 0.49,
+      "strongPrecision": 0.89
+     }
+    },
+    {
+     "experience": "paddling_boating",
+     "weights": {
+      "text": 0.34,
+      "children": 0.31,
+      "features": 0,
+      "terrain": 0.11,
+      "bias": 0.15
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.43,
+      "maeOn0to3": 0.83,
+      "strongLabelled": 72,
+      "strongRecall": 0.15,
+      "strongPrecision": 0.58
+     }
+    },
+    {
+     "experience": "big_game_safari",
+     "weights": {
+      "text": 0.31,
+      "children": 0,
+      "features": 0.1,
+      "terrain": 0,
+      "bias": 0.01
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.44,
+      "maeOn0to3": 0.21,
+      "strongLabelled": 10,
+      "strongRecall": 0,
+      "strongPrecision": null
+     }
+    },
+    {
+     "experience": "wildlife_general",
+     "weights": {
+      "text": 0.49,
+      "children": 0,
+      "features": 0.09,
+      "terrain": 0,
+      "bias": 0.1
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.46,
+      "maeOn0to3": 0.79,
+      "strongLabelled": 54,
+      "strongRecall": 0.24,
+      "strongPrecision": 0.65
+     }
+    },
+    {
+     "experience": "marine_wildlife",
+     "weights": {
+      "text": 0.58,
+      "children": 0.25,
+      "features": 0.11,
+      "terrain": 0,
+      "bias": 0.08
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.68,
+      "maeOn0to3": 0.53,
+      "strongLabelled": 48,
+      "strongRecall": 0.46,
+      "strongPrecision": 0.81
+     }
+    },
+    {
+     "experience": "birding",
+     "weights": {
+      "text": 0.4,
+      "children": 0.1,
+      "features": 0.1,
+      "terrain": 0,
+      "bias": 0.14
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.35,
+      "maeOn0to3": 0.79,
+      "strongLabelled": 49,
+      "strongRecall": 0.02,
+      "strongPrecision": 0.33
+     }
+    },
+    {
+     "experience": "rainforest_biodiversity",
+     "weights": {
+      "text": 0.57,
+      "children": 0.06,
+      "features": 0.01,
+      "terrain": 0.12,
+      "bias": 0.05
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.61,
+      "maeOn0to3": 0.41,
+      "strongLabelled": 26,
+      "strongRecall": 0.19,
+      "strongPrecision": 0.71
+     }
+    },
+    {
+     "experience": "desert_landscapes",
+     "weights": {
+      "text": 0.35,
+      "children": 0.03,
+      "features": 0.08,
+      "terrain": 0.36,
+      "bias": 0.03
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.64,
+      "maeOn0to3": 0.35,
+      "strongLabelled": 22,
+      "strongRecall": 0.23,
+      "strongPrecision": 0.83
+     }
+    },
+    {
+     "experience": "scenic_driving",
+     "weights": {
+      "text": 0.24,
+      "children": 0.14,
+      "features": 0.47,
+      "terrain": 0,
+      "bias": 0.15
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.22,
+      "maeOn0to3": 0.98,
+      "strongLabelled": 80,
+      "strongRecall": 0.04,
+      "strongPrecision": 0.5
+     }
+    },
+    {
+     "experience": "rail_journeys",
+     "weights": {
+      "text": 0.23,
+      "children": 0.18,
+      "features": 0.07,
+      "terrain": 0,
+      "bias": 0.06
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.32,
+      "maeOn0to3": 0.37,
+      "strongLabelled": 16,
+      "strongRecall": 0,
+      "strongPrecision": null
+     }
+    },
+    {
+     "experience": "winter_snow",
+     "weights": {
+      "text": 0.33,
+      "children": 0.1,
+      "features": 0.35,
+      "terrain": 0.18,
+      "bias": 0
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.75,
+      "maeOn0to3": 0.31,
+      "strongLabelled": 24,
+      "strongRecall": 0.38,
+      "strongPrecision": 0.64
+     }
+    },
+    {
+     "experience": "hot_springs_wellness",
+     "weights": {
+      "text": 0.29,
+      "children": 0.06,
+      "features": 0.31,
+      "terrain": 0,
+      "bias": 0.08
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.45,
+      "maeOn0to3": 0.48,
+      "strongLabelled": 26,
+      "strongRecall": 0.04,
+      "strongPrecision": 0.5
+     }
+    },
+    {
+     "experience": "villages_culture",
+     "weights": {
+      "text": 0.34,
+      "children": 0.01,
+      "features": 0.44,
+      "terrain": 0,
+      "bias": 0.15
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.5,
+      "maeOn0to3": 0.91,
+      "strongLabelled": 123,
+      "strongRecall": 0.48,
+      "strongPrecision": 0.82
+     }
+    },
+    {
+     "experience": "food",
+     "weights": {
+      "text": 0.35,
+      "children": 0.14,
+      "features": 0.06,
+      "terrain": 0.37,
+      "bias": 0.13
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.57,
+      "maeOn0to3": 0.77,
+      "strongLabelled": 74,
+      "strongRecall": 0.38,
+      "strongPrecision": 0.8
+     }
+    },
+    {
+     "experience": "city_life",
+     "weights": {
+      "text": 0.18,
+      "children": 0,
+      "features": 0.3,
+      "terrain": 0.29,
+      "bias": 0
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.73,
+      "maeOn0to3": 0.35,
+      "strongLabelled": 21,
+      "strongRecall": 0.48,
+      "strongPrecision": 1
+     }
+    },
+    {
+     "experience": "night_skies",
+     "weights": {
+      "text": 0.33,
+      "children": 0.1,
+      "features": 0,
+      "terrain": 0,
+      "bias": 0.15
+     },
+     "heldOut": {
+      "n": 216,
+      "correlation": 0.24,
+      "maeOn0to3": 0.74,
+      "strongLabelled": 39,
+      "strongRecall": 0,
+      "strongPrecision": null
+     }
+    }
+   ]
+  },
+  "meanAbsoluteErrorAgainstCurated": {
+   "challengeTypical0to3": 0.5,
+   "remoteness0to3": 0.76,
+   "crowds0to3": 0.78,
+   "familiarity0to3": 0.71,
+   "nightsIdeal": 1.98,
+   "family0to3": 1.12,
+   "lowMobility0to3": 0.92,
+   "cost1to4": 0.73
+  },
+  "cost": {
+   "method": "World Bank household-consumption price level of the country, interpolated between the median price levels of curated entries at each cost level",
+   "anchors": [
+    {
+     "priceLevel": 0.379,
+     "cost": 1
+    },
+    {
+     "priceLevel": 0.468,
+     "cost": 2
+    },
+    {
+     "priceLevel": 0.776,
+     "cost": 3
+    },
+    {
+     "priceLevel": 0.888,
+     "cost": 4
+    }
+   ]
+  },
+  "familiarity": {
+   "method": "least-squares line from log(1 + Wikimedia sitelinks) to the curated 0–3 reading, plus guide prominence",
+   "slope": 0.534,
+   "n": 216
+  }
+ },
+ "advisories": {
+  "source": "U.S. Department of State travel advisories",
+  "asOf": "2026-10-22",
+  "countries": 193,
+  "unmatched": []
+ },
+ "sources": [
+  {
+   "id": "wikivoyage",
+   "name": "Wikivoyage (English)",
+   "use": "Which places are travel destinations, the travel hierarchy, guide text evidence, listed sights, first-sentence descriptions",
+   "licence": "CC BY-SA 4.0",
+   "attribution": "Wikivoyage contributors",
+   "url": "https://dumps.wikimedia.org/enwikivoyage/latest/",
+   "access": "bulk dump (pages-articles, page_props)",
+   "update": "dumps twice a month",
+   "cost": "free"
+  },
+  {
+   "id": "wikidata",
+   "name": "Wikidata",
+   "use": "Stable identity (QID), aliases, country, population, area, sitelink counts; the worldwide layer of notable features (parks, ranges, volcanoes, beaches, ski areas, reefs, heritage sites)",
+   "licence": "CC0 1.0",
+   "attribution": "none required",
+   "url": "https://query.wikidata.org/",
+   "access": "Wikidata Query Service, one query per class or per 150 items, cached",
+   "update": "live",
+   "cost": "free; 60 s query limit, one query at a time"
+  },
+  {
+   "id": "chelsa",
+   "name": "CHELSA V2.1 climatologies 1981–2010",
+   "use": "Monthly mean daily maximum and minimum temperature and precipitation at 30 arc-seconds, sampled where people stay and on the highest ground of each destination",
+   "licence": "CC0 1.0 (per chelsa-climate.org; the files carry no licence attribute)",
+   "attribution": "Karger et al. 2017, Scientific Data 4:170122",
+   "url": "https://chelsa-climate.org/",
+   "access": "36 NetCDF files, about 6 GB, downloaded once",
+   "update": "static normals",
+   "cost": "free"
+  },
+  {
+   "id": "etopo",
+   "name": "ETOPO 2022 (60 arc-second surface)",
+   "use": "Elevation where people stay, the highest ground within a destination, relief, the land/sea mask",
+   "licence": "Public domain (NOAA NCEI)",
+   "attribution": "NOAA National Centers for Environmental Information, 2022",
+   "url": "https://www.ncei.noaa.gov/products/etopo-global-relief-model",
+   "access": "one NetCDF file, 478 MB",
+   "update": "static",
+   "cost": "free"
+  },
+  {
+   "id": "oisst",
+   "name": "NOAA OISST v2.1 monthly long-term mean 1991–2020",
+   "use": "Sea-surface temperature of the nearest sea, for swimming and diving seasons",
+   "licence": "Public domain (NOAA)",
+   "attribution": "NOAA PSL; Huang et al. 2021",
+   "url": "https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html",
+   "access": "one NetCDF file, 46 MB",
+   "update": "static normals",
+   "cost": "free"
+  },
+  {
+   "id": "ourairports",
+   "name": "OurAirports",
+   "use": "Airports with scheduled service and an IATA code, for measured distance to the nearest airport and hub",
+   "licence": "Public domain",
+   "attribution": "none required",
+   "url": "https://ourairports.com/data/",
+   "access": "one CSV, 13 MB",
+   "update": "nightly",
+   "cost": "free"
+  },
+  {
+   "id": "worldbank",
+   "name": "World Bank World Development Indicators",
+   "use": "Household-consumption price level by country (US = 1), the basis of the cost estimate",
+   "licence": "CC BY 4.0",
+   "attribution": "World Bank",
+   "url": "https://data.worldbank.org/",
+   "access": "already in the repository (packages/core/src/intelligence/reference/price-levels.ts)",
+   "update": "annual",
+   "cost": "free"
+  },
+  {
+   "id": "state_advisories",
+   "name": "U.S. Department of State travel advisories",
+   "use": "Country advisory level with its date; a fresh do-not-travel level removes a destination, the level below it becomes a caution on the card",
+   "licence": "Public domain (U.S. Government work)",
+   "attribution": "travel.state.gov",
+   "url": "https://cadataapi.state.gov/api/TravelAdvisories",
+   "access": "one JSON request",
+   "update": "continuous; refresh with `node packages/atlas/build/advisories.mjs`",
+   "cost": "free"
+  },
+  {
+   "id": "sidequest_catalog",
+   "name": "Sidequest editorial catalog",
+   "use": "234 curated destinations: the editorial rows of the atlas and the labels every estimator is fitted to and checked against",
+   "licence": "Sidequest",
+   "attribution": "Sidequest",
+   "url": "packages/core/src/advisor/catalog/regions/",
+   "access": "in the repository",
+   "update": "by hand",
+   "cost": "editorial time"
+  }
+ ],
+ "embeddings": {
+  "shipped": true,
+  "model": "minishlab/potion-base-8M (MIT)",
+  "dim": 96,
+  "gzipBytes": 6019739
+ },
+ "bytes": {
+  "json": 26034540,
+  "gzip": 10481837
+ }
+}

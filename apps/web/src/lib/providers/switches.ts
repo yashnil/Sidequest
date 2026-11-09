@@ -74,6 +74,20 @@ export function destinationInterpreterChoice(): 'anthropic' | 'fixture' | 'off' 
 }
 
 /**
+ * Wider research for "Help me choose" (`lib/atlas/research.ts`): one bounded
+ * call that may propose destination names for an unusual request. The atlas
+ * verifies and ranks them; with this off, the list is the atlas alone.
+ * `SIDEQUEST_ADVISOR_RESEARCH` = `anthropic` | `fixture` | `off`; unset means
+ * on when a credential exists.
+ */
+export function advisorResearchChoice(): 'anthropic' | 'fixture' | 'off' {
+  const chosen = process.env.SIDEQUEST_ADVISOR_RESEARCH?.trim().toLowerCase();
+  if (chosen === 'fixture') return 'fixture';
+  if (chosen === 'off') return 'off';
+  return (process.env.ANTHROPIC_API_KEY?.trim().length ?? 0) > 0 ? 'anthropic' : 'off';
+}
+
+/**
  * Whether a research-model credential exists.
  *
  * Length only. The value is never read, logged, compared or returned — a

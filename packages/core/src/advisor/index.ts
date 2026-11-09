@@ -1,5 +1,6 @@
 export * from './catalog/index';
 export * from './answers';
+export * from './destination';
 export * from './origin';
 export * from './profile';
 export * from './score';
@@ -7,6 +8,8 @@ export * from './select';
 export * from './shortlist-schema';
 export * from './advise';
 export * from './questions';
+export * from './interview-policy';
 export * from './parse';
 export * from './climate-check';
 export * from './summary';
+export * from './research-need';

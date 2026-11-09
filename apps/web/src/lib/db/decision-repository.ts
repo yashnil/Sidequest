@@ -1,13 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import {
-  advisorShortlistSchema,
-  destinationShortlistSchema,
-  tripComposerAnswersSchema,
-  type AdvisorShortlist,
-  type DestinationShortlist,
-  type TripComposerAnswers,
-} from '@sidequest/core';
+import { advisorShortlistSchema, tripComposerAnswersSchema, type AdvisorShortlist, type TripComposerAnswers } from '@sidequest/core';
 import { getDb } from './client';
 
 /**
@@ -28,12 +21,11 @@ import { getDb } from './client';
 export interface DecisionSession {
   id: string;
   answers: TripComposerAnswers;
-  /** Null until a shortlist has been built. Different from "empty shortlist". */
-  shortlist: DestinationShortlist | null;
   /**
-   * The destination advisor's shortlist (2026-10 rebuild). One column holds
-   * either shape; `kind: 'advisor'` tells them apart, and a session holds at
-   * most one of the two.
+   * The destination advisor's shortlist. Null until one has been built, which
+   * is different from an empty shortlist — and null for a row whose stored
+   * list is the previous ranker's (anything without `kind: 'advisor'`): that
+   * session keeps its answers and simply re-enters the interview.
    */
   advisor: AdvisorShortlist | null;
   /** Set once, when they chose. Never cleared. */
@@ -67,34 +59,39 @@ interface Row {
  * it. The answers themselves parse strictly — a session whose answers we cannot
  * read is not a session, and pretending otherwise would rank against defaults
  * nobody chose.
+ *
+ * The column once held the previous ranker's shortlist too. Those rows are
+ * still on disk and there is no reader for them any more, so they fall under
+ * the same policy: only a list that says `kind: 'advisor'` and parses is a
+ * list; anything else in the column — an old shape, a half-written one, text
+ * that is not JSON at all — is "no list yet", never an error.
  */
 function toSession(row: Row): DecisionSession | null {
   const answers = tripComposerAnswersSchema.safeParse(JSON.parse(row.answers_json));
   if (!answers.success) return null;
 
-  let shortlist: DestinationShortlist | null = null;
-  let advisor: AdvisorShortlist | null = null;
-  if (row.shortlist_json) {
-    const raw: unknown = JSON.parse(row.shortlist_json);
-    if ((raw as { kind?: unknown } | null)?.kind === 'advisor') {
-      const parsed = advisorShortlistSchema.safeParse(raw);
-      advisor = parsed.success ? parsed.data : null;
-    } else {
-      const parsed = destinationShortlistSchema.safeParse(raw);
-      shortlist = parsed.success ? parsed.data : null;
-    }
-  }
-
   return {
     id: row.id,
     answers: answers.data,
-    shortlist,
-    advisor,
+    advisor: storedAdvisorShortlist(row.shortlist_json),
     resolvedTripId: row.resolved_trip_id,
     ownerToken: row.owner_token,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function storedAdvisorShortlist(json: string | null): AdvisorShortlist | null {
+  if (!json) return null;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if ((raw as { kind?: unknown } | null)?.kind !== 'advisor') return null;
+  const parsed = advisorShortlistSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -164,7 +161,7 @@ export function saveDecisionAnswers(id: string, answers: TripComposerAnswers, no
     .run(JSON.stringify(answers), now.toISOString(), id);
 }
 
-export function saveDecisionShortlist(id: string, shortlist: DestinationShortlist | AdvisorShortlist, now: Date): void {
+export function saveDecisionShortlist(id: string, shortlist: AdvisorShortlist, now: Date): void {
   getDb()
     .prepare('UPDATE decision_sessions SET shortlist_json = ?, updated_at = ? WHERE id = ?')
     .run(JSON.stringify(shortlist), now.toISOString(), id);

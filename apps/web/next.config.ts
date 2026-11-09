@@ -84,7 +84,7 @@ export const PERMISSIONS_POLICY = 'camera=(), microphone=(), geolocation=(), pay
 export const NOINDEX_SOURCES = ['/share/:path*', '/trips/:path*', '/api/:path*', '/profile', '/labs/:path*'];
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@sidequest/bench', '@sidequest/core', '@sidequest/geo', '@sidequest/planner'],
+  transpilePackages: ['@sidequest/atlas', '@sidequest/bench', '@sidequest/core', '@sidequest/geo', '@sidequest/planner'],
   serverExternalPackages: ['better-sqlite3'],
   typedRoutes: false,
   /** Advertising the framework in a response header helps exactly one audience. */

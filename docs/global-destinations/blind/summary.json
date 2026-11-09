@@ -1,0 +1,53 @@
+{
+ "n": 147,
+ "means": {
+  "before": {
+   "fit": 2.5,
+   "defensible": 2.66,
+   "variety": 2.92
+  },
+  "after": {
+   "fit": 3.5,
+   "defensible": 3.35,
+   "variety": 3.31
+  }
+ },
+ "preferred": {
+  "before": 31,
+  "after": 97,
+  "tie": 19
+ },
+ "beforePreferred": [
+  "africa-safari-february",
+  "patagonia-roadtrip",
+  "alpine-hiking-september",
+  "family-limited-driving",
+  "family-no-car-europe",
+  "like-amalfi-quieter",
+  "andes-trek-june",
+  "winter-sun-walking",
+  "balkans-hiking-cheap",
+  "volcano-hikes",
+  "med-islands-june",
+  "indian-ocean-honeymoon",
+  "whales",
+  "southeast-asia-first",
+  "road-trip-europe-coast",
+  "desert-stargazing",
+  "namibia-like",
+  "lakes-swimming-summer",
+  "cheap-anywhere-warm-feb",
+  "luxury-safari-beach",
+  "short-haul-from-nyc",
+  "short-haul-from-singapore",
+  "from-sydney-winter-escape",
+  "wheelchair-scenery",
+  "teenagers-adventure",
+  "honeymoon-quiet",
+  "vague-surprise",
+  "vague-nature",
+  "contradiction-cheap-luxury",
+  "typos",
+  "long-trip-sabbatical"
+ ]
+}

@@ -27,6 +27,8 @@ import { experienceSimilarity, type ScoredDestination } from './score';
 
 export const FLOOR_GAP = 0.14;
 export const FLOOR_ABSOLUTE = 0.5;
+/** Below the bar but worth showing when nothing clears it — never lower than this. */
+export const STRETCH_FLOOR = 0.3;
 /**
  * Calibration on the lead (Steck 2018, in miniature): once the traveller has
  * said what the trip must be brilliant at, every *primary* pick has to be good
@@ -34,13 +36,33 @@ export const FLOOR_ABSOLUTE = 0.5;
  * an alternate.
  */
 export const LEAD_FLOOR = 0.6;
+export const LEAD_FLOOR_DERIVED = 0.5;
 
 export function lambdaFor(profile: AdvisorProfile): number {
-  const narrowedPlace = profile.regions !== null || profile.countries !== null || profile.similarTo !== null;
+  const narrowedPlace = profile.regions !== null || profile.countries !== null || profile.within !== null || profile.similarTo !== null;
   const narrowInterest = profile.interests.length <= 1 || (profile.interests[0] && profile.interests[0].weight >= 0.99 && profile.interests.length === 1);
   if (narrowedPlace) return 0.9;
   if (narrowInterest) return 0.8;
   return 0.68;
+}
+
+/**
+ * Whether two destinations are the same ground.
+ *
+ * With one record per hand-drawn region this could not happen. With a
+ * hierarchy it is the default: the Dolomites, South Tyrol, Val Gardena and
+ * Ortisei are four records and one holiday. 1 = one contains the other (by the
+ * travel hierarchy, or one centre sits well inside the other's extent), 0.6 =
+ * their extents overlap substantially, 0 = separate trips.
+ */
+export function overlap(a: ScoredDestination['destination'], b: ScoredDestination['destination']): number {
+  if (a.id === b.id || a.parents.includes(b.id) || b.parents.includes(a.id)) return 1;
+  if (a.wikidataId && a.wikidataId === b.wikidataId) return 1;
+  const km = advisorKm(a.center, b.center);
+  const larger = Math.max(a.radiusKm, b.radiusKm);
+  if (km < Math.max(12, 0.6 * larger)) return 1;
+  if (km < 0.5 * (a.radiusKm + b.radiusKm)) return 0.6;
+  return 0;
 }
 
 export function similarity(a: ScoredDestination, b: ScoredDestination): number {
@@ -49,7 +71,8 @@ export function similarity(a: ScoredDestination, b: ScoredDestination): number {
   const geography = Math.exp(-km / 1500);
   const sameCountry = a.destination.countries.some((code) => b.destination.countries.includes(code)) ? 1 : 0;
   const sameContinent = CONTINENT_OF[a.destination.worldRegion] === CONTINENT_OF[b.destination.worldRegion] ? 1 : 0;
-  return 0.5 * experience + 0.25 * geography + 0.15 * sameCountry + 0.1 * sameContinent;
+  const base = 0.5 * experience + 0.25 * geography + 0.15 * sameCountry + 0.1 * sameContinent;
+  return Math.max(base, overlap(a.destination, b.destination));
 }
 
 export interface Selection {
@@ -60,11 +83,23 @@ export interface Selection {
   closeCalls: ScoredDestination[];
   /** How many primary places had to come from outside the stated lead. */
   leadShort: number;
+  /** True when nothing cleared the relevance bar and these are the closest that exist. */
+  stretched: boolean;
 }
 
 export function selectShortlist(ranked: readonly ScoredDestination[], profile: AdvisorProfile, size = 3, alternates = 3): Selection {
   const lambda = lambdaFor(profile);
-  const leadOk = (candidate: ScoredDestination) => !profile.leadStated || (candidate.interestFit[0]?.value ?? 0) >= LEAD_FLOOR;
+  /*
+   * A derived reading is already discounted for thin evidence; holding it to the
+   * editorial floor as well would count that uncertainty twice and keep a
+   * well-matched but little-documented place out of the primaries for good.
+   */
+  /* A place whose guide is plainly about the request's own words ("tea plantations") serves the request, whatever the structured reading of its lead. */
+  const leadOk = (candidate: ScoredDestination) =>
+    !profile.leadStated ||
+    (candidate.interestFit[0]?.value ?? 0) >= (candidate.destination.origin === 'editorial' ? LEAD_FLOOR : LEAD_FLOOR_DERIVED) ||
+    /* Above anything the meaning channel can give on its own: this takes the guide actually using the words. */
+    (candidate.destination.mention ?? 0) >= 0.7;
   const servesLead = ranked.filter(leadOk);
   const top = (servesLead[0] ?? ranked[0])?.score ?? 0;
   const floor = Math.max(FLOOR_ABSOLUTE, top - FLOOR_GAP);
@@ -74,21 +109,47 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
    * 0.80 for someone who said the trip must be a safari.
    */
   const pool = [
-    ...servesLead.filter((candidate) => candidate.score >= floor).slice(0, 30),
-    ...ranked.filter((candidate) => !leadOk(candidate) && candidate.score >= floor).slice(0, 20),
+    ...servesLead.filter((candidate) => candidate.score >= floor).slice(0, 60),
+    ...ranked.filter((candidate) => !leadOk(candidate) && candidate.score >= floor).slice(0, 30),
   ];
   /*
    * The gap keeps a much weaker place from getting in for being different; it
    * must not empty a list. When fewer places clear it than the list holds, the
    * next best above the absolute floor fill in, in rank order.
    */
+  const distinct = (list: readonly ScoredDestination[]) => {
+    const kept: ScoredDestination[] = [];
+    for (const candidate of list) if (!kept.some((other) => overlap(candidate.destination, other.destination) >= 1)) kept.push(candidate);
+    return kept.length;
+  };
   for (const candidate of ranked) {
-    if (pool.length >= size + alternates) break;
+    if (pool.length >= size + alternates && distinct(pool) >= size + alternates) break;
+    if (pool.length >= 120) break;
     if (candidate.score >= FLOOR_ABSOLUTE && !pool.includes(candidate)) pool.push(candidate);
   }
+  /*
+   * Nothing clears the bar. An empty page helps nobody who asked a hard
+   * question ("a beach in Europe in April"); the closest answers do, as long as
+   * the page says plainly that they are a stretch and what holds them back.
+   */
+  let stretched = false;
+  if (pool.length === 0) {
+    for (const candidate of ranked) {
+      if (candidate.score < STRETCH_FLOOR || pool.length >= 30) break;
+      pool.push(candidate);
+    }
+    stretched = pool.length > 0;
+  }
   const chosen: ScoredDestination[] = [];
-  const remaining = [...pool];
+  let remaining = [...pool];
   while (chosen.length < size + alternates && remaining.length > 0) {
+    /*
+     * The same ground is never offered twice: once a place is chosen, whatever
+     * contains it or lies inside it leaves the pool. This is not diversity
+     * (which trades relevance for difference) — it is not repeating an answer.
+     */
+    remaining = remaining.filter((candidate) => !chosen.some((picked) => overlap(candidate.destination, picked.destination) >= 1));
+    if (remaining.length === 0) break;
     /* Primaries come from the places that serve the lead while any are left. */
     const eligible = chosen.length < size && remaining.some(leadOk) ? remaining.filter(leadOk) : remaining;
     let bestIndex = 0;
@@ -107,8 +168,10 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
   const picks = chosen.slice(0, size);
   const lastPick = picks[picks.length - 1];
   const closeCalls = lastPick
-    ? ranked.filter((candidate) => !chosen.includes(candidate) && candidate.score >= lastPick.score - 0.01).slice(0, 3)
+    ? ranked
+        .filter((candidate) => !chosen.includes(candidate) && candidate.score >= lastPick.score - 0.01 && !chosen.some((picked) => overlap(candidate.destination, picked.destination) >= 1))
+        .slice(0, 3)
     : [];
   const leadShort = profile.leadStated ? Math.max(0, size - picks.filter(leadOk).length) : 0;
-  return { picks, alternates: chosen.slice(size), lambda, closeCalls, leadShort };
+  return { picks, alternates: stretched ? [] : chosen.slice(size), lambda, closeCalls: stretched ? [] : closeCalls, leadShort, stretched };
 }

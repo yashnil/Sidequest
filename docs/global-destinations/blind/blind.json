@@ -1,0 +1,2044 @@
+[
+ {
+  "id": "karakoram-budget-trek",
+  "request": "Budget trekking in the Karakoram in July, two weeks, happy with basic guesthouses.",
+  "X": [
+   "Ladakh (Trans-Himalaya, India)",
+   "Jammu and Kashmir (Himalayan North, India)",
+   "Hunza Valley (Gilgit-Baltistan, Pakistan)"
+  ],
+  "Y": [
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Transylvania & the Carpathians (Romania)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ]
+ },
+ {
+  "id": "karakoram-pakistan-mountains",
+  "request": "I want big mountain scenery in northern Pakistan in August without spending much.",
+  "X": [
+   "Gilgit-Baltistan (Pakistan)",
+   "Karakoram Highway (China)",
+   "Khyber Pass (Khyber Pakhtunkhwa, Pakistan)"
+  ],
+  "Y": [
+   "Chamonix & Mont Blanc (French Alps)",
+   "North Cascades (Washington State)",
+   "Japanese Alps: Kamikochi & Takayama (Chubu, Japan)"
+  ]
+ },
+ {
+  "id": "hawaii-volcano-beach",
+  "request": "Volcanoes and beaches in Hawaii for ten days in February.",
+  "X": [
+   "Maui (Hawaii, United States)",
+   "Oahu (Hawaii, United States)",
+   "Kailua-Kona (Big Island, United States)"
+  ],
+  "Y": [
+   "Guadeloupe (French Caribbean)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Tongariro & Rotorua (Central North Island, New Zealand)"
+  ]
+ },
+ {
+  "id": "hawaii-family",
+  "request": "A week in Hawaii with two kids in April, snorkelling and easy hikes, we will rent a car.",
+  "X": [
+   "Maui (Hawaii, United States)",
+   "Oahu (Hawaii, United States)",
+   "Molokai (Hawaii, United States)"
+  ],
+  "Y": [
+   "Jamaica (Caribbean)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Seychelles (Mahé, Praslin and La Digue)"
+  ]
+ },
+ {
+  "id": "japan-spring-culture",
+  "request": "A spring cultural trip in Japan, temples, gardens and food, about 12 days in early April.",
+  "X": [
+   "Kyoto & Nara (Kansai, Japan)",
+   "Tohoku (Japan)",
+   "Chugoku (Japan)"
+  ],
+  "Y": [
+   "Andalusia (Southern Spain)",
+   "Yucatán & the Riviera Maya (Mexico)",
+   "Dakar & the Saloum Delta (Senegal)"
+  ]
+ },
+ {
+  "id": "japan-autumn-quiet",
+  "request": "Japan in November for autumn colours and old towns, somewhere less crowded than Kyoto.",
+  "X": [
+   "Tokyo (Kanto, Japan)",
+   "Kumano Kodo (Kii Peninsula, Japan)",
+   "Tohoku (Japan)"
+  ],
+  "Y": [
+   "Andalusia (Southern Spain)",
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Dubai (United Arab Emirates)"
+  ]
+ },
+ {
+  "id": "central-asia-remote-hiking",
+  "request": "Remote hiking in Central Asia in August, I want to be far from crowds and I am fit.",
+  "X": [
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)",
+   "Fann Mountains (Western Tajikistan)",
+   "Song-Kul & Naryn (Central Kyrgyzstan)"
+  ],
+  "Y": [
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)",
+   "Kazbegi (Greater Caucasus, Georgia)",
+   "Kaçkar Mountains (Northeast Turkey)"
+  ]
+ },
+ {
+  "id": "central-asia-silk-road",
+  "request": "Silk Road cities and mountain lakes in Central Asia, two weeks in September, moderate budget.",
+  "X": [
+   "Almaty & the Northern Tian Shan (Southeast Kazakhstan)",
+   "Ladakh (Trans-Himalaya, India)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ],
+  "Y": [
+   "Tajikistan (Caucasus & Central Asia)",
+   "Uzbekistan Silk Road (Samarkand, Bukhara & Khiva)",
+   "Almaty & the Northern Tian Shan (Southeast Kazakhstan)"
+  ]
+ },
+ {
+  "id": "indonesia-islands",
+  "request": "Tropical islands in Indonesia in July, snorkelling and quiet beaches, not Bali.",
+  "X": [
+   "Society Islands (French Polynesia)",
+   "Corsica (Mediterranean France)",
+   "São Tomé & Príncipe (Gulf of Guinea)"
+  ],
+  "Y": [
+   "Komodo & Flores (Nusa Tenggara, Indonesia)",
+   "Sumba (East Nusa Tenggara, Indonesia)",
+   "East Java (Java, Indonesia)"
+  ]
+ },
+ {
+  "id": "indonesia-diving",
+  "request": "World-class diving in Indonesia in October, two weeks, happy to take small boats.",
+  "X": [
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Lycian Coast (Southwest Turkey)"
+  ],
+  "Y": [
+   "Komodo & Flores (Nusa Tenggara, Indonesia)",
+   "Raja Ampat (West Papua, Indonesia)",
+   "Gili Islands (Lombok, Indonesia)"
+  ]
+ },
+ {
+  "id": "europe-city-break-spring",
+  "request": "A long weekend city break in Europe in May, good food and museums, flying from London.",
+  "X": [
+   "Porto & the Douro Valley (Northern Portugal)",
+   "Stockholm (Stockholm County, Sweden)",
+   "Paris (Île-de-France, France)"
+  ],
+  "Y": [
+   "Porto & the Douro Valley (Northern Portugal)",
+   "Amalfi Coast (Campania, Italy)",
+   "Loire Valley (Central France)"
+  ]
+ },
+ {
+  "id": "europe-city-break-winter",
+  "request": "Four nights in a European city in December for Christmas markets and cosy cafes.",
+  "X": [
+   "London (England, United Kingdom)",
+   "Madrid (Community of Madrid, Spain)",
+   "Venice (Metropolitan Venice, Italy)"
+  ],
+  "Y": [
+   "Porto & the Douro Valley (Northern Portugal)",
+   "Tuscany (Central Italy)",
+   "Loire Valley (Central France)"
+  ]
+ },
+ {
+  "id": "europe-city-break-underrated",
+  "request": "An underrated European city for three nights in October, not the usual capitals, cheap and walkable.",
+  "X": [
+   "Porto & the Douro Valley (Northern Portugal)",
+   "Lake Ohrid (North Macedonia & Albania)",
+   "Picos de Europa (Northern Spain)"
+  ],
+  "Y": [
+   "Porto & the Douro Valley (Northern Portugal)",
+   "Skopje (Povardarie, North Macedonia)",
+   "Budapest (Central Hungary, Hungary)"
+  ]
+ },
+ {
+  "id": "africa-safari-august",
+  "request": "A safari in Africa in August, we want to see the big cats, 10 nights, comfortable lodges.",
+  "X": [
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Okavango Delta (Northern Botswana)",
+   "Laikipia & Samburu (Central Kenya)"
+  ],
+  "Y": [
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Okavango Delta (Northern Botswana)",
+   "Serengeti (Northern Tanzania)"
+  ]
+ },
+ {
+  "id": "africa-safari-february",
+  "request": "Safari in February with a moderate budget, where is good that time of year?",
+  "X": [
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)",
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Maasai Mara (Southwest Kenya)"
+  ],
+  "Y": [
+   "Rajasthan (Northwest India)",
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)"
+  ]
+ },
+ {
+  "id": "africa-safari-budget",
+  "request": "Affordable self-drive safari in southern Africa in June for two weeks.",
+  "X": [
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Zambia (Southern Africa)",
+   "Okavango-Chobe (Botswana)"
+  ],
+  "Y": [
+   "Kruger & Sabi Sand (Northeast South Africa)"
+  ]
+ },
+ {
+  "id": "patagonia-summer",
+  "request": "Patagonia in January: glaciers, granite towers and long day hikes, about 12 nights.",
+  "X": [
+   "Bariloche & the Seven Lakes (Argentine Lake District)",
+   "Torres del Paine (Chilean Patagonia)",
+   "El Chaltén & Los Glaciares (Argentine Patagonia)"
+  ],
+  "Y": [
+   "El Chaltén & Los Glaciares (Argentine Patagonia)",
+   "Torres del Paine (Chilean Patagonia)",
+   "Bariloche & the Seven Lakes (Argentine Lake District)"
+  ]
+ },
+ {
+  "id": "patagonia-roadtrip",
+  "request": "A road trip through Patagonia in December with some hiking and wildlife.",
+  "X": [
+   "Bariloche & the Seven Lakes (Argentine Lake District)",
+   "Torres del Paine (Chilean Patagonia)",
+   "Península Valdés (Atlantic Patagonia, Argentina)"
+  ],
+  "Y": [
+   "Bariloche & the Seven Lakes (Argentine Lake District)",
+   "Carretera Austral (Aysén, Chilean Patagonia)",
+   "Torres del Paine (Chilean Patagonia)"
+  ]
+ },
+ {
+  "id": "alpine-hiking-september",
+  "request": "Alpine hiking in September, hut to hut for a week, high trails and big views.",
+  "X": [
+   "High Atlas (Central Morocco)",
+   "Olympic Peninsula (Washington State)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ],
+  "Y": [
+   "Chamonix & Mont Blanc (French Alps)",
+   "Olympic Peninsula (Washington State)",
+   "Japanese Alps: Kamikochi & Takayama (Chubu, Japan)"
+  ]
+ },
+ {
+  "id": "alps-september-quiet",
+  "request": "Hiking in the Alps in late September, somewhere quieter than Chamonix and Zermatt.",
+  "X": [
+   "Chamonix & Mont Blanc (French Alps)",
+   "Olympic Peninsula (Washington State)",
+   "Japanese Alps: Kamikochi & Takayama (Chubu, Japan)"
+  ],
+  "Y": [
+   "Julian Alps (Slovenia)",
+   "French Alps (France)",
+   "Bavarian Alps (Alps, Austria)"
+  ]
+ },
+ {
+  "id": "winter-sports-february",
+  "request": "Winter sports in February: reliable snow, good skiing and a lively village, one week.",
+  "X": [
+   "Bernese Oberland (Swiss Alps)",
+   "Niseko & Hokkaido Powder (Hokkaido, Japan)",
+   "Québec City & Charlevoix (Québec)"
+  ],
+  "Y": [
+   "Tyrolean Alps (Western Austria)",
+   "Niseko & Hokkaido Powder (Hokkaido, Japan)",
+   "Québec City & Charlevoix (Québec)"
+  ]
+ },
+ {
+  "id": "winter-sports-budget",
+  "request": "Cheap skiing in February, we do not need a famous resort, just good snow and low prices.",
+  "X": [
+   "Rila & Pirin Mountains (Southwest Bulgaria)",
+   "Hokkaido (Japan)",
+   "Adirondacks (Upstate New York)"
+  ],
+  "Y": [
+   "Adirondacks (Upstate New York)",
+   "Almaty & the Northern Tian Shan (Southeast Kazakhstan)",
+   "High Tatras (Slovakia & Poland)"
+  ]
+ },
+ {
+  "id": "winter-sports-japan",
+  "request": "Powder skiing in Japan in January and hot springs afterwards.",
+  "X": [
+   "Niseko & Hokkaido Powder (Hokkaido, Japan)",
+   "Tohoku (Japan)",
+   "Beppu (Oita, Japan)"
+  ],
+  "Y": [
+   "Niseko & Hokkaido Powder (Hokkaido, Japan)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "The Engadin (Graubünden, Switzerland)"
+  ]
+ },
+ {
+  "id": "rainforest-wildlife",
+  "request": "Rainforest and wildlife: monkeys, birds, sloths. Two weeks in March, moderate budget.",
+  "X": [
+   "Sabah, Borneo (Malaysian Borneo)",
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)",
+   "Madagascar's RN7 (Southern Highlands, Madagascar)"
+  ],
+  "Y": [
+   "Sabah, Borneo (Malaysian Borneo)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)"
+  ]
+ },
+ {
+  "id": "rainforest-borneo-like",
+  "request": "Jungle trekking and orangutans in July, we are fine with basic lodges and humidity.",
+  "X": [
+   "Olympic Peninsula (Washington State)",
+   "Chamonix & Mont Blanc (French Alps)",
+   "Madeira (Atlantic Portugal)"
+  ],
+  "Y": [
+   "Olympic Peninsula (Washington State)",
+   "Madagascar's RN7 (Southern Highlands, Madagascar)",
+   "Ordesa & the Aragonese Pyrenees (Spanish Pyrenees)"
+  ]
+ },
+ {
+  "id": "amazon-august",
+  "request": "The Amazon in August for ten days, river lodges and wildlife.",
+  "X": [
+   "Surinamese Rainforest (Suriname)",
+   "Cuyabeno Wildlife Reserve (Amazon, Ecuador)",
+   "Iquitos (Peruvian Amazon, Peru)"
+  ],
+  "Y": [
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Komodo & Flores (Nusa Tenggara, Indonesia)",
+   "Loango (Coastal Gabon)"
+  ]
+ },
+ {
+  "id": "family-limited-driving",
+  "request": "A family trip in July with two children aged 6 and 9, beaches and easy walks, we do not want to drive much.",
+  "X": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Isla Holbox (Quintana Roo, Mexico)",
+   "Zanzibar (Tanzania)"
+  ],
+  "Y": [
+   "Zanzibar (Tanzania)",
+   "Dalmatian Coast & Islands (Croatia)",
+   "Isla Holbox (Quintana Roo, Mexico)"
+  ]
+ },
+ {
+  "id": "family-no-car-europe",
+  "request": "Family holiday in Europe in August with kids, no car, trains and lakes and easy mountain walks.",
+  "X": [
+   "The Engadin (Graubünden, Switzerland)",
+   "Julian Alps (Slovenia)",
+   "Bernese Oberland (Swiss Alps)"
+  ],
+  "Y": [
+   "Julian Alps (Slovenia)",
+   "The Engadin (Graubünden, Switzerland)",
+   "The Dolomites (Northern Italy)"
+  ]
+ },
+ {
+  "id": "rail-multi-country",
+  "request": "A multi-country rail journey in Europe in June, two weeks, scenic trains and old towns.",
+  "X": [
+   "The Italian Lakes (Lombardy & Garda, Italy)",
+   "United Kingdom (Northern Europe)",
+   "Germany (Western Europe)"
+  ],
+  "Y": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Scottish Highlands & Skye (Scotland)",
+   "Tuscany (Central Italy)"
+  ]
+ },
+ {
+  "id": "rail-asia",
+  "request": "A scenic train trip somewhere in Asia in November, 10 days, culture and food along the way.",
+  "X": [
+   "Kyoto & Nara (Kansai, Japan)",
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Rajasthan (Northwest India)"
+  ],
+  "Y": [
+   "Kyoto & Nara (Kansai, Japan)",
+   "Rajasthan (Northwest India)",
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)"
+  ]
+ },
+ {
+  "id": "like-dolomites-cheaper",
+  "request": "I want somewhere like the Dolomites, but less crowded and cheaper, in early September.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Banff & Jasper (Canadian Rockies, Alberta)",
+   "Great Barrier Reef & Daintree (Tropical North Queensland, Australia)"
+  ],
+  "Y": [
+   "High Atlas (Central Morocco)",
+   "Rila & Pirin Mountains (Southwest Bulgaria)",
+   "Drakensberg (KwaZulu-Natal, South Africa)"
+  ]
+ },
+ {
+  "id": "like-amalfi-quieter",
+  "request": "Somewhere like the Amalfi Coast but quieter and less expensive, in June.",
+  "X": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Society Islands (French Polynesia)"
+  ],
+  "Y": [
+   "Sumba (East Nusa Tenggara, Indonesia)",
+   "Zanzibar (Tanzania)",
+   "Bali (Indonesia)"
+  ]
+ },
+ {
+  "id": "like-iceland-cheaper",
+  "request": "Landscapes like Iceland but cheaper and less touristy, in July.",
+  "X": [
+   "Song-Kul & Naryn (Central Kyrgyzstan)",
+   "Taveuni & Vanua Levu (Northern Fiji)",
+   "Sumba (East Nusa Tenggara, Indonesia)"
+  ],
+  "Y": [
+   "Bernese Oberland (Swiss Alps)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Porto & the Douro Valley (Northern Portugal)"
+  ]
+ },
+ {
+  "id": "like-santorini-uncrowded",
+  "request": "An island like Santorini without the cruise crowds, in September.",
+  "X": [
+   "Crete (Greece)",
+   "Society Islands (French Polynesia)",
+   "Zanzibar (Tanzania)"
+  ],
+  "Y": [
+   "Society Islands (French Polynesia)",
+   "Crete (Greece)",
+   "Sumba (East Nusa Tenggara, Indonesia)"
+  ]
+ },
+ {
+  "id": "like-banff-quiet",
+  "request": "An underrated alternative to Banff: turquoise lakes and mountains with fewer people, in August.",
+  "X": [
+   "Wind River Range (Western Wyoming)",
+   "Rila & Pirin Mountains (Southwest Bulgaria)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ],
+  "Y": [
+   "North Cascades (Washington State)",
+   "The Engadin (Graubünden, Switzerland)",
+   "Ladakh (Trans-Himalaya, India)"
+  ]
+ },
+ {
+  "id": "remote-mountains-september",
+  "request": "Remote mountains, incredible hiking, beautiful lakes, inexpensive, September, not too cold.",
+  "X": [
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)",
+   "Rila & Pirin Mountains (Southwest Bulgaria)",
+   "Avenue of the Volcanoes (Ecuadorian Andes)"
+  ],
+  "Y": [
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)",
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Rila & Pirin Mountains (Southwest Bulgaria)"
+  ]
+ },
+ {
+  "id": "himalaya-october",
+  "request": "A classic Himalayan trek in October, teahouses, about 14 days.",
+  "X": [
+   "High Atlas (Central Morocco)",
+   "Everest Region (Khumbu) (Eastern Nepal)",
+   "Tenerife & La Gomera (Canary Islands, Spain)"
+  ],
+  "Y": [
+   "Annapurna Region (Central Nepal)",
+   "Everest Region (Khumbu) (Eastern Nepal)",
+   "Langtang Valley (North of Kathmandu, Nepal)"
+  ]
+ },
+ {
+  "id": "andes-trek-june",
+  "request": "High-altitude trekking in the Andes in June, I have done Kilimanjaro and want something wilder.",
+  "X": [
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Corsica (Mediterranean France)",
+   "Kazbegi (Greater Caucasus, Georgia)"
+  ],
+  "Y": [
+   "Chile (Southern South America)",
+   "Jujuy (Andean Northwest, Argentina)",
+   "Salta (Andean Northwest, Argentina)"
+  ]
+ },
+ {
+  "id": "caucasus-hiking",
+  "request": "Hiking in the Caucasus in July, village to village, cheap guesthouses and big peaks.",
+  "X": [
+   "Tusheti (Eastern Caucasus, Georgia)",
+   "Svaneti (Greater Caucasus, Georgia)",
+   "Southern Armenia (Armenia)"
+  ],
+  "Y": [
+   "Svaneti (Greater Caucasus, Georgia)",
+   "Avenue of the Volcanoes (Ecuadorian Andes)",
+   "Albanian Alps: Theth & Valbona (Northern Albania)"
+  ]
+ },
+ {
+  "id": "spring-hiking-no-snow",
+  "request": "Hiking in April without snow on the trails, warm days, somewhere in Europe.",
+  "X": [
+   "Crete (Greece)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Madeira (Atlantic Portugal)"
+  ],
+  "Y": [
+   "Crete (Greece)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Madeira (Atlantic Portugal)"
+  ]
+ },
+ {
+  "id": "march-mountains-budget",
+  "request": "March 19-27, mountains and hiking, on a budget.",
+  "X": [
+   "Annapurna Region (Central Nepal)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "High Atlas (Central Morocco)"
+  ],
+  "Y": [
+   "Annapurna Region (Central Nepal)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Santo Antão (Cape Verde)"
+  ]
+ },
+ {
+  "id": "winter-sun-walking",
+  "request": "Winter sun and good walking in January, flying from Manchester, one week.",
+  "X": [
+   "Phoenix (Greater Phoenix, United States)",
+   "Siwa Oasis (Western Desert, Egypt)",
+   "São Tomé & Príncipe (Gulf of Guinea)"
+  ],
+  "Y": [
+   "Dubai (United Arab Emirates)",
+   "Laikipia & Samburu (Central Kenya)",
+   "Tenerife & La Gomera (Canary Islands, Spain)"
+  ]
+ },
+ {
+  "id": "usa-national-parks-autumn",
+  "request": "US national parks in October: red rock, canyons and day hikes, ten days with a car.",
+  "X": [
+   "Utah Canyon Country (Southern Utah)",
+   "Petra & Dana (Southern Jordan)",
+   "Salta & Jujuy (Northwest Argentina)"
+  ],
+  "Y": [
+   "Utah Canyon Country (Southern Utah)",
+   "Grand Canyon (Northern Arizona)",
+   "Colorado (Rocky Mountains, United States)"
+  ]
+ },
+ {
+  "id": "scandinavia-summer-hiking",
+  "request": "Hiking and fjords in Scandinavia in July, wild camping, I do not mind rain.",
+  "X": [
+   "Jotunheimen (Central Norway)",
+   "Lofoten Islands (Northern Norway)",
+   "Swedish Lapland (Arctic Sweden)"
+  ],
+  "Y": [
+   "Jotunheimen (Central Norway)",
+   "Swedish Lapland (Arctic Sweden)",
+   "Lofoten Islands (Northern Norway)"
+  ]
+ },
+ {
+  "id": "new-zealand-february",
+  "request": "New Zealand in February for great walks, lakes and scenic drives, three weeks.",
+  "X": [
+   "Queenstown & Wānaka (Central Otago, New Zealand)",
+   "Fiordland (South Island, New Zealand)",
+   "Aoraki/Mount Cook & the Mackenzie (South Island, New Zealand)"
+  ],
+  "Y": [
+   "Queenstown & Wānaka (Central Otago, New Zealand)",
+   "Fiordland (South Island, New Zealand)",
+   "Aoraki/Mount Cook & the Mackenzie (South Island, New Zealand)"
+  ]
+ },
+ {
+  "id": "africa-mountains",
+  "request": "Mountain trekking in Africa in January or February, something other than Kilimanjaro.",
+  "X": [
+   "High Atlas (Central Morocco)",
+   "Drakensberg (KwaZulu-Natal, South Africa)",
+   "Rwanda (East Africa)"
+  ],
+  "Y": [
+   "Mount Kilimanjaro (Northern Tanzania)",
+   "Drakensberg (KwaZulu-Natal, South Africa)",
+   "Rwenzori Mountains (Western Uganda)"
+  ]
+ },
+ {
+  "id": "balkans-hiking-cheap",
+  "request": "Cheap mountain hiking in the Balkans in June, wild and not touristy.",
+  "X": [
+   "Albanian Alps: Theth & Valbona (Northern Albania)",
+   "Zagori & the Vikos Gorge (Epirus, Greece)",
+   "Rila & Pirin Mountains (Southwest Bulgaria)"
+  ],
+  "Y": [
+   "Albanian Alps: Theth & Valbona (Northern Albania)",
+   "Rila & Pirin Mountains (Southwest Bulgaria)",
+   "Transylvania & the Carpathians (Romania)"
+  ]
+ },
+ {
+  "id": "japan-alps-hike",
+  "request": "Hiking in the Japanese mountains in early October with hot springs.",
+  "X": [
+   "Japanese Alps: Kamikochi & Takayama (Chubu, Japan)",
+   "Matsumoto (Nagano, Japan)",
+   "Southern Yatsugatake Volcanic Group (Kiyosato Plateau, Japan)"
+  ],
+  "Y": [
+   "Réunion (French Indian Ocean)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Japanese Alps: Kamikochi & Takayama (Chubu, Japan)"
+  ]
+ },
+ {
+  "id": "volcano-hikes",
+  "request": "I want to climb active volcanoes and see lava or crater lakes, in May, two weeks.",
+  "X": [
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Lake Atitlán & Antigua (Guatemalan Highlands)",
+   "New Zealand (Australia & New Zealand)"
+  ],
+  "Y": [
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Lake Atitlán & Antigua (Guatemalan Highlands)",
+   "Vanuatu: Efate, Tanna & Santo (Melanesia)"
+  ]
+ },
+ {
+  "id": "glaciers-easy",
+  "request": "Glaciers and icebergs I can see without serious hiking, in July, with my parents in their seventies.",
+  "X": [
+   "Bernese Oberland (Swiss Alps)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Kruger & Sabi Sand (Northeast South Africa)"
+  ],
+  "Y": [
+   "Iceland’s Ring Road (Iceland)",
+   "Altai Tavan Bogd (Western Mongolia)",
+   "Kluane & the Southern Yukon (Yukon)"
+  ]
+ },
+ {
+  "id": "caribbean-january",
+  "request": "Caribbean beach week in January, snorkelling off the beach, not a giant resort island.",
+  "X": [
+   "Turks & Caicos (Caribbean)",
+   "Guadeloupe (French Caribbean)",
+   "Puerto Rico (Caribbean)"
+  ],
+  "Y": [
+   "Turks & Caicos (Caribbean)",
+   "Jamaica (Caribbean)",
+   "Puerto Rico (Caribbean)"
+  ]
+ },
+ {
+  "id": "caribbean-hurricane-season",
+  "request": "A beach holiday in the Caribbean in September, is anywhere sensible?",
+  "X": [
+   "Turks & Caicos (Caribbean)"
+  ],
+  "Y": [
+   "Turks & Caicos (Caribbean)",
+   "Aruba (Caribbean)",
+   "Saint Martin (Lesser Antilles, France)"
+  ]
+ },
+ {
+  "id": "med-islands-june",
+  "request": "A quiet Mediterranean island in June, swimming coves, good food, no car needed.",
+  "X": [
+   "Crete (Greece)",
+   "Dalmatian Coast & Islands (Croatia)",
+   "The Cyclades (Aegean Greece)"
+  ],
+  "Y": [
+   "Mediterranean Turkey (Turkey)",
+   "Crete (Greece)",
+   "Israel (Middle East)"
+  ]
+ },
+ {
+  "id": "warm-sea-november",
+  "request": "Somewhere with a warm sea to swim in during November, within a short flight of Berlin.",
+  "X": [
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Baja California Sur (Mexico)",
+   "Mauritius (Indian Ocean)"
+  ],
+  "Y": [
+   "Tel Aviv (Israeli Coastal Plain, Israel)"
+  ]
+ },
+ {
+  "id": "thailand-islands-august",
+  "request": "Thai islands in August, which side has good weather? Beaches and snorkelling.",
+  "X": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Ningaloo Coast (Western Australia)"
+  ],
+  "Y": [
+   "Ko Samui (Central Gulf Coast, Thailand)",
+   "Pattaya (Eastern Gulf Coast, Thailand)",
+   "Ko Pha-ngan (Central Gulf Coast, Thailand)"
+  ]
+ },
+ {
+  "id": "thailand-islands-january",
+  "request": "Thailand beaches in January, island hopping for two weeks.",
+  "X": [
+   "Krabi & the Andaman Coast (Southern Thailand)",
+   "Ko Samui (Central Gulf Coast, Thailand)",
+   "Eastern Gulf Coast (Eastern Thailand, Thailand)"
+  ],
+  "Y": [
+   "Jamaica (Caribbean)",
+   "Maldives (Indian Ocean atolls)",
+   "Krabi & the Andaman Coast (Southern Thailand)"
+  ]
+ },
+ {
+  "id": "philippines-islands",
+  "request": "Island hopping in the Philippines in March, lagoons, snorkelling, budget friendly.",
+  "X": [
+   "Palawan: El Nido & Coron (Philippines)",
+   "Cebu Province (Visayas, Philippines)",
+   "Mindoro (Luzon, Philippines)"
+  ],
+  "Y": [
+   "Oaxaca Coast (Pacific Mexico)",
+   "Palawan: El Nido & Coron (Philippines)",
+   "Wild Coast (Eastern Cape, South Africa)"
+  ]
+ },
+ {
+  "id": "pacific-islands",
+  "request": "A South Pacific island escape in June, lagoons and snorkelling, somewhere less developed than Bora Bora.",
+  "X": [
+   "Society Islands (French Polynesia)",
+   "Ningaloo Coast (Western Australia)",
+   "Vanuatu: Efate, Tanna & Santo (Melanesia)"
+  ],
+  "Y": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Society Islands (French Polynesia)"
+  ]
+ },
+ {
+  "id": "indian-ocean-honeymoon",
+  "request": "Honeymoon in the Indian Ocean in May, luxury, turquoise water and privacy.",
+  "X": [
+   "Turks & Caicos (Caribbean)",
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)"
+  ],
+  "Y": [
+   "Christmas Island (Australia)",
+   "Saint-Leu (Réunion, France)",
+   "Lakshadweep (Southern India, India)"
+  ]
+ },
+ {
+  "id": "red-sea-diving",
+  "request": "Diving in the Red Sea in April, liveaboard or shore diving.",
+  "X": [
+   "Turks & Caicos (Caribbean)",
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)"
+  ],
+  "Y": [
+   "El Gouna (Red Sea Coast, Egypt)",
+   "Port Ghalib (Red Sea Coast, Egypt)",
+   "Marsa Alam (Red Sea Coast, Egypt)"
+  ]
+ },
+ {
+  "id": "surf-winter",
+  "request": "Somewhere to surf in December with warm water and a relaxed town.",
+  "X": [
+   "Dubai (United Arab Emirates)",
+   "Arenal & Monteverde (Northern Costa Rica)",
+   "Garden Route (Southern Cape, South Africa)"
+  ],
+  "Y": [
+   "Jacó (Central Pacific, Costa Rica)",
+   "Jeffreys Bay (Sunshine Coast, South Africa)",
+   "Rincón (Porta del Sol, United States)"
+  ]
+ },
+ {
+  "id": "cold-water-coast",
+  "request": "Wild Atlantic coastline, cliffs, seabirds and seafood in June. I do not need to swim.",
+  "X": [
+   "Corsica (Mediterranean France)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Society Islands (French Polynesia)"
+  ],
+  "Y": [
+   "Bali (Indonesia)",
+   "Society Islands (French Polynesia)",
+   "São Tomé & Príncipe (Gulf of Guinea)"
+  ]
+ },
+ {
+  "id": "whales",
+  "request": "Where can I see whales in August and also do some hiking?",
+  "X": [
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Kaikōura (South Island, New Zealand)",
+   "Washington (Pacific Northwest, United States)"
+  ],
+  "Y": [
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Kenai Peninsula (Southcentral Alaska)",
+   "Shiretoko (Eastern Hokkaido, Japan)"
+  ]
+ },
+ {
+  "id": "greek-islands-october",
+  "request": "Greek islands in mid October, still warm enough to swim, quiet villages.",
+  "X": [
+   "The Cyclades (Aegean Greece)",
+   "Rhodes (Dodecanese, Greece)",
+   "Corfu Town (Central Corfu, Greece)"
+  ],
+  "Y": [
+   "Zanzibar (Tanzania)",
+   "Crete (Greece)",
+   "Samoa (South Pacific)"
+  ]
+ },
+ {
+  "id": "atlantic-islands-winter",
+  "request": "Atlantic islands for hiking in February, mild weather, flying from Madrid.",
+  "X": [
+   "Tayrona & the Sierra Nevada Coast (Caribbean Colombia)",
+   "Sydney & the Blue Mountains (New South Wales, Australia)",
+   "Wild Coast (Eastern Cape, South Africa)"
+  ],
+  "Y": [
+   "Tayrona & the Sierra Nevada Coast (Caribbean Colombia)",
+   "Wild Coast (Eastern Cape, South Africa)",
+   "Maui (Hawaii, United States)"
+  ]
+ },
+ {
+  "id": "gorillas",
+  "request": "Gorilla trekking in July, plus a few days somewhere else nearby.",
+  "X": [
+   "Denali (Interior Alaska)",
+   "Kazbegi (Greater Caucasus, Georgia)",
+   "Bwindi Impenetrable Forest (Southwest Uganda)"
+  ],
+  "Y": [
+   "Volcanoes National Park (Northern Rwanda)",
+   "Denali (Interior Alaska)",
+   "Shiretoko (Eastern Hokkaido, Japan)"
+  ]
+ },
+ {
+  "id": "india-tigers",
+  "request": "Tigers in India in March, and some palaces.",
+  "X": [
+   "Andalusia (Southern Spain)",
+   "Turks & Caicos (Caribbean)",
+   "Khao Sok (Southern Thailand)"
+  ],
+  "Y": [
+   "Maharashtra (Western India, India)",
+   "Eastern India (India)",
+   "Karnataka (Southern India, India)"
+  ]
+ },
+ {
+  "id": "bears-north-america",
+  "request": "Bears, salmon and glaciers in July, ten days in North America.",
+  "X": [
+   "Yellowstone & Grand Teton (Wyoming and Montana)",
+   "Denali (Interior Alaska)",
+   "Haida Gwaii (British Columbia)"
+  ],
+  "Y": [
+   "Kenai Peninsula (Southcentral Alaska)",
+   "Kluane & the Southern Yukon (Yukon)",
+   "Banff & Jasper (Canadian Rockies, Alberta)"
+  ]
+ },
+ {
+  "id": "birding-neotropics",
+  "request": "A birding trip to the Neotropics in February, cloud forest and hummingbirds, two weeks.",
+  "X": [
+   "Sabah, Borneo (Malaysian Borneo)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Galápagos Islands (Ecuador)"
+  ],
+  "Y": [
+   "Sabah, Borneo (Malaysian Borneo)",
+   "Costa Rica (Mexico & Central America)",
+   "Seychelles (Mahé, Praslin and La Digue)"
+  ]
+ },
+ {
+  "id": "penguins",
+  "request": "I want to see penguins in the wild in December without going to Antarctica.",
+  "X": [
+   "Kangaroo Island (South Australia)",
+   "Galápagos Islands (Ecuador)",
+   "Laikipia & Samburu (Central Kenya)"
+  ],
+  "Y": [
+   "Tongariro & Rotorua (Central North Island, New Zealand)",
+   "Baja California Sur (Mexico)",
+   "El Chaltén & Los Glaciares (Argentine Patagonia)"
+  ]
+ },
+ {
+  "id": "madagascar-like",
+  "request": "Unusual wildlife you cannot see anywhere else, September, three weeks, adventurous.",
+  "X": [
+   "Madagascar's RN7 (Southern Highlands, Madagascar)",
+   "Komodo & Flores (Nusa Tenggara, Indonesia)",
+   "Białowieża Forest (Eastern Poland)"
+  ],
+  "Y": [
+   "Madagascar's RN7 (Southern Highlands, Madagascar)",
+   "Shiretoko (Eastern Hokkaido, Japan)",
+   "Sabah, Borneo (Malaysian Borneo)"
+  ]
+ },
+ {
+  "id": "arctic-wildlife",
+  "request": "Arctic wildlife and midnight sun in June, expedition style.",
+  "X": [
+   "Svalbard (High Arctic, Norway)",
+   "Qausuittuq National Park (Queen Elizabeth Islands, Canada)",
+   "Resolute (Queen Elizabeth Islands, Canada)"
+  ],
+  "Y": [
+   "South Luangwa (Eastern Zambia)",
+   "Komodo & Flores (Nusa Tenggara, Indonesia)",
+   "Tambopata & Manu (Peruvian Amazon)"
+  ]
+ },
+ {
+  "id": "food-city-asia",
+  "request": "A food-obsessed week in an Asian city in November, street food and markets.",
+  "X": [
+   "Kyoto & Nara (Kansai, Japan)",
+   "Istanbul (Turkey)",
+   "Hong Kong (China)"
+  ],
+  "Y": [
+   "Kyoto & Nara (Kansai, Japan)",
+   "Rajasthan (Northwest India)",
+   "Istanbul (Turkey)"
+  ]
+ },
+ {
+  "id": "latin-america-colonial",
+  "request": "Colonial cities and ruins in Latin America in February, two weeks, mid budget.",
+  "X": [
+   "Rajasthan (Northwest India)",
+   "Cape Town & the Winelands (Western Cape, South Africa)",
+   "Yucatán & the Riviera Maya (Mexico)"
+  ],
+  "Y": [
+   "Colombia (Northern South America)",
+   "Peru (Northern South America)",
+   "Panama (Mexico & Central America)"
+  ]
+ },
+ {
+  "id": "ancient-ruins-spring",
+  "request": "Ancient ruins and archaeology in April, not too hot, about ten days.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Utah Canyon Country (Southern Utah)",
+   "Buenos Aires (Argentina)"
+  ],
+  "Y": [
+   "Amalfi Coast (Campania, Italy)",
+   "Kyoto & Nara (Kansai, Japan)",
+   "Colorado (Rocky Mountains, United States)"
+  ]
+ },
+ {
+  "id": "wine-region",
+  "request": "A wine region with good restaurants and pretty villages in late September.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Santa Fe & Taos (Northern New Mexico)",
+   "Istanbul (Turkey)"
+  ],
+  "Y": [
+   "Amalfi Coast (Campania, Italy)",
+   "Santa Fe & Taos (Northern New Mexico)",
+   "Istanbul (Turkey)"
+  ]
+ },
+ {
+  "id": "middle-east-culture-winter",
+  "request": "Culture and deserts in the Middle East in December, one week, we like history.",
+  "X": [
+   "Tel Aviv (Israeli Coastal Plain, Israel)",
+   "Oman's Hajar Mountains (Nizwa and Jebel Akhdar, Oman)",
+   "Jordan (Middle East)"
+  ],
+  "Y": [
+   "Jamaica (Caribbean)",
+   "Rajasthan (Northwest India)",
+   "Dakar & the Saloum Delta (Senegal)"
+  ]
+ },
+ {
+  "id": "india-first-time",
+  "request": "First time in India, December, two weeks: palaces, food, a bit of nature, not too hectic.",
+  "X": [
+   "Jamaica (Caribbean)",
+   "Rajasthan (Northwest India)",
+   "Yucatán & the Riviera Maya (Mexico)"
+  ],
+  "Y": [
+   "Rajasthan (Northwest India)",
+   "Kerala: Munnar & the Backwaters (Southwest India)",
+   "Maharashtra (Western India, India)"
+  ]
+ },
+ {
+  "id": "china-off-beaten",
+  "request": "China beyond Beijing and Shanghai in May: old towns, karst landscapes, good food.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Kyoto & Nara (Kansai, Japan)",
+   "Santa Fe & Taos (Northern New Mexico)"
+  ],
+  "Y": [
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Xi'an (Shaanxi, China)",
+   "Fujian (East China, China)"
+  ]
+ },
+ {
+  "id": "south-america-cities",
+  "request": "A lively South American city for a week in March, nightlife, food and day trips.",
+  "X": [
+   "Buenos Aires (Argentina)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Bogotá (Andino, Colombia)"
+  ],
+  "Y": [
+   "Andalusia (Southern Spain)",
+   "Yucatán & the Riviera Maya (Mexico)",
+   "Buenos Aires (Argentina)"
+  ]
+ },
+ {
+  "id": "north-africa-medinas",
+  "request": "Medinas, mountains and desert in North Africa in October, ten days.",
+  "X": [
+   "Morocco (North Africa)",
+   "Tunisia (North Africa)",
+   "Cairo (Lower Egypt, Egypt)"
+  ],
+  "Y": [
+   "High Atlas (Central Morocco)",
+   "Damaraland & Kaokoland (Northwest Namibia)",
+   "Drakensberg (KwaZulu-Natal, South Africa)"
+  ]
+ },
+ {
+  "id": "usa-city-weekend",
+  "request": "A long weekend in a US city in October, live music and food, flying from Chicago.",
+  "X": [
+   "New York City (New York)",
+   "Los Angeles (Southern California, United States)",
+   "Washington, D.C. (Mid-Atlantic, United States)"
+  ],
+  "Y": [
+   "New York City (New York)",
+   "Oaxaca City & Valleys (Southern Mexico)",
+   "Santa Fe & Taos (Northern New Mexico)"
+  ]
+ },
+ {
+  "id": "southeast-asia-first",
+  "request": "Three weeks in Southeast Asia in January for a first-timer: temples, beaches and street food.",
+  "X": [
+   "Philippines (Southeast Asia)",
+   "Thailand (Southeast Asia)",
+   "Malaysia (Southeast Asia)"
+  ],
+  "Y": [
+   "Krabi & the Andaman Coast (Southern Thailand)",
+   "Bali (Indonesia)",
+   "Northern Laos (Luang Prabang & the Nam Ou)"
+  ]
+ },
+ {
+  "id": "eastern-europe-winter-city",
+  "request": "A cheap, atmospheric Eastern European city in February with thermal baths.",
+  "X": [
+   "Andalusia (Southern Spain)",
+   "Porto & the Douro Valley (Northern Portugal)",
+   "Crete (Greece)"
+  ],
+  "Y": [
+   "Budapest (Central Hungary, Hungary)",
+   "Sofia (Bulgarian Shopluk, Bulgaria)",
+   "Prague (Central Bohemia, Czech Republic)"
+  ]
+ },
+ {
+  "id": "small-towns-italy",
+  "request": "Small hill towns and food in Italy in May, away from Tuscany crowds.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Kyoto & Nara (Kansai, Japan)",
+   "Santa Fe & Taos (Northern New Mexico)"
+  ],
+  "Y": [
+   "Amalfi Coast (Campania, Italy)",
+   "The Italian Lakes (Lombardy & Garda, Italy)",
+   "Venice (Metropolitan Venice, Italy)"
+  ]
+ },
+ {
+  "id": "spain-winter",
+  "request": "Southern Spain in January: Moorish cities, tapas, mild weather, by train.",
+  "X": [
+   "Dubai (United Arab Emirates)",
+   "Sydney & the Blue Mountains (New South Wales, Australia)",
+   "Oaxaca City & Valleys (Southern Mexico)"
+  ],
+  "Y": [
+   "Granada (Andalusia, Spain)",
+   "Ronda (Serranía de Ronda, Spain)",
+   "Costa del Sol (Málaga, Spain)"
+  ]
+ },
+ {
+  "id": "road-trip-western-us",
+  "request": "A two-week road trip in the American West in May, national parks and empty highways.",
+  "X": [
+   "Utah Canyon Country (Southern Utah)",
+   "Great Smoky Mountains & Blue Ridge (Tennessee and North Carolina)",
+   "Florida Keys & Everglades (South Florida)"
+  ],
+  "Y": [
+   "Provence & the Verdon (Southern France)",
+   "Utah Canyon Country (Southern Utah)",
+   "Scottish Highlands & Skye (Scotland)"
+  ]
+ },
+ {
+  "id": "road-trip-europe-coast",
+  "request": "A coastal road trip in Europe in September, 10 days, swimming stops and seafood.",
+  "X": [
+   "Crete (Greece)",
+   "Corsica (Mediterranean France)",
+   "Bay of Kotor & Durmitor (Montenegro)"
+  ],
+  "Y": [
+   "Crete (Greece)",
+   "Corsica (Mediterranean France)",
+   "Tenerife & La Gomera (Canary Islands, Spain)"
+  ]
+ },
+ {
+  "id": "iceland-ring-road",
+  "request": "Is the Iceland ring road worth it in March? We want waterfalls and maybe northern lights.",
+  "X": [
+   "North Iceland (Iceland)"
+  ],
+  "Y": [
+   "The Engadin (Graubünden, Switzerland)",
+   "Svalbard (High Arctic, Norway)",
+   "Finnish Lapland (Arctic Finland)"
+  ]
+ },
+ {
+  "id": "desert-stargazing",
+  "request": "Desert landscapes and stargazing in November, camping under the stars, one week.",
+  "X": [
+   "Atacama Desert (Northern Chile)",
+   "Baja California Sur (Mexico)",
+   "Erg Chebbi & the Dadès (Southeast Morocco)"
+  ],
+  "Y": [
+   "Baja California Sur (Mexico)",
+   "Siwa Oasis (Western Desert, Egypt)",
+   "Salar de Uyuni & the Lípez (Southwest Bolivia)"
+  ]
+ },
+ {
+  "id": "namibia-like",
+  "request": "A self-drive trip with huge empty landscapes, dunes and wildlife, in July.",
+  "X": [
+   "Damaraland & Kaokoland (Northwest Namibia)",
+   "Transylvania & the Carpathians (Romania)",
+   "West MacDonnell Ranges (Alice Springs, Australia)"
+  ],
+  "Y": [
+   "Damaraland & Kaokoland (Northwest Namibia)",
+   "West MacDonnell Ranges (Alice Springs, Australia)",
+   "Central Mongolia & the Gobi (Mongolia)"
+  ]
+ },
+ {
+  "id": "australia-outback",
+  "request": "Australia in July: outback, red rock and a reef if possible, three weeks.",
+  "X": [
+   "Society Islands (French Polynesia)",
+   "Samoa (South Pacific)",
+   "Rarotonga & Aitutaki (Cook Islands)"
+  ],
+  "Y": [
+   "Queensland (Australia)",
+   "Top End (Northern Territory, Australia)",
+   "Ningaloo Coast (Western Australia)"
+  ]
+ },
+ {
+  "id": "scotland-like-drive",
+  "request": "A scenic driving loop with lochs, castles and short walks in May, 8 days.",
+  "X": [
+   "Provence & the Verdon (Southern France)",
+   "Salta & Jujuy (Northwest Argentina)",
+   "High Atlas (Central Morocco)"
+  ],
+  "Y": [
+   "Andalusia (Southern Spain)",
+   "Turks & Caicos (Caribbean)",
+   "Grand Canyon (Northern Arizona)"
+  ]
+ },
+ {
+  "id": "northern-lights",
+  "request": "Northern lights in February, plus dog sledding, five nights.",
+  "X": [
+   "Swedish Lapland (Arctic Sweden)",
+   "Tromsø & the Lyngen Alps (Arctic Norway)",
+   "East Norway (Norway)"
+  ],
+  "Y": [
+   "Bernese Oberland (Swiss Alps)",
+   "Niseko & Hokkaido Powder (Hokkaido, Japan)",
+   "Tromsø & the Lyngen Alps (Arctic Norway)"
+  ]
+ },
+ {
+  "id": "fall-colours",
+  "request": "Autumn foliage road trip in early October, small towns and short hikes.",
+  "X": [
+   "Great Smoky Mountains & Blue Ridge (Tennessee and North Carolina)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Crete (Greece)"
+  ],
+  "Y": [
+   "Great Smoky Mountains & Blue Ridge (Tennessee and North Carolina)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Crete (Greece)"
+  ]
+ },
+ {
+  "id": "lakes-swimming-summer",
+  "request": "Warm lakes to swim in, with mountains behind, in July, by train if possible.",
+  "X": [
+   "Banff & Jasper (Canadian Rockies, Alberta)",
+   "Ladakh (Trans-Himalaya, India)",
+   "Julian Alps (Slovenia)"
+  ],
+  "Y": [
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)",
+   "Banff & Jasper (Canadian Rockies, Alberta)",
+   "Julian Alps (Slovenia)"
+  ]
+ },
+ {
+  "id": "canada-lakes-canoe",
+  "request": "A canoe trip on wilderness lakes in August, portaging and camping.",
+  "X": [
+   "Adirondacks (Upstate New York)",
+   "Finnish Lakeland (Eastern Finland)",
+   "Lake Malawi (Malawi)"
+  ],
+  "Y": [
+   "The Italian Lakes (Lombardy & Garda, Italy)",
+   "Adirondacks (Upstate New York)",
+   "Lake Malawi (Malawi)"
+  ]
+ },
+ {
+  "id": "cheap-anywhere-warm-feb",
+  "request": "Somewhere warm and really cheap in February for three weeks, beaches and good food.",
+  "X": [
+   "Yucatán & the Riviera Maya (Mexico)",
+   "Wild Coast (Eastern Cape, South Africa)",
+   "Kerala: Munnar & the Backwaters (Southwest India)"
+  ],
+  "Y": [
+   "Philippines (Southeast Asia)",
+   "Yucatán & the Riviera Maya (Mexico)",
+   "Colombia (Northern South America)"
+  ]
+ },
+ {
+  "id": "luxury-safari-beach",
+  "request": "Luxury safari followed by a beach, in September, money is not a concern.",
+  "X": [
+   "Crete (Greece)",
+   "Okavango Delta (Northern Botswana)",
+   "Great Barrier Reef & Daintree (Tropical North Queensland, Australia)"
+  ],
+  "Y": [
+   "South Luangwa (Eastern Zambia)",
+   "Crete (Greece)",
+   "Great Barrier Reef & Daintree (Tropical North Queensland, Australia)"
+  ]
+ },
+ {
+  "id": "backpacking-south-america",
+  "request": "Backpacking in South America for a month from June, mountains, ruins and cheap hostels.",
+  "X": [
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Avenue of the Volcanoes (Ecuadorian Andes)",
+   "Cordillera Huayhuash (Central Peruvian Andes)"
+  ],
+  "Y": [
+   "Bolivia (Northern South America)",
+   "Colombia (Northern South America)",
+   "Sacred Valley & Machu Picchu (Cusco region, Peru)"
+  ]
+ },
+ {
+  "id": "short-haul-from-nyc",
+  "request": "Five nights in March, warm, beach and some hiking, short flight from New York.",
+  "X": [
+   "Jamaica (Caribbean)",
+   "Turks & Caicos (Caribbean)",
+   "Yucatán & the Riviera Maya (Mexico)"
+  ],
+  "Y": [
+   "Jamaica (Caribbean)",
+   "Dominica (Eastern Caribbean)",
+   "Guadeloupe (French Caribbean)"
+  ]
+ },
+ {
+  "id": "short-haul-from-singapore",
+  "request": "A long weekend from Singapore in June: nature, waterfalls, not a big city.",
+  "X": [
+   "Taman Negara (Peninsular Malaysia)",
+   "Ningaloo Coast (Western Australia)",
+   "Phong Nha-Ke Bang (Central Vietnam)"
+  ],
+  "Y": [
+   "Namtok Chet Sao Noi National Park (Chao Phraya Basin, Thailand)",
+   "Ningaloo Coast (Western Australia)",
+   "Siquijor (Visayas, Philippines)"
+  ]
+ },
+ {
+  "id": "from-sydney-winter-escape",
+  "request": "From Sydney in July, we want warmth, snorkelling and a short flight.",
+  "X": [
+   "Vanuatu: Efate, Tanna & Santo (Melanesia)",
+   "Great Barrier Reef & Daintree (Tropical North Queensland, Australia)",
+   "Port Moresby (Southern Papua New Guinea, Papua New Guinea)"
+  ],
+  "Y": [
+   "Great Barrier Reef & Daintree (Tropical North Queensland, Australia)",
+   "Vanuatu: Efate, Tanna & Santo (Melanesia)"
+  ]
+ },
+ {
+  "id": "from-delhi-mountains",
+  "request": "Mountains not too far from Delhi for a week in May, to escape the heat.",
+  "X": [
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Everest Region (Khumbu) (Eastern Nepal)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ],
+  "Y": [
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Himalayan North (India)",
+   "Bhutan (Eastern Himalaya)"
+  ]
+ },
+ {
+  "id": "from-sao-paulo",
+  "request": "From São Paulo, a week in July with waterfalls, hiking and wildlife, not too far.",
+  "X": [
+   "Transylvania & the Carpathians (Romania)",
+   "South Luangwa (Eastern Zambia)",
+   "Olympic Peninsula (Washington State)"
+  ],
+  "Y": [
+   "Chapada Diamantina (Bahia, Brazil)",
+   "Tambopata & Manu (Peruvian Amazon)",
+   "Pantanal (Mato Grosso, Brazil)"
+  ]
+ },
+ {
+  "id": "from-nairobi-beach",
+  "request": "A beach break in East Africa in January, short flight from Nairobi.",
+  "X": [
+   "Zanzibar (Tanzania)",
+   "Mombasa (Coastal Kenya, Kenya)",
+   "Diani Beach (Coastal Kenya, Kenya)"
+  ],
+  "Y": [
+   "Zanzibar (Tanzania)",
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Mauritius (Indian Ocean)"
+  ]
+ },
+ {
+  "id": "wheelchair-scenery",
+  "request": "Spectacular scenery that works for a wheelchair user, in June, with good hotels.",
+  "X": [
+   "Brighton (East Sussex, United Kingdom)",
+   "Narrabri (Western New England, Australia)",
+   "Watsonville (Santa Cruz County, United States)"
+  ],
+  "Y": [
+   "The Italian Lakes (Lombardy & Garda, Italy)",
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Society Islands (French Polynesia)"
+  ]
+ },
+ {
+  "id": "seniors-gentle",
+  "request": "A gentle trip for my parents in their seventies in May: gardens, lakes, short walks, good trains.",
+  "X": [
+   "Salzkammergut (Upper Austria)",
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Almaty & the Northern Tian Shan (Southeast Kazakhstan)"
+  ],
+  "Y": [
+   "The Italian Lakes (Lombardy & Garda, Italy)",
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Palawan: El Nido & Coron (Philippines)"
+  ]
+ },
+ {
+  "id": "toddler-beach",
+  "request": "Beach holiday with a toddler in June, shallow calm water, short transfers.",
+  "X": [
+   "Turks & Caicos (Caribbean)",
+   "Ningaloo Coast (Western Australia)",
+   "Seychelles (Mahé, Praslin and La Digue)"
+  ],
+  "Y": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Samoa (South Pacific)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)"
+  ]
+ },
+ {
+  "id": "teenagers-adventure",
+  "request": "An adventurous trip with teenagers in August: rafting, hiking, wildlife, two weeks.",
+  "X": [
+   "Transylvania & the Carpathians (Romania)",
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Victoria (Australia)"
+  ],
+  "Y": [
+   "Transylvania & the Carpathians (Romania)",
+   "Sabah, Borneo (Malaysian Borneo)",
+   "West MacDonnell Ranges (Alice Springs, Australia)"
+  ]
+ },
+ {
+  "id": "solo-female-first",
+  "request": "First solo trip as a woman, two weeks in October, safe, easy to meet people, nature and culture.",
+  "X": [
+   "Andalusia (Southern Spain)",
+   "Bali (Indonesia)",
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)"
+  ],
+  "Y": [
+   "Andalusia (Southern Spain)",
+   "Bali (Indonesia)",
+   "Rajasthan (Northwest India)"
+  ]
+ },
+ {
+  "id": "honeymoon-quiet",
+  "request": "A quiet honeymoon in October, mountains or coast, romantic and not crowded, 10 nights.",
+  "X": [
+   "Mediterranean Turkey (Turkey)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "High Atlas (Central Morocco)"
+  ],
+  "Y": [
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Lycian Coast (Southwest Turkey)",
+   "Seychelles (Mahé, Praslin and La Digue)"
+  ]
+ },
+ {
+  "id": "friends-group-cheap-summer",
+  "request": "Six friends, cheap week in July, beaches, hiking and nightlife in Europe.",
+  "X": [
+   "Gulf of Orosei & Supramonte (East Sardinia)",
+   "Peneda-Gerês (Northern Portugal)",
+   "Transylvania & the Carpathians (Romania)"
+  ],
+  "Y": [
+   "Crete (Greece)",
+   "Baku (Baku Region, Azerbaijan)",
+   "Gulf of Orosei & Supramonte (East Sardinia)"
+  ]
+ },
+ {
+  "id": "digital-detox",
+  "request": "Somewhere truly remote to disconnect for two weeks in August, cabins, hiking, no crowds.",
+  "X": [
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Corsica (Mediterranean France)",
+   "West MacDonnell Ranges (Alice Springs, Australia)"
+  ],
+  "Y": [
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "West MacDonnell Ranges (Alice Springs, Australia)",
+   "Réunion (French Indian Ocean)"
+  ]
+ },
+ {
+  "id": "hidden-gems-europe",
+  "request": "Hidden gems in Europe in June, places my friends have never heard of, nature and villages.",
+  "X": [
+   "Lake Ohrid (North Macedonia & Albania)",
+   "Peneda-Gerês (Northern Portugal)",
+   "Zagori & the Vikos Gorge (Epirus, Greece)"
+  ],
+  "Y": [
+   "Lake Ohrid (North Macedonia & Albania)",
+   "Peneda-Gerês (Northern Portugal)",
+   "Zagori & the Vikos Gorge (Epirus, Greece)"
+  ]
+ },
+ {
+  "id": "hidden-gems-asia",
+  "request": "Off-the-beaten-path mountains and culture in Asia in October, I have done Nepal and Japan.",
+  "X": [
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Annapurna Region (Central Nepal)",
+   "Everest Region (Khumbu) (Eastern Nepal)"
+  ],
+  "Y": [
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Southern Armenia (Armenia)",
+   "Himalayan North (India)"
+  ]
+ },
+ {
+  "id": "hidden-gems-americas",
+  "request": "Underrated nature in the Americas in March, somewhere most tourists skip.",
+  "X": [
+   "Buenos Aires (Argentina)",
+   "Turks & Caicos (Caribbean)",
+   "Yucatán & the Riviera Maya (Mexico)"
+  ],
+  "Y": [
+   "Caribbean Nicaragua (Nicaragua)",
+   "Western Kansas (Kansas, United States)",
+   "Northern Mexico (Mexico)"
+  ]
+ },
+ {
+  "id": "monsoon-avoid-july",
+  "request": "Asia in July but I want to avoid the monsoon, beaches or mountains either is fine.",
+  "X": [
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)",
+   "Siargao (Mindanao, Philippines)",
+   "Kazbegi (Greater Caucasus, Georgia)"
+  ],
+  "Y": [
+   "Bali (Indonesia)",
+   "Western Java (Java, Indonesia)",
+   "East Java (Java, Indonesia)"
+  ]
+ },
+ {
+  "id": "ski-april",
+  "request": "Late-season skiing in mid April, where is the snow still good?",
+  "X": [
+   "Svalbard (High Arctic, Norway)",
+   "Finnish Lapland (Arctic Finland)",
+   "Tromsø & the Lyngen Alps (Arctic Norway)"
+  ],
+  "Y": [
+   "Svalbard (High Arctic, Norway)",
+   "Chamonix & Mont Blanc (French Alps)",
+   "Tromsø & the Lyngen Alps (Arctic Norway)"
+  ]
+ },
+ {
+  "id": "hike-may-alps",
+  "request": "Hiking in the Alps in early May, what is realistic?",
+  "X": [
+   "Julian Alps (Slovenia)",
+   "Bavarian Alps (Alps, Austria)",
+   "Mont Blanc (Alps, Italy)"
+  ],
+  "Y": [
+   "High Atlas (Central Morocco)",
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Scottish Highlands & Skye (Scotland)"
+  ]
+ },
+ {
+  "id": "southern-hemisphere-ski",
+  "request": "Skiing in August.",
+  "X": [
+   "Queenstown & Wānaka (Central Otago, New Zealand)",
+   "Svalbard (High Arctic, Norway)",
+   "Bariloche & the Seven Lakes (Argentine Lake District)"
+  ],
+  "Y": []
+ },
+ {
+  "id": "beach-europe-april",
+  "request": "Beach holiday in Europe in April with swimming.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Crete (Greece)"
+  ],
+  "Y": [
+   "Crete (Greece)",
+   "Dalmatian Coast & Islands (Croatia)"
+  ]
+ },
+ {
+  "id": "safari-april-rains",
+  "request": "Safari in April, where does the rain not ruin it?",
+  "X": [
+   "Okavango Delta (Northern Botswana)",
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)"
+  ],
+  "Y": [
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)",
+   "Kruger & Sabi Sand (Northeast South Africa)",
+   "Okavango Delta (Northern Botswana)"
+  ]
+ },
+ {
+  "id": "desert-summer",
+  "request": "Desert trip in July that is not dangerously hot.",
+  "X": [
+   "Sossusvlei & the Namib (Southern Namibia)",
+   "West MacDonnell Ranges (Alice Springs, Australia)",
+   "Salta & Jujuy (Northwest Argentina)"
+  ],
+  "Y": [
+   "Central Mongolia & the Gobi (Mongolia)",
+   "Lençóis Maranhenses (Maranhão, Brazil)",
+   "Sossusvlei & the Namib (Southern Namibia)"
+  ]
+ },
+ {
+  "id": "himalaya-monsoon",
+  "request": "Himalayan trekking in July or August, is there anywhere in the rain shadow?",
+  "X": [
+   "Namche Bazaar (Khumbu, Nepal)"
+  ],
+  "Y": [
+   "Chamonix & Mont Blanc (French Alps)",
+   "Japanese Alps: Kamikochi & Takayama (Chubu, Japan)",
+   "North Cascades (Washington State)"
+  ]
+ },
+ {
+  "id": "patagonia-winter",
+  "request": "Patagonia in July.",
+  "X": [
+   "Salta & Jujuy (Northwest Argentina)",
+   "Buenos Aires (Argentina)",
+   "Península Valdés (Atlantic Patagonia, Argentina)"
+  ],
+  "Y": [
+   "Península Valdés (Atlantic Patagonia, Argentina)",
+   "El Impenetrable National Park (Patagonia, Argentina)",
+   "Viedma (Patagonia, Argentina)"
+  ]
+ },
+ {
+  "id": "japan-summer-cool",
+  "request": "Japan in August but somewhere cool, hiking and nature rather than cities.",
+  "X": [
+   "Hokkaido (Japan)",
+   "Tokyo (Kanto, Japan)",
+   "Tohoku (Japan)"
+  ],
+  "Y": [
+   "Almaty & the Northern Tian Shan (Southeast Kazakhstan)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Picos de Europa (Northern Spain)"
+  ]
+ },
+ {
+  "id": "christmas-snow-not-ski",
+  "request": "A snowy Christmas week without skiing: saunas, reindeer, cosy cabins.",
+  "X": [
+   "Cradle Mountain & Tasmania’s West (Tasmania, Australia)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Kaikōura (South Island, New Zealand)"
+  ],
+  "Y": [
+   "Chamonix & Mont Blanc (French Alps)",
+   "Niseko & Hokkaido Powder (Hokkaido, Japan)",
+   "Mammoth Lakes & the Eastern Sierra (California)"
+  ]
+ },
+ {
+  "id": "shoulder-season-med",
+  "request": "Mediterranean in late October, culture first, a swim would be a bonus.",
+  "X": [
+   "Israel (Middle East)",
+   "Lycian Coast (Southwest Turkey)",
+   "Crete (Greece)"
+  ],
+  "Y": [
+   "Crete (Greece)",
+   "Lycian Coast (Southwest Turkey)",
+   "Gulf of Orosei & Supramonte (East Sardinia)"
+  ]
+ },
+ {
+  "id": "vague-somewhere-nice",
+  "request": "Somewhere nice.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Florida Keys & Everglades (South Florida)",
+   "Dubai (United Arab Emirates)"
+  ],
+  "Y": [
+   "Buenos Aires (Argentina)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Turks & Caicos (Caribbean)"
+  ]
+ },
+ {
+  "id": "vague-surprise",
+  "request": "Surprise me. Two weeks in May.",
+  "X": [
+   "The Azores (Mid-Atlantic, Portugal)",
+   "Sabah, Borneo (Malaysian Borneo)",
+   "Salta & Jujuy (Northwest Argentina)"
+  ],
+  "Y": [
+   "Outback New South Wales (New South Wales, Australia)",
+   "Bantry (County Cork, Ireland)",
+   "Sumba (East Nusa Tenggara, Indonesia)"
+  ]
+ },
+ {
+  "id": "vague-nature",
+  "request": "I just want nature and quiet.",
+  "X": [
+   "Białowieża Forest (Eastern Poland)",
+   "Turks & Caicos (Caribbean)",
+   "Copper Canyon (Sierra Madre, Chihuahua)"
+  ],
+  "Y": [
+   "North Bengal (West Bengal, India)",
+   "Turks & Caicos (Caribbean)",
+   "East Coast and Midlands (Ireland)"
+  ]
+ },
+ {
+  "id": "contradiction-cheap-luxury",
+  "request": "Luxury resorts but on a tight budget, in August.",
+  "X": [
+   "Aceh (Sumatra, Indonesia)",
+   "Melrose (Scottish Borders, United Kingdom)",
+   "Pello (Sea Lapland and Torne River Valley, Finland)"
+  ],
+  "Y": [
+   "Bernese Oberland (Swiss Alps)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Kruger & Sabi Sand (Northeast South Africa)"
+  ]
+ },
+ {
+  "id": "contradiction-remote-easy",
+  "request": "Completely remote and wild but easy to get to with no long transfers, in September.",
+  "X": [
+   "Sacred Valley & Machu Picchu (Cusco region, Peru)",
+   "Drakensberg (KwaZulu-Natal, South Africa)",
+   "North Cascades (Washington State)"
+  ],
+  "Y": [
+   "Chamonix & Mont Blanc (French Alps)",
+   "Avenue of the Volcanoes (Ecuadorian Andes)",
+   "Drakensberg (KwaZulu-Natal, South Africa)"
+  ]
+ },
+ {
+  "id": "everything",
+  "request": "Beaches, mountains, cities, wildlife, food, skiing and deserts, in one week.",
+  "X": [
+   "Crete (Greece)",
+   "Québec City & Charlevoix (Québec)",
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)"
+  ],
+  "Y": [
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Tyrolean Alps (Western Austria)",
+   "Sri Lanka South Coast (Galle to Yala, Sri Lanka)"
+  ]
+ },
+ {
+  "id": "negation",
+  "request": "Not Europe, no beaches, no long hikes, in November.",
+  "X": [
+   "Buenos Aires (Argentina)",
+   "Dubai (United Arab Emirates)",
+   "Kyoto & Nara (Kansai, Japan)"
+  ],
+  "Y": [
+   "Buenos Aires (Argentina)",
+   "Sydney & the Blue Mountains (New South Wales, Australia)",
+   "Dubai (United Arab Emirates)"
+  ]
+ },
+ {
+  "id": "typos",
+  "request": "hikng and beachs in septmber somwhere cheap",
+  "X": [
+   "Bromo-Tengger-Semeru National Park (East Java, Indonesia)",
+   "Ubon Ratchathani (Southern Isaan, Thailand)",
+   "Baltoro Muztagh (Gilgit-Baltistan, Pakistan)"
+  ],
+  "Y": [
+   "Lake Atitlán & Antigua (Guatemalan Highlands)",
+   "Taman Negara (Peninsular Malaysia)",
+   "High Atlas (Central Morocco)"
+  ]
+ },
+ {
+  "id": "one-word-diving",
+  "request": "Diving.",
+  "X": [
+   "Dalmatian Coast & Islands (Croatia)",
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Turks & Caicos (Caribbean)"
+  ],
+  "Y": [
+   "Turks & Caicos (Caribbean)",
+   "Seychelles (Mahé, Praslin and La Digue)",
+   "Vanuatu: Efate, Tanna & Santo (Melanesia)"
+  ]
+ },
+ {
+  "id": "specific-niche-tea",
+  "request": "Tea plantations, misty hills and train rides, in February.",
+  "X": [
+   "Dubai (United Arab Emirates)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Florida Keys & Everglades (South Florida)"
+  ],
+  "Y": [
+   "Sri Lanka Hill Country (Central Sri Lanka)",
+   "Hoi An & Central Vietnam (Hue to Hoi An, Vietnam)",
+   "Bernese Oberland (Swiss Alps)"
+  ]
+ },
+ {
+  "id": "specific-niche-fjords",
+  "request": "Fjords I can kayak in, with few cruise ships, in August.",
+  "X": [
+   "Geiranger (Møre og Romsdal, Norway)",
+   "Svendborg (Funen, Denmark)",
+   "Picton (Marlborough, New Zealand)"
+  ],
+  "Y": [
+   "Bernese Oberland (Swiss Alps)",
+   "Rio de Janeiro & Costa Verde (Southeast Brazil)",
+   "Porto & the Douro Valley (Northern Portugal)"
+  ]
+ },
+ {
+  "id": "specific-niche-hot-springs",
+  "request": "Natural hot springs in the mountains in winter, away from big resorts.",
+  "X": [
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Avenue of the Volcanoes (Ecuadorian Andes)",
+   "Réunion (French Indian Ocean)"
+  ],
+  "Y": [
+   "Costa Rica (Mexico & Central America)",
+   "Tenerife & La Gomera (Canary Islands, Spain)",
+   "Atacama Desert (Northern Chile)"
+  ]
+ },
+ {
+  "id": "specific-niche-caves",
+  "request": "Caves, karst and underground rivers, in April.",
+  "X": [
+   "Moravian Karst (South Moravia, Czech Republic)",
+   "Mole Creek Karst National Park (Western Tasmania, Australia)",
+   "Jingxi (Baise, China)"
+  ],
+  "Y": [
+   "Amalfi Coast (Campania, Italy)",
+   "Florida Keys & Everglades (South Florida)",
+   "Buenos Aires (Argentina)"
+  ]
+ },
+ {
+  "id": "specific-niche-monasteries",
+  "request": "Remote monasteries and high passes in October.",
+  "X": [
+   "Santa Fe & Taos (Northern New Mexico)",
+   "Yunnan: Lijiang & Tiger Leaping Gorge (Northwest Yunnan, China)",
+   "Amalfi Coast (Campania, Italy)"
+  ],
+  "Y": [
+   "Drakensberg (KwaZulu-Natal, South Africa)",
+   "Yakushima (Kagoshima, Japan)",
+   "Sydney & the Blue Mountains (New South Wales, Australia)"
+  ]
+ },
+ {
+  "id": "specific-niche-waterfalls",
+  "request": "The best waterfalls in the world, in the season when they are in full flow.",
+  "X": [
+   "Amalfi Coast (Campania, Italy)",
+   "Florida Keys & Everglades (South Florida)",
+   "Dubai (United Arab Emirates)"
+  ],
+  "Y": [
+   "Niagara Frontier (New York, United States)",
+   "Moselle Valley (Rhineland-Palatinate, Germany)",
+   "Paniyeli Poru (Ernakulam District, India)"
+  ]
+ },
+ {
+  "id": "specific-niche-cycling",
+  "request": "A week of road cycling on quiet mountain passes in June.",
+  "X": [
+   "High Atlas (Central Morocco)",
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ],
+  "Y": [
+   "High Atlas (Central Morocco)",
+   "Cordillera Blanca (Huaraz, Peruvian Andes)",
+   "Issyk-Kul & Karakol (Tian Shan, Kyrgyzstan)"
+  ]
+ },
+ {
+  "id": "long-trip-sabbatical",
+  "request": "A three-month sabbatical starting in January, slow travel, hiking, culture and cheap living.",
+  "X": [
+   "Coffee Region & Valle de Cocora (Andean Colombia)",
+   "Annapurna Region (Central Nepal)",
+   "Wild Coast (Eastern Cape, South Africa)"
+  ],
+  "Y": [
+   "Coffee Region & Valle de Cocora (Andean Colombia)",
+   "Santo Antão (Cape Verde)",
+   "Sri Lanka Hill Country (Central Sri Lanka)"
+  ]
+ },
+ {
+  "id": "two-nights",
+  "request": "Two nights away next month from Paris, countryside and good food.",
+  "X": [
+   "Marrakech (Morocco)",
+   "Cappadocia (Central Turkey)",
+   "Peneda-Gerês (Northern Portugal)"
+  ],
+  "Y": [
+   "Cardiff (Glamorgan, United Kingdom)",
+   "Naples (Metropolitan Naples, Italy)",
+   "Granada (Andalusia, Spain)"
+  ]
+ }
+]

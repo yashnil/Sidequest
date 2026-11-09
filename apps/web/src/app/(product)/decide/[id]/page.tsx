@@ -1,17 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import {
-  ADVISOR_QUESTIONS,
-  destinationCatalog,
-  emptyComposerAnswers,
-  parseTravelRequest,
-  profileChips,
-  type QuestionId,
-} from '@sidequest/core';
+import { ADVISOR_QUESTIONS, emptyComposerAnswers, needsResearch, parseTravelRequest, profileChips, type QuestionId } from '@sidequest/core';
 import { AdvisorInterview } from '@/components/advisor/AdvisorInterview';
 import { AdvisorShortlistView } from '@/components/advisor/AdvisorShortlistView';
+import { advisorWorldSample } from '@/components/advisor/world-sample';
 import { AdvisorImagery } from './AdvisorImagery';
+import { AdvisorResearch } from './AdvisorResearch';
+import { advisorWorld } from '@/lib/atlas/world';
+import { advisorResearchChoice } from '@/lib/providers/switches';
 import { ownedDecisionSession } from '@/lib/net/decision-access';
 import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { advisorImageSubjects } from '@/lib/destinations/advisor-images';
@@ -19,11 +16,15 @@ import { advisorImageSubjects } from '@/lib/destinations/advisor-images';
 /**
  * ONE DECISION: THE INTERVIEW UNTIL THERE IS A SHORTLIST, THEN THE SHORTLIST.
  *
- * Reads rows only. The interview runs in the browser on the stored answers;
- * the shortlist is built by an explicit action and stored, so a refresh renders
- * what is on disk and a back button costs nothing. A session from the previous
- * ranker (stored before the 2026-10 rebuild) has its answers and no advisor
- * shortlist, so it re-enters the interview with everything it already said.
+ * Reads rows only. The interview's questions run in the browser on the stored
+ * answers and ask the server which comes next; the shortlist is built by an
+ * explicit action and stored, so a refresh renders what is on disk and a back
+ * button costs nothing. A session from the previous ranker (stored before the
+ * 2026-10 rebuild) has its answers and no advisor shortlist, so it re-enters
+ * the interview with everything it already said.
+ *
+ * The atlas stays on the server: the screens get a thinned sample of real
+ * destination centres to draw (`advisorWorldSample`) and the counts beside it.
  */
 export const dynamic = 'force-dynamic';
 
@@ -45,8 +46,7 @@ export default async function DecideSessionPage({
   if (!session) notFound();
   if (session.resolvedTripId) redirect(`/trips/${session.resolvedTripId}/plan`);
 
-  const catalog = destinationCatalog();
-  const points = catalog.map((entry) => ({ id: entry.id, lat: entry.center.lat, lng: entry.center.lng }));
+  const sample = advisorWorldSample();
   const editing = query.edit === '1';
   const askParam = typeof query.ask === 'string' ? query.ask : null;
   const startAt = askParam && ADVISOR_QUESTIONS.some((question) => question.id === askParam) ? (askParam as QuestionId) : null;
@@ -55,14 +55,25 @@ export default async function DecideSessionPage({
     const subjects = advisorImageSubjects(session.advisor);
     const images = acceptedImagesFor(subjects);
     const missing = subjects.filter((subject) => !images[subject.id]).length;
+    /*
+     * Whether one wider look is worth asking for: research is switched on, the
+     * atlas is there to verify what comes back, this list has not been widened
+     * already, and it is thin or weak enough to warrant it. Decided here so the
+     * browser is told yes or no and nothing about why.
+     */
+    const researchPossible =
+      advisorResearchChoice() !== 'off' && advisorWorld().atlas !== null && session.advisor.stats.research === null && needsResearch(session.answers, session.advisor);
     return (
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+        {/* Research first: actions run in the order they are asked, and the photographs should be found for the list it leaves. */}
+        <AdvisorResearch sessionId={id} possible={researchPossible} />
         <AdvisorImagery sessionId={id} missing={missing} />
         <AdvisorShortlistView
           sessionId={id}
           shortlist={session.advisor}
           images={images}
-          points={points}
+          dots={sample.dots}
+          sampleComplete={sample.complete}
           summary={profileChips(session.answers).map((chip) => chip.label)}
         />
         <p className="mt-14 rule-top pt-6 type-small text-ink-muted">
@@ -83,7 +94,9 @@ export default async function DecideSessionPage({
   }
 
   const request = session.answers.discovery?.request;
-  const understood = request ? parseTravelRequest(request, emptyComposerAnswers('help_me_decide', new Date())).readings.map((reading) => reading.label) : [];
+  /* Read with the atlas, as the request was when it was stored, so a named place ("in the Karakoram") appears among what was understood. */
+  const now = new Date();
+  const understood = request ? parseTravelRequest(request, emptyComposerAnswers('help_me_decide', now), now, advisorWorld().atlas ?? undefined).readings.map((reading) => reading.label) : [];
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -100,6 +113,9 @@ export default async function DecideSessionPage({
           initial={editing ? { ...session.answers, discovery: session.answers.discovery ? { ...session.answers.discovery, asked: [] } : undefined } : session.answers}
           understood={understood}
           startAt={startAt}
+          dots={sample.dots}
+          worldSize={sample.size}
+          sampleComplete={sample.complete}
         />
       </div>
       <p className="mt-14 rule-top pt-6 type-small text-ink-muted">

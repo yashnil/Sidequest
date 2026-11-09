@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { TRIP_THEMES, type TripTheme } from '@sidequest/core';
-import { destinationCatalog } from '@sidequest/core';
+import { formatCount } from '@/components/advisor/advisor-copy';
 import { AdvisorStart } from '@/components/advisor/AdvisorStart';
+import { DataAttribution } from '@/components/advisor/DataAttribution';
 import { WorldDots } from '@/components/advisor/WorldDots';
+import { advisorWorldSample } from '@/components/advisor/world-sample';
 import type { DecisionAnswersInput } from '@/lib/destinations/decision-answers';
 import { seedDestinationIndexIfRequested } from '@/lib/destinations/seed';
 
@@ -78,13 +80,14 @@ export default async function DecidePage({
   seedDestinationIndexIfRequested();
   const initial = prefillFrom(await searchParams);
   /*
-   * The destination advisor reads its own catalog of travel destinations (see
-   * `@sidequest/core` → `advisor/catalog`), not the place index, so this screen
-   * no longer depends on an index having been built.
+   * The advisor ranks a global atlas that never leaves the server (see
+   * `lib/atlas/world`). This screen gets a thinned sample of real destination
+   * centres to draw and the true counts to caption them with; when the atlas
+   * could not be loaded, the sample is the curated catalog and says so.
    */
-  const catalog = destinationCatalog();
-  const regions = new Set(catalog.map((entry) => entry.worldRegion)).size;
-  const points = catalog.map((entry) => ({ id: entry.id, lat: entry.center.lat, lng: entry.center.lng }));
+  const sample = advisorWorldSample();
+  const size = formatCount(sample.size);
+  const countries = formatCount(sample.countries);
 
   return (
     <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -102,12 +105,21 @@ export default async function DecidePage({
             <AdvisorStart prefill={initial} />
           </div>
         </div>
-        <figure className="survey-night rounded-[var(--radius-card)] p-4 text-bone lg:mt-8">
-          <WorldDots points={points} highlighted={[]} tone="night" className="h-auto w-full" label={`World map of the ${catalog.length} destinations Sidequest compares`} />
+        <figure className="survey-night min-w-0 rounded-[var(--radius-card)] p-4 text-bone lg:mt-8">
+          <WorldDots
+            dots={sample.dots}
+            highlighted={[]}
+            tone="night"
+            className="h-auto w-full"
+            label={sample.complete ? `World map of the ${size} destinations Sidequest compares` : `World map of a sample of the ${size} destinations Sidequest compares`}
+          />
           <figcaption className="mt-3 text-sm text-bone/75">
-            {catalog.length} destinations across {regions} parts of the world — parks, ranges, coasts and islands people really travel to, each with a season, places to sleep and things to do.
+            {sample.complete
+              ? `${size} destinations in ${countries} countries — parks, ranges, coasts and islands, each written up by us with a season, places to sleep and things to do. Each dot is one of them.`
+              : `${size} destinations in ${countries} countries — cities, islands, parks, ranges and coasts read from open travel guides and map data, alongside our own curated picks. Dots are a sample.`}
           </figcaption>
-          <p className="mt-2 text-[0.7rem] text-bone/45">Land: Natural Earth. Each dot is a real destination centre.</p>
+          <p className="mt-2 text-[0.7rem] text-bone/45">Land: Natural Earth. Every dot is a real destination centre.</p>
+          {sample.complete ? null : <DataAttribution tone="night" className="mt-1 text-[0.7rem] leading-snug text-bone/45" />}
         </figure>
       </div>
 

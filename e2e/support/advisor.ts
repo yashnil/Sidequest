@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Drives the destination advisor the way a quick traveller would: type a
@@ -8,6 +8,18 @@ import { expect, type Page } from '@playwright/test';
  */
 export const ADVISOR_REQUEST = 'Hiking and mountains in July, about 9 nights.';
 
+/**
+ * The question that can be answered right now.
+ *
+ * Which follow-up comes next is worked out on the server, one call per answer.
+ * While that call is in flight the question just answered stays on screen,
+ * marked busy, so nothing jumps — and a helper that pressed its options again
+ * would be answering a question that is already answered.
+ */
+export function currentQuestion(page: Page): Locator {
+  return page.locator('[data-testid^="advisor-question-"]:not([aria-busy="true"])').first();
+}
+
 export async function startAdvisor(page: Page, text = ADVISOR_REQUEST): Promise<string> {
   await page.goto('/decide');
   await page.getByLabel('In your own words').fill(text);
@@ -16,12 +28,24 @@ export async function startAdvisor(page: Page, text = ADVISOR_REQUEST): Promise<
   return new URL(page.url()).pathname.split('/').pop()!;
 }
 
-export async function answerUntilShortlist(page: Page, maxSteps = 12): Promise<void> {
+/**
+ * Answers whatever is on screen until the shortlist appears.
+ *
+ * Bounded by time, not by a count of loop turns: each answer is followed by a
+ * server round trip that chooses the next question, so how many turns pass
+ * while the screen is settling says nothing about how far the interview has
+ * got. `maxAnswers` is the interview's own ceiling (two essentials and five
+ * follow-ups) with room to spare — exceeding it means the interview is not
+ * stopping, which is a failure worth seeing.
+ */
+export async function answerUntilShortlist(page: Page, maxAnswers = 12, budgetMs = 120_000): Promise<void> {
   const shortlist = page.getByTestId('advisor-shortlist');
-  for (let step = 0; step < maxSteps; step += 1) {
+  const deadline = Date.now() + budgetMs;
+  let answered = 0;
+  while (Date.now() < deadline) {
     if (await shortlist.isVisible().catch(() => false)) return;
-    const question = page.locator('[data-testid^="advisor-question-"]').first();
-    if (await question.isVisible().catch(() => false)) {
+    const question = currentQuestion(page);
+    if (answered < maxAnswers && (await question.isVisible().catch(() => false))) {
       const checkboxes = question.getByRole('checkbox');
       if ((await checkboxes.count()) > 0) {
         await checkboxes.first().check();
@@ -29,12 +53,13 @@ export async function answerUntilShortlist(page: Page, maxSteps = 12): Promise<v
       } else {
         await question.getByRole('radio').first().click();
       }
+      answered += 1;
       await page.waitForTimeout(150);
       continue;
     }
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(300);
   }
-  await expect(shortlist).toBeVisible({ timeout: 30_000 });
+  await expect(shortlist).toBeVisible({ timeout: 5_000 });
 }
 
 export async function adviseToShortlist(page: Page, text = ADVISOR_REQUEST): Promise<string> {

@@ -58,6 +58,8 @@ export interface AdvisorProfile {
   climate: 'warm' | 'mild' | 'cold' | null;
   /** The traveller refused snow and ice: a snowbound month is out of season for them. */
   avoidSnow: boolean;
+  /** The traveller asked for the aurora: only high latitudes can answer. */
+  aurora: boolean;
   /** Interests the traveller refused, as experience mappings. */
   refused: AdvisorInterest[];
   /** How much warmer (+) or cooler (−) than the stated climate, in refinement steps. */
@@ -67,6 +69,14 @@ export interface AdvisorProfile {
   visited: string[];
   excluded: Set<string>;
   similarTo: string | null;
+  /** Destination ids the request named as its geography ("in the Karakoram"). Null = anywhere. */
+  within: string[] | null;
+  /** Words from the request that no structured answer captured ("tea plantations"), for lexical retrieval. */
+  terms: string[];
+  /** The same words as written, for retrieval by meaning. */
+  phrase: string | null;
+  /** Destination ids the request ruled out by name; nothing inside one is offered. */
+  outside: string[];
   /** Weight multipliers refinements put on factors, e.g. "easier logistics" → access ×2. */
   emphasis: Partial<Record<FactorId, number>>;
   /** Party size, for copy. */
@@ -186,13 +196,17 @@ function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAns
           : { birding: 0.7, wildlife_general: 0.3 };
     }
     if (key === 'mountains' && discovery?.mountainStyle) {
-      mapping = discovery.mountainStyle === 'hut_to_hut'
+      mapping = discovery.mountainStyle === 'glaciers'
+        ? { glaciers_ice: 0.7, high_mountains: 0.2, coastal_scenery: 0.1 }
+        : discovery.mountainStyle === 'hut_to_hut'
         ? { high_mountains: 0.5, multi_day_trekking: 0.4, day_hiking: 0.1 }
         : discovery.mountainStyle === 'high_altitude'
           ? { high_mountains: 0.55, multi_day_trekking: 0.3, glaciers_ice: 0.15 }
           : { day_hiking: 0.5, high_mountains: 0.4, lakes: 0.1 };
     }
     if (key === 'beaches' && discovery?.swimStyle === 'warm_sea') mapping = { beaches_swimming: 0.7, snorkel_dive: 0.3 };
+    if (key === 'beaches' && discovery?.swimStyle === 'diving') mapping = { snorkel_dive: 0.75, beaches_swimming: 0.15, coastal_scenery: 0.1 };
+    if (key === 'beaches' && discovery?.swimStyle === 'snorkel') mapping = { beaches_swimming: 0.45, snorkel_dive: 0.4, coastal_scenery: 0.15 };
     if (key === 'lakes' && discovery?.swimStyle === 'lakes') mapping = { lakes: 1 };
     interests.push({ key, weight, mapping });
   }
@@ -230,7 +244,8 @@ export function effectiveRefinements(list: readonly Refinement[]): Refinement[] 
 
 export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
   const discovery = answers.discovery;
-  const origin = originPointFromText(answers.origin, answers.originCountry);
+  const named = discovery?.originPoint;
+  const origin: OriginPoint | null = originPointFromText(answers.origin, answers.originCountry) ?? (named ? { lat: named.lat, lng: named.lng, label: named.label, countryCode: named.countryCode, basis: 'city' } : null);
   const { months, flexible } = monthsOf(answers, origin);
   const refinements = effectiveRefinements(discovery?.refinements ?? []);
   const focus = focusOf(answers);
@@ -350,12 +365,17 @@ export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
     novelty,
     climate,
     avoidSnow: discovery?.avoidSnow === true && !focus.includes('snow'),
+    aurora: discovery?.aurora === true,
     refused: (discovery?.refused ?? []).filter((key) => !focus.includes(key)).map((key) => ({ key, weight: 1, mapping: FOCUS_EXPERIENCES[key] })),
     warmthShift,
     avoidText: (answers.avoid ?? '').toLowerCase(),
     visited: (answers.visited ?? []).map((name) => name.toLowerCase()),
     excluded: new Set(discovery?.excluded ?? []),
     similarTo: discovery?.similarTo ?? null,
+    within: discovery?.within?.length ? [...discovery.within] : null,
+    terms: [...(discovery?.terms ?? [])],
+    phrase: discovery?.phrase ?? null,
+    outside: [...(discovery?.outside ?? [])],
     emphasis,
     adults: answers.adults,
     children: answers.children,

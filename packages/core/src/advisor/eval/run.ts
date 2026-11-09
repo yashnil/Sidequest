@@ -2,9 +2,11 @@ import type { TripComposerAnswers } from '../../schemas/composer';
 import { emptyComposerAnswers } from '../../schemas/composer';
 import { buildAdvisorShortlist } from '../advise';
 import type { CatalogDestination } from '../catalog/schema';
+import type { Destination } from '../destination';
 import { advisorKm, originPointFromText } from '../origin';
 import { parseTravelRequest } from '../parse';
-import { ADVISOR_QUESTIONS, answerAdvisorQuestion, nextQuestion, skipAdvisorQuestion, type QuestionId } from '../questions';
+import { ADVISOR_QUESTIONS, answerAdvisorQuestion, skipAdvisorQuestion, type QuestionId } from '../questions';
+import { nextQuestion } from '../interview-policy';
 import type { AdvisorShortlist } from '../shortlist-schema';
 import type { Check, Scenario } from './scenarios';
 
@@ -16,6 +18,9 @@ import type { Check, Scenario } from './scenarios';
  * check against the catalog entries of the primary picks. Deterministic, no
  * clock beyond the fixed `now`, no network.
  */
+
+/** A curated entry, plain or carrying the atlas's measurements. The checks read only its editorial fields. */
+type EvalEntry = CatalogDestination | Destination;
 
 export const EVAL_NOW = new Date('2026-10-26T12:00:00Z');
 
@@ -48,8 +53,8 @@ export function baseAnswers(): TripComposerAnswers {
   return { ...emptyComposerAnswers('help_me_decide', EVAL_NOW), dates: { mode: 'month', wantsRecommendation: false } };
 }
 
-function evaluate(check: Check, picks: CatalogDestination[], run: { asked: QuestionId[]; answers: TripComposerAnswers }): CheckResult {
-  const all = (predicate: (entry: CatalogDestination) => boolean, what: string): CheckResult => {
+function evaluate(check: Check, picks: EvalEntry[], run: { asked: QuestionId[]; answers: TripComposerAnswers }): CheckResult {
+  const all = (predicate: (entry: EvalEntry) => boolean, what: string): CheckResult => {
     const failing = picks.filter((entry) => !predicate(entry)).map((entry) => entry.id);
     return { check, pass: picks.length > 0 && failing.length === 0, detail: picks.length === 0 ? 'no picks' : failing.length === 0 ? `all ${what}` : `not ${what}: ${failing.join(', ')}` };
   };
@@ -61,15 +66,15 @@ function evaluate(check: Check, picks: CatalogDestination[], run: { asked: Quest
     case 'in_countries':
       return all((entry) => entry.countries.some((code) => check.countries.includes(code)), 'in the requested countries');
     case 'in_season':
-      return all((entry) => check.months.some((month) => entry.season[month - 1]! >= 2), `in season in ${check.months.join('/')}`);
+      return all((entry) => check.months.some((month) => (entry.season?.[month - 1] ?? 0) >= 2), `in season in ${check.months.join('/')}`);
     case 'warmth':
       return all((entry) => check.months.some((month) => (check.min === undefined || entry.highC[month - 1]! >= check.min) && (check.max === undefined || entry.highC[month - 1]! <= check.max)), `within the temperature bound`);
     case 'max_cost':
       return all((entry) => entry.cost <= check.cost, `cost ≤ ${check.cost}`);
     case 'low_mobility':
-      return all((entry) => entry.lowMobility >= check.min, `low-mobility ≥ ${check.min}`);
+      return all((entry) => (entry.lowMobility ?? 0) >= check.min, `low-mobility ≥ ${check.min}`);
     case 'family':
-      return all((entry) => entry.family >= check.min, `family ≥ ${check.min}`);
+      return all((entry) => (entry.family ?? 0) >= check.min, `family ≥ ${check.min}`);
     case 'no_car':
       return all((entry) => entry.access.car !== 'essential', 'doable without a car');
     case 'fits_nights':
@@ -100,7 +105,7 @@ function evaluate(check: Check, picks: CatalogDestination[], run: { asked: Quest
   }
 }
 
-export function runScenario(scenario: Scenario, catalog: readonly CatalogDestination[]): ScenarioRun {
+export function runScenario(scenario: Scenario, catalog: readonly EvalEntry[]): ScenarioRun {
   const started = Date.now();
   const parsed = parseTravelRequest(scenario.text, baseAnswers());
   let answers = parsed.answers;

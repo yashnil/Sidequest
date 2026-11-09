@@ -1,6 +1,5 @@
 import { monthNormal, type ClimateProfile } from '../schemas/climate';
 import { catalogDestinationById } from './catalog/index';
-import type { CatalogDestination } from './catalog/schema';
 import { monthWord } from './score';
 import type { AdvisorPick } from './shortlist-schema';
 
@@ -21,7 +20,7 @@ export function checkPickClimate(
   pick: AdvisorPick,
   profile: ClimateProfile | null,
   failed: boolean,
-  entry: CatalogDestination | null = catalogDestinationById(pick.id),
+  entry: { highC: readonly number[] } | null = catalogDestinationById(pick.id),
 ): AdvisorPick['climate'] {
   if (!profile) {
     return failed

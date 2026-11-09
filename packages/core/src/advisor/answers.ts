@@ -32,6 +32,7 @@ export const FOCUS_KEYS = [
   'snow',
   'culture_food',
   'cities',
+  'rail',
 ] as const;
 export type FocusKey = (typeof FOCUS_KEYS)[number];
 
@@ -48,6 +49,7 @@ export const FOCUS_LABELS: Record<FocusKey, string> = {
   snow: 'Snow and winter',
   culture_food: 'Culture and food',
   cities: 'Cities',
+  rail: 'Rail journeys',
 };
 
 /**
@@ -67,6 +69,7 @@ export const FOCUS_EXPERIENCES: Record<FocusKey, Partial<Record<Experience, numb
   snow: { winter_snow: 1 },
   culture_food: { villages_culture: 0.55, food: 0.45 },
   cities: { city_life: 0.7, food: 0.3 },
+  rail: { rail_journeys: 0.7, villages_culture: 0.3 },
 };
 
 export const ADVENTURE_LEVELS = ['comfortable', 'active', 'rugged', 'expedition'] as const;
@@ -143,17 +146,37 @@ export const advisorAnswersSchema = z.object({
   avoidSnow: z.boolean().optional(),
   /** Interests the traveller explicitly refused ("no cities"): a place built around one is marked down, never ruled out. */
   refused: z.array(z.enum(FOCUS_KEYS)).max(FOCUS_KEYS.length).optional(),
-  mountainStyle: z.enum(['base_day_hikes', 'hut_to_hut', 'high_altitude']).optional(),
-  swimStyle: z.enum(['warm_sea', 'lakes', 'either']).optional(),
+  /** `glaciers` is read from the request ("glaciers and icebergs"): the ice is the point, not the climbing. */
+  mountainStyle: z.enum(['base_day_hikes', 'hut_to_hut', 'high_altitude', 'glaciers']).optional(),
+  /** The traveller asked for the northern (or southern) lights, which only high latitudes have. */
+  aurora: z.boolean().optional(),
+  /** `diving` and `snorkel` are read from the request ("world-class diving", "snorkelling off the beach"): the water is the point, not the sand. */
+  swimStyle: z.enum(['warm_sea', 'lakes', 'either', 'diving', 'snorkel']).optional(),
   /** What the traveller typed, verbatim, so a reading can always be checked against it. */
   request: z.string().max(600).optional(),
   /** What Sidequest took as given without being told, in words, so it can be corrected. */
   assumptions: z.array(z.string().min(1).max(160)).max(12).default([]),
   refinements: z.array(z.enum(REFINEMENTS)).max(20).default([]),
   /** Catalog ids the traveller set aside ("show me something different"). */
-  excluded: z.array(z.string().min(1).max(60)).max(60).default([]),
-  /** "More like this one": a catalog id whose profile becomes a soft target. */
-  similarTo: z.string().min(1).max(60).optional(),
+  excluded: z.array(z.string().min(1).max(120)).max(60).default([]),
+  /** "More like this one": a destination id whose profile becomes a soft target. */
+  similarTo: z.string().min(1).max(120).optional(),
+  /**
+   * Destinations the request named as its geography ("trekking in the
+   * Karakoram", "islands in Indonesia"), as atlas ids. Everything recommended
+   * lies inside one of them. A named place is a scope, never the answer itself.
+   */
+  within: z.array(z.string().min(1).max(120)).max(6).optional(),
+  /** The same scope in words, for the chips and the read-back. */
+  withinLabels: z.array(z.string().min(1).max(80)).max(6).optional(),
+  /** Destinations the request ruled out by name ("not Bali", "I have done Nepal"): nothing inside one is offered. */
+  outside: z.array(z.string().min(1).max(120)).max(8).optional(),
+  /** Where the traveller starts, when the request named a place the built-in list of departure cities does not hold. */
+  originPoint: z.object({ lat: z.number(), lng: z.number(), label: z.string().max(80), countryCode: z.string().length(2).nullable() }).optional(),
+  /** Words from the request no structured answer captured ("tea plantations", "fjords"), kept for lexical retrieval. */
+  terms: z.array(z.string().min(2).max(40)).max(16).optional(),
+  /** The same words as the traveller wrote them, in order ("tea plantations misty hills train rides"), for retrieval by meaning. */
+  phrase: z.string().max(200).optional(),
   /** Advisor questions already put to the traveller, answered or skipped. */
   asked: z.array(z.string().min(1).max(40)).max(40).default([]),
 });

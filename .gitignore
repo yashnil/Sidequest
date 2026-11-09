@@ -5,6 +5,8 @@ dist/
 build/
 # The App Router route segment `trips/[id]/build` (V8) is source, not build output.
 !apps/web/src/app/**/build/
+# The atlas pipeline's stages live in `packages/atlas/build/`: source, not output.
+!packages/atlas/build/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
@@ -84,3 +86,10 @@ docs/**/*.png
 docs/**/*.log
 docs/**/polls.jsonl
 docs/**/url.txt
+
+# Global destination atlas: raw open datasets and intermediate build files (several GB, regenerable — see packages/atlas/README.md).
+.atlas-cache/
+
+# Python bytecode from the atlas build stages.
+__pycache__/
+*.pyc

@@ -120,4 +120,4 @@ The advisor makes **no model call** by design; nothing to verify there. Downstre
 - 11 entries have no verified Wikidata item, and some items are a base town rather than the whole region; those cards show the locator.
 - The question priors are assumptions, not learned from traffic.
 - The interview stops at five follow-ups in most broad scenarios; the low-value stop triggers mainly for specific requests.
-- The old `DecisionComposer`, `ShortlistView`, `DecisionRevise` and the old decide actions are no longer reached by any route but were left in place.
+- The old `DecisionComposer`, `ShortlistView`, `DecisionRevise`, the old decide actions and the ranker behind them (`packages/core/src/recommend/`, `lib/destinations/recommend.ts`) were left in place by this pass and removed in 2026-11; the advisor is the only destination recommender in the tree.

@@ -28,8 +28,9 @@ import { densityExpectation, hotelChangeThresholds } from '../operating/policy-e
  * ## The rule that shapes every dimension
  *
  * `unknown` is a verdict. A dimension nobody could measure says so and is left
- * out of every count of what is weak — the same discipline `schemas/shortlist.ts`
- * applies to ranking, and for the same reason: "we could not measure the legs"
+ * out of every count of what is weak — the same discipline the destination
+ * advisor applies to ranking (a factor nobody asked about is dropped, never
+ * mid-scored), and for the same reason: "we could not measure the legs"
  * and "the legs are bad" are different sentences about different things.
  */
 

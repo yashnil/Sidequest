@@ -10,7 +10,9 @@ import { resolveAdvisorImageryAction } from '../advisor-actions';
  * Renders nothing. It exists so that resolving eight destination photographs —
  * eight sequential requests to a volunteer-run service, deliberately not
  * parallelised — happens *after* the ranking is on screen instead of in front
- * of it. See `buildShortlistAction` for the twenty-five seconds this cost.
+ * of it. The lookup is its own action (`resolveAdvisorImageryAction`), apart
+ * from the one that builds the list: run inside it, the photographs once held
+ * a finished ranking off the screen for twenty-five seconds.
  *
  * Two properties worth stating:
  *

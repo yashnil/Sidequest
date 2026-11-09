@@ -172,7 +172,14 @@ describe('no destination-specific rule reached the new engine', () => {
     'packages/core/src/dates',
     'packages/core/src/scope',
     'packages/core/src/destinations',
-    'packages/core/src/recommend',
+    /*
+     * The destination advisor's world model — what the recommender ranks. The
+     * curated entries beside it (`advisor/catalog/regions/`) are data about
+     * named places and are not listed here; the code that narrows, scores and
+     * resolves them is, because a rule about one country written into *that*
+     * is exactly the defect this guard exists for.
+     */
+    'packages/core/src/atlas',
     'packages/core/src/intent',
   ];
 
@@ -216,27 +223,70 @@ describe('no destination-specific rule reached the new engine', () => {
  * phrase — enforced here by there being no provider on the path at all.
  */
 describe('the destination ranking reaches no model', () => {
+  /**
+   * The one recommender: the advisor's interview, scoring and selection, the
+   * atlas that narrows the world for it, and the straight-line measure typed
+   * destinations are disambiguated with. The previous ranker
+   * (`recommend/rank.ts`, `recommend/shortlist.ts`) held this guarantee until it
+   * was removed; this is the same guarantee on the engine that replaced it.
+   */
   const RANKING = [
-    'packages/core/src/recommend/rank.ts',
-    'packages/core/src/recommend/shortlist.ts',
-    'packages/core/src/recommend/distance.ts',
-    'packages/core/src/schemas/shortlist.ts',
+    'packages/core/src/advisor/advise.ts',
+    'packages/core/src/advisor/score.ts',
+    'packages/core/src/advisor/select.ts',
+    'packages/core/src/advisor/profile.ts',
+    'packages/core/src/advisor/questions.ts',
+    'packages/core/src/advisor/parse.ts',
+    'packages/core/src/atlas/atlas.ts',
+    'packages/core/src/atlas/seasonality.ts',
+    'packages/core/src/atlas/lexical.ts',
+    'packages/core/src/destinations/distance.ts',
   ];
 
-  const REACHES_A_MODEL = [
-    /\bfetch\s*\(/,
-    /anthropic/i,
-    /\bopenai\b/i,
-    /\bprompt\b/i,
-    /ResearchModel/,
-    /https?:\/\//,
-  ];
+  /** Calls something, names a provider, or holds an address to call. */
+  const REACHES_OUTWARD = [/\bfetch\s*\(/, /anthropic/i, /\bopenai\b/i, /ResearchModel/, /https?:\/\//];
+  const WRITES_A_PROMPT = /\bprompt\b/i;
+  const REACHES_A_MODEL = [...REACHES_OUTWARD, WRITES_A_PROMPT];
+
+  /**
+   * The one file where the word is not about a model: an interview question's
+   * `prompt` is the sentence the *traveller* is asked ("When could you go?").
+   * It is held to every other pattern and to the import rule below, which is
+   * what actually keeps a model out of reach; the exemption is for that one
+   * word in that one file and is asserted to still be needed.
+   */
+  const ASKS_THE_TRAVELLER = 'packages/core/src/advisor/questions.ts';
 
   it.each(RANKING)('%s calls nothing and prompts nobody', (file) => {
     const source = code(file);
-    for (const pattern of REACHES_A_MODEL) {
+    for (const pattern of file === ASKS_THE_TRAVELLER ? REACHES_OUTWARD : REACHES_A_MODEL) {
       expect(pattern.test(source), `${file} matches ${pattern}`).toBe(false);
     }
+  });
+
+  it('exempts the interview from the word "prompt" only because its questions have one', () => {
+    const source = code(ASKS_THE_TRAVELLER);
+    expect(WRITES_A_PROMPT.test(source), 'the exemption is no longer needed — remove it').toBe(true);
+    /* Every use is the question's own field: declared, written as an object key, or read off a question. */
+    const uses = source.match(/[^\n]*\bprompt\b[^\n]*/gi) ?? [];
+    const stray = uses.filter((line) => !/^\s*prompt\??:\s/.test(line) && !/\.prompt\b/.test(line));
+    expect(stray, stray.join('\n')).toEqual([]);
+  });
+
+  /**
+   * A model, a provider or an SDK can only be reached through an import, so
+   * this is the half of the guarantee that does not depend on spotting a word:
+   * the ranking imports nothing but its own package's sources (and `zod`).
+   */
+  it.each(RANKING)('%s imports nothing from outside the core package', (file) => {
+    const specifiers = [...code(file).matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)['"]([^'"]+)['"]/gm)].map((match) => match[1]!);
+    const outside = specifiers.filter((specifier) => {
+      if (specifier === 'zod') return false;
+      if (!specifier.startsWith('.')) return true;
+      const resolved = join(file, '..', specifier).replace(/\\/g, '/');
+      return !resolved.startsWith('packages/core/src/');
+    });
+    expect(outside, `${file} imports ${outside.join(', ')}`).toEqual([]);
   });
 
   /**

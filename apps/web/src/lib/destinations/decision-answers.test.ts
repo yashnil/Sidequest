@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INTAKE_QUESTION_IDS, intakeAnswered, intakeReady } from '@sidequest/core';
+import { emptyComposerAnswers, tripComposerAnswersSchema } from '@sidequest/core';
 import {
   decisionAnswersSchema,
   decisionAnswersToComposer,
@@ -15,13 +15,14 @@ const NOW = new Date('2026-09-13T00:00:00Z');
  * The product requirement is a single sentence — "choosing a recommendation
  * transfers everything, no re-entering information" — and the only structural
  * way to hold it is for the intake to write the *same record* trip setup reads.
- * `adoptDestinationAction` spreads the stored `TripComposerAnswers` into the
+ * `adoptAdvisorPickAction` spreads the stored `TripComposerAnswers` into the
  * trip's own composer row, so the whole guarantee reduces to this: every answer
- * the intake collects has to reach `TripComposerAnswers`.
+ * this shape can carry has to reach `TripComposerAnswers`.
  *
  * A test that listed the fields by hand would pass for ever while somebody added
- * a fifteenth question. So it is driven off `INTAKE_QUESTION_IDS`: a question
- * whose answer does not survive the conversion fails here by name.
+ * a new one. So it is driven off the schema's own keys: a field whose answer
+ * does not survive the conversion fails here by name, and so does a field
+ * nobody has written a second value for.
  */
 
 const FULL: DecisionAnswersInput = {
@@ -61,12 +62,77 @@ describe('what the intake collects reaches the trip', () => {
     expect(decisionAnswersSchema.safeParse(FULL).success).toBe(true);
   });
 
-  it('answers every question the ladder can ask', () => {
+  /**
+   * A second, different, valid value for every field the schema accepts. The
+   * conversion is a pure function, so a field has reached the composer record
+   * exactly when changing it changes that record.
+   */
+  const CHANGED: { [K in keyof Required<DecisionAnswersInput>]: DecisionAnswersInput[K] } = {
+    dateMode: 'month',
+    startDate: '2026-12-20',
+    endDate: '2027-01-05',
+    month: 7,
+    season: 'summer',
+    nights: 5,
+    minNights: 9,
+    maxNights: 13,
+    shape: 'one_base',
+    transport: 'drive',
+    pace: 'slow',
+    themes: ['food'],
+    outdoorIntensity: 'gentle',
+    budget: 'premium',
+    adults: 3,
+    children: 2,
+    avoid: 'long drives',
+    origin: 'Lisbon',
+    originCountry: 'pt',
+    flightTolerance: 'short',
+    climatePreference: 'cold',
+    lodgingComfort: 'refined',
+    tripScope: 'domestic',
+    surpriseAppetite: 'familiar',
+    crowdTolerance: 'unbothered',
+    visited: ['Norway'],
+    budgetPerPerson: 4000,
+    budgetIncludesFlights: true,
+    travelerNeeds: ['kids_under_12'],
+    skipped: ['intake:lodging'],
+  };
+
+  it('has a second value for every field the schema accepts', () => {
+    expect(Object.keys(CHANGED).sort()).toEqual(Object.keys(decisionAnswersSchema.shape).sort());
+  });
+
+  it.each(Object.keys(decisionAnswersSchema.shape) as (keyof DecisionAnswersInput)[])(
+    'carries %s onto the composer record',
+    (field) => {
+      const changed = { ...FULL, [field]: CHANGED[field] } as DecisionAnswersInput;
+      expect(decisionAnswersSchema.safeParse(changed).success, `${field}: the second value is not valid input`).toBe(true);
+      expect(changed[field], `${field}: the second value is the first one`).not.toEqual(FULL[field]);
+      expect(decisionAnswersToComposer(changed, NOW), `${field} is collected and then dropped`).not.toEqual(
+        decisionAnswersToComposer(FULL, NOW),
+      );
+    },
+  );
+
+  it('writes a record the stored-answers schema reads back unchanged', () => {
+    // The decision session stores this and re-reads it strictly on every load:
+    // a conversion that produced something the schema refuses would be a
+    // session nobody could open.
+    for (const input of [FULL, emptyDecisionAnswers()]) {
+      const composer = decisionAnswersToComposer(input, NOW);
+      const parsed = tripComposerAnswersSchema.safeParse(JSON.parse(JSON.stringify(composer)));
+      expect(parsed.success, parsed.success ? '' : JSON.stringify(parsed.error.issues)).toBe(true);
+      expect(parsed.data).toEqual(composer);
+    }
+  });
+
+  it('is always a help-me-decide record with no destination, whatever was collected', () => {
     const composer = decisionAnswersToComposer(FULL, NOW);
-    const unanswered = INTAKE_QUESTION_IDS.filter((id) => !intakeAnswered(id, composer));
-    /* `party` is answered by four adults; `visited` by two names; and so on for all seventeen. */
-    expect(unanswered).toEqual([]);
-    expect(intakeReady(composer)).toBe(true);
+    expect(composer.mode).toBe('help_me_decide');
+    expect(composer.destination).toBeUndefined();
+    expect(composer.destinationQuery).toBeUndefined();
   });
 
   it('carries every V11 recommender field onto the composer record unchanged', () => {
@@ -113,10 +179,41 @@ describe('what the intake collects reaches the trip', () => {
     expect(composer.skipped).toEqual(['intake:lodging']);
   });
 
-  it('a blank intake answers nothing and is not rankable', () => {
+  it('a blank intake says nothing the traveller did not', () => {
     const composer = decisionAnswersToComposer(emptyDecisionAnswers(), NOW);
-    expect(intakeReady(composer)).toBe(false);
-    expect(intakeAnswered('when', composer)).toBe(false);
-    expect(intakeAnswered('priorities', composer)).toBe(false);
+    const untouched = emptyComposerAnswers('help_me_decide', NOW);
+
+    // No window, no length, no interests: the three things a ranking needs
+    // first are all still open, so nothing downstream can mistake a default
+    // for an answer.
+    expect(composer.dates).toEqual({ mode: 'month', year: 2026, wantsRecommendation: false });
+    expect(composer.duration).toEqual({ mode: 'unknown', wantsRecommendation: true });
+    expect(composer.themes).toEqual([]);
+    expect(composer.travelerNeeds).toEqual([]);
+    expect(composer.skipped).toEqual([]);
+
+    // And every preference is absent rather than defaulted.
+    for (const field of [
+      'shape',
+      'transport',
+      'pace',
+      'budget',
+      'outdoorIntensity',
+      'avoid',
+      'origin',
+      'originCountry',
+      'flightTolerance',
+      'climatePreference',
+      'lodgingComfort',
+      'tripScope',
+      'surpriseAppetite',
+      'crowdTolerance',
+      'visited',
+      'budgetPerPerson',
+      'budgetIncludesFlights',
+    ] as const) {
+      expect(composer[field], `${field} was invented`).toEqual(untouched[field]);
+      expect(composer[field], `${field} was invented`).toBeUndefined();
+    }
   });
 });

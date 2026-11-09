@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { coordinatesSchema, type Coordinates } from './common';
-import { separationKm } from '../recommend/distance';
+import { separationKm } from '../destinations/distance';
 import {
   confidenceAssessmentSchema,
   destinationEntityTypeSchema,

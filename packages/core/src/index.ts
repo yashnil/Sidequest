@@ -36,7 +36,6 @@ export * from './schemas/journey';
 export * from './schemas/imagery';
 export * from './schemas/supply';
 export * from './schemas/preflight';
-export * from './schemas/shortlist';
 // `schemas/calendar` is deliberately not re-exported here: `schemas/access`
 // already forwards every name in it, and two `export *` sources for one name
 // make it ambiguous and therefore invisible to consumers.
@@ -145,13 +144,9 @@ export * from './evidence/freshness';
 export * from './dates/windows';
 export * from './dates/duration';
 export * from './scope/portfolio';
-export * from './recommend/distance';
-export * from './recommend/intake';
-export * from './recommend/presentation';
-export * from './recommend/proposal';
-export * from './recommend/rank';
-export * from './recommend/shortlist';
+export * from './destinations/distance';
 export * from './advisor/index';
+export * from './atlas/index';
 export * from './routing/plan';
 export * from './routing/portfolio';
 

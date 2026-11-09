@@ -258,6 +258,13 @@ export const ACTION_RATE_RULES = {
    * they are two halves of the same button press.
    */
   decide_shortlist: { capacity: 6, refillPerMinute: 3 },
+  /*
+   * The interview's own step: which question next, who is leading. It writes
+   * nothing and calls nothing outward, but each call ranks the atlas a few
+   * dozen times, so it is fenced — generously, since an honest interview is one
+   * call per answer.
+   */
+  decide_step: { capacity: 40, refillPerMinute: 30 },
   /**
    * V8 — starts one durable build run (one billed composition, backstopped by
    * the daily ceiling). A duplicate press attaches to the run it already

@@ -17,7 +17,7 @@ export default function DecideLoading() {
         Getting ready…
       </p>
       <p className="measure mt-3 text-ink-muted">
-        Four questions, and nothing is bought to answer them.
+        A few questions — only the ones that would change the answer.
       </p>
       <div className="mt-10 space-y-3" aria-hidden="true">
         {Array.from({ length: 4 }, (_, index) => (

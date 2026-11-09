@@ -1,0 +1,590 @@
+{
+ "karakoram-budget-trek": {
+  "X": "after",
+  "Y": "before"
+ },
+ "karakoram-pakistan-mountains": {
+  "X": "after",
+  "Y": "before"
+ },
+ "hawaii-volcano-beach": {
+  "X": "after",
+  "Y": "before"
+ },
+ "hawaii-family": {
+  "X": "after",
+  "Y": "before"
+ },
+ "japan-spring-culture": {
+  "X": "after",
+  "Y": "before"
+ },
+ "japan-autumn-quiet": {
+  "X": "after",
+  "Y": "before"
+ },
+ "central-asia-remote-hiking": {
+  "X": "after",
+  "Y": "before"
+ },
+ "central-asia-silk-road": {
+  "X": "before",
+  "Y": "after"
+ },
+ "indonesia-islands": {
+  "X": "before",
+  "Y": "after"
+ },
+ "indonesia-diving": {
+  "X": "before",
+  "Y": "after"
+ },
+ "europe-city-break-spring": {
+  "X": "after",
+  "Y": "before"
+ },
+ "europe-city-break-winter": {
+  "X": "after",
+  "Y": "before"
+ },
+ "europe-city-break-underrated": {
+  "X": "before",
+  "Y": "after"
+ },
+ "africa-safari-august": {
+  "X": "before",
+  "Y": "after"
+ },
+ "africa-safari-february": {
+  "X": "before",
+  "Y": "after"
+ },
+ "africa-safari-budget": {
+  "X": "after",
+  "Y": "before"
+ },
+ "patagonia-summer": {
+  "X": "before",
+  "Y": "after"
+ },
+ "patagonia-roadtrip": {
+  "X": "after",
+  "Y": "before"
+ },
+ "alpine-hiking-september": {
+  "X": "after",
+  "Y": "before"
+ },
+ "alps-september-quiet": {
+  "X": "before",
+  "Y": "after"
+ },
+ "winter-sports-february": {
+  "X": "before",
+  "Y": "after"
+ },
+ "winter-sports-budget": {
+  "X": "after",
+  "Y": "before"
+ },
+ "winter-sports-japan": {
+  "X": "after",
+  "Y": "before"
+ },
+ "rainforest-wildlife": {
+  "X": "after",
+  "Y": "before"
+ },
+ "rainforest-borneo-like": {
+  "X": "before",
+  "Y": "after"
+ },
+ "amazon-august": {
+  "X": "after",
+  "Y": "before"
+ },
+ "family-limited-driving": {
+  "X": "before",
+  "Y": "after"
+ },
+ "family-no-car-europe": {
+  "X": "before",
+  "Y": "after"
+ },
+ "rail-multi-country": {
+  "X": "after",
+  "Y": "before"
+ },
+ "rail-asia": {
+  "X": "after",
+  "Y": "before"
+ },
+ "like-dolomites-cheaper": {
+  "X": "before",
+  "Y": "after"
+ },
+ "like-amalfi-quieter": {
+  "X": "before",
+  "Y": "after"
+ },
+ "like-iceland-cheaper": {
+  "X": "after",
+  "Y": "before"
+ },
+ "like-santorini-uncrowded": {
+  "X": "after",
+  "Y": "before"
+ },
+ "like-banff-quiet": {
+  "X": "after",
+  "Y": "before"
+ },
+ "remote-mountains-september": {
+  "X": "before",
+  "Y": "after"
+ },
+ "himalaya-october": {
+  "X": "before",
+  "Y": "after"
+ },
+ "andes-trek-june": {
+  "X": "before",
+  "Y": "after"
+ },
+ "caucasus-hiking": {
+  "X": "after",
+  "Y": "before"
+ },
+ "spring-hiking-no-snow": {
+  "X": "before",
+  "Y": "after"
+ },
+ "march-mountains-budget": {
+  "X": "after",
+  "Y": "before"
+ },
+ "winter-sun-walking": {
+  "X": "after",
+  "Y": "before"
+ },
+ "usa-national-parks-autumn": {
+  "X": "before",
+  "Y": "after"
+ },
+ "scandinavia-summer-hiking": {
+  "X": "after",
+  "Y": "before"
+ },
+ "new-zealand-february": {
+  "X": "before",
+  "Y": "after"
+ },
+ "africa-mountains": {
+  "X": "after",
+  "Y": "before"
+ },
+ "balkans-hiking-cheap": {
+  "X": "before",
+  "Y": "after"
+ },
+ "japan-alps-hike": {
+  "X": "after",
+  "Y": "before"
+ },
+ "volcano-hikes": {
+  "X": "after",
+  "Y": "before"
+ },
+ "glaciers-easy": {
+  "X": "before",
+  "Y": "after"
+ },
+ "caribbean-january": {
+  "X": "after",
+  "Y": "before"
+ },
+ "caribbean-hurricane-season": {
+  "X": "before",
+  "Y": "after"
+ },
+ "med-islands-june": {
+  "X": "before",
+  "Y": "after"
+ },
+ "warm-sea-november": {
+  "X": "before",
+  "Y": "after"
+ },
+ "thailand-islands-august": {
+  "X": "before",
+  "Y": "after"
+ },
+ "thailand-islands-january": {
+  "X": "after",
+  "Y": "before"
+ },
+ "philippines-islands": {
+  "X": "after",
+  "Y": "before"
+ },
+ "pacific-islands": {
+  "X": "after",
+  "Y": "before"
+ },
+ "indian-ocean-honeymoon": {
+  "X": "before",
+  "Y": "after"
+ },
+ "red-sea-diving": {
+  "X": "before",
+  "Y": "after"
+ },
+ "surf-winter": {
+  "X": "before",
+  "Y": "after"
+ },
+ "cold-water-coast": {
+  "X": "before",
+  "Y": "after"
+ },
+ "whales": {
+  "X": "after",
+  "Y": "before"
+ },
+ "greek-islands-october": {
+  "X": "after",
+  "Y": "before"
+ },
+ "atlantic-islands-winter": {
+  "X": "before",
+  "Y": "after"
+ },
+ "gorillas": {
+  "X": "before",
+  "Y": "after"
+ },
+ "india-tigers": {
+  "X": "before",
+  "Y": "after"
+ },
+ "bears-north-america": {
+  "X": "before",
+  "Y": "after"
+ },
+ "birding-neotropics": {
+  "X": "before",
+  "Y": "after"
+ },
+ "penguins": {
+  "X": "after",
+  "Y": "before"
+ },
+ "madagascar-like": {
+  "X": "after",
+  "Y": "before"
+ },
+ "arctic-wildlife": {
+  "X": "after",
+  "Y": "before"
+ },
+ "food-city-asia": {
+  "X": "after",
+  "Y": "before"
+ },
+ "latin-america-colonial": {
+  "X": "before",
+  "Y": "after"
+ },
+ "ancient-ruins-spring": {
+  "X": "before",
+  "Y": "after"
+ },
+ "wine-region": {
+  "X": "after",
+  "Y": "before"
+ },
+ "middle-east-culture-winter": {
+  "X": "after",
+  "Y": "before"
+ },
+ "india-first-time": {
+  "X": "before",
+  "Y": "after"
+ },
+ "china-off-beaten": {
+  "X": "before",
+  "Y": "after"
+ },
+ "south-america-cities": {
+  "X": "after",
+  "Y": "before"
+ },
+ "north-africa-medinas": {
+  "X": "after",
+  "Y": "before"
+ },
+ "usa-city-weekend": {
+  "X": "after",
+  "Y": "before"
+ },
+ "southeast-asia-first": {
+  "X": "after",
+  "Y": "before"
+ },
+ "eastern-europe-winter-city": {
+  "X": "before",
+  "Y": "after"
+ },
+ "small-towns-italy": {
+  "X": "before",
+  "Y": "after"
+ },
+ "spain-winter": {
+  "X": "before",
+  "Y": "after"
+ },
+ "road-trip-western-us": {
+  "X": "after",
+  "Y": "before"
+ },
+ "road-trip-europe-coast": {
+  "X": "before",
+  "Y": "after"
+ },
+ "iceland-ring-road": {
+  "X": "after",
+  "Y": "before"
+ },
+ "desert-stargazing": {
+  "X": "before",
+  "Y": "after"
+ },
+ "namibia-like": {
+  "X": "after",
+  "Y": "before"
+ },
+ "australia-outback": {
+  "X": "before",
+  "Y": "after"
+ },
+ "scotland-like-drive": {
+  "X": "after",
+  "Y": "before"
+ },
+ "northern-lights": {
+  "X": "after",
+  "Y": "before"
+ },
+ "fall-colours": {
+  "X": "before",
+  "Y": "after"
+ },
+ "lakes-swimming-summer": {
+  "X": "after",
+  "Y": "before"
+ },
+ "canada-lakes-canoe": {
+  "X": "after",
+  "Y": "before"
+ },
+ "cheap-anywhere-warm-feb": {
+  "X": "before",
+  "Y": "after"
+ },
+ "luxury-safari-beach": {
+  "X": "before",
+  "Y": "after"
+ },
+ "backpacking-south-america": {
+  "X": "before",
+  "Y": "after"
+ },
+ "short-haul-from-nyc": {
+  "X": "after",
+  "Y": "before"
+ },
+ "short-haul-from-singapore": {
+  "X": "before",
+  "Y": "after"
+ },
+ "from-sydney-winter-escape": {
+  "X": "after",
+  "Y": "before"
+ },
+ "from-delhi-mountains": {
+  "X": "before",
+  "Y": "after"
+ },
+ "from-sao-paulo": {
+  "X": "before",
+  "Y": "after"
+ },
+ "from-nairobi-beach": {
+  "X": "after",
+  "Y": "before"
+ },
+ "wheelchair-scenery": {
+  "X": "after",
+  "Y": "before"
+ },
+ "seniors-gentle": {
+  "X": "after",
+  "Y": "before"
+ },
+ "toddler-beach": {
+  "X": "after",
+  "Y": "before"
+ },
+ "teenagers-adventure": {
+  "X": "after",
+  "Y": "before"
+ },
+ "solo-female-first": {
+  "X": "after",
+  "Y": "before"
+ },
+ "honeymoon-quiet": {
+  "X": "after",
+  "Y": "before"
+ },
+ "friends-group-cheap-summer": {
+  "X": "before",
+  "Y": "after"
+ },
+ "digital-detox": {
+  "X": "before",
+  "Y": "after"
+ },
+ "hidden-gems-europe": {
+  "X": "after",
+  "Y": "before"
+ },
+ "hidden-gems-asia": {
+  "X": "before",
+  "Y": "after"
+ },
+ "hidden-gems-americas": {
+  "X": "before",
+  "Y": "after"
+ },
+ "monsoon-avoid-july": {
+  "X": "before",
+  "Y": "after"
+ },
+ "ski-april": {
+  "X": "before",
+  "Y": "after"
+ },
+ "hike-may-alps": {
+  "X": "after",
+  "Y": "before"
+ },
+ "southern-hemisphere-ski": {
+  "X": "after",
+  "Y": "before"
+ },
+ "beach-europe-april": {
+  "X": "after",
+  "Y": "before"
+ },
+ "safari-april-rains": {
+  "X": "after",
+  "Y": "before"
+ },
+ "desert-summer": {
+  "X": "after",
+  "Y": "before"
+ },
+ "himalaya-monsoon": {
+  "X": "after",
+  "Y": "before"
+ },
+ "patagonia-winter": {
+  "X": "before",
+  "Y": "after"
+ },
+ "japan-summer-cool": {
+  "X": "after",
+  "Y": "before"
+ },
+ "christmas-snow-not-ski": {
+  "X": "before",
+  "Y": "after"
+ },
+ "shoulder-season-med": {
+  "X": "after",
+  "Y": "before"
+ },
+ "vague-somewhere-nice": {
+  "X": "before",
+  "Y": "after"
+ },
+ "vague-surprise": {
+  "X": "before",
+  "Y": "after"
+ },
+ "vague-nature": {
+  "X": "before",
+  "Y": "after"
+ },
+ "contradiction-cheap-luxury": {
+  "X": "after",
+  "Y": "before"
+ },
+ "contradiction-remote-easy": {
+  "X": "after",
+  "Y": "before"
+ },
+ "everything": {
+  "X": "before",
+  "Y": "after"
+ },
+ "negation": {
+  "X": "after",
+  "Y": "before"
+ },
+ "typos": {
+  "X": "after",
+  "Y": "before"
+ },
+ "one-word-diving": {
+  "X": "before",
+  "Y": "after"
+ },
+ "specific-niche-tea": {
+  "X": "before",
+  "Y": "after"
+ },
+ "specific-niche-fjords": {
+  "X": "after",
+  "Y": "before"
+ },
+ "specific-niche-hot-springs": {
+  "X": "before",
+  "Y": "after"
+ },
+ "specific-niche-caves": {
+  "X": "after",
+  "Y": "before"
+ },
+ "specific-niche-monasteries": {
+  "X": "after",
+  "Y": "before"
+ },
+ "specific-niche-waterfalls": {
+  "X": "before",
+  "Y": "after"
+ },
+ "specific-niche-cycling": {
+  "X": "after",
+  "Y": "before"
+ },
+ "long-trip-sabbatical": {
+  "X": "after",
+  "Y": "before"
+ },
+ "two-nights": {
+  "X": "before",
+  "Y": "after"
+ }
+}

@@ -70,7 +70,6 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       'apps/web/src/lib/execution/perf-offline.test.ts',
-      'apps/web/src/lib/destinations/recommend-perf.test.ts',
       'apps/web/src/lib/planning/planner-bench.perf.test.ts',
       /*
        * The live evaluation suite (`apps/web/src/lib/eval/`) reaches public

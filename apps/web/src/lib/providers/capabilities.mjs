@@ -43,7 +43,7 @@ export const CONSUMERS = {
   'food.scan': 'discovery-scan/food.ts#groundScanFood ← discovery-scan/run.ts#scanFoodFor',
   'food.discovery': 'providers/discovery.ts#discoverFoodNear ← itinerary/actions.ts#discoverFoodAction (display only)',
   'weather.forecast': 'weather/refresh.ts#ensureWeatherForPlanning → reconcile.ts day weather',
-  'weather.climate': 'lib/capabilities.ts (climate_normals) → destinations/recommend.ts + composer date guidance',
+  'weather.climate': 'lib/capabilities.ts (climate_normals) → destinations/advisor.ts (climate check of the shortlist, world from lib/atlas) + composer date guidance',
   'currency.fx': 'planning/production-plan.ts (fetchReferenceRate → trip_fx_rates) → intelligence/load.ts budget',
   'readiness.entry': 'core/intelligence/readiness.ts#OfficialTravelSourceRegistry → intelligence/build.ts',
   'readiness.advisory': 'core/intelligence/readiness.ts#OfficialTravelSourceRegistry → intelligence/build.ts',
@@ -51,6 +51,8 @@ export const CONSUMERS = {
   'maps.tiles': 'components/map-adapter.ts#resolveMapTileSource → InteractiveMap',
   'destinations.resolution': 'trips/new/place-actions.ts#placeDestinationAction (index → bundled country reference → geocoder through destinations/intent-resolution.ts, every row gated by core destinations/semantics.ts) → the setup canvas and the timing recommendation, then plan/actions.ts#resolveDestinationAction once the trip exists',
   'destinations.interpretation': 'destinations/interpretation.ts#interpretDestinationConcept ← destinations/intent-resolution.ts (only when the gate finds the evidence insufficient for a region-like part; a classification and names, never a coordinate; every name geocoded and gated)',
+  'destinations.atlas': 'lib/atlas/world.ts#advisorWorld ← decide/advisor-actions.ts (the global destination atlas, loaded once from packages/atlas/data; the curated catalog alone when the file is missing)',
+  'destinations.research': 'lib/atlas/research.ts#researchSuggestions ← decide/advisor-actions.ts#widenAdvisorShortlistAction (only for a weak shortlist, after it is on screen; names only, each resolved against the atlas and ranked by the same scorer)',
   'destinations.suggestions': 'api/destinations/suggest → destinations/provider.ts#localSuggestionProvider (the local index only, never a network call while typing)',
   'auth.sign_in': 'api/auth/google/callback/route.ts + signin/actions.ts#fixtureSignInAction → lib/auth/session.ts#currentUser → lib/net/trip-access.ts#tripAccessRefusal (account first, browser cookie only while unclaimed)',
 };
@@ -320,6 +322,34 @@ export function capabilityRegistry(env = process.env) {
         ? 'The recorded corpus only.'
         : 'Deterministic sources only: a region the geocoder cannot bound stays typed but unplaced.',
     limitations: interpreter === 'anthropic' ? [] : ['Set SIDEQUEST_DESTINATION_INTERPRETER=anthropic with ANTHROPIC_API_KEY to read broad natural regions the geocoder cannot bound.'],
+  });
+  /*
+   * "Help me choose" ranks the global atlas: an artifact that ships with the
+   * build (`packages/atlas/data`), so there is nothing to configure and nothing
+   * to reach. Wider research is the one optional model call on that path.
+   */
+  add('destinations.atlas', 'destinations', {
+    configured: true,
+    provider: 'sidequest',
+    costClass: 'none',
+    freshness: 'stable',
+    coverage: 'About 36,600 destinations worldwide, built offline from Wikivoyage, Wikidata, CHELSA climate normals, ETOPO, NOAA OISST, OurAirports and World Bank price levels, with the curated catalog as its editorial layer. No network at request time.',
+    limitations: ['What a derived destination offers is an estimate fitted to the curated catalog; climate is a 1981–2010 normal; the travel-advisory snapshot is dated and only removes a country while fresh.'],
+  });
+  const researchChoice = read(env, 'SIDEQUEST_ADVISOR_RESEARCH').toLowerCase();
+  const research = researchChoice === 'fixture' ? 'fixture' : researchChoice === 'off' ? 'off' : anthropic ? 'anthropic' : 'off';
+  add('destinations.research', 'destinations', {
+    configured: research !== 'off',
+    provider: research === 'off' ? null : research,
+    costClass: research === 'anthropic' ? 'metered' : 'none',
+    fixture: research === 'fixture',
+    freshness: 'stable',
+    coverage: research === 'anthropic'
+      ? 'At most one bounded call per weak shortlist, proposing destination names for a request the atlas answers thinly. Every name is resolved against the atlas or dropped; ranking is unchanged. Cached thirty days; charged to the daily model-call ledger.'
+      : research === 'fixture'
+        ? 'Recorded suggestions only.'
+        : 'The atlas alone: no model is asked for further ideas.',
+    limitations: research === 'anthropic' ? [] : ['Set ANTHROPIC_API_KEY (and leave SIDEQUEST_ADVISOR_RESEARCH unset) to widen thin shortlists with researched suggestions.'],
   });
   add('destinations.suggestions', 'destinations', {
     configured: set(env, 'SIDEQUEST_DESTINATION_INDEX_SEED'),

@@ -1,8 +1,8 @@
 /**
  * The screen while a stored decision session is being read back.
  *
- * The ranking itself has its own state inside `ShortlistView`; this is the
- * shorter window before that — a refresh, a back button, a shared link — and
+ * The ranking itself has its own state inside `AdvisorInterview`; this is the
+ * shorter window before that — a refresh, a back button, a reopened tab — and
  * without it the browser sat on the previous page with nothing to say.
  */
 export default function DecideSessionLoading() {

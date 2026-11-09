@@ -64,6 +64,20 @@ export const advisorPickSchema = z.object({
     .default({ status: 'not_checked', note: 'Weather not yet checked against records.' }),
   factors: z.array(factorSchema),
   references: z.array(z.string()),
+  /**
+   * Where the reading comes from: a person (`editorial`), open data with no
+   * human in the loop (`open_data`), or a place a research model proposed that
+   * resolved to a real entity and was then ranked like any other (`research`).
+   */
+  basis: z.enum(['editorial', 'open_data', 'research']).default('editorial'),
+  /** 0–1: how much evidence stands behind what the place is said to offer. */
+  confidence: z.number().default(0.9),
+  /** When it is good, by activity, in words — "The high trails: usually July–September". */
+  seasonNote: z.string().nullable().default(null),
+  /** True when the climate behind the season reading is measured normals rather than an editorial estimate. */
+  measured: z.boolean().default(false),
+  /** True when a research model proposed this place for the request; it was then found in the atlas and ranked like any other. */
+  suggested: z.boolean().default(false),
 });
 export type AdvisorPick = z.infer<typeof advisorPickSchema>;
 
@@ -89,11 +103,15 @@ export const advisorShortlistSchema = z.object({
   }),
   stats: z.object({
     catalog: z.number(),
+    /** How many candidates the first pass handed to the detailed scorer. */
+    considered: z.number().default(0),
     eligible: z.number(),
     excluded: z.record(z.string(), z.number()),
     lambda: z.number(),
     climateChecked: z.number(),
     climateVerified: z.number(),
+    /** Places a research model proposed for this request, how many resolved to a real entity, and how many reached the list. */
+    research: z.object({ proposed: z.number(), resolved: z.number(), shown: z.number(), note: z.string() }).nullable().default(null),
   }),
   /** What changed from the previous list after a refinement, in words. */
   changes: z.array(z.string()).default([]),

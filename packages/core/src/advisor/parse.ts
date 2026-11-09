@@ -5,6 +5,8 @@ import { originPointFromText } from './origin';
 import { REGION_GROUPS, REGION_GROUP_LABELS, type QuestionId } from './questions';
 import { monthsLabel } from './advise';
 import { seasonMonthsForTraveller } from './profile';
+import type { PlaceMention } from '../atlas/atlas';
+import { atlasTokens } from '../atlas/lexical';
 
 /**
  * READING WHAT SOMEBODY TYPED BEFORE ASKING THEM ANYTHING.
@@ -39,17 +41,21 @@ const MONTH_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'se
 
 const FOCUS_PATTERNS: [RegExp, FocusKey[]][] = [
   [/\b(hik(e|es|ing|ers?)|walk(s|ing)? in the hills|hill ?walk(s|ing)?|walking (holiday|trip|vacation)s?|trails?|scrambl(e|es|ing))\b/, ['hiking']],
-  [/\b(trek(s|king)?|hut[- ]to[- ]hut|thru[- ]hike)\b/, ['mountains', 'hiking']],
+  /* A trek is a mountain walk unless it says otherwise: a jungle trek, a gorilla trek or a camel trek is a walk through something else. */
+  [/\b(?<!(jungle|rainforest|forest|gorilla|chimp|chimpanzee|orangutan|desert|camel|village|elephant)\s)(trek(s|king)?|hut[- ]to[- ]hut|thru[- ]hike)\b/, ['mountains', 'hiking']],
+  [/\b(jungle|rainforest|forest|gorilla|chimp|chimpanzee|orangutan|desert|camel|village|elephant)\s(trek(s|king)?)\b/, ['hiking']],
+  [/\b(glaciers?|icebergs?|ice ?(fields?|caps?)|summits?|mountaineering|base camp)\b/, ['mountains']],
   [/\b(mountains?|alpine|alps|high country|peaks?|highlands)\b/, ['mountains']],
-  [/\b(wildlife|animals?|safari|game drives?|birds?|birding|bears?|whales?|puffins?|gorillas?)\b/, ['wildlife']],
+  [/\b(wildlife|animals?|safari|game drives?|birds?|birding|bears?|whales?|puffins?|gorillas?|penguins?|orangutans?|big cats?|elephants?|lions?|tigers?|leopards?|monkeys?|sloths?|turtles?|dolphins?|seals?)\b/, ['wildlife']],
   [/\blakes?\b/, ['lakes']],
   [/\b(beach(es)?|coast(al|line)?|seaside|island(s)?|snorkel(ling|ing)?|div(e|ing)|reefs?|sea\b|ocean)\b/, ['beaches']],
   [/\b(rain ?forest|jungle|cloud forest|tropical forest)\b/, ['rainforest']],
-  [/\b(road ?trip|scenic drives?|driving holiday)\b/, ['road_trips']],
+  [/\b(road ?trips?|scenic driv(e|es|ing)|driving (holiday|loop|route|tour)s?|self[- ]drive|empty highways?|open road)\b/, ['road_trips']],
   [/\b(desert|dunes?|canyons?)\b/, ['desert']],
   [/\b(volcano(es)?|volcanic|hot springs?|geothermal|geysers?)\b/, ['volcanoes']],
-  [/\b(ski(s|ing|ers?)?|snow(board(s|ing|ers?)?|shoe(s|ing)?)?|northern lights|aurora|winter sports?|winter wonderland)\b/, ['snow']],
-  [/\b(food|eat(ing)?|cuisine|culture|history|museums?|villages?|architecture|wine)\b/, ['culture_food']],
+  [/\b(ski(s|ing|ers?)?|snow(y|fall|board(s|ing|ers?)?|shoe(s|ing)?)?|northern lights|aurora|winter sports?|winter wonderland|white christmas|reindeer|husk(y|ies)|dog ?sledd?ing)\b/, ['snow']],
+  [/\b(food|eat(ing)?|cuisine|culture|cultural|history|historic(al)?|museums?|villages?|architecture|wine|old towns?|temples?|ruins|archaeolog\w+|castles?|medinas?|monaster(y|ies)|palaces?|colonial|heritage|markets?|medieval|shrines?)\b/, ['culture_food']],
+  [/\b(rail (journey|trip|holiday|adventure|tour)s?|train (journey|trip|ride|travel|tour)s?|scenic (trains?|railways?)|interrail(ing)?|eurail|sleeper trains?|railways?|by sleeper)\b/, ['rail']],
   [/\b(city|cities|urban|nightlife)\b/, ['cities']],
 ];
 
@@ -58,9 +64,20 @@ const REGION_PATTERNS: [RegExp, WorldRegion[], string][] = [
 
   [/\bmediterranean\b/, ['southern_europe', 'north_africa', 'middle_east'], 'The Mediterranean'],
   [/\bcaribbean\b/, ['caribbean'], 'The Caribbean'],
-  [/\bcentral america\b/, ['mexico_central_america'], 'Central America'],
-  [/\bsouth america\b/, ['south_america_north', 'south_america_south'], 'South America'],
-  [/\b(north america|usa|the us|the states|canada)\b/, ['north_america_west', 'north_america_east', 'north_america_north'], 'North America'],
+  [/\bcentral america(n)?\b/, ['mexico_central_america'], 'Central America'],
+  [/\bsouth america(n)?\b/, ['south_america_north', 'south_america_south'], 'South America'],
+  [/\blatin america(n)?\b/, ['south_america_north', 'south_america_south', 'mexico_central_america'], 'Latin America'],
+  [/\b(north america(n)?|usa|the us|the states|canada)\b/, ['north_america_west', 'north_america_east', 'north_america_north'], 'North America'],
+  [/\bnorth africa(n)?\b/, ['north_africa'], 'North Africa'],
+  [/\b(east africa(n)?)\b/, ['east_africa'], 'East Africa'],
+  [/\b(southern africa(n)?)\b/, ['southern_africa'], 'Southern Africa'],
+  [/\b(middle east(ern)?)\b/, ['middle_east'], 'The Middle East'],
+  [/\b(central asia(n)?)\b/, ['caucasus_central_asia'], 'Central Asia'],
+  [/\b(south asia(n)?)\b/, ['south_asia'], 'South Asia'],
+  [/\b(east asia(n)?)\b/, ['east_asia'], 'East Asia'],
+  [/\b(eastern europe(an)?)\b/, ['central_eastern_europe'], 'Eastern Europe'],
+  [/\b(south pacific|pacific islands?)\b/, ['pacific_islands'], 'The Pacific Islands'],
+  [/\b(indian ocean)\b/, ['indian_ocean', 'south_asia', 'east_africa'], 'The Indian Ocean'],
   [/\b(the )?americas\b/, REGION_GROUPS.americas!, REGION_GROUP_LABELS.americas!],
   [/\b(europe|european)\b/, REGION_GROUPS.europe!, REGION_GROUP_LABELS.europe!],
   [/\b(asia|asian)\b/, REGION_GROUPS.asia!, REGION_GROUP_LABELS.asia!],
@@ -245,7 +262,66 @@ function rangeLabel(startDate: string, endDate: string): string {
   return sameMonth ? `${fmt(startDate)}–${Number(endDate.slice(8, 10))}` : `${fmt(startDate)} – ${fmt(endDate)}`;
 }
 
-export function parseTravelRequest(text: string, base: TripComposerAnswers, now: Date = new Date()): ParsedRequest {
+/** Something that can say which places a sentence names — the atlas, in production. */
+export interface RequestPlaces {
+  findPlaces(text: string): PlaceMention[];
+}
+
+/**
+ * Words that say nothing about a place: how the request is phrased, who is
+ * going, what it costs, when. What is left after these, the month names and the
+ * interest vocabulary are the request's own words — "tea plantations", "karst",
+ * "fishing villages" — and those are looked for in the travel guides.
+ */
+const REQUEST_FILLER = new Set(
+  'want wanna wanting looking look find finding somewhere anywhere someplace trip trips travel travelling traveling holiday holidays vacation vacations break getaway escape week weeks weekend weekends night nights month months day days people friend friends family families kid kids child children toddler teenager teenagers parent parents couple solo honeymoon budget cheap cheaper expensive inexpensive affordable money cost costs price flight flights flying fly drive driving car rent rental train trains happy fine okay basic love like enjoy prefer need plus maybe possible possibly really quite bit lot lots something anything everything thing things stuff good better great amazing beautiful incredible stunning spectacular nice cool fun interesting lovely pretty gorgeous dramatic less more fewer crowded crowd crowds touristy tourist tourists quiet quieter busy remote underrated hidden gem gems famous popular known unknown season weather warm hot cold cool sunny mild january february march april may june july august september october november december summer winter spring autumn fall early late mid year years time first next last far near close short long world place places destination destinations country region area stay staying hotel hotels lodge lodges guesthouse guesthouses hostel hostels resort resorts moderate comfortable luxury luxurious easy hard fit adventurous adventure adventures experience experiences sensible realistic worth still enough without with also rather instead other another usual type kind style big small little lively relaxed relaxing few many old new possible ideally prefer preferably mostly mainly including include especially particularly along away around about trying try tried done been seen visit visited visiting see seeing going go get getting take taking day-trips daytrips option options idea ideas recommend recommendation suggestions suggest help choose decide where when what which who how why this that these those there here from into onto over under between during after before again only just even ever never always often sometimes already yet soon now thanks thank please hello cheers regards sorry help then than too very much such both either neither each every all any some most least own same different similar alternative alternatives version equivalent unusual class world-class level minimum maximum total per person adults adult aged ages age using use used via within outside inside across through throughout north south east west northern southern eastern western central one two three four five six seven eight nine ten eleven twelve fourteen couple half quarter whole entire lively atmospheric cosy cozy reliable proper real true wild truly completely totally fully mostly partly kind sort mix mixed variety various several nothing anyone everyone someone nobody happy glad keen able unable'.split(
+    /\s+/,
+  ),
+);
+
+/**
+ * The interest words too broad to look up: every guide to a mountain says
+ * "mountain". The *specific* words that also name an interest — "gorilla",
+ * "penguin", "temple", "loch" — are kept, because a traveller who asked for
+ * gorillas did not ask for wildlife in general.
+ */
+const GENERIC_INTEREST_WORDS = new Set(
+  'hike hikes hiking hiker hikers walk walks walking trail trails trek treks trekking mountain mountains alpine peak peaks wildlife animal animals bird birds birding lake lakes beach beaches coast coastal coastline seaside island islands sea ocean snorkel snorkelling snorkeling dive diving rainforest jungle forest roadtrip drive drives driving desert volcano volcanoes volcanic ski skiing snow snowboard snowboarding food eat eating cuisine culture cultural history historic historical city cities urban village villages swim swimming outdoors outdoor nature scenery scenic view views landscape landscapes sport sports activity activities sight sights sightseeing town towns'.split(
+    /\s+/,
+  ),
+);
+
+/**
+ * The request's own words: what is left when place names, filler and the
+ * interest vocabulary are taken away. `terms` are folded for the lexical index;
+ * `phrase` is the same words as written, in order, for retrieval by meaning.
+ */
+export function requestWords(raw: string, mentions: readonly PlaceMention[]): { terms: string[]; phrase: string } {
+  let text = raw;
+  for (const mention of [...mentions].sort((a, b) => b.start - a.start)) text = `${text.slice(0, mention.start)} ${text.slice(mention.end)}`;
+  const terms: string[] = [];
+  const words: string[] = [];
+  const lowered = text.toLowerCase();
+  const clauses = ` ${lowered.replace(/[’']/g, "'").replace(/[,.;:!?()]+/g, ' | ')} `;
+  for (const match of lowered.matchAll(/[\p{L}]+/gu)) {
+    const word = match[0];
+    if (word.length < 3 || REQUEST_FILLER.has(word) || GENERIC_INTEREST_WORDS.has(word)) continue;
+    const term = atlasTokens(word)[0];
+    if (!term || REQUEST_FILLER.has(term) || GENERIC_INTEREST_WORDS.has(term) || terms.includes(term)) continue;
+    /* A word the traveller refused ("no long hikes") is not something to look for. */
+    const at = clauses.indexOf(` ${word}`);
+    if (at >= 0 && isNegated(clauses, at + 1)) continue;
+    terms.push(term);
+    words.push(word);
+  }
+  return { terms: terms.slice(0, 8), phrase: words.slice(0, 8).join(' ') };
+}
+
+export function requestTerms(raw: string, mentions: readonly PlaceMention[]): string[] {
+  return requestWords(raw, mentions).terms;
+}
+
+export function parseTravelRequest(text: string, base: TripComposerAnswers, now: Date = new Date(), places?: RequestPlaces): ParsedRequest {
   const raw = text.slice(0, 600);
   /* Clause breaks survive as " | " so a negation never reaches across a comma. */
   const t = ` ${raw.toLowerCase().replace(/[’']/g, "'").replace(/[,.;:!?()]+/g, ' | ').replace(/[^a-z0-9'\-|\s]/g, ' ').replace(/\s+/g, ' ')} `;
@@ -346,8 +422,10 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
   // ---- what for ---------------------------------------------------------------
   const focus: FocusKey[] = [...(discoveryOf(answers).focus ?? [])];
   const refused = new Set<FocusKey>();
+  const said = new Map<FocusKey, number>();
   for (const [pattern, keys] of FOCUS_PATTERNS) {
     const seen = occurrences(pattern, t);
+    if (seen.positive > 0) for (const key of keys) said.set(key, (said.get(key) ?? 0) + seen.positive);
     if (seen.positive > 0) for (const key of keys) if (!focus.includes(key)) focus.push(key);
     if (seen.negative > 0 && seen.positive === 0) for (const key of keys) refused.add(key);
   }
@@ -375,6 +453,21 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
       leadSaid = true;
     }
   }
+  /*
+   * Said again is said first. "Winter sports: reliable snow, good skiing and a
+   * lively village" is a ski trip with a village in it, not an even split — an
+   * interest the request returns to, at least twice as often as any other,
+   * leads.
+   */
+  if (!leadSaid && focus.length >= 2) {
+    const counted = focus.map((key) => [key, said.get(key) ?? 0] as const).sort((a, b) => b[1] - a[1]);
+    if (counted[0]![1] >= 2 && counted[0]![1] >= 2 * counted[1]![1]) {
+      const lead = counted[0]![0];
+      focus.splice(focus.indexOf(lead), 1);
+      focus.unshift(lead);
+      leadSaid = true;
+    }
+  }
   if (focus.length > 0) {
     patchDiscovery({ focus, focusRanked: focus.length === 1 || leadSaid });
     for (const key of focus) readings.push({ kind: 'focus', label: FOCUS_LABELS[key] });
@@ -383,10 +476,17 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
   }
   if (saysYes(/\bsafari\b/, t)) patchDiscovery({ wildlifeKind: 'safari' });
   else if (saysYes(/\b(whales?|snorkel|reef|marine|dolphins?)\b/, t) && focus.includes('wildlife')) patchDiscovery({ wildlifeKind: 'marine' });
-  if (saysYes(/\b(high[- ]altitude|high and wild|above \d{4} ?m|base camp)\b/, t)) patchDiscovery({ mountainStyle: 'high_altitude' });
+  if (saysYes(/\b(glaciers?|icebergs?|ice ?(fields?|caps?))\b/, t) && !saysYes(/\b(trek(s|king)?|climb(ing)?|mountaineering|hut[- ]to[- ]hut)\b/, t)) patchDiscovery({ mountainStyle: 'glaciers' });
+  else if (saysYes(/\b(high[- ]altitude|high and wild|above \d{4} ?m|base camp)\b/, t)) patchDiscovery({ mountainStyle: 'high_altitude' });
   else if (saysYes(/\b(hut[- ]to[- ]hut|multi[- ]day|thru[- ]hike|long[- ]distance (trail|walk|hike)s?)\b/, t)) patchDiscovery({ mountainStyle: 'hut_to_hut' });
   else if (saysYes(/\bday hikes?\b/, t) && focus.includes('mountains')) patchDiscovery({ mountainStyle: 'base_day_hikes' });
-  if (/\b(warm (sea|water)|tropical beach)/.test(t)) patchDiscovery({ swimStyle: 'warm_sea' });
+  /* What kind of sea trip: for a diver the reef is the destination and the sand is incidental. */
+  const diveSaid = occurrences(/\b(scuba|div(e|es|ing|ers?)|liveaboards?|dive sites?|wreck div\w+)\b/, t).positive;
+  const snorkelSaid = occurrences(/\b(snorkel(l?ing|s)?|reefs?|coral)\b/, t).positive;
+  const beachSaid = occurrences(/\b(beach(es)?|sand|sunbath\w+|swim(ming)?)\b/, t).positive;
+  if (diveSaid > 0 && diveSaid >= beachSaid) patchDiscovery({ swimStyle: 'diving' });
+  else if (snorkelSaid > 0 || diveSaid > 0) patchDiscovery({ swimStyle: 'snorkel' });
+  else if (/\b(warm (sea|water)|tropical beach)/.test(t)) patchDiscovery({ swimStyle: 'warm_sea' });
 
   // ---- budget -----------------------------------------------------------------
   /*
@@ -473,7 +573,7 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
     ? 'comfortable'
     : saysYes(/\b(expedition|technical|mountaineering|base camp|high[- ]altitude|peak bagging|summit(s|ing)?)\b/, t)
       ? 'expedition'
-      : saysYes(/\b(rugged|remote|wild|off[- ]grid|challenging|strenuous|hardcore|intense|demanding|tough|gruelling|grueling|hard hik(es|ing)|very active|highly active|super active|push (myself|ourselves))\b/, t)
+      : saysYes(/\b(rugged|remote|(?<!in the )wild(?!life)|off[- ]grid|challenging|strenuous|hardcore|intense|demanding|tough|gruelling|grueling|hard hik(es|ing)|very active|highly active|super active|push (myself|ourselves))\b/, t)
         ? 'rugged'
         : saysYes(/\b(easy|easygoing|easy-going|relaxed|relaxing|gentle|leisurely|chill|laid[- ]back|low[- ]key|accessible)\b/, t)
           ? 'comfortable'
@@ -569,8 +669,9 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
     readings.push({ kind: 'novelty', label: 'The classics' });
   }
   const warmWords = /\b(warm|hot(?! springs?)|sunny|sunshine|tropical|heat|humid)\b/;
+  const coolSaid = /\b(somewhere cool\b|cool (place|climate|summer|air|temperatures?)|stay cool|keep cool|\bbut somewhere cool)\b/.test(t);
   const coldWords = /\b(cold|chilly|freezing|snowy|crisp)\b/;
-  if (/\b(not too hot|avoid (the )?heat|avoid extreme heat|escape the heat|cooler|cool weather|no heat)\b/.test(t) || (occurrences(warmWords, t).negative > 0 && !saysYes(warmWords, t))) {
+  if (coolSaid || /\b(not too hot|avoid (the )?heat|avoid extreme heat|escape the heat|cooler|cool weather|no heat|not dangerously hot)\b/.test(t) || (occurrences(warmWords, t).negative > 0 && !saysYes(warmWords, t))) {
     answers = { ...answers, climatePreference: 'mild' };
     readings.push({ kind: 'climate', label: 'Not too hot' });
   } else if (/\bescape the (cold|winter)\b/.test(t) || saysYes(/\b(warm|hot(?! springs?)|sunny|sunshine|tropical)\b/, t)) {
@@ -583,6 +684,104 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
   } else if (saysYes(coldWords, t)) {
     answers = { ...answers, climatePreference: 'cold' };
     readings.push({ kind: 'climate', label: 'Cool' });
+  }
+
+  // ---- named places: a scope, a comparison, a refusal or a starting point ------
+  /*
+   * "Trekking in the Karakoram", "like the Dolomites but cheaper", "not Bali",
+   * "from Delhi". A named place is never the answer itself: it bounds the
+   * search, sets what to resemble, or is ruled out. Which of those is read from
+   * the words around it, and each reading is shown back as a chip.
+   */
+  if (places) {
+    const mentions = places.findPlaces(raw);
+    const continentWords = /^(europe|asia|africa|americas|oceania|caribbean|mediterranean|north america|south america|central america)$/;
+    const within: string[] = [];
+    const withinLabels: string[] = [];
+    const scopedCountries: string[] = [];
+    const outside: string[] = [];
+    let similarTo: string | undefined = discoveryOf(answers).similarTo;
+    for (const mention of mentions) {
+      const said = raw.slice(mention.start, mention.end).toLowerCase();
+      if (mention.role === 'origin') {
+        if (!originPointFromText(answers.origin, answers.originCountry) && !discoveryOf(answers).originPoint) {
+          answers = { ...answers, origin: mention.name };
+          patchDiscovery({ originPoint: { lat: mention.center.lat, lng: mention.center.lng, label: mention.name, countryCode: mention.country } });
+          readings.push({ kind: 'origin', label: `From ${mention.name}` });
+        }
+        continue;
+      }
+      if (mention.role === 'similar') {
+        if (!similarTo) {
+          similarTo = mention.id;
+          readings.push({ kind: 'region', label: `Like ${mention.name}` });
+        }
+        continue;
+      }
+      if (mention.role === 'avoid') {
+        /* "Not Europe", "anywhere but Asia": the continent table already read the refusal, with its negation. */
+        if (continentWords.test(said)) continue;
+        if (!outside.includes(mention.id)) {
+          outside.push(mention.id);
+          readings.push({ kind: 'region', label: `Not ${mention.name}` });
+        }
+        continue;
+      }
+      /* The hand-written continent table already read these words, negations included. */
+      if (continentWords.test(said)) continue;
+      /* A single town named in passing is not an area to search inside. */
+      if (!mention.wide) continue;
+      if (mention.country) {
+        if (!scopedCountries.includes(mention.country)) scopedCountries.push(mention.country);
+        readings.push({ kind: 'region', label: mention.name });
+      } else if (!within.includes(mention.id)) {
+        /* One name, several records ("Patagonia" is filed once under Chile and once under Argentina): the scope is all of them. */
+        for (const id of mention.ids) if (!within.includes(id)) within.push(id);
+        withinLabels.push(mention.name);
+        readings.push({ kind: 'region', label: mention.name });
+      }
+    }
+    if (within.length > 0 || scopedCountries.length > 0) {
+      /*
+       * A named country or area is the scope. The coarser readings the tables
+       * made of the same words ("Canada" as all of North America, "Patagonia"
+       * as the whole of Argentina and Chile) give way to it.
+       */
+      const named = [...new Set(readings.filter((reading) => reading.kind === 'region').map((reading) => reading.label))];
+      void named;
+      patchDiscovery({
+        ...(within.length > 0 ? { within: within.slice(0, 6), withinLabels: withinLabels.slice(0, 6) } : {}),
+        ...(scopedCountries.length > 0 ? { countries: scopedCountries.slice(0, 40) } : within.length > 0 ? { countries: undefined } : {}),
+        regions: undefined,
+      });
+      asked.add('region');
+    }
+    if (outside.length > 0) patchDiscovery({ outside: outside.slice(0, 8) });
+    if (similarTo && similarTo !== discoveryOf(answers).similarTo) {
+      patchDiscovery({ similarTo });
+      asked.add('region');
+    }
+    const own = requestWords(raw, mentions);
+    /* "Northern lights" folds to nothing an index holds; the word guides use for it is kept. */
+    if (/\b(northern lights|southern lights|aurora)\b/.test(t)) patchDiscovery({ aurora: true });
+    if (/\b(northern lights|aurora)\b/.test(t) && !own.terms.includes('aurora')) {
+      own.terms.unshift('aurora');
+      own.phrase = `aurora northern lights ${own.phrase}`.trim();
+    }
+    if (own.terms.length > 0) patchDiscovery({ terms: own.terms.slice(0, 8), phrase: own.phrase });
+  }
+  /* Comparatives. "Cheaper", "quieter", "less touristy" are asks in their own right, most often said against a named place. */
+  if (/\b(cheaper|less expensive|less pricey|more affordable|lower cost|costs? less)\b/.test(t) && !answers.budget) {
+    patchDiscovery({ refinements: [...new Set([...(discoveryOf(answers).refinements ?? []), 'cheaper' as const])] });
+    readings.push({ kind: 'budget', label: 'Less expensive' });
+  }
+  if (/\b(quieter|less (crowded|busy|touristy|developed|commerciali[sz]ed)|fewer (people|tourists|crowds)|without the (\w+ )?crowds|crowd[- ]free|few (cruise ships|tourists|people))\b/.test(t) && answers.crowdTolerance !== 'avoid') {
+    answers = { ...answers, crowdTolerance: 'avoid' };
+    readings.push({ kind: 'crowds', label: 'Away from crowds' });
+  }
+  if (/\b(underrated|under the radar|undiscovered|less touristy|lesser known|alternatives? to|most tourists skip|never heard of|off[- ]the[- ]beaten)\b/.test(t) && !answers.surpriseAppetite) {
+    answers = { ...answers, surpriseAppetite: 'surprise_me' };
+    readings.push({ kind: 'novelty', label: 'Somewhere unexpected' });
   }
 
   patchDiscovery({ asked: [...asked], assumptions: [...new Set([...(discoveryOf(answers).assumptions ?? []), ...assumptions])].slice(0, 12) });

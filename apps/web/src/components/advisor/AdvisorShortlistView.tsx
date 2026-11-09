@@ -1,4 +1,6 @@
+import { Fragment } from 'react';
 import {
+  DESTINATION_KIND_LABELS,
   imageryFallbackFor,
   WORLD_REGION_LABELS,
   type AdvisorPick,
@@ -7,6 +9,8 @@ import {
 } from '@sidequest/core';
 import { DestinationImage } from '@/components/DestinationImage';
 import { cx } from '@/components/ui';
+import { comparedSentence, formatCount, provenanceOf, provenanceShort, sourceReference } from './advisor-copy';
+import { DataAttribution } from './DataAttribution';
 import { WorldDots } from './WorldDots';
 import { AdvisorPickActions, AdvisorRefineBar } from './AdvisorControls';
 
@@ -14,9 +18,11 @@ import { AdvisorPickActions, AdvisorRefineBar } from './AdvisorControls';
  * THE SHORTLIST: THREE DIFFERENT ANSWERS, EACH ARGUED FOR.
  *
  * Built from the stored `AdvisorShortlist` only — no ranking, no provider and
- * no model at render. Each card says why it fits *this* traveller, what they'd
- * actually do, when, for how long, how hard and how far, what it costs on the
- * ground, what's worse about it, and what we have not checked. Internal
+ * no model at render. Each card says what kind of place it is, whose reading
+ * it is (ours, or open data nobody has checked — and how much that data says),
+ * why it fits *this* traveller, what they'd actually do, when it is good for
+ * what they want to do, for how long, how hard and how far, what it costs on
+ * the ground, what's worse about it, and what we have not checked. Internal
  * numbers appear only inside "How we ranked these", where they are labelled.
  *
  * A photograph is shown only when the imagery gate accepted one for the
@@ -35,38 +41,75 @@ function coverageWords(pick: AdvisorPick): string {
   return `judged on ${asked} of ${pick.factors.length} things`;
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function kindWords(pick: AdvisorPick): string | null {
+  return DESTINATION_KIND_LABELS[pick.kind] ?? null;
+}
+
+const mark = (pick: AdvisorPick) => ({ id: pick.id, lat: pick.center.lat, lng: pick.center.lng });
+
+function Fact({ label, wide = false, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
   return (
-    <div className="min-w-0 py-2.5">
+    <div className={cx('min-w-0 py-2.5', wide && 'sm:col-span-2')}>
       <dt className="sheet-label text-ink-muted">{label}</dt>
-      <dd className="mt-1 text-sm leading-snug text-ink">{children}</dd>
+      <dd className="mt-1 text-sm leading-snug [overflow-wrap:anywhere] text-ink">{children}</dd>
     </div>
   );
 }
 
-function Locator({ pick, points }: { pick: AdvisorPick; points: { id: string; lat: number; lng: number }[] }) {
+/** Whose reading this is, in a sentence — and, for open data, how much it had to go on. */
+function Provenance({ pick, className }: { pick: AdvisorPick; className?: string }) {
+  const provenance = provenanceOf(pick);
+  return (
+    <p data-testid="advisor-provenance" className={cx('text-[0.8125rem] leading-snug text-ink-muted', className)}>
+      {provenance.suggested ? <span className="block">{provenance.suggested}.</span> : null}
+      <span className="block">
+        {provenance.reading}
+        {provenance.documentation ? ` · ${provenance.documentation}` : ''}.
+      </span>
+    </p>
+  );
+}
+
+function Sources({ pick }: { pick: AdvisorPick }) {
+  if (pick.references.length === 0) return null;
+  return (
+    <p className="mt-4 text-sm leading-snug [overflow-wrap:anywhere] text-ink-muted">
+      <span className="sheet-label mr-2">Sources</span>
+      {pick.references.map((reference, index) => {
+        const source = sourceReference(reference);
+        return (
+          <Fragment key={reference}>
+            {index > 0 ? ' · ' : null}
+            {source.href ? (
+              <a href={source.href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-ink">
+                {source.text}
+                <span className="sr-only">
+                  {source.generic ? ` for ${pick.name}` : ''} (opens in a new tab)
+                </span>
+              </a>
+            ) : (
+              source.text
+            )}
+          </Fragment>
+        );
+      })}
+    </p>
+  );
+}
+
+function Locator({ pick }: { pick: AdvisorPick }) {
   return (
     <div className="survey-night relative flex aspect-[16/9] flex-col justify-between p-4 text-bone">
-      <WorldDots points={points} highlighted={[pick.id]} tone="night" className="absolute inset-0 m-auto h-full w-full p-3 opacity-90" label={`${pick.name} on a world map`} />
+      <WorldDots highlighted={[mark(pick)]} tone="night" className="absolute inset-0 m-auto h-full w-full p-3 opacity-90" label={`${pick.name} on a world map`} />
       <p className="sheet-label relative text-bone/60">{WORLD_REGION_LABELS[pick.worldRegion]}</p>
       <p className="sheet-label relative text-bone/45">No photograph yet</p>
     </div>
   );
 }
 
-function PickCard({
-  pick,
-  index,
-  image,
-  sessionId,
-  points,
-}: {
-  pick: AdvisorPick;
-  index: number;
-  image: ImageRecord | null;
-  sessionId: string;
-  points: { id: string; lat: number; lng: number }[];
-}) {
+function PickCard({ pick, index, image, sessionId }: { pick: AdvisorPick; index: number; image: ImageRecord | null; sessionId: string }) {
+  const kind = kindWords(pick);
+  const editorial = pick.basis === 'editorial';
   return (
     <article data-testid="advisor-pick" className="fade-up flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-ink/15 bg-paper-raised" style={{ ['--d' as string]: `${index * 90}ms` }} aria-labelledby={`pick-${pick.id}`}>
       {image ? (
@@ -76,19 +119,24 @@ function PickCard({
           fallback={imageryFallbackFor({ kind: 'destination', id: `advisor:${pick.id}`, name: pick.name, coordinates: pick.center })}
         />
       ) : (
-        <Locator pick={pick} points={points} />
+        <Locator pick={pick} />
       )}
       <div className="flex min-w-0 flex-1 flex-col p-5 sm:p-6">
-        <div className="flex items-baseline justify-between gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <p className="sheet-label text-accent">
             <span className="font-semibold text-flare">{index + 1}</span> · {MATCH_WORDS[pick.match]}
           </p>
           <p className="type-meta text-ink-faint" title="How many of the things we score were measured for you">{coverageWords(pick)}</p>
         </div>
-        <h3 id={`pick-${pick.id}`} className="mt-2 font-display text-[clamp(1.7rem,1.3rem+1.2vw,2.3rem)] leading-[1.02] font-[360] tracking-[-0.02em] text-ink">
+        <h3 id={`pick-${pick.id}`} className="mt-2 font-display text-[clamp(1.7rem,1.3rem+1.2vw,2.3rem)] leading-[1.02] font-[360] tracking-[-0.02em] [overflow-wrap:anywhere] text-ink">
           {pick.name}
         </h3>
-        <p className="mt-1 text-sm text-ink-muted">{pick.context}</p>
+        <p className="mt-1 text-sm text-ink-muted">
+          {kind ? <span data-testid="advisor-kind">{kind}</span> : null}
+          {kind && pick.context ? ' · ' : null}
+          {pick.context}
+        </p>
+        <Provenance pick={pick} className="mt-2" />
         <p className="mt-4 text-[1.02rem] leading-snug text-ink">{pick.why}</p>
         {pick.differsBy ? <p className="mt-2 text-sm text-ink-muted italic">{pick.differsBy}</p> : null}
 
@@ -102,7 +150,19 @@ function PickCard({
         </ul>
 
         <dl className="ruled mt-5 grid grid-cols-1 border-t border-ink/15 sm:grid-cols-2 sm:gap-x-5 [&>*+*]:border-t-0 sm:[&>*]:border-b sm:[&>*]:border-ink/10">
-          <Fact label="Best time">{pick.window.label}</Fact>
+          <Fact label="Best time" wide={Boolean(pick.seasonNote)}>
+            {pick.seasonNote ? (
+              <>
+                <span className="font-medium">{pick.window.label}</span>
+                {/* The season by activity: when it is good for what this traveller wants to do there. */}
+                <span data-testid="advisor-season" className="mt-1 block">
+                  {pick.seasonNote}
+                </span>
+              </>
+            ) : (
+              pick.window.label
+            )}
+          </Fact>
           <Fact label="Trip length">
             About {pick.nights.suggested} nights <span className="text-ink-muted">({pick.nights.min}–{pick.nights.max} works)</span>
           </Fact>
@@ -129,13 +189,19 @@ function PickCard({
             </ul>
           </div>
         ) : null}
-        <details className="mt-4 text-sm">
+        <Sources pick={pick} />
+        <details className="mt-2 text-sm">
           <summary className="min-h-11 cursor-pointer py-2 text-ink-muted hover:text-ink">Not checked yet</summary>
           <ul className="mt-1 space-y-1 text-ink-muted">
             {pick.unverified.map((line) => (
               <li key={line}>· {line}</li>
             ))}
-            <li>· Our reading is editorial, from {pick.references.join(', ')}.</li>
+            <li>
+              ·{' '}
+              {editorial
+                ? 'Our reading of this place is editorial, written from the sources above.'
+                : 'Nobody at Sidequest has reviewed this place. What we say about it is worked out from the sources above.'}
+            </li>
           </ul>
         </details>
 
@@ -148,10 +214,14 @@ function PickCard({
 }
 
 function AlternateCard({ pick, sessionId }: { pick: AdvisorPick; sessionId: string }) {
+  const kind = kindWords(pick);
   return (
     <article className="flex min-w-0 flex-col rounded-[var(--radius-card)] border border-ink/15 p-4" aria-labelledby={`alt-${pick.id}`}>
-      <p className="sheet-label text-ink-muted">{WORLD_REGION_LABELS[pick.worldRegion]}</p>
-      <h3 id={`alt-${pick.id}`} className="mt-1.5 font-display text-xl leading-tight text-ink">
+      <p className="sheet-label text-ink-muted">
+        {WORLD_REGION_LABELS[pick.worldRegion]}
+        {kind ? ` · ${kind}` : ''}
+      </p>
+      <h3 id={`alt-${pick.id}`} className="mt-1.5 font-display text-xl leading-tight [overflow-wrap:anywhere] text-ink">
         {pick.name}
       </h3>
       <p className="text-xs text-ink-muted">{pick.context}</p>
@@ -159,6 +229,8 @@ function AlternateCard({ pick, sessionId }: { pick: AdvisorPick; sessionId: stri
       <p className="type-meta mt-2 text-ink-faint">
         {pick.window.label} · ~{pick.nights.suggested} nights · {pick.cost.label.toLowerCase()}
       </p>
+      {pick.seasonNote ? <p className="mt-1 text-[0.8125rem] leading-snug text-ink-muted">{pick.seasonNote}</p> : null}
+      <Provenance pick={pick} className="mt-2" />
       <div className="mt-auto pt-4">
         <AdvisorPickActions sessionId={sessionId} pickId={pick.id} name={pick.name} />
       </div>
@@ -169,6 +241,7 @@ function AlternateCard({ pick, sessionId }: { pick: AdvisorPick; sessionId: stri
 function CompareTable({ picks }: { picks: AdvisorPick[] }) {
   const rows: [string, (pick: AdvisorPick) => string][] = [
     ['Where', (pick) => pick.context],
+    ['What it is', (pick) => kindWords(pick) ?? '—'],
     ['Strong for', (pick) => pick.strongFor.join(', ') || '—'],
     ['Best time', (pick) => pick.window.label],
     ['Nights', (pick) => `~${pick.nights.suggested} (${pick.nights.min}–${pick.nights.max})`],
@@ -177,6 +250,7 @@ function CompareTable({ picks }: { picks: AdvisorPick[] }) {
     ['Getting there', (pick) => (pick.distanceKm !== null ? `~${(Math.round(pick.distanceKm / 100) * 100).toLocaleString('en-US')} km` : pick.gettingThere.split('(')[0]!.trim())],
     ['Getting around', (pick) => pick.gettingAround],
     ['Weather check', (pick) => ({ verified: 'Matches records', differs: 'Records differ', unavailable: 'Unchecked', not_checked: 'Unchecked' })[pick.climate.status]],
+    ['Whose reading', (pick) => provenanceShort(pick)],
   ];
   return (
     <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
@@ -216,17 +290,22 @@ export function AdvisorShortlistView({
   sessionId,
   shortlist,
   images,
-  points,
+  dots,
+  sampleComplete,
   summary,
 }: {
   sessionId: string;
   shortlist: AdvisorShortlist;
   images: Record<string, ImageRecord>;
-  points: { id: string; lat: number; lng: number }[];
+  /** Path data for the header map: a server-thinned sample of real destination centres. */
+  dots: string;
+  /** True when the dots are every destination rather than a sample. */
+  sampleComplete: boolean;
   summary: string[];
 }) {
   const all = [...shortlist.picks, ...shortlist.alternates];
-  const { readout } = shortlist;
+  const { readout, stats } = shortlist;
+  const setAside = Object.values(stats.excluded).reduce((a, b) => a + b, 0);
   return (
     <div data-testid="advisor-shortlist">
       <header className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-end">
@@ -254,9 +333,20 @@ export function AdvisorShortlistView({
           ) : null}
           {readout.relaxation ? <p className="measure mt-4 rounded-[var(--radius-card)] border border-warning/40 bg-amber-soft px-4 py-3 text-sm text-ink">{readout.relaxation}</p> : null}
         </div>
-        <div className="survey-night rounded-[var(--radius-card)] p-3">
-          <WorldDots points={points} highlighted={shortlist.picks.map((pick) => pick.id)} tone="night" className="h-auto w-full" label={`World map: ${shortlist.picks.map((pick) => pick.name).join(', ')}`} />
-        </div>
+        <figure className="survey-night min-w-0 rounded-[var(--radius-card)] p-3">
+          <WorldDots
+            dots={dots}
+            highlighted={shortlist.picks.map(mark)}
+            tone="night"
+            className="h-auto w-full"
+            label={
+              shortlist.picks.length > 0
+                ? `World map marking ${shortlist.picks.map((pick) => pick.name).join(', ')}. The faint dots are ${sampleComplete ? 'the' : 'a sample of the'} destinations we compared.`
+                : `World map of ${sampleComplete ? 'the' : 'a sample of the'} destinations we compared`
+            }
+          />
+          <figcaption className="mt-1 text-[0.7rem] text-bone/45">{sampleComplete ? 'Each faint dot is a real destination centre.' : 'Faint dots are a sample of real destination centres.'}</figcaption>
+        </figure>
       </header>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]" aria-label="What this is based on">
@@ -291,7 +381,7 @@ export function AdvisorShortlistView({
 
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         {shortlist.picks.map((pick, index) => (
-          <PickCard key={pick.id} pick={pick} index={index} image={images[`advisor:${pick.id}`] ?? null} sessionId={sessionId} points={points} />
+          <PickCard key={pick.id} pick={pick} index={index} image={images[`advisor:${pick.id}`] ?? null} sessionId={sessionId} />
         ))}
       </div>
 
@@ -331,10 +421,10 @@ export function AdvisorShortlistView({
         <summary className="min-h-11 cursor-pointer font-display text-xl text-ink">How we ranked these</summary>
         <div className="mt-3 space-y-4 text-sm text-ink-muted">
           <p>
-            We compared {shortlist.stats.catalog} destinations — national parks, mountain regions, coasts and islands, never administrative districts — and set aside{' '}
-            {Object.values(shortlist.stats.excluded).reduce((a, b) => a + b, 0)} that broke something you said (wrong season, too far, too demanding…). The rest were scored on
-            the factors below; anything you haven’t told us is left out of the score rather than guessed. Then we chose places that are good <em>and</em> different from each
-            other. Fame is never a bonus.
+            {comparedSentence(stats)} Each card says whether its reading is ours or comes from open travel guides and map data.{' '}
+            {setAside > 0 ? `${formatCount(setAside)} were set aside for breaking something you said (wrong season, too far, too demanding…). ` : ''}
+            The rest were scored on the factors below; anything you haven’t told us is left out of the score rather than guessed. Then we chose places that are good{' '}
+            <em>and</em> different from each other. Fame is never a bonus.
           </p>
           {readout.closeCalls.length > 0 ? <p>Close behind: {readout.closeCalls.join(', ')}.</p> : null}
           <div className="-mx-4 overflow-x-auto px-4">
@@ -372,11 +462,19 @@ export function AdvisorShortlistView({
             </table>
           </div>
           <p className="text-xs">
-            Catalog {shortlist.catalogVersion} · built in {shortlist.elapsedMs} ms · weather checked for {shortlist.stats.climateChecked} of {all.length}, matching our reading for{' '}
-            {shortlist.stats.climateVerified}.
+            Atlas edition {shortlist.catalogVersion} · built in {formatCount(shortlist.elapsedMs)} ms · weather checked for {stats.climateChecked} of {all.length}, matching our reading for{' '}
+            {stats.climateVerified}.
           </p>
         </div>
       </details>
+
+      <footer className="mt-10 rule-top pt-5" aria-label="How this list was made">
+        <p data-testid="advisor-readout" className="type-small text-ink-muted">
+          {comparedSentence(stats)}
+          {stats.research ? ` ${stats.research.note}` : ''}
+        </p>
+        <DataAttribution className="mt-2 text-[0.8125rem] leading-snug text-ink-muted" />
+      </footer>
     </div>
   );
 }

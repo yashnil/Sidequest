@@ -1,0 +1,16 @@
+{
+  "name": "@sidequest/atlas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build:atlas": "node build/04-candidates.mjs && python3 -I build/05-rasters.py --points ../../.atlas-cache/work/points.ndjson --out ../../.atlas-cache/work/rasters.ndjson && node build/06-assemble.mjs"
+  },
+  "dependencies": {
+    "@sidequest/core": "*"
+  }
+}

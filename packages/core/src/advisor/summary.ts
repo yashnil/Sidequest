@@ -66,8 +66,8 @@ export function profileChips(answers: TripComposerAnswers): ProfileChip[] {
   if (answers.surpriseAppetite === 'familiar') chips.push({ question: 'novelty', label: 'The classics' });
   if (answers.climatePreference && answers.climatePreference !== 'any') chips.push({ question: 'climate', label: { warm: 'Warm', mild: 'Mild', cold: 'Cool' }[answers.climatePreference] });
   if (discovery?.wildlifeKind && discovery.wildlifeKind !== 'any') chips.push({ question: 'wildlife_kind', label: { safari: 'Safari', marine: 'Marine life', birds: 'Birds' }[discovery.wildlifeKind] });
-  if (discovery?.mountainStyle) chips.push({ question: 'mountain_style', label: { base_day_hikes: 'Day hikes from a base', hut_to_hut: 'Hut-to-hut', high_altitude: 'High and wild' }[discovery.mountainStyle] });
-  if (discovery?.swimStyle && discovery.swimStyle !== 'either') chips.push({ question: 'swim', label: discovery.swimStyle === 'warm_sea' ? 'Warm sea' : 'Lake swimming' });
+  if (discovery?.mountainStyle) chips.push({ question: 'mountain_style', label: { base_day_hikes: 'Day hikes from a base', hut_to_hut: 'Hut-to-hut', high_altitude: 'High and wild', glaciers: 'Glaciers and ice' }[discovery.mountainStyle] });
+  if (discovery?.swimStyle && discovery.swimStyle !== 'either') chips.push({ question: 'swim', label: { warm_sea: 'Warm sea', lakes: 'Lake swimming', diving: 'Diving', snorkel: 'Snorkelling' }[discovery.swimStyle] });
   for (const refinement of discovery?.refinements ?? []) chips.push({ question: 'focus', label: REFINEMENT_LABELS[refinement] });
   return chips;
 }

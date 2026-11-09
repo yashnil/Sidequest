@@ -126,8 +126,35 @@ export const DESTINATION_KINDS = [
   'city_and_surroundings',
   'desert',
   'wilderness',
+  /* Kinds only the global atlas produces: one place rather than a hand-drawn region. */
+  'city',
+  'town',
+  'country',
+  'protected_area',
+  'ski_area',
+  'route',
 ] as const;
 export type DestinationKind = (typeof DESTINATION_KINDS)[number];
+
+export const DESTINATION_KIND_LABELS: Record<DestinationKind, string> = {
+  national_park: 'National park',
+  travel_region: 'Travel region',
+  mountain_range: 'Mountain range',
+  island: 'Island',
+  island_group: 'Island group',
+  coast: 'Coast',
+  lake_district: 'Lake district',
+  country_circuit: 'Country circuit',
+  city_and_surroundings: 'City and surroundings',
+  desert: 'Desert',
+  wilderness: 'Wilderness',
+  city: 'City',
+  town: 'Town',
+  country: 'Country',
+  protected_area: 'Protected area',
+  ski_area: 'Ski area',
+  route: 'Route',
+};
 
 /**
  * The experiences a destination offers, each 0–3:
