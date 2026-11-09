@@ -3,58 +3,58 @@
   "generatedAt": "2026-11-08T12:00:00.000Z",
   "atlas": {
    "version": "2026-11.1",
-   "builtAt": "2026-11-09T07:04:47.151Z",
-   "destinations": 36635,
-   "loadMs": 284,
+   "builtAt": "2026-11-09T15:48:14.681Z",
+   "destinations": 36588,
+   "loadMs": 313,
    "embeddings": "attached",
    "coverage": {
-    "destinations": 36635,
+    "destinations": 36588,
     "curated": 234,
     "countries": 227,
     "byKind": {
      "island_group": 903,
-     "travel_region": 4241,
-     "national_park": 3137,
+     "travel_region": 4220,
+     "national_park": 3128,
      "country_circuit": 8,
      "wilderness": 12,
-     "lake_district": 405,
+     "lake_district": 403,
      "coast": 256,
      "mountain_range": 1655,
      "island": 2272,
      "city_and_surroundings": 14,
      "desert": 104,
      "city": 4170,
-     "town": 17159,
-     "protected_area": 1531,
-     "route": 366,
-     "country": 187,
+     "town": 17157,
+     "protected_area": 1524,
+     "route": 363,
+     "country": 184,
      "ski_area": 215
     },
     "byWorldRegion": {
      "northern_europe": 3518,
      "western_europe": 2287,
-     "southern_europe": 3102,
-     "central_eastern_europe": 1798,
+     "southern_europe": 3101,
+     "central_eastern_europe": 1796,
      "north_america_west": 2447,
-     "north_america_east": 5295,
-     "north_america_north": 306,
-     "mexico_central_america": 1186,
-     "caribbean": 372,
-     "south_america_north": 1517,
+     "north_america_east": 5293,
+     "north_america_north": 303,
+     "mexico_central_america": 1181,
+     "caribbean": 371,
+     "south_america_north": 1514,
      "south_america_south": 519,
-     "oceania": 1761,
-     "pacific_islands": 490,
-     "polar": 558,
+     "oceania": 1752,
+     "pacific_islands": 487,
+     "polar": 557,
      "east_africa": 456,
      "southern_africa": 642,
-     "north_africa": 406,
+     "north_africa": 405,
      "west_central_africa": 1110,
-     "indian_ocean": 186,
-     "middle_east": 1006,
-     "caucasus_central_asia": 619,
+     "indian_ocean": 183,
+     "middle_east": 1002,
+     "caucasus_central_asia": 618,
      "south_asia": 2299,
-     "southeast_asia": 2239,
-     "east_asia": 2516
+     "southeast_asia": 2232,
+     "east_asia": 2515
     }
    }
   },
@@ -317,25 +317,25 @@
   "after": {
    "system": "global atlas 2026-11.1",
    "requests": 211,
-   "answeredWithThree": 208,
+   "answeredWithThree": 209,
    "empty": 0,
    "checks": 468,
-   "checksPassed": 417,
-   "checkPassRate": 0.891,
+   "checksPassed": 418,
+   "checkPassRate": 0.893,
    "requestsWithChecks": 195,
-   "requestsAllChecksPass": 149,
-   "distinctDestinations": 326,
+   "requestsAllChecksPass": 150,
+   "distinctDestinations": 322,
    "overlappingPairs": 0,
    "byBasis": {
-    "editorial": 434,
-    "open_data": 193
+    "editorial": 439,
+    "open_data": 190
    },
    "byCategory": {
     "trekking": {
      "requests": 9,
      "checks": 28,
-     "passed": 25,
-     "allPass": 6
+     "passed": 27,
+     "allPass": 8
     },
     "islands": {
      "requests": 7,
@@ -562,15 +562,15 @@
     "safety": {
      "requests": 1,
      "checks": 2,
-     "passed": 2,
-     "allPass": 1
+     "passed": 1,
+     "allPass": 0
     }
    },
    "latencyMs": {
-    "cold": 772,
-    "p50": 28.6,
-    "p95": 49.6,
-    "max": 132.5
+    "cold": 765,
+    "p50": 29.4,
+    "p95": 49.4,
+    "max": 140.8
    }
   },
   "stability": {
@@ -578,8 +578,8 @@
    "sameAfterRewording": "211/211"
   },
   "provenance": {
-   "derivedPicksShown": 485,
-   "withSourceBasisAndCaveat": 485
+   "derivedPicksShown": 484,
+   "withSourceBasisAndCaveat": 484
   },
   "recall": {
    "named": 223,
@@ -594,11 +594,11 @@
    ]
   },
   "coverage": {
-   "withMeasuredClimate": 36635,
+   "withMeasuredClimate": 36588,
    "strongByExperience": {
     "day_hiking": {
      "northern_europe": 185,
-     "total": 2617,
+     "total": 2616,
      "western_europe": 355,
      "southern_europe": 362,
      "central_eastern_europe": 161,
@@ -616,7 +616,7 @@
      "southern_africa": 40,
      "north_africa": 13,
      "west_central_africa": 10,
-     "indian_ocean": 10,
+     "indian_ocean": 9,
      "middle_east": 72,
      "caucasus_central_asia": 80,
      "south_asia": 106,
@@ -650,29 +650,29 @@
     },
     "coastal_scenery": {
      "northern_europe": 339,
-     "total": 1597,
+     "total": 1583,
      "southern_europe": 282,
      "north_america_west": 123,
-     "north_america_east": 190,
-     "north_america_north": 8,
-     "mexico_central_america": 38,
-     "caribbean": 50,
-     "south_america_north": 29,
+     "north_america_east": 189,
+     "north_america_north": 5,
+     "mexico_central_america": 37,
+     "caribbean": 49,
+     "south_america_north": 28,
      "south_america_south": 12,
-     "oceania": 131,
-     "pacific_islands": 41,
+     "oceania": 129,
+     "pacific_islands": 40,
      "polar": 12,
      "southern_africa": 15,
      "west_central_africa": 13,
      "indian_ocean": 12,
-     "middle_east": 30,
+     "middle_east": 29,
      "south_asia": 18,
-     "southeast_asia": 106,
+     "southeast_asia": 105,
      "east_asia": 77,
-     "north_africa": 5,
+     "north_africa": 4,
      "western_europe": 44,
      "caucasus_central_asia": 2,
-     "central_eastern_europe": 16,
+     "central_eastern_europe": 15,
      "east_africa": 4
     },
     "paddling_boating": {
@@ -701,12 +701,12 @@
     },
     "marine_wildlife": {
      "northern_europe": 5,
-     "total": 109,
+     "total": 108,
      "southern_europe": 4,
      "north_america_west": 14,
      "north_america_east": 10,
      "north_america_north": 2,
-     "mexico_central_america": 14,
+     "mexico_central_america": 13,
      "caribbean": 2,
      "south_america_north": 2,
      "south_america_south": 6,
@@ -768,16 +768,16 @@
     },
     "villages_culture": {
      "northern_europe": 896,
-     "total": 4438,
+     "total": 4434,
      "western_europe": 677,
-     "southern_europe": 889,
-     "central_eastern_europe": 342,
+     "southern_europe": 888,
+     "central_eastern_europe": 341,
      "north_america_west": 21,
      "north_america_east": 96,
      "north_america_north": 1,
      "mexico_central_america": 126,
      "caribbean": 21,
-     "south_america_north": 65,
+     "south_america_north": 64,
      "south_america_south": 23,
      "oceania": 7,
      "pacific_islands": 8,
@@ -787,7 +787,7 @@
      "north_africa": 69,
      "west_central_africa": 28,
      "indian_ocean": 7,
-     "middle_east": 305,
+     "middle_east": 304,
      "caucasus_central_asia": 111,
      "south_asia": 286,
      "southeast_asia": 128,
@@ -908,14 +908,14 @@
     },
     "volcanoes_geothermal": {
      "northern_europe": 4,
-     "total": 103,
+     "total": 101,
      "southern_europe": 13,
      "north_america_west": 9,
-     "mexico_central_america": 23,
+     "mexico_central_america": 22,
      "caribbean": 2,
      "south_america_north": 5,
      "south_america_south": 5,
-     "oceania": 6,
+     "oceania": 5,
      "pacific_islands": 2,
      "indian_ocean": 2,
      "southeast_asia": 20,
@@ -966,13 +966,13 @@
     },
     "beaches_swimming": {
      "northern_europe": 1,
-     "total": 1074,
+     "total": 1069,
      "western_europe": 5,
      "southern_europe": 300,
-     "north_america_east": 130,
-     "mexico_central_america": 87,
+     "north_america_east": 129,
+     "mexico_central_america": 86,
      "caribbean": 48,
-     "south_america_north": 89,
+     "south_america_north": 88,
      "oceania": 75,
      "pacific_islands": 11,
      "southern_africa": 12,
@@ -980,12 +980,12 @@
      "indian_ocean": 8,
      "middle_east": 18,
      "south_asia": 55,
-     "southeast_asia": 150,
+     "southeast_asia": 149,
      "east_asia": 36,
      "north_africa": 6,
      "south_america_south": 7,
      "caucasus_central_asia": 2,
-     "central_eastern_europe": 14,
+     "central_eastern_europe": 13,
      "east_africa": 5
     },
     "food": {
@@ -1015,18 +1015,18 @@
     },
     "snorkel_dive": {
      "southern_europe": 5,
-     "total": 105,
-     "north_america_east": 3,
-     "mexico_central_america": 12,
-     "caribbean": 11,
-     "south_america_north": 2,
+     "total": 99,
+     "north_america_east": 2,
+     "mexico_central_america": 11,
+     "caribbean": 10,
+     "south_america_north": 1,
      "oceania": 5,
      "pacific_islands": 16,
      "southern_africa": 2,
      "indian_ocean": 5,
      "middle_east": 2,
      "south_asia": 3,
-     "southeast_asia": 32,
+     "southeast_asia": 30,
      "east_africa": 1,
      "east_asia": 4,
      "north_africa": 2
@@ -1096,68 +1096,68 @@
    },
    "goodMonthsByActivity": {
     "hike_low": [
-     21052,
-     22915,
-     25420,
-     27939,
-     27896,
-     26754,
-     24965,
-     25356,
-     27537,
-     28887,
-     27990,
-     22627
+     21032,
+     22895,
+     25399,
+     27912,
+     27866,
+     26724,
+     24931,
+     25322,
+     27506,
+     28861,
+     27959,
+     22601
     ],
     "hike_high": [
-     20362,
-     21819,
-     23826,
-     26600,
-     26942,
-     26057,
-     24442,
-     24998,
-     27159,
-     28351,
-     27112,
-     21999
+     20342,
+     21798,
+     23805,
+     26574,
+     26914,
+     26029,
+     24409,
+     24966,
+     27129,
+     28327,
+     27082,
+     21973
     ],
     "beach": [
-     3639,
-     3879,
-     4035,
-     4568,
-     4221,
-     4833,
-     6225,
-     6306,
-     5283,
-     3726,
-     4139,
-     3968
+     3626,
+     3864,
+     4014,
+     4538,
+     4194,
+     4806,
+     6195,
+     6275,
+     5254,
+     3698,
+     4111,
+     3942
     ],
     "dive": [
-     4730,
-     4931,
-     5071,
-     5571,
-     5819,
-     7663,
-     8155,
-     8467,
-     8216,
-     6988,
-     5785,
-     5331
+     4706,
+     4903,
+     5042,
+     5539,
+     5787,
+     7629,
+     8117,
+     8431,
+     8180,
+     6957,
+     5752,
+     5300
     ],
     "ski": [
      3232,
      3690,
-     3326,
-     2264,
-     1232,
-     553,
+     3325,
+     2263,
+     1231,
+     552,
      305,
      369,
      451,
@@ -1166,144 +1166,144 @@
      2424
     ],
     "winter": [
-     5669,
-     6202,
-     4610,
-     2052,
-     1015,
+     5667,
+     6198,
+     4605,
+     2048,
+     1013,
      471,
      339,
      413,
      526,
-     787,
-     1473,
-     3456
+     785,
+     1472,
+     3454
     ],
     "safari": [
-     12003,
-     13063,
-     15420,
-     21614,
-     26313,
-     26484,
-     26137,
-     26368,
-     25801,
-     22338,
-     15152,
-     12147
+     11984,
+     13042,
+     15399,
+     21584,
+     26280,
+     26450,
+     26100,
+     26332,
+     25767,
+     22306,
+     15124,
+     12122
     ],
     "wild": [
-     31550,
-     33073,
-     34894,
-     35255,
-     35084,
-     34423,
-     33936,
-     34357,
-     34968,
-     35264,
-     34361,
-     32295
+     31511,
+     33033,
+     34853,
+     35211,
+     35039,
+     34379,
+     33890,
+     34313,
+     34923,
+     35219,
+     34319,
+     32253
     ],
     "city": [
-     31849,
-     32618,
-     34688,
-     34787,
-     34946,
-     34976,
-     35112,
-     35370,
-     35815,
-     35743,
-     34972,
-     32673
+     31808,
+     32576,
+     34646,
+     34743,
+     34900,
+     34931,
+     35067,
+     35324,
+     35769,
+     35696,
+     34929,
+     32631
     ],
     "desert": [
-     18309,
-     19039,
-     23965,
-     30550,
-     33262,
-     34167,
-     34531,
-     34718,
-     34791,
-     33113,
-     25894,
-     19607
+     18271,
+     19001,
+     23926,
+     30509,
+     33220,
+     34124,
+     34487,
+     34674,
+     34747,
+     33070,
+     25854,
+     19568
     ],
     "drive": [
-     29096,
-     29443,
-     31633,
-     34325,
-     35094,
-     34819,
-     34574,
-     34850,
-     35284,
-     35265,
-     33965,
-     30812
+     29058,
+     29404,
+     31592,
+     34283,
+     35050,
+     34773,
+     34527,
+     34805,
+     35239,
+     35222,
+     33922,
+     30771
     ],
     "paddle": [
-     15006,
-     15835,
-     18627,
-     25970,
-     31035,
-     31009,
-     30732,
-     31398,
-     31981,
-     29705,
-     19982,
-     16089
+     14975,
+     15805,
+     18591,
+     25930,
+     30997,
+     30971,
+     30694,
+     31359,
+     31943,
+     29664,
+     19945,
+     16052
     ],
     "sky": [
-     35145,
-     35770,
-     35964,
-     35935,
-     34643,
-     31999,
-     31835,
-     33815,
-     34830,
-     35444,
-     35336,
-     35348
+     35105,
+     35731,
+     35919,
+     35890,
+     34602,
+     31961,
+     31794,
+     33773,
+     34785,
+     35399,
+     35291,
+     35302
     ],
     "scenery": [
-     21265,
-     23248,
-     27897,
-     31468,
-     31708,
-     31048,
-     30431,
-     30910,
-     31972,
-     32541,
-     29590,
-     22834
+     21237,
+     23220,
+     27861,
+     31427,
+     31669,
+     31009,
+     30391,
+     30869,
+     31932,
+     32502,
+     29550,
+     22798
     ],
     "any": [
-     34696,
-     35112,
-     35833,
-     35914,
-     35932,
-     36068,
-     36069,
-     36137,
-     36322,
-     36227,
-     35889,
-     35168
+     34653,
+     35069,
+     35789,
+     35869,
+     35885,
+     36021,
+     36023,
+     36091,
+     36275,
+     36180,
+     35845,
+     35125
     ]
    }
   },
@@ -11199,32 +11199,32 @@
      "score": 0.874
     },
     {
-     "id": "wv:Jammu and Kashmir",
-     "name": "Jammu and Kashmir",
-     "context": "Himalayan North, India",
-     "basis": "open_data",
-     "kind": "travel_region",
-     "score": 0.792
-    },
-    {
      "id": "wv:Hunza Valley",
      "name": "Hunza Valley",
      "context": "Gilgit-Baltistan, Pakistan",
      "basis": "open_data",
      "kind": "travel_region",
      "score": 0.734
+    },
+    {
+     "id": "wd:Q805805",
+     "name": "Baltoro Muztagh",
+     "context": "Gilgit-Baltistan, Pakistan",
+     "basis": "open_data",
+     "kind": "mountain_range",
+     "score": 0.692
     }
    ],
    "alternates": [
-    "Baltoro Muztagh",
     "Panmah Muztagh",
-    "Western Himalaya"
+    "Western Himalaya",
+    "Gilgit"
    ],
    "checks": [
     {
      "check": "inside the named area",
-     "pass": false,
-     "detail": "not: Jammu and Kashmir"
+     "pass": true,
+     "detail": "all"
     },
     {
      "check": "feasible (trek_high) by climate normals",
@@ -11238,7 +11238,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 14.2
+   "ms": 15.8
   },
   {
    "id": "karakoram-pakistan-mountains",
@@ -11263,18 +11263,15 @@
      "score": 0.766
     },
     {
-     "id": "wv:Khyber Pass",
-     "name": "Khyber Pass",
-     "context": "Khyber Pakhtunkhwa, Pakistan",
+     "id": "wv:Azad Kashmir",
+     "name": "Azad Kashmir",
+     "context": "Pakistan",
      "basis": "open_data",
      "kind": "travel_region",
-     "score": 0.559
+     "score": 0.523
     }
    ],
-   "alternates": [
-    "Swat",
-    "Arang Kel"
-   ],
+   "alternates": [],
    "checks": [
     {
      "check": "in the named countries",
@@ -11284,7 +11281,7 @@
     {
      "check": "feasible (hike) by climate normals",
      "pass": false,
-     "detail": "not: Khyber Pass"
+     "detail": "not: Azad Kashmir"
     },
     {
      "check": "price level ≤ 0.5",
@@ -11293,7 +11290,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 11.9
+   "ms": 17.6
   },
   {
    "id": "hawaii-volcano-beach",
@@ -11343,7 +11340,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 6.5
+   "ms": 11.1
   },
   {
    "id": "hawaii-family",
@@ -11394,7 +11391,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 3.5
+   "ms": 3.3
   },
   {
    "id": "japan-spring-culture",
@@ -11450,7 +11447,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 132.5
+   "ms": 140.8
   },
   {
    "id": "japan-autumn-quiet",
@@ -11506,7 +11503,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 18.3
+   "ms": 15.9
   },
   {
    "id": "central-asia-remote-hiking",
@@ -11562,7 +11559,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 18.7
+   "ms": 15.9
   },
   {
    "id": "central-asia-silk-road",
@@ -11613,7 +11610,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.8
+   "ms": 14.8
   },
   {
    "id": "indonesia-islands",
@@ -11669,7 +11666,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 39.6
+   "ms": 37.3
   },
   {
    "id": "indonesia-diving",
@@ -11725,7 +11722,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 15.1
+   "ms": 15
   },
   {
    "id": "europe-city-break-spring",
@@ -11791,7 +11788,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 71
+   "ms": 72.8
   },
   {
    "id": "europe-city-break-winter",
@@ -11847,7 +11844,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 23.5
+   "ms": 30.3
   },
   {
    "id": "europe-city-break-underrated",
@@ -11877,13 +11874,13 @@
      "context": "Central Hungary, Hungary",
      "basis": "open_data",
      "kind": "city",
-     "score": 0.765
+     "score": 0.772
     }
    ],
    "alternates": [
     "Sofia",
-    "Sarajevo",
-    "Amsterdam"
+    "Amsterdam",
+    "Barcelona"
    ],
    "checks": [
     {
@@ -11908,7 +11905,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 21.5
+   "ms": 22.2
   },
   {
    "id": "africa-safari-august",
@@ -11964,7 +11961,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 45.7
+   "ms": 46.5
   },
   {
    "id": "africa-safari-february",
@@ -12020,7 +12017,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 49.6
+   "ms": 50.5
   },
   {
    "id": "africa-safari-budget",
@@ -12076,7 +12073,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 20.1
+   "ms": 19.9
   },
   {
    "id": "patagonia-summer",
@@ -12132,7 +12129,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 14.9
+   "ms": 18.4
   },
   {
    "id": "patagonia-roadtrip",
@@ -12181,7 +12178,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 7.7
+   "ms": 6
   },
   {
    "id": "alpine-hiking-september",
@@ -12232,7 +12229,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 50.9
+   "ms": 54.3
   },
   {
    "id": "alps-september-quiet",
@@ -12241,32 +12238,34 @@
    "text": "Hiking in the Alps in late September, somewhere quieter than Chamonix and Zermatt.",
    "picks": [
     {
-     "id": "julian-alps",
-     "name": "Julian Alps",
-     "context": "Slovenia",
+     "id": "tyrol",
+     "name": "Tyrolean Alps",
+     "context": "Western Austria",
      "basis": "editorial",
-     "kind": "national_park",
-     "score": 0.819
-    },
-    {
-     "id": "wv:French Alps",
-     "name": "French Alps",
-     "context": "France",
-     "basis": "open_data",
      "kind": "mountain_range",
-     "score": 0.709
+     "score": 0.924
     },
     {
-     "id": "wv:Bavarian Alps",
-     "name": "Bavarian Alps",
-     "context": "Alps, Austria",
-     "basis": "open_data",
-     "kind": "travel_region",
-     "score": 0.711
+     "id": "dolomites",
+     "name": "The Dolomites",
+     "context": "Northern Italy",
+     "basis": "editorial",
+     "kind": "mountain_range",
+     "score": 0.915
+    },
+    {
+     "id": "bernese-oberland",
+     "name": "Bernese Oberland",
+     "context": "Swiss Alps",
+     "basis": "editorial",
+     "kind": "mountain_range",
+     "score": 0.897
     }
    ],
    "alternates": [
-    "Swiss Alps"
+    "The Engadin",
+    "Julian Alps",
+    "Provence-Alpes-Côte d'Azur"
    ],
    "checks": [
     {
@@ -12286,7 +12285,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 6.9
+   "ms": 42.1
   },
   {
    "id": "winter-sports-february",
@@ -12337,7 +12336,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 37.8
+   "ms": 36.2
   },
   {
    "id": "winter-sports-budget",
@@ -12393,7 +12392,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 39.6
+   "ms": 34.7
   },
   {
    "id": "winter-sports-japan",
@@ -12449,7 +12448,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 14.7
+   "ms": 15.6
   },
   {
    "id": "rainforest-wildlife",
@@ -12500,7 +12499,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 45
+   "ms": 39.8
   },
   {
    "id": "rainforest-borneo-like",
@@ -12551,7 +12550,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 41.8
+   "ms": 40.9
   },
   {
    "id": "amazon-august",
@@ -12598,7 +12597,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 16.9
+   "ms": 18
   },
   {
    "id": "family-limited-driving",
@@ -12649,7 +12648,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 46.7
+   "ms": 43.6
   },
   {
    "id": "family-no-car-europe",
@@ -12710,7 +12709,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 29.9
+   "ms": 23.8
   },
   {
    "id": "rail-multi-country",
@@ -12822,7 +12821,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 25.2
+   "ms": 26.5
   },
   {
    "id": "like-dolomites-cheaper",
@@ -12883,7 +12882,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 62.6
+   "ms": 66.3
   },
   {
    "id": "like-amalfi-quieter",
@@ -12939,7 +12938,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 60
+   "ms": 98.3
   },
   {
    "id": "like-iceland-cheaper",
@@ -12995,7 +12994,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 62
+   "ms": 61.5
   },
   {
    "id": "like-santorini-uncrowded",
@@ -13046,7 +13045,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.2
+   "ms": 36.1
   },
   {
    "id": "like-banff-quiet",
@@ -13102,7 +13101,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 41.3
+   "ms": 43.4
   },
   {
    "id": "remote-mountains-september",
@@ -13163,7 +13162,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.1
+   "ms": 28.2
   },
   {
    "id": "himalaya-october",
@@ -13180,25 +13179,26 @@
      "score": 0.918
     },
     {
-     "id": "everest-khumbu",
-     "name": "Everest Region (Khumbu)",
-     "context": "Eastern Nepal",
-     "basis": "editorial",
-     "kind": "national_park",
-     "score": 0.802
+     "id": "wv:Uttarakhand",
+     "name": "Uttarakhand",
+     "context": "Himalayan North, India",
+     "basis": "open_data",
+     "kind": "travel_region",
+     "score": 0.853
     },
     {
-     "id": "langtang-valley",
-     "name": "Langtang Valley",
-     "context": "North of Kathmandu, Nepal",
+     "id": "bhutan",
+     "name": "Bhutan",
+     "context": "Eastern Himalaya",
      "basis": "editorial",
-     "kind": "national_park",
-     "score": 0.693
+     "kind": "country_circuit",
+     "score": 0.838
     }
    ],
    "alternates": [
-    "Makalu Barun National Park",
-    "Dhaulagiri Himal"
+    "Everest Region (Khumbu)",
+    "Langtang Valley Trek",
+    "Manaslu Trek"
    ],
    "checks": [
     {
@@ -13208,8 +13208,8 @@
     },
     {
      "check": "feasible (trek_high) by climate normals",
-     "pass": false,
-     "detail": "not: Langtang Valley"
+     "pass": true,
+     "detail": "all"
     },
     {
      "check": "offers multi_day_trekking",
@@ -13218,7 +13218,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 9.9
+   "ms": 25.2
   },
   {
    "id": "andes-trek-june",
@@ -13227,34 +13227,34 @@
    "text": "High-altitude trekking in the Andes in June, I have done Kilimanjaro and want something wilder.",
    "picks": [
     {
-     "id": "wv:Jujuy",
-     "name": "Jujuy",
-     "context": "Andean Northwest, Argentina",
-     "basis": "open_data",
-     "kind": "travel_region",
-     "score": 0.718
+     "id": "cordillera-blanca",
+     "name": "Cordillera Blanca",
+     "context": "Huaraz, Peruvian Andes",
+     "basis": "editorial",
+     "kind": "mountain_range",
+     "score": 0.968
     },
     {
-     "id": "wv:Salta (province)",
-     "name": "Salta",
-     "context": "Andean Northwest, Argentina",
-     "basis": "open_data",
+     "id": "cusco-sacred-valley",
+     "name": "Sacred Valley & Machu Picchu",
+     "context": "Cusco region, Peru",
+     "basis": "editorial",
      "kind": "travel_region",
-     "score": 0.688
+     "score": 0.908
     },
     {
-     "id": "wv:Potosí (department)",
-     "name": "Potosí",
-     "context": "Altiplano, Bolivia",
+     "id": "wv:Andean Highlands (Ecuador)",
+     "name": "Andean Highlands",
+     "context": "Ecuador",
      "basis": "open_data",
      "kind": "travel_region",
-     "score": 0.663
+     "score": 0.795
     }
    ],
    "alternates": [
-    "San Juan",
-    "Mérida",
-    "Tarija"
+    "Salkantay trail",
+    "Sajama National Park",
+    "Ausangate circuit"
    ],
    "checks": [
     {
@@ -13274,7 +13274,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 26.8
+   "ms": 35.1
   },
   {
    "id": "caucasus-hiking",
@@ -13330,7 +13330,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 20.7
+   "ms": 20.5
   },
   {
    "id": "spring-hiking-no-snow",
@@ -13386,7 +13386,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 21.6
+   "ms": 21
   },
   {
    "id": "march-mountains-budget",
@@ -13437,7 +13437,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 29.8
+   "ms": 33.2
   },
   {
    "id": "winter-sun-walking",
@@ -13454,26 +13454,26 @@
      "score": 0.964
     },
     {
-     "id": "siwa-oasis",
-     "name": "Siwa Oasis",
-     "context": "Western Desert, Egypt",
-     "basis": "editorial",
-     "kind": "desert",
-     "score": 0.939
-    },
-    {
      "id": "sao-tome-principe",
      "name": "São Tomé & Príncipe",
      "context": "Gulf of Guinea",
      "basis": "editorial",
      "kind": "island_group",
      "score": 0.92
+    },
+    {
+     "id": "wv:Nantou County",
+     "name": "Nantou County",
+     "context": "Central Taiwan, Taiwan",
+     "basis": "open_data",
+     "kind": "travel_region",
+     "score": 0.925
     }
    ],
    "alternates": [
-    "Nantou County",
     "Multan",
-    "João Pessoa"
+    "João Pessoa",
+    "Guangzhou"
    ],
    "checks": [
     {
@@ -13489,11 +13489,11 @@
     {
      "check": "within 5000 km of Manchester",
      "pass": false,
-     "detail": "not: Phoenix, São Tomé & Príncipe"
+     "detail": "not: Phoenix, São Tomé & Príncipe, Nantou County"
     }
    ],
    "overlapping": 0,
-   "ms": 11.7
+   "ms": 10.5
   },
   {
    "id": "usa-national-parks-autumn",
@@ -13549,7 +13549,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.2
+   "ms": 41.4
   },
   {
    "id": "scandinavia-summer-hiking",
@@ -13600,7 +13600,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 37.6
+   "ms": 37.8
   },
   {
    "id": "new-zealand-february",
@@ -13649,7 +13649,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 12.4
+   "ms": 13.5
   },
   {
    "id": "africa-mountains",
@@ -13705,7 +13705,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 22.6
+   "ms": 21.9
   },
   {
    "id": "balkans-hiking-cheap",
@@ -13761,7 +13761,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.5
+   "ms": 32.1
   },
   {
    "id": "japan-alps-hike",
@@ -13816,7 +13816,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 5.8
+   "ms": 5.7
   },
   {
    "id": "volcano-hikes",
@@ -13862,7 +13862,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.6
+   "ms": 40.7
   },
   {
    "id": "glaciers-easy",
@@ -13908,7 +13908,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.7
+   "ms": 40.8
   },
   {
    "id": "caribbean-january",
@@ -13959,7 +13959,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 14
+   "ms": 15.8
   },
   {
    "id": "caribbean-hurricane-season",
@@ -14010,7 +14010,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 4.1
+   "ms": 5.3
   },
   {
    "id": "med-islands-june",
@@ -14066,7 +14066,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 25.1
+   "ms": 26
   },
   {
    "id": "warm-sea-november",
@@ -14097,7 +14097,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 26.7
+   "ms": 29.8
   },
   {
    "id": "thailand-islands-august",
@@ -14148,7 +14148,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 13.4
+   "ms": 14
   },
   {
    "id": "thailand-islands-january",
@@ -14199,7 +14199,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 11.1
+   "ms": 10.7
   },
   {
    "id": "philippines-islands",
@@ -14255,7 +14255,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.3
+   "ms": 28.1
   },
   {
    "id": "pacific-islands",
@@ -14311,7 +14311,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 38
+   "ms": 41.5
   },
   {
    "id": "indian-ocean-honeymoon",
@@ -14362,7 +14362,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 11.4
+   "ms": 12
   },
   {
    "id": "red-sea-diving",
@@ -14412,7 +14412,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 8
+   "ms": 7.9
   },
   {
    "id": "surf-winter",
@@ -14458,7 +14458,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 37
+   "ms": 37.8
   },
   {
    "id": "cold-water-coast",
@@ -14509,7 +14509,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.7
+   "ms": 39.1
   },
   {
    "id": "whales",
@@ -14555,7 +14555,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.3
+   "ms": 36.1
   },
   {
    "id": "greek-islands-october",
@@ -14606,7 +14606,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 5.1
+   "ms": 7.5
   },
   {
    "id": "atlantic-islands-winter",
@@ -14662,7 +14662,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28
+   "ms": 31.7
   },
   {
    "id": "gorillas",
@@ -14708,7 +14708,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 33.4
+   "ms": 35.7
   },
   {
    "id": "india-tigers",
@@ -14759,7 +14759,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 33.6
+   "ms": 31.2
   },
   {
    "id": "bears-north-america",
@@ -14810,7 +14810,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28.4
+   "ms": 30.7
   },
   {
    "id": "birding-neotropics",
@@ -14861,7 +14861,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 35.6
+   "ms": 36.7
   },
   {
    "id": "penguins",
@@ -14912,7 +14912,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.2
+   "ms": 29.4
   },
   {
    "id": "madagascar-like",
@@ -14958,7 +14958,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.1
+   "ms": 29.3
   },
   {
    "id": "arctic-wildlife",
@@ -15000,7 +15000,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 14.4
+   "ms": 15.8
   },
   {
    "id": "food-city-asia",
@@ -15070,7 +15070,7 @@
      "context": "Andino, Colombia",
      "basis": "open_data",
      "kind": "city",
-     "score": 0.697
+     "score": 0.667
     },
     {
      "id": "wv:Lima",
@@ -15086,7 +15086,7 @@
      "context": "Andean Highlands, Ecuador",
      "basis": "open_data",
      "kind": "city",
-     "score": 0.585
+     "score": 0.644
     }
    ],
    "alternates": [
@@ -15112,7 +15112,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28.5
+   "ms": 19.5
   },
   {
    "id": "ancient-ruins-spring",
@@ -15168,7 +15168,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 35.2
+   "ms": 33.9
   },
   {
    "id": "wine-region",
@@ -15219,7 +15219,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.7
+   "ms": 39
   },
   {
    "id": "middle-east-culture-winter",
@@ -15270,7 +15270,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 29.5
+   "ms": 28.4
   },
   {
    "id": "india-first-time",
@@ -15321,7 +15321,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.5
+   "ms": 18.2
   },
   {
    "id": "china-off-beaten",
@@ -15377,7 +15377,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.3
+   "ms": 28.2
   },
   {
    "id": "south-america-cities",
@@ -15428,7 +15428,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 25.3
+   "ms": 31
   },
   {
    "id": "north-africa-medinas",
@@ -15445,26 +15445,26 @@
      "score": 0.837
     },
     {
-     "id": "siwa-oasis",
-     "name": "Siwa Oasis",
-     "context": "Western Desert, Egypt",
-     "basis": "editorial",
-     "kind": "desert",
-     "score": 0.775
-    },
-    {
      "id": "fes-chefchaouen",
      "name": "Fes & Chefchaouen",
      "context": "Northern Morocco",
      "basis": "editorial",
      "kind": "travel_region",
      "score": 0.828
+    },
+    {
+     "id": "wv:Cairo",
+     "name": "Cairo",
+     "context": "Lower Egypt, Egypt",
+     "basis": "open_data",
+     "kind": "city",
+     "score": 0.777
     }
    ],
    "alternates": [
-    "Cairo",
     "Tunis",
-    "Saharan Morocco"
+    "Saharan Morocco",
+    "Casablanca"
    ],
    "checks": [
     {
@@ -15479,7 +15479,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 16.6
+   "ms": 15.1
   },
   {
    "id": "usa-city-weekend",
@@ -15535,7 +15535,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 35.4
+   "ms": 37.4
   },
   {
    "id": "southeast-asia-first",
@@ -15544,33 +15544,33 @@
    "text": "Three weeks in Southeast Asia in January for a first-timer: temples, beaches and street food.",
    "picks": [
     {
-     "id": "wv:Philippines",
-     "name": "Philippines",
-     "context": "Southeast Asia",
-     "basis": "open_data",
-     "kind": "country",
-     "score": 0.934
-    },
-    {
-     "id": "wv:Thailand",
-     "name": "Thailand",
-     "context": "Southeast Asia",
-     "basis": "open_data",
-     "kind": "country",
-     "score": 0.869
-    },
-    {
      "id": "wv:Malaysia",
      "name": "Malaysia",
      "context": "Southeast Asia",
      "basis": "open_data",
      "kind": "country",
      "score": 0.852
+    },
+    {
+     "id": "wv:Vietnam",
+     "name": "Vietnam",
+     "context": "Southeast Asia",
+     "basis": "open_data",
+     "kind": "country",
+     "score": 0.821
+    },
+    {
+     "id": "northern-laos",
+     "name": "Northern Laos",
+     "context": "Luang Prabang & the Nam Ou",
+     "basis": "editorial",
+     "kind": "travel_region",
+     "score": 0.717
     }
    ],
    "alternates": [
-    "Vietnam",
-    "Northern Laos",
+    "Krabi & the Andaman Coast",
+    "Luzon",
     "Singapore"
    ],
    "checks": [
@@ -15581,7 +15581,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 23.8
+   "ms": 22.5
   },
   {
    "id": "eastern-europe-winter-city",
@@ -15595,7 +15595,7 @@
      "context": "Central Hungary, Hungary",
      "basis": "open_data",
      "kind": "city",
-     "score": 0.745
+     "score": 0.753
     },
     {
      "id": "wv:Bulgarian Black Sea Coast",
@@ -15615,9 +15615,9 @@
     }
    ],
    "alternates": [
+    "Letenye",
     "Hisarya",
-    "Zalakaros",
-    "Szeged"
+    "Győr"
    ],
    "checks": [
     {
@@ -15637,7 +15637,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.4
+   "ms": 28.6
   },
   {
    "id": "small-towns-italy",
@@ -15693,7 +15693,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.6
+   "ms": 27.9
   },
   {
    "id": "spain-winter",
@@ -15749,7 +15749,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 10.9
+   "ms": 8.3
   },
   {
    "id": "road-trip-western-us",
@@ -15805,7 +15805,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 24.6
+   "ms": 25.7
   },
   {
    "id": "road-trip-europe-coast",
@@ -15861,7 +15861,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 22.4
+   "ms": 22.7
   },
   {
    "id": "iceland-ring-road",
@@ -15887,7 +15887,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 13.5
+   "ms": 13
   },
   {
    "id": "desert-stargazing",
@@ -15922,8 +15922,8 @@
    ],
    "alternates": [
     "Wadi Rum",
-    "Siwa Oasis",
-    "Damaraland & Kaokoland"
+    "Damaraland & Kaokoland",
+    "Salta & Jujuy"
    ],
    "checks": [
     {
@@ -15938,7 +15938,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.6
+   "ms": 34.2
   },
   {
    "id": "namibia-like",
@@ -15989,7 +15989,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 39.1
+   "ms": 35.5
   },
   {
    "id": "australia-outback",
@@ -16035,7 +16035,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.9
+   "ms": 27.7
   },
   {
    "id": "scotland-like-drive",
@@ -16086,7 +16086,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 35.1
+   "ms": 32.7
   },
   {
    "id": "northern-lights",
@@ -16137,7 +16137,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 23.1
+   "ms": 23.3
   },
   {
    "id": "fall-colours",
@@ -16183,7 +16183,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.2
+   "ms": 33.2
   },
   {
    "id": "lakes-swimming-summer",
@@ -16234,7 +16234,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 43.2
+   "ms": 33.1
   },
   {
    "id": "canada-lakes-canoe",
@@ -16285,7 +16285,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 39.1
+   "ms": 33.4
   },
   {
    "id": "cheap-anywhere-warm-feb",
@@ -16294,34 +16294,34 @@
    "text": "Somewhere warm and really cheap in February for three weeks, beaches and good food.",
    "picks": [
     {
-     "id": "wv:Philippines",
-     "name": "Philippines",
+     "id": "wv:Malaysia",
+     "name": "Malaysia",
      "context": "Southeast Asia",
      "basis": "open_data",
      "kind": "country",
-     "score": 0.945
+     "score": 0.895
     },
     {
-     "id": "oaxaca-coast",
-     "name": "Oaxaca Coast",
-     "context": "Pacific Mexico",
+     "id": "yucatan",
+     "name": "Yucatán & the Riviera Maya",
+     "context": "Mexico",
      "basis": "editorial",
-     "kind": "coast",
-     "score": 0.831
+     "kind": "travel_region",
+     "score": 0.847
     },
     {
-     "id": "wv:Colombia",
-     "name": "Colombia",
-     "context": "Northern South America",
+     "id": "wv:Maharashtra",
+     "name": "Maharashtra",
+     "context": "Western India, India",
      "basis": "open_data",
-     "kind": "country",
-     "score": 0.834
+     "kind": "travel_region",
+     "score": 0.869
     }
    ],
    "alternates": [
-    "Malaysia",
-    "Maharashtra",
-    "Jamaica"
+    "Argentina",
+    "Jamaica",
+    "Sri Lanka South Coast"
    ],
    "checks": [
     {
@@ -16332,7 +16332,7 @@
     {
      "check": "price level ≤ 0.5",
      "pass": false,
-     "detail": "not: Oaxaca Coast"
+     "detail": "not: Yucatán & the Riviera Maya"
     },
     {
      "check": "daily highs ≥ 24 °C",
@@ -16341,7 +16341,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.6
+   "ms": 27.8
   },
   {
    "id": "luxury-safari-beach",
@@ -16377,7 +16377,7 @@
    "alternates": [
     "East Java",
     "Mombasa",
-    "Hawaii"
+    "Society Islands"
    ],
    "checks": [
     {
@@ -16392,7 +16392,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 38.2
+   "ms": 33.2
   },
   {
    "id": "backpacking-south-america",
@@ -16428,7 +16428,7 @@
    "alternates": [
     "Cordillera Blanca",
     "La Paz",
-    "Bogotá"
+    "Coffee Region & Valle de Cocora"
    ],
    "checks": [
     {
@@ -16443,7 +16443,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 18.3
+   "ms": 19.5
   },
   {
    "id": "short-haul-from-nyc",
@@ -16494,7 +16494,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 25.4
+   "ms": 26.4
   },
   {
    "id": "short-haul-from-singapore",
@@ -16540,7 +16540,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 69.7
+   "ms": 36.1
   },
   {
    "id": "from-sydney-winter-escape",
@@ -16596,7 +16596,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28.4
+   "ms": 34.5
   },
   {
    "id": "from-delhi-mountains",
@@ -16652,7 +16652,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.6
+   "ms": 30.3
   },
   {
    "id": "from-sao-paulo",
@@ -16698,7 +16698,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 37.5
+   "ms": 33.8
   },
   {
    "id": "from-nairobi-beach",
@@ -16749,7 +16749,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 11.6
+   "ms": 9.7
   },
   {
    "id": "wheelchair-scenery",
@@ -16789,7 +16789,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 30.2
+   "ms": 30.5
   },
   {
    "id": "seniors-gentle",
@@ -16840,7 +16840,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 34.9
+   "ms": 34.8
   },
   {
    "id": "toddler-beach",
@@ -16891,7 +16891,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.9
+   "ms": 40.1
   },
   {
    "id": "teenagers-adventure",
@@ -16937,7 +16937,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 48.7
+   "ms": 39.6
   },
   {
    "id": "solo-female-first",
@@ -16977,7 +16977,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 58
+   "ms": 35.9
   },
   {
    "id": "honeymoon-quiet",
@@ -17017,7 +17017,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 33.3
+   "ms": 36.3
   },
   {
    "id": "friends-group-cheap-summer",
@@ -17073,7 +17073,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.5
+   "ms": 27.8
   },
   {
    "id": "digital-detox",
@@ -17124,7 +17124,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 52.2
+   "ms": 32.7
   },
   {
    "id": "hidden-gems-europe",
@@ -17175,7 +17175,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 13.5
+   "ms": 15.8
   },
   {
    "id": "hidden-gems-asia",
@@ -17226,7 +17226,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 21.5
+   "ms": 22
   },
   {
    "id": "hidden-gems-americas",
@@ -17277,7 +17277,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 26.7
+   "ms": 30.3
   },
   {
    "id": "monsoon-avoid-july",
@@ -17328,7 +17328,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 23.3
+   "ms": 23.9
   },
   {
    "id": "ski-april",
@@ -17379,7 +17379,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 16.2
+   "ms": 16.4
   },
   {
    "id": "hike-may-alps",
@@ -17396,23 +17396,27 @@
      "score": 0.879
     },
     {
-     "id": "wv:Bavarian Alps",
-     "name": "Bavarian Alps",
-     "context": "Alps, Austria",
+     "id": "wv:Provence-Alpes-Côte d'Azur",
+     "name": "Provence-Alpes-Côte d'Azur",
+     "context": "France",
      "basis": "open_data",
      "kind": "travel_region",
-     "score": 0.716
+     "score": 0.826
     },
     {
-     "id": "wv:Mont Blanc",
-     "name": "Mont Blanc",
-     "context": "Alps, Italy",
+     "id": "wv:Vorarlberg",
+     "name": "Vorarlberg",
+     "context": "Austria",
      "basis": "open_data",
      "kind": "travel_region",
-     "score": 0.587
+     "score": 0.828
     }
    ],
-   "alternates": [],
+   "alternates": [
+    "Western Switzerland",
+    "South Tyrol",
+    "Visp"
+   ],
    "checks": [
     {
      "check": "inside the named area",
@@ -17426,7 +17430,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 4.8
+   "ms": 14.6
   },
   {
    "id": "southern-hemisphere-ski",
@@ -17477,7 +17481,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 18.4
+   "ms": 22.9
   },
   {
    "id": "beach-europe-april",
@@ -17524,7 +17528,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 25.3
+   "ms": 16.3
   },
   {
    "id": "safari-april-rains",
@@ -17575,7 +17579,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.5
+   "ms": 27.3
   },
   {
    "id": "desert-summer",
@@ -17626,7 +17630,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27
+   "ms": 31.8
   },
   {
    "id": "himalaya-monsoon",
@@ -17635,15 +17639,35 @@
    "text": "Himalayan trekking in July or August, is there anywhere in the rain shadow?",
    "picks": [
     {
-     "id": "wv:Namche Bazaar",
-     "name": "Namche Bazaar",
-     "context": "Khumbu, Nepal",
+     "id": "wv:Annapurna Circuit",
+     "name": "Annapurna Circuit",
+     "context": "Nepal",
      "basis": "open_data",
-     "kind": "town",
-     "score": 0.547
+     "kind": "route",
+     "score": 0.69
+    },
+    {
+     "id": "wv:Uttarakhand",
+     "name": "Uttarakhand",
+     "context": "Himalayan North, India",
+     "basis": "open_data",
+     "kind": "travel_region",
+     "score": 0.634
+    },
+    {
+     "id": "bhutan",
+     "name": "Bhutan",
+     "context": "Eastern Himalaya",
+     "basis": "editorial",
+     "kind": "country_circuit",
+     "score": 0.605
     }
    ],
-   "alternates": [],
+   "alternates": [
+    "Manaslu Trek",
+    "Sikkim",
+    "Island Peak Trek"
+   ],
    "checks": [
     {
      "check": "in the named countries",
@@ -17653,11 +17677,11 @@
     {
      "check": "feasible (trek_high) by climate normals",
      "pass": false,
-     "detail": "not: Namche Bazaar"
+     "detail": "not: Annapurna Circuit, Uttarakhand"
     }
    ],
    "overlapping": 0,
-   "ms": 7.4
+   "ms": 15.6
   },
   {
    "id": "patagonia-winter",
@@ -17703,7 +17727,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 8.9
+   "ms": 6.6
   },
   {
    "id": "japan-summer-cool",
@@ -17759,7 +17783,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 11.6
+   "ms": 13.3
   },
   {
    "id": "christmas-snow-not-ski",
@@ -17805,7 +17829,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 22
+   "ms": 23.2
   },
   {
    "id": "shoulder-season-med",
@@ -17856,7 +17880,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 16.6
+   "ms": 19.2
   },
   {
    "id": "vague-somewhere-nice",
@@ -17896,7 +17920,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 31.5
+   "ms": 33.9
   },
   {
    "id": "vague-surprise",
@@ -17936,7 +17960,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 31.6
+   "ms": 34.7
   },
   {
    "id": "vague-nature",
@@ -17976,7 +18000,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 29.1
+   "ms": 33.5
   },
   {
    "id": "contradiction-cheap-luxury",
@@ -18016,7 +18040,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 31.4
+   "ms": 35.5
   },
   {
    "id": "contradiction-remote-easy",
@@ -18056,7 +18080,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 30.7
+   "ms": 37.9
   },
   {
    "id": "everything",
@@ -18096,7 +18120,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 38.3
+   "ms": 41.2
   },
   {
    "id": "negation",
@@ -18136,7 +18160,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 29.6
+   "ms": 29.4
   },
   {
    "id": "typos",
@@ -18171,12 +18195,12 @@
    ],
    "alternates": [
     "Muang Ngeun",
-    "Akşehir",
-    "Agbarho"
+    "Ponorogo",
+    "Mampong"
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 34.4
+   "ms": 38.5
   },
   {
    "id": "one-word-diving",
@@ -18222,7 +18246,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30
+   "ms": 26.2
   },
   {
    "id": "specific-niche-tea",
@@ -18262,7 +18286,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 28.1
+   "ms": 49.4
   },
   {
    "id": "specific-niche-fjords",
@@ -18308,7 +18332,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31
+   "ms": 67.2
   },
   {
    "id": "specific-niche-hot-springs",
@@ -18354,7 +18378,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 37.7
+   "ms": 41.7
   },
   {
    "id": "specific-niche-caves",
@@ -18394,7 +18418,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 27.1
+   "ms": 28.7
   },
   {
    "id": "specific-niche-monasteries",
@@ -18434,7 +18458,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 33
+   "ms": 28.5
   },
   {
    "id": "specific-niche-waterfalls",
@@ -18474,7 +18498,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 29.8
+   "ms": 28.6
   },
   {
    "id": "specific-niche-cycling",
@@ -18514,7 +18538,7 @@
    ],
    "checks": [],
    "overlapping": 0,
-   "ms": 34.5
+   "ms": 35
   },
   {
    "id": "long-trip-sabbatical",
@@ -18606,7 +18630,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.1
+   "ms": 33.9
   },
   {
    "id": "rc-vague-beautiful-relaxing",
@@ -18657,7 +18681,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 40
+   "ms": 34.2
   },
   {
    "id": "rc-vague-unforgettable-friends",
@@ -18703,7 +18727,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.9
+   "ms": 34.5
   },
   {
    "id": "rc-vague-scenery-cheap",
@@ -18759,7 +18783,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 26.1
+   "ms": 33.1
   },
   {
    "id": "rc-vague-adventurous-easy",
@@ -18810,7 +18834,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28.2
+   "ms": 29.1
   },
   {
    "id": "rc-vague-romantic-june",
@@ -18856,7 +18880,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 39
+   "ms": 39.3
   },
   {
    "id": "rc-vague-recharge-february",
@@ -18907,7 +18931,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 34.8
+   "ms": 37.3
   },
   {
    "id": "rc-vague-family-summer",
@@ -18958,7 +18982,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 46.4
+   "ms": 45.5
   },
   {
    "id": "rc-vague-wow-september",
@@ -19004,7 +19028,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 29
+   "ms": 32.7
   },
   {
    "id": "rc-vague-outdoorsy-couple",
@@ -19055,7 +19079,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 40.2
+   "ms": 42.9
   },
   {
    "id": "rc-stargazing-remote-march",
@@ -19106,7 +19130,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.8
+   "ms": 37.2
   },
   {
    "id": "rc-stargazing-europe-august",
@@ -19162,7 +19186,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.8
+   "ms": 18.7
   },
   {
    "id": "rc-astro-southern",
@@ -19218,7 +19242,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.6
+   "ms": 30
   },
   {
    "id": "rc-aurora-february",
@@ -19269,7 +19293,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 19.1
+   "ms": 20.6
   },
   {
    "id": "rc-hot-springs-winter",
@@ -19320,7 +19344,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 24.7
+   "ms": 26.5
   },
   {
    "id": "rc-onsen-japan",
@@ -19376,7 +19400,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 16.9
+   "ms": 15.4
   },
   {
    "id": "rc-thermal-europe",
@@ -19437,7 +19461,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 25.1
+   "ms": 20.3
   },
   {
    "id": "rc-birding-south-america",
@@ -19493,7 +19517,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.2
+   "ms": 16.4
   },
   {
    "id": "rc-birding-europe-spring",
@@ -19549,7 +19573,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 23.7
+   "ms": 20.5
   },
   {
    "id": "rc-safari-first-timer",
@@ -19610,7 +19634,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.2
+   "ms": 28.9
   },
   {
    "id": "rc-safari-green-season",
@@ -19671,7 +19695,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 10.6
+   "ms": 8.6
   },
   {
    "id": "rc-safari-india",
@@ -19727,7 +19751,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 19.5
+   "ms": 18.6
   },
   {
    "id": "rc-whales-august",
@@ -19778,7 +19802,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.1
+   "ms": 31
   },
   {
    "id": "rc-bears-autumn",
@@ -19829,7 +19853,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.1
+   "ms": 29.5
   },
   {
    "id": "rc-rail-scenic-alps",
@@ -19838,32 +19862,34 @@
    "text": "Scenic mountain railways in the Alps in July, no car.",
    "picks": [
     {
-     "id": "julian-alps",
-     "name": "Julian Alps",
-     "context": "Slovenia",
+     "id": "bernese-oberland",
+     "name": "Bernese Oberland",
+     "context": "Swiss Alps",
      "basis": "editorial",
-     "kind": "national_park",
-     "score": 0.722
+     "kind": "mountain_range",
+     "score": 0.942
     },
     {
-     "id": "wv:French Alps",
-     "name": "French Alps",
-     "context": "France",
-     "basis": "open_data",
-     "kind": "mountain_range",
-     "score": 0.667
+     "id": "engadin",
+     "name": "The Engadin",
+     "context": "Graubünden, Switzerland",
+     "basis": "editorial",
+     "kind": "travel_region",
+     "score": 0.928
     },
     {
-     "id": "wv:Swiss Alps",
-     "name": "Swiss Alps",
-     "context": "Switzerland",
-     "basis": "open_data",
+     "id": "tyrol",
+     "name": "Tyrolean Alps",
+     "context": "Western Austria",
+     "basis": "editorial",
      "kind": "mountain_range",
-     "score": 0.574
+     "score": 0.811
     }
    ],
    "alternates": [
-    "Bavarian Alps"
+    "The Dolomites",
+    "Provence-Alpes-Côte d'Azur",
+    "Occitanie"
    ],
    "checks": [
     {
@@ -19874,7 +19900,7 @@
     {
      "check": "offers rail_journeys",
      "pass": false,
-     "detail": "not: Julian Alps, French Alps, Swiss Alps"
+     "detail": "not: Tyrolean Alps"
     },
     {
      "check": "doable without a car",
@@ -19888,7 +19914,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 9.3
+   "ms": 21.4
   },
   {
    "id": "rc-rail-asia",
@@ -19934,7 +19960,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.4
+   "ms": 15.6
   },
   {
    "id": "rc-rail-heritage-uk",
@@ -19990,7 +20016,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.6
+   "ms": 28.8
   },
   {
    "id": "rc-drive-coast-autumn",
@@ -20046,7 +20072,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 35.9
+   "ms": 35
   },
   {
    "id": "rc-drive-mountain-passes",
@@ -20102,7 +20128,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 34.4
+   "ms": 33.8
   },
   {
    "id": "rc-drive-usa-parks",
@@ -20163,7 +20189,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.9
+   "ms": 19.9
   },
   {
    "id": "rc-dive-liveaboard",
@@ -20219,7 +20245,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.6
+   "ms": 33.1
   },
   {
    "id": "rc-snorkel-family-easter",
@@ -20280,7 +20306,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 35.6
+   "ms": 37.2
   },
   {
    "id": "rc-dive-red-sea-or-similar",
@@ -20341,7 +20367,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.9
+   "ms": 34.4
   },
   {
    "id": "rc-ski-powder-january",
@@ -20397,7 +20423,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 26.2
+   "ms": 21.3
   },
   {
    "id": "rc-ski-family-february",
@@ -20458,7 +20484,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.6
+   "ms": 32.1
   },
   {
    "id": "rc-ski-late-season",
@@ -20514,7 +20540,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 15.9
+   "ms": 14.2
   },
   {
    "id": "rc-ski-southern",
@@ -20570,7 +20596,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 15.1
+   "ms": 15.7
   },
   {
    "id": "rc-beach-swim-october-europe",
@@ -20626,7 +20652,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 15.8
+   "ms": 17.6
   },
   {
    "id": "rc-beach-calm-toddlers",
@@ -20682,7 +20708,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.3
+   "ms": 35
   },
   {
    "id": "rc-mountaineering-first-6000",
@@ -20733,7 +20759,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.6
+   "ms": 37.3
   },
   {
    "id": "rc-mountaineering-alpine-course",
@@ -20742,32 +20768,34 @@
    "text": "An introductory mountaineering week on glaciers in the Alps in July.",
    "picks": [
     {
-     "id": "wv:French Alps",
-     "name": "French Alps",
-     "context": "France",
-     "basis": "open_data",
-     "kind": "mountain_range",
-     "score": 0.774
-    },
-    {
-     "id": "julian-alps",
-     "name": "Julian Alps",
-     "context": "Slovenia",
+     "id": "dolomites",
+     "name": "The Dolomites",
+     "context": "Northern Italy",
      "basis": "editorial",
-     "kind": "national_park",
-     "score": 0.761
+     "kind": "mountain_range",
+     "score": 0.895
     },
     {
-     "id": "wv:Swiss Alps",
-     "name": "Swiss Alps",
-     "context": "Switzerland",
+     "id": "wv:Switzerland",
+     "name": "Switzerland",
+     "context": "Western Europe",
      "basis": "open_data",
+     "kind": "country",
+     "score": 0.865
+    },
+    {
+     "id": "tyrol",
+     "name": "Tyrolean Alps",
+     "context": "Western Austria",
+     "basis": "editorial",
      "kind": "mountain_range",
-     "score": 0.645
+     "score": 0.86
     }
    ],
    "alternates": [
-    "Bavarian Alps"
+    "Occitanie",
+    "Julian Alps",
+    "South Tyrol"
    ],
    "checks": [
     {
@@ -20787,7 +20815,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 8.7
+   "ms": 17.8
   },
   {
    "id": "rc-trek-huts-september",
@@ -20843,7 +20871,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 31.2
+   "ms": 29.7
   },
   {
    "id": "rc-trek-shoulder-nepal-alternative",
@@ -20904,7 +20932,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 36.3
+   "ms": 38.9
   },
   {
    "id": "rc-hike-winter-sun",
@@ -20965,7 +20993,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 34.5
+   "ms": 34.3
   },
   {
    "id": "rc-access-wheelchair-city",
@@ -21021,7 +21049,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 33.6
+   "ms": 32.3
   },
   {
    "id": "rc-access-low-mobility-nature",
@@ -21072,7 +21100,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 42.8
+   "ms": 41.7
   },
   {
    "id": "rc-access-seniors-warm",
@@ -21089,32 +21117,32 @@
      "score": 0.845
     },
     {
-     "id": "wv:U.S. Virgin Islands",
-     "name": "U.S. Virgin Islands",
-     "context": "Lesser Antilles, United States",
-     "basis": "open_data",
-     "kind": "travel_region",
-     "score": 0.778
-    },
-    {
      "id": "wv:Yountville",
      "name": "Yountville",
      "context": "Napa Valley, United States",
      "basis": "open_data",
      "kind": "town",
      "score": 0.806
+    },
+    {
+     "id": "wv:Cahors",
+     "name": "Cahors",
+     "context": "Lot, France",
+     "basis": "open_data",
+     "kind": "town",
+     "score": 0.763
     }
    ],
    "alternates": [
-    "Cahors",
     "Mthatha",
-    "Chipley"
+    "Chipley",
+    "Kilifi"
    ],
    "checks": [
     {
      "check": "daily highs ≥ 18 °C",
      "pass": false,
-     "detail": "not: Yountville"
+     "detail": "not: Yountville, Cahors"
     },
     {
      "check": "a specific destination, not a whole country",
@@ -21123,7 +21151,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28.6
+   "ms": 37.6
   },
   {
    "id": "rc-family-teens-adventure",
@@ -21174,7 +21202,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 38.4
+   "ms": 52.7
   },
   {
    "id": "rc-family-toddler-easy",
@@ -21230,7 +21258,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 28.1
+   "ms": 56.7
   },
   {
    "id": "rc-family-wildlife-kids",
@@ -21286,7 +21314,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 30.2
+   "ms": 28.3
   },
   {
    "id": "rc-food-october",
@@ -21337,7 +21365,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 33.2
+   "ms": 37.4
   },
   {
    "id": "rc-food-asia-street",
@@ -21393,7 +21421,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 13.7
+   "ms": 22.7
   },
   {
    "id": "rc-culture-ancient",
@@ -21449,7 +21477,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 32.5
+   "ms": 33.1
   },
   {
    "id": "rc-remote-expedition",
@@ -21495,7 +21523,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 45.2
+   "ms": 39.3
   },
   {
    "id": "rc-remote-islands",
@@ -21546,7 +21574,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 52.5
+   "ms": 35.3
   },
   {
    "id": "rc-specific-italy",
@@ -21597,7 +21625,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 17.7
+   "ms": 15.3
   },
   {
    "id": "rc-specific-scotland",
@@ -21631,8 +21659,8 @@
     }
    ],
    "alternates": [
+    "Skye",
     "Dumfries and Galloway",
-    "Loch Lomond and The Trossachs National Park",
     "Scottish Borders"
    ],
    "checks": [
@@ -21653,7 +21681,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 16
+   "ms": 13.7
   },
   {
    "id": "rc-specific-new-zealand",
@@ -21704,7 +21732,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 12.5
+   "ms": 12.1
   },
   {
    "id": "rc-specific-morocco",
@@ -21755,7 +21783,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 9.1
+   "ms": 11
   },
   {
    "id": "rc-specific-vietnam",
@@ -21861,7 +21889,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 13.7
+   "ms": 11.1
   },
   {
    "id": "rc-season-monsoon-india",
@@ -21912,7 +21940,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 27.4
+   "ms": 23.4
   },
   {
    "id": "rc-season-caribbean-september",
@@ -21948,7 +21976,7 @@
    "alternates": [
     "Grenada",
     "Aruba",
-    "Bahamas"
+    "Jost Van Dyke"
    ],
    "checks": [
     {
@@ -21963,7 +21991,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 12.4
+   "ms": 8.4
   },
   {
    "id": "rc-season-gorillas",
@@ -22014,7 +22042,7 @@
     }
    ],
    "overlapping": 0,
-   "ms": 48
+   "ms": 41.1
   },
   {
    "id": "rc-safety-sahel",
@@ -22023,34 +22051,33 @@
    "text": "Desert landscapes and old trading towns in the Sahara in January.",
    "picks": [
     {
-     "id": "siwa-oasis",
-     "name": "Siwa Oasis",
-     "context": "Western Desert, Egypt",
-     "basis": "editorial",
-     "kind": "desert",
-     "score": 0.889
+     "id": "wv:Egypt",
+     "name": "Egypt",
+     "context": "North Africa",
+     "basis": "open_data",
+     "kind": "country",
+     "score": 0.678
     },
     {
-     "id": "wv:Bahariyya",
-     "name": "Bahariyya",
-     "context": "Western Desert, Egypt",
+     "id": "wv:Timimoun",
+     "name": "Timimoun",
+     "context": "Saharan Algeria, Algeria",
      "basis": "open_data",
      "kind": "town",
-     "score": 0.641
+     "score": 0.61
     },
     {
-     "id": "wv:Dakhla Oasis",
-     "name": "Dakhla Oasis",
-     "context": "Western Desert, Egypt",
+     "id": "wv:Tozeur",
+     "name": "Tozeur",
+     "context": "Saharan Tunisia, Tunisia",
      "basis": "open_data",
-     "kind": "travel_region",
-     "score": 0.636
+     "kind": "town",
+     "score": 0.603
     }
    ],
    "alternates": [
-    "Timimoun",
-    "Farafra",
-    "White Desert National Park"
+    "Tamanrasset",
+    "Douz"
    ],
    "checks": [
     {
@@ -22060,12 +22087,12 @@
     },
     {
      "check": "a specific destination, not a whole country",
-     "pass": true,
-     "detail": "all"
+     "pass": false,
+     "detail": "not: Egypt"
     }
    ],
    "overlapping": 0,
-   "ms": 22
+   "ms": 18.6
   }
  ]
 }

@@ -41,6 +41,7 @@ import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { EXPERIENCES } from './lib/vocabulary.mjs';
 import { worldRegionFor, worldRegionByPoint, WORLD_REGIONS } from './lib/world-regions.mjs';
+import { advisoryTables, areaWarningFor, landmassOf, ols, ownRoomEvidence, ownWeight, placeKey, polygonScopes, refiledParents, spreadFor, suspectLocation, median as medianOf } from './lib/evidence.mjs';
 
 const CACHE = process.env.ATLAS_CACHE ?? '.atlas-cache';
 const WORK = join(CACHE, 'work');
@@ -315,12 +316,152 @@ async function main() {
 
   const advisories = advisoryLevels(countryNames);
 
+  /* ── Real geography (stage 08), when it has been run ─────────────────── */
+  const geometry = new Map();
+  if (existsSync(join(WORK, 'geometry.ndjson'))) await ndjson(join(WORK, 'geometry.ndjson'), (row) => geometry.set(row.id, row));
+  const polygonLines = [];
+  if (existsSync(join(WORK, 'polygons.ndjson'))) await ndjson(join(WORK, 'polygons.ndjson'), (row) => polygonLines.push(row));
+  const scopes = polygonScopes(polygonLines);
+  let refiled = 0;
+  for (const candidate of candidates) {
+    const parents = refiledParents(candidate, scopes);
+    if (parents.length !== candidate.parents.length) refiled += 1;
+    candidate.parents = parents;
+  }
+  const landmassIndex = new Map([['', 0]]);
+  const landmassId = (key) => {
+    if (!key) return 0;
+    if (!landmassIndex.has(key)) landmassIndex.set(key, landmassIndex.size);
+    return landmassIndex.get(key);
+  };
+
+  /* ── Regional advisories from every authority ────────────────────────── */
+  const advisoryFile = join(WORK, 'advisories-v2.json');
+  const advisoriesV2 = existsSync(advisoryFile) ? JSON.parse(readFileSync(advisoryFile, 'utf8')) : null;
+  const advisoryData = advisoriesV2 ? advisoryTables(advisoriesV2) : null;
+  const advisoryRows = {};
+  const warningFor = (iso, name, parentIds, division, radiusKm) => {
+    if (!advisoryData || !iso) return null;
+    const ancestors = parentIds.map((id) => placeKey(candidates[indexOf.get(id) ?? -1]?.name ?? '')).filter(Boolean);
+    const own = placeKey(name);
+    const divisionKey = division ? placeKey(division) : '';
+    return areaWarningFor(advisoryData.prepared, iso, { places: [own, ...ancestors, divisionKey].filter(Boolean), division: divisionKey, name: own, ancestors, radiusKm });
+  };
+
+  /* ── Cost from dated listings: a prior from the hierarchy, updated by the place's own prices ── */
+  const priced = new Map();
+  if (existsSync(join(WORK, 'prices.ndjson'))) await ndjson(join(WORK, 'prices.ndjson'), (row) => priced.set(row.id, row));
+  const priceYear = new Date().getUTCFullYear();
+  const ownRoom = new Map();
+  for (const [id, row] of priced) {
+    const own = ownRoomEvidence(row.sleep, priceYear);
+    if (own) ownRoom.set(id, own);
+  }
+  const countryPool = new Map();
+  const ancestorPool = new Map();
+  const add = (pool, key, value) => {
+    const list = pool.get(key);
+    if (list) list.push(value);
+    else pool.set(key, [value]);
+  };
+  for (const candidate of candidates) {
+    const own = ownRoom.get(candidate.id);
+    if (!own || own.n < 3) continue;
+    if (candidate.countries.length === 1) add(countryPool, candidate.countries[0], own.logUsd);
+    for (const parent of candidate.parents.slice(0, 3)) if (candidates[indexOf.get(parent) ?? -1]?.wvType !== 'country') add(ancestorPool, parent, own.logUsd);
+  }
+  const without = (list, value) => {
+    if (!list) return [];
+    if (value === undefined) return list;
+    const at = list.indexOf(value);
+    return at < 0 ? list : [...list.slice(0, at), ...list.slice(at + 1)];
+  };
+  const priorSignals = (candidate) => {
+    const self = ownRoom.get(candidate.id);
+    const selfValue = self && self.n >= 3 ? self.logUsd : undefined;
+    const iso = candidate.countries.length === 1 ? candidate.countries[0] : null;
+    const peers = iso ? without(countryPool.get(iso), selfValue) : [];
+    const country = peers.length >= 20 ? medianOf(peers) : null;
+    let hierarchy = null;
+    for (const parent of candidate.parents.slice(0, 3)) {
+      const list = without(ancestorPool.get(parent), selfValue);
+      if (list.length >= 3) {
+        hierarchy = medianOf(list);
+        break;
+      }
+    }
+    const level = iso ? priceOf(iso) : null;
+    return { country, hierarchy, world: level === null ? null : Math.log(level) };
+  };
+  const costShapes = [
+    ['hierarchy', 'country', 'world'],
+    ['country', 'world'],
+    ['hierarchy', 'world'],
+    ['world'],
+  ];
+  const costFits = costShapes.map((shape) => {
+    const rows = [];
+    const targets = [];
+    for (const candidate of candidates) {
+      const own = ownRoom.get(candidate.id);
+      if (!own || own.n < 5) continue;
+      const signals = priorSignals(candidate);
+      if (shape.some((key) => signals[key] === null)) continue;
+      rows.push([1, ...shape.map((key) => signals[key])]);
+      targets.push(own.logUsd);
+    }
+    return { shape, beta: rows.length >= 30 ? ols(rows, targets) : null, n: rows.length };
+  });
+  const roomEstimate = (candidate) => {
+    const signals = priorSignals(candidate);
+    const fit = costFits.find(({ shape, beta }) => beta && shape.every((key) => signals[key] !== null));
+    if (!fit) return null;
+    const prior = fit.beta[0] + fit.shape.reduce((sum, key, index) => sum + fit.beta[index + 1] * signals[key], 0);
+    const own = ownRoom.get(candidate.id);
+    const weight = own ? ownWeight(own.nEff) : 0;
+    const logUsd = own ? prior + weight * (own.logUsd - prior) : prior;
+    return { logUsd, own, listingBased: Boolean(own) || fit.shape.length > 1 };
+  };
+  /*
+   * The 1–4 scale stays anchored on the country, whose agreement with the
+   * editorial labels is the better of the two; what the listings add is how far
+   * this place sits from what its country's price level alone predicts. The one
+   * coefficient is fitted on the curated entries and reported held-out.
+   */
+  const worldFit = costFits.find((fit) => fit.shape.length === 1 && fit.beta);
+  const residualOf = (candidate, estimate) => {
+    const iso = candidate.countries.length === 1 ? candidate.countries[0] : null;
+    const level = iso ? priceOf(iso) : null;
+    /* Only a place's own well-attested listings say how it differs from its country; inherited priors are the country again. */
+    if (!worldFit || level === null || !estimate?.own || estimate.own.n < 5) return null;
+    return estimate.logUsd - (worldFit.beta[0] + worldFit.beta[1] * Math.log(level));
+  };
+  const residualRows = [];
+  for (const twin of twins) {
+    const estimate = roomEstimate(twin);
+    const residual = residualOf(twin, estimate);
+    const country = costFor(twin.countries.length === 1 ? twin.countries[0] : null);
+    if (residual === null || country === null) continue;
+    residualRows.push({ residual, gap: curatedById.get(twin.curated).cost - country, country });
+  }
+  const slopeOf = (rows) => {
+    const denominator = rows.reduce((sum, row) => sum + row.residual ** 2, 0);
+    return denominator === 0 ? 0 : Math.max(0, rows.reduce((sum, row) => sum + row.residual * row.gap, 0) / denominator);
+  };
+  const costSlope = slopeOf(residualRows);
+  const heldOut = residualRows.map((row, index) => Math.abs(row.gap - slopeOf(residualRows.filter((_, other) => other !== index)) * row.residual));
+  const heldOutCountry = residualRows.map((row) => Math.abs(row.gap));
+  const costCheck = { country: [], listings: [] };
+  
   /* ── Per-row estimates ───────────────────────────────────────────────── */
   const N = candidates.length;
   const exp = new Uint8Array(N * EXPERIENCES.length);
   const u8 = () => new Uint8Array(N);
-  const cols = { kind: u8(), region: u8(), flags: u8(), confidence: u8(), substance: u8(), familiarity: u8(), crowds: u8(), remoteness: u8(), easiest: u8(), typical: u8(), cost: u8(), reach: u8(), car: u8(), transit: u8(), family: u8(), lowMobility: u8(), lodging: u8() };
+  const cols = { kind: u8(), region: u8(), flags: u8(), confidence: u8(), substance: u8(), familiarity: u8(), crowds: u8(), remoteness: u8(), easiest: u8(), typical: u8(), cost: u8(), costBasis: u8(), costSpread: u8(), reach: u8(), car: u8(), transit: u8(), family: u8(), lowMobility: u8(), lodging: u8() };
   const nights = new Uint8Array(N * 3);
+  const landmass = new Uint16Array(N);
+  const roomUsd = new Uint16Array(N);
+  const priceYears = {};
   const clim = new Int16Array(N * 37).fill(-32768);
   const coast = new Int16Array(N).fill(-1);
   const highRows = [];
@@ -409,9 +550,22 @@ async function main() {
     cols.kind[i] = Math.max(0, KINDS.indexOf(kind));
     cols.region[i] = Math.max(0, WORLD_REGIONS.indexOf(region));
     if (candidate.aliases.length > 0) aliases[i] = candidate.aliases;
-    if (candidate.members?.length) members[i] = candidate.members.map((id) => indexOf.get(id)).filter((row) => row !== undefined);
+    {
+      const listed = (candidate.members ?? []).map((id) => indexOf.get(id));
+      const inside = [...(scopes.get(candidate.id) ?? [])].map((id) => indexOf.get(id));
+      const rows = [...new Set([...listed, ...(inside.length >= 3 ? inside : [])])].filter((row) => row !== undefined && row !== i);
+      if (rows.length > 0) members[i] = rows;
+    }
     if (candidate.curated) curatedTwin[candidate.curated] = i;
-    cols.flags[i] = (candidate.scopeOnly ? 1 : 0) | (candidate.curated ? 2 : 0) | (guide ? 0 : 4);
+    const located = geometry.get(candidate.id);
+    const suspect = suspectLocation(candidate, located, kind);
+    if (suspect) stats.suspectLocation = (stats.suspectLocation ?? 0) + 1;
+    cols.flags[i] = (candidate.scopeOnly ? 1 : 0) | (candidate.curated ? 2 : 0) | (guide ? 0 : 4) | (suspect ? 8 : 0);
+    landmass[i] = landmassId(landmassOf(candidate, located));
+    if (candidate.countries.length === 1) {
+      const warning = warningFor(candidate.countries[0], candidate.name, candidate.parents, located?.adm1?.name ?? null, candidate.radiusKm);
+      if (warning) advisoryRows[i] = warning;
+    }
     stats.byKind[kind] = (stats.byKind[kind] ?? 0) + 1;
     stats.byRegion[region] = (stats.byRegion[region] ?? 0) + 1;
     if (candidate.scopeOnly) stats.scopeOnly += 1;
@@ -468,7 +622,25 @@ async function main() {
     cols.familiarity[i] = Math.round(familiarity * 10);
     cols.crowds[i] = Math.round(crowds * 10);
 
-    const cost = costFor(iso);
+    const countryCost = costFor(iso);
+    const estimate = roomEstimate(candidate);
+    let cost = countryCost;
+    const residual = residualOf(candidate, estimate);
+    if (residual !== null && countryCost !== null) cost = clamp(countryCost + costSlope * residual, 1, 4);
+    if (estimate?.listingBased && countryCost !== null) {
+      roomUsd[i] = Math.min(65_000, Math.round(Math.exp(estimate.logUsd)));
+      const nEff = estimate.own?.nEff ?? 0;
+      const wide = kind === 'national_park' || kind === 'protected_area' || (candidate.radiusKm > 150 && kind !== 'country');
+      cols.costSpread[i] = Math.round(spreadFor(nEff, wide) * 100) - 100;
+      const observed = estimate.own && estimate.own.n >= 5 && estimate.own.age <= 7;
+      cols.costBasis[i] = observed ? 2 : 1;
+      if (estimate.own?.yearMin && estimate.own.yearMax) priceYears[i] = [estimate.own.yearMin, estimate.own.yearMax];
+      if (candidate.curated && countryCost !== null) {
+        const label = curatedById.get(candidate.curated).cost;
+        costCheck.country.push(Math.abs(countryCost - label));
+        costCheck.listings.push(Math.abs(cost - label));
+      }
+    }
     cols.cost[i] = cost === null ? 0 : Math.round(cost * 10);
     if (cost !== null) stats.costKnown += 1;
 
@@ -592,6 +764,13 @@ async function main() {
     const twin = curatedTwin[entry.id];
     const out = { airports: curatedAirports[entry.id] ?? [] };
     if (twin !== undefined) out.twin = twin;
+    const located = geometry.get(`cur:${entry.id}`);
+    const landKey = landmassId(located?.land?.id ?? null);
+    if (landKey) out.landmass = landKey;
+    if (entry.countries.length === 1) {
+      const warning = warningFor(entry.countries[0], entry.name, twin !== undefined ? candidates[twin].parents : [], located?.adm1?.name ?? null, entry.radiusKm ?? 100);
+      if (warning) out.advisory = warning;
+    }
     if (usable(raster?.base)) {
       out.base = packClimate(raster.base);
       if (usable(raster.high)) out.high = packClimate(raster.high);
@@ -647,13 +826,16 @@ async function main() {
     ...Object.fromEntries(Object.entries(cols).map(([key, value]) => [key, b64(value)])),
     clim: b64(clim),
     coastKm: b64(coast),
+    landmass: b64(landmass),
+    roomUsd: b64(roomUsd),
+    priceYears,
     high: { rows: b64(Int32Array.from(highRows)), data: b64(Int16Array.from(highData)) },
     sea: { rows: b64(Int32Array.from(seaRows)), data: b64(Int16Array.from(seaData)) },
     airportTable,
     airportRef: b64(airportRef),
     airportKm: b64(airportKm),
     terms: { vocab: [...vocab.keys()], offsets: b64(offsets), ids: b64(Uint32Array.from(termIds)), weights: b64(Uint8Array.from(termWeights)) },
-    advisories: { source: 'U.S. Department of State', asOf: advisories.asOf, levels: advisories.levels },
+    advisories: { source: 'U.S. Department of State', asOf: advisories.asOf, levels: advisories.levels, ...(advisoryData ? { fetchedAt: advisoriesV2.fetchedAt, countries: advisoryData.countries, rows: advisoryRows } : {}) },
     curated: curatedEnrichment,
   };
 
@@ -687,6 +869,10 @@ async function main() {
   console.log(`${N} rows → ${join(OUT_DIR, 'atlas.json.gz')} (${(zipped.length / 1e6).toFixed(1)} MB gzip, ${(json.length / 1e6).toFixed(1)} MB json) in ${((Date.now() - started) / 1000).toFixed(1)} s`);
   console.log('experience agreement (held-out r):', agreement.map((row) => `${row.experience} ${row.heldOut.correlation}`).join(' · '));
   console.log('embeddings:', JSON.stringify(embeddings));
+  const meanOf = (list) => (list.length === 0 ? null : Math.round((list.reduce((sum, value) => sum + value, 0) / list.length) * 1000) / 1000);
+  console.log(`geometry: ${refiled} rows re-filed, ${stats.suspectLocation ?? 0} suspect locations, ${landmassIndex.size - 1} landmasses in use, ${Object.keys(members).length} rows with explicit members`);
+  console.log(`advisories: ${Object.keys(advisoryRows).length} rows under a matched area warning`);
+  console.log(`cost: fits ${costFits.map((fit) => `${fit.shape.join('+')} n=${fit.n}`).join(' · ')}; slope ${costSlope.toFixed(2)}; leave-one-out MAE vs curated on ${heldOut.length} twins: country ${meanOf(heldOutCountry)} → with listings ${meanOf(heldOut)}`);
   console.log('MAE vs curated:', manifest.estimators.meanAbsoluteErrorAgainstCurated);
 }
 

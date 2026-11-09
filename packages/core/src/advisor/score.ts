@@ -391,7 +391,7 @@ function budgetMeasure(destination: Destination, profile: AdvisorProfile): Facto
     const over = destination.cost - profile.budget;
     value = overBudgetValue(over);
     notes.push(over <= 0.25 ? 'within your budget' : over <= 1.25 ? 'a stretch on your budget' : 'well over your budget');
-    if (destination.basis.cost === 'estimated') notes.push('costs estimated from the country’s price level');
+    if (destination.basis.cost === 'estimated') notes.push(destination.costEvidence ? 'costs estimated from dated travel-guide listings' : 'costs estimated from the country’s price level');
   }
   /* Somebody who asked for luxury wants the stays to match, not merely to be inside a budget nothing could exceed. */
   if (destination.lodging) {
@@ -644,7 +644,7 @@ export function scoreDestination(input: CatalogDestination | Destination, profil
   const ruledOut = context.outsideTargets?.find((target) => liesWithin(destination, target, true));
   if (ruledOut) exclude({ code: 'traveller_avoided', message: `You ruled out ${ruledOut.name}.` });
   if (destination.advisory && destination.advisory.level >= ADVISORY_EXCLUDES) {
-    exclude({ code: 'advisory', message: `${destination.advisory.source} advises against all travel there (as of ${destination.advisory.asOf}).` });
+    exclude({ code: 'advisory', message: `${destination.advisory.source} advises against all travel ${destination.advisory.area ? `to ${destination.advisory.area}` : 'there'} (as of ${destination.advisory.asOf}).` });
   }
 
   const add = (id: FactorId, measure: FactorMeasure, scale = 1) => {

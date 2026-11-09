@@ -143,8 +143,10 @@ function withoutBroadStandIns(ranked: readonly ScoredDestination[], profile: Adv
     if (!country && !vast) continue;
     const parts = country ? (byCountry.get(destination.countries[0]!) ?? []) : ranked.filter((other) => other.destination.parents.includes(destination.id));
     /* `ranked` is in score order, so the first part is the best one. */
+    /* A country with a do-not-travel area inside it is no answer when somebody could be sent to exactly that area by following it. */
+    const warnedInParts = country && (destination.advisory?.parts?.some((part) => part.level >= 4) ?? false);
     const best = parts.find((other) => other.destination.radiusKm < destination.radiusKm && !stoodDown.has(other.destination.id));
-    if (best && best.score >= entry.score - margin) stoodDown.add(destination.id);
+    if (best && (warnedInParts || best.score >= entry.score - margin)) stoodDown.add(destination.id);
   }
   return stoodDown.size === 0 ? [...ranked] : ranked.filter((entry) => !stoodDown.has(entry.destination.id));
 }
@@ -286,11 +288,23 @@ function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile): strin
   return out.slice(0, 3);
 }
 
+/** A room range in words, always with what it rests on, never as a current price. */
+function roomsLine(d: Destination): string | null {
+  const evidence = d.costEvidence;
+  if (!evidence) return null;
+  const [low, high] = evidence.roomUsd;
+  const when = evidence.years ? (evidence.years[0] === evidence.years[1] ? `${evidence.years[0]}` : `${evidence.years[0]}–${evidence.years[1]}`) : null;
+  const source = evidence.basis === 'historical_observation' && when ? `from travel-guide listings dated ${when}` : when ? `our estimate, using a few guide listings from ${when}` : 'our estimate from nearby guide listings';
+  return `A double room has run roughly $${low}–$${high} a night (${source}; not a current price).`;
+}
+
 function unverifiedFor(scored: ScoredDestination, profile: AdvisorProfile): string[] {
   const out: string[] = [];
   const d = scored.destination;
   /* An advisory short of "do not travel" is the traveller's call, and they should make it knowingly. */
-  if (d.advisory && d.advisory.level === 3) out.push(`${d.advisory.source} advises reconsidering travel to parts of the country (as of ${d.advisory.asOf}) — read the current advisory for this region.`);
+  if (d.advisory && d.advisory.level === 3) out.push(`${d.advisory.source} advises reconsidering travel to ${d.advisory.area ?? 'this country'} (as of ${d.advisory.asOf}). Read the current advisory before you commit.`);
+  /* A warning for part of a country that could not be placed is said out loud. Nothing here says this place is outside it. */
+  if (d.advisory?.parts?.length && !d.advisory.area) out.push(`${d.advisory.parts.map((part) => part.source).join(' and ')} ${d.advisory.parts.length > 1 ? 'warn' : 'warns'} against travel to parts of this country. Check whether that covers where you would go.`);
   if (d.origin !== 'editorial') out.push('What it offers is read from open travel guides and map data, not checked by an editor.');
   if (!profile.origin) out.push('How long it takes to get there from you — we don’t know where you’re starting.');
   if (profile.budget === null) out.push('Whether it fits your budget — you haven’t said one.');
@@ -416,7 +430,7 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     character: characterOf(d),
     gettingThere: gettingThere(scored, profile),
     gettingAround: d.access.note,
-    cost: { level: costLevel, label: `${COST_LABELS[costLevel]!}${d.basis.cost === 'estimated' ? ' (estimated from national price levels)' : ''}`, versusBudget },
+    cost: { level: costLevel, label: `${COST_LABELS[costLevel]!}${d.basis.cost !== 'estimated' ? '' : d.costEvidence ? ' (estimated)' : ' (estimated from national price levels)'}`, versusBudget, rooms: roomsLine(d) },
     bases: [...d.bases],
     tradeoffs: tradeoffsFor(scored, profile),
     unverified: unverifiedFor(scored, profile),

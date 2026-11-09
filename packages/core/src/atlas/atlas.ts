@@ -1,5 +1,5 @@
 import { DESTINATION_KINDS, EXPERIENCES, WORLD_REGIONS, type CatalogDestination, type DestinationKind, type Experience, type WorldRegion } from '../advisor/catalog/schema';
-import { destinationFromCatalog, type CandidateQuery, type Destination, type DestinationWorld, type MeasuredClimate, type NearbyAirport } from '../advisor/destination';
+import { destinationFromCatalog, type CandidateQuery, type DestinationCostEvidence, type Destination, type DestinationWorld, type MeasuredClimate, type NearbyAirport } from '../advisor/destination';
 import { atlasStem, atlasTokens, foldPlaceName } from './lexical';
 import { AMBIGUOUS_LOWER, COUNTRY_ACRONYMS, DEMONYMS, NEVER_ALONE, ORDINARY_WORDS, REGION_ADJECTIVES } from '../naming/place-words';
 import { decodeEmbeddingTable, decodeInt8Matrix, embedQuery, type EmbeddingTable, type RawEmbeddingTable } from './embed';
@@ -72,6 +72,8 @@ export interface AtlasArtifact {
   easiest: string;
   typical: string;
   cost: string;
+  costBasis: string;
+  costSpread: string;
   reach: string;
   car: string;
   transit: string;
@@ -86,8 +88,18 @@ export interface AtlasArtifact {
   airportRef: string;
   airportKm: string;
   terms: { vocab: string[]; offsets: string; ids: string; weights: string };
-  advisories: { source: string; asOf: string | null; levels: Record<string, { level: number; asOf: string }> };
-  curated: Record<string, { airports: NearbyAirport[]; twin?: number; base?: number[]; high?: number[]; coastKm?: number; sst?: number[] }>;
+  advisories: {
+    source: string;
+    asOf: string | null;
+    levels: Record<string, { level: number; asOf: string }>;
+    fetchedAt?: string;
+    countries?: Record<string, CountryAdvisory>;
+    rows?: Record<string, AreaWarning>;
+  };
+  landmass?: string;
+  roomUsd?: string;
+  priceYears?: Record<string, [number, number]>;
+  curated: Record<string, { advisory?: AreaWarning; landmass?: number; airports: NearbyAirport[]; twin?: number; base?: number[]; high?: number[]; coastKm?: number; sst?: number[] }>;
   /** A digest of the row ids in order; an embedding matrix is attached only when it was built for these rows. */
   rowsDigest?: string;
 }
@@ -104,6 +116,8 @@ export interface AtlasEmbeddings extends RawEmbeddingTable {
 const FLAG_SCOPE = 1;
 const FLAG_TWIN = 2;
 const FLAG_DATA_ONLY = 4;
+/** The row's coordinates contradict what it is (a mountain resort in mid-ocean). Kept for its name, never offered. */
+const FLAG_SUSPECT_LOCATION = 8;
 const NO_DATA = -32768;
 const CLIMATE_WIDTH = 37;
 const ACTIVITY_COUNT = ACTIVITIES.length;
@@ -164,6 +178,29 @@ const SEMANTIC_SHARE = 0.6;
 /** Below this, a row is too thin to be offered on its own; it can still be reached by name or as part of a named area. */
 export const SUBSTANCE_FLOOR = 0.22;
 const SUBSTANCE_FLOOR_IN_SCOPE = 0.1;
+
+interface CountryAdvisory {
+  /** The strictest level any authority gives the whole country; 0 when none does. */
+  level: number;
+  source?: string;
+  asOf?: string;
+  url?: string;
+  label?: string;
+  whole?: { source: string; label: string; url: string; updatedAt: string }[];
+  parts?: { source: string; level: number; url: string }[];
+}
+
+interface AreaWarning {
+  level: number;
+  /** Named as an exception to a warning covering the rest of the country. */
+  exempt: boolean;
+  area?: string | null;
+  source?: string;
+  label?: string;
+  text?: string;
+  url?: string;
+  asOf?: string;
+}
 
 export type PlaceRole = 'scope' | 'similar' | 'avoid' | 'origin';
 
@@ -236,6 +273,8 @@ export class Atlas implements DestinationWorld {
   private seasonTable: Uint8Array | null = null;
   private names: Map<string, NameTarget[]> | null = null;
   private readonly advisoryFresh: boolean;
+  private readonly landmassCol: Uint16Array | null;
+  private readonly roomUsd: Uint16Array | null;
   private readonly countryRow = new Map<string, number>();
 
   constructor(raw: AtlasArtifact, curated: readonly CatalogDestination[], options: AtlasOptions = {}) {
@@ -265,7 +304,9 @@ export class Atlas implements DestinationWorld {
     raw.ids.forEach((id, row) => this.idToRow.set(id, row));
     this.rowCache = new Array<Destination | undefined>(raw.n);
     const now = options.now ?? new Date();
-    const snapshot = Date.parse(raw.builtAt);
+    const snapshot = Date.parse(raw.advisories.fetchedAt ?? raw.builtAt);
+    this.landmassCol = raw.landmass ? uint16(raw.landmass) : null;
+    this.roomUsd = raw.roomUsd ? uint16(raw.roomUsd) : null;
     this.advisoryFresh = Number.isFinite(snapshot) && now.getTime() - snapshot <= ADVISORY_FRESH_DAYS * 86_400_000;
 
     for (let row = 0; row < raw.n; row += 1) {
@@ -296,7 +337,9 @@ export class Atlas implements DestinationWorld {
         parents: twin !== undefined ? this.parentIds(twin) : [],
         aliases: twin !== undefined ? [...(raw.aliases[String(twin)] ?? []), raw.names[twin]!].filter((name) => name !== entry.name) : [],
         airports: extra?.airports ?? [],
-        advisory: this.advisoryFor(entry.countries[0] ?? null),
+        advisory: this.advisoryFor(entry.countries[0] ?? null, extra?.advisory),
+        landmass: extra?.landmass ?? (twin !== undefined ? this.landmassOf(twin) : null),
+        costEvidence: twin !== undefined ? this.costEvidenceOf(twin) : null,
       });
       this.curatedList.push(destination);
       this.curatedById.set(entry.id, destination);
@@ -310,16 +353,44 @@ export class Atlas implements DestinationWorld {
 
   /** A row that can be recommended on its own: a real destination with a measured climate that no curated entry already stands for. */
   private offerable(row: number): boolean {
-    return (this.flags[row]! & (FLAG_SCOPE | FLAG_TWIN)) === 0 && this.clim[row * CLIMATE_WIDTH + 1] !== NO_DATA;
+    return (this.flags[row]! & (FLAG_SCOPE | FLAG_TWIN | FLAG_SUSPECT_LOCATION)) === 0 && this.clim[row * CLIMATE_WIDTH + 1] !== NO_DATA;
   }
 
-  private advisoryFor(iso: string | null): Destination['advisory'] {
+  private landmassOf(row: number): number | null {
+    return this.landmassCol ? this.landmassCol[row]! || null : null;
+  }
+
+  private costEvidenceOf(row: number): DestinationCostEvidence | null {
+    const room = this.roomUsd?.[row] ?? 0;
+    if (room === 0) return null;
+    const spread = 1 + this.u8('costSpread')[row]! / 100;
+    const round = (value: number) => (value >= 100 ? Math.round(value / 10) * 10 : Math.round(value / 5) * 5 || 5);
+    return { roomUsd: [round(room / spread), round(room * spread)], basis: this.u8('costBasis')[row] === 2 ? 'historical_observation' : 'model_estimate', years: this.raw.priceYears?.[String(row)] ?? null };
+  }
+
+  /**
+   * The advice that applies to one place. The strictest authority's do-not-travel
+   * that actually covers it decides; a warning for part of the country that could
+   * not be placed stays on the card as a caution with the authority named.
+   */
+  private advisoryFor(iso: string | null, warning?: AreaWarning): Destination['advisory'] {
     if (!iso) return null;
-    const entry = this.raw.advisories.levels[iso];
-    if (!entry) return null;
-    /* A stale "do not travel" is a caution to check, not grounds to hide a country. */
-    const level = entry.level >= 4 && !this.advisoryFresh ? 3 : entry.level;
-    return { level, asOf: entry.asOf, source: `The ${this.raw.advisories.source}` };
+    const stale = (level: number) => (level >= 4 && !this.advisoryFresh ? 3 : level);
+    const country = this.raw.advisories.countries?.[iso];
+    if (!country) {
+      const entry = this.raw.advisories.levels[iso];
+      if (!entry) return null;
+      return { level: stale(entry.level), asOf: entry.asOf, source: `The ${this.raw.advisories.source}` };
+    }
+    const asOf = (this.raw.advisories.fetchedAt ?? this.raw.builtAt).slice(0, 10);
+    const parts = country.parts && !country.whole ? { parts: country.parts } : {};
+    const whole = country.whole?.[0];
+    if (whole && !warning?.exempt) return { level: stale(4), asOf: whole.updatedAt ?? asOf, source: whole.source, url: whole.url };
+    if (warning && warning.level >= 3 && warning.source && warning.level >= country.level) {
+      return { level: stale(warning.level), asOf: warning.asOf ?? asOf, source: warning.source, area: warning.area ?? null, ...(warning.url ? { url: warning.url } : {}), ...parts };
+    }
+    if (country.level === 0 && !country.parts) return null;
+    return { level: Math.min(stale(country.level), 3), asOf: country.asOf ?? asOf, source: country.source ?? country.parts?.[0]?.source ?? 'A government', ...(country.url ? { url: country.url } : {}), ...parts };
   }
 
   /** The id a row answers to: the curated entry's where one stands for it. */
@@ -461,7 +532,9 @@ export class Atlas implements DestinationWorld {
       aliases: raw.aliases[String(row)] ?? [],
       airports,
       basis: { experiences: 'estimated', climate: measured ? 'measured' : 'estimated', cost: 'estimated', logistics: 'estimated' },
-      advisory: this.advisoryFor(countries[0] ?? null),
+      advisory: this.advisoryFor(countries[0] ?? null, countries.length === 1 ? raw.advisories.rows?.[String(row)] : undefined),
+      landmass: this.landmassOf(row),
+      costEvidence: this.costEvidenceOf(row),
     };
     this.rowCache[row] = destination;
     return destination;

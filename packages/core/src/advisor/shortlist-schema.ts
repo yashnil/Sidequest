@@ -49,7 +49,7 @@ export const advisorPickSchema = z.object({
   character: z.string(),
   gettingThere: z.string(),
   gettingAround: z.string(),
-  cost: z.object({ level: z.number(), label: z.string(), versusBudget: z.string().nullable() }),
+  cost: z.object({ level: z.number(), label: z.string(), versusBudget: z.string().nullable(), rooms: z.string().nullable().default(null) }),
   bases: z.array(z.string()),
   tradeoffs: z.array(z.string()),
   unverified: z.array(z.string()),

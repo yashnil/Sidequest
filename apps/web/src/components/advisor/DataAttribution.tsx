@@ -21,7 +21,7 @@ export function DataAttribution({ className, tone = 'paper' }: { className?: str
       <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" className={link}>
         CC BY-SA 4.0
       </a>
-      ), Wikidata (CC0), CHELSA climate normals, NOAA ETOPO &amp; OISST, OurAirports, World Bank.
+      ), Wikidata (CC0), CHELSA climate normals, NOAA ETOPO &amp; OISST, OurAirports, World Bank, Natural Earth, GMBA Mountain Inventory v2 (CC BY 4.0, Snethlage et al. 2022). Travel advice from the U.S. Department of State, the UK FCDO (Open Government Licence v3.0) and the Government of Canada (Open Government Licence – Canada).
     </p>
   );
 }

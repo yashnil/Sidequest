@@ -80,7 +80,7 @@ export function formatCount(value: number): string {
 }
 
 /** Required by the sources' licences wherever a shortlist is shown. */
-export const DATA_ATTRIBUTION = 'Destination data: Wikivoyage (CC BY-SA 4.0), Wikidata (CC0), CHELSA climate normals, NOAA ETOPO & OISST, OurAirports, World Bank.';
+export const DATA_ATTRIBUTION = 'Destination data: Wikivoyage (CC BY-SA 4.0), Wikidata (CC0), CHELSA climate normals, NOAA ETOPO & OISST, OurAirports, World Bank, Natural Earth, GMBA Mountain Inventory v2 (CC BY 4.0, Snethlage et al. 2022). Travel advice from the U.S. Department of State, the UK FCDO (Open Government Licence v3.0) and the Government of Canada (Open Government Licence – Canada).';
 
 /** How wide the comparison was and how many places were read in full, in one sentence. */
 export function comparedSentence(stats: { catalog: number; considered: number }): string {

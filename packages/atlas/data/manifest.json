@@ -1,7 +1,7 @@
 {
  "format": 1,
  "version": "2026-11.1",
- "builtAt": "2026-11-09T07:04:47.151Z",
+ "builtAt": "2026-11-09T15:48:14.681Z",
  "counts": {
   "destinations": 36782,
   "scopes": 34,
@@ -505,7 +505,7 @@
    "nightsIdeal": 1.98,
    "family0to3": 1.12,
    "lowMobility0to3": 0.92,
-   "cost1to4": 0.73
+   "cost1to4": 0.71
   },
   "cost": {
    "method": "World Bank household-consumption price level of the country, interpolated between the median price levels of curated entries at each cost level",
@@ -648,7 +648,7 @@
   "gzipBytes": 6019739
  },
  "bytes": {
-  "json": 26034540,
-  "gzip": 10481837
+  "json": 27091908,
+  "gzip": 10677424
  }
 }

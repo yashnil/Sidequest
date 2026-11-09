@@ -105,8 +105,18 @@ export interface Destination {
   airports: NearbyAirport[];
   /** How each group of fields was arrived at. */
   basis: { experiences: FieldBasis; climate: FieldBasis; cost: FieldBasis; logistics: FieldBasis };
-  /** Government travel-advisory level for the country (1–4) with its date, when held. */
-  advisory: { level: number; asOf: string; source: string } | null;
+  /**
+   * The official advice that applies here, when any is held: the strictest
+   * covering this place. `area` names the warned area when the warning is
+   * regional. `parts` lists authorities that warn about *some* of the country
+   * where it could not be established whether this place is inside — which is
+   * never a statement that it is outside.
+   */
+  advisory: DestinationAdvisory | null;
+  /** The landmass it stands on, as an opaque number, when that is known. */
+  landmass?: number | null;
+  /** What a room costs here, as a range, when listings or a fitted estimate say. Never a current price. */
+  costEvidence?: DestinationCostEvidence | null;
   /** Lexical relevance to words in the request that no structured field captured, 0–1. Set per query. */
   mention?: number;
 }
@@ -114,7 +124,26 @@ export interface Destination {
 /** How far to trust an editorial reading: high, and deliberately not 1 — nobody checked the prices. */
 export const EDITORIAL_CONFIDENCE = 0.9;
 
+export interface DestinationAdvisory {
+  level: number;
+  asOf: string;
+  source: string;
+  area?: string | null;
+  url?: string;
+  parts?: { source: string; level: number; url: string }[];
+}
+
+export interface DestinationCostEvidence {
+  /** 80 % range for a mid-range double room, US dollars of the observation period. */
+  roomUsd: [number, number];
+  basis: 'historical_observation' | 'model_estimate';
+  /** The years of the listings it rests on, when it rests on any of its own. */
+  years: [number, number] | null;
+}
+
 export interface CatalogEnrichment {
+  landmass?: number | null;
+  costEvidence?: DestinationCostEvidence | null;
   measured?: MeasuredClimate | null;
   parents?: string[];
   aliases?: string[];
@@ -136,6 +165,8 @@ export function destinationFromCatalog(entry: CatalogDestination, enrichment: Ca
     airports: enrichment.airports ?? [],
     basis: { experiences: 'editorial', climate: enrichment.measured ? 'measured' : 'editorial', cost: 'editorial', logistics: 'editorial' },
     advisory: enrichment.advisory ?? null,
+    landmass: enrichment.landmass ?? null,
+    costEvidence: enrichment.costEvidence ?? null,
   };
 }
 

@@ -170,6 +170,7 @@ function PickCard({ pick, index, image, sessionId }: { pick: AdvisorPick; index:
           <Fact label="Costs">
             {pick.cost.label}
             {pick.cost.versusBudget ? <span className="text-ink-muted"> · {pick.cost.versusBudget.toLowerCase()}</span> : null}
+            {pick.cost.rooms ? <span className="mt-1 block text-ink-muted">{pick.cost.rooms}</span> : null}
           </Fact>
           <Fact label="Getting there">{pick.gettingThere}</Fact>
           <Fact label="Getting around">{pick.gettingAround}</Fact>

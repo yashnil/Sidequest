@@ -58,6 +58,8 @@ export function lambdaFor(profile: AdvisorProfile): number {
 export function overlap(a: ScoredDestination['destination'], b: ScoredDestination['destination']): number {
   if (a.id === b.id || a.parents.includes(b.id) || b.parents.includes(a.id)) return 1;
   if (a.wikidataId && a.wikidataId === b.wikidataId) return 1;
+  /* Different landmasses are different trips, however their circles overlap: Bali is not Lombok. */
+  if (a.landmass && b.landmass && a.landmass !== b.landmass) return 0;
   const km = advisorKm(a.center, b.center);
   const larger = Math.max(a.radiusKm, b.radiusKm);
   if (km < Math.max(12, 0.6 * larger)) return 1;

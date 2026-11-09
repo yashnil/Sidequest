@@ -1,49 +1,49 @@
 # Atlas coverage
 
-36,635 destinations in 227 countries and territories; 36,635 with measured climate.
+36,588 destinations in 227 countries and territories; 36,588 with measured climate.
 
 | World region | Destinations |
 |---|---|
-| Eastern North America | 5,295 |
+| Eastern North America | 5,293 |
 | Northern Europe | 3,518 |
-| Southern Europe | 3,102 |
-| East Asia | 2,516 |
+| Southern Europe | 3,101 |
+| East Asia | 2,515 |
 | Western North America | 2,447 |
 | South Asia | 2,299 |
 | Western Europe | 2,287 |
-| Southeast Asia | 2,239 |
-| Central & Eastern Europe | 1,798 |
-| Australia & New Zealand | 1,761 |
-| Northern South America | 1,517 |
-| Mexico & Central America | 1,186 |
+| Southeast Asia | 2,232 |
+| Central & Eastern Europe | 1,796 |
+| Australia & New Zealand | 1,752 |
+| Northern South America | 1,514 |
+| Mexico & Central America | 1,181 |
 | West & Central Africa | 1,110 |
-| Middle East | 1,006 |
+| Middle East | 1,002 |
 | Southern Africa | 642 |
-| Caucasus & Central Asia | 619 |
-| Polar regions | 558 |
+| Caucasus & Central Asia | 618 |
+| Polar regions | 557 |
 | Southern South America | 519 |
-| Pacific Islands | 490 |
+| Pacific Islands | 487 |
 | East Africa | 456 |
-| North Africa | 406 |
-| Caribbean | 372 |
-| Alaska & Northern Canada | 306 |
-| Indian Ocean | 186 |
+| North Africa | 405 |
+| Caribbean | 371 |
+| Alaska & Northern Canada | 303 |
+| Indian Ocean | 183 |
 
 | Kind | Destinations |
 |---|---|
-| town | 17,159 |
-| travel_region | 4,241 |
+| town | 17,157 |
+| travel_region | 4,220 |
 | city | 4,170 |
-| national_park | 3,137 |
+| national_park | 3,128 |
 | island | 2,272 |
 | mountain_range | 1,655 |
-| protected_area | 1,531 |
+| protected_area | 1,524 |
 | island_group | 903 |
-| lake_district | 405 |
-| route | 366 |
+| lake_district | 403 |
+| route | 363 |
 | coast | 256 |
 | ski_area | 215 |
-| country | 187 |
+| country | 184 |
 | desert | 104 |
 | city_and_surroundings | 14 |
 | wilderness | 12 |
@@ -53,19 +53,19 @@
 
 | Experience | Destinations | World regions with at least one |
 |---|---|---|
-| day_hiking | 2,617 | 24 of 24 |
+| day_hiking | 2,616 | 24 of 24 |
 | multi_day_trekking | 267 | 23 of 24 |
 | high_mountains | 1,052 | 22 of 24 |
 | glaciers_ice | 210 | 14 of 24 |
-| volcanoes_geothermal | 103 | 15 of 24 |
+| volcanoes_geothermal | 101 | 15 of 24 |
 | lakes | 356 | 20 of 24 |
-| beaches_swimming | 1,074 | 21 of 24 |
-| coastal_scenery | 1,597 | 24 of 24 |
-| snorkel_dive | 105 | 15 of 24 |
+| beaches_swimming | 1,069 | 21 of 24 |
+| coastal_scenery | 1,583 | 24 of 24 |
+| snorkel_dive | 99 | 15 of 24 |
 | paddling_boating | 94 | 21 of 24 |
 | big_game_safari | 11 | 4 of 24 |
 | wildlife_general | 60 | 19 of 24 |
-| marine_wildlife | 109 | 19 of 24 |
+| marine_wildlife | 108 | 19 of 24 |
 | birding | 54 | 19 of 24 |
 | rainforest_biodiversity | 53 | 13 of 24 |
 | desert_landscapes | 79 | 14 of 24 |
@@ -73,7 +73,7 @@
 | rail_journeys | 17 | 10 of 24 |
 | winter_snow | 199 | 13 of 24 |
 | hot_springs_wellness | 37 | 15 of 24 |
-| villages_culture | 4,438 | 24 of 24 |
+| villages_culture | 4,434 | 24 of 24 |
 | food | 508 | 22 of 24 |
 | city_life | 106 | 19 of 24 |
 | night_skies | 44 | 15 of 24 |
@@ -82,18 +82,18 @@
 
 | Activity | J | F | M | A | M | J | J | A | S | O | N | D |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| hike_low | 21052 | 22915 | 25420 | 27939 | 27896 | 26754 | 24965 | 25356 | 27537 | 28887 | 27990 | 22627 |
-| hike_high | 20362 | 21819 | 23826 | 26600 | 26942 | 26057 | 24442 | 24998 | 27159 | 28351 | 27112 | 21999 |
-| beach | 3639 | 3879 | 4035 | 4568 | 4221 | 4833 | 6225 | 6306 | 5283 | 3726 | 4139 | 3968 |
-| dive | 4730 | 4931 | 5071 | 5571 | 5819 | 7663 | 8155 | 8467 | 8216 | 6988 | 5785 | 5331 |
-| ski | 3232 | 3690 | 3326 | 2264 | 1232 | 553 | 305 | 369 | 451 | 769 | 1490 | 2424 |
-| winter | 5669 | 6202 | 4610 | 2052 | 1015 | 471 | 339 | 413 | 526 | 787 | 1473 | 3456 |
-| safari | 12003 | 13063 | 15420 | 21614 | 26313 | 26484 | 26137 | 26368 | 25801 | 22338 | 15152 | 12147 |
-| wild | 31550 | 33073 | 34894 | 35255 | 35084 | 34423 | 33936 | 34357 | 34968 | 35264 | 34361 | 32295 |
-| city | 31849 | 32618 | 34688 | 34787 | 34946 | 34976 | 35112 | 35370 | 35815 | 35743 | 34972 | 32673 |
-| desert | 18309 | 19039 | 23965 | 30550 | 33262 | 34167 | 34531 | 34718 | 34791 | 33113 | 25894 | 19607 |
-| drive | 29096 | 29443 | 31633 | 34325 | 35094 | 34819 | 34574 | 34850 | 35284 | 35265 | 33965 | 30812 |
-| paddle | 15006 | 15835 | 18627 | 25970 | 31035 | 31009 | 30732 | 31398 | 31981 | 29705 | 19982 | 16089 |
-| sky | 35145 | 35770 | 35964 | 35935 | 34643 | 31999 | 31835 | 33815 | 34830 | 35444 | 35336 | 35348 |
-| scenery | 21265 | 23248 | 27897 | 31468 | 31708 | 31048 | 30431 | 30910 | 31972 | 32541 | 29590 | 22834 |
-| any | 34696 | 35112 | 35833 | 35914 | 35932 | 36068 | 36069 | 36137 | 36322 | 36227 | 35889 | 35168 |
+| hike_low | 21032 | 22895 | 25399 | 27912 | 27866 | 26724 | 24931 | 25322 | 27506 | 28861 | 27959 | 22601 |
+| hike_high | 20342 | 21798 | 23805 | 26574 | 26914 | 26029 | 24409 | 24966 | 27129 | 28327 | 27082 | 21973 |
+| beach | 3626 | 3864 | 4014 | 4538 | 4194 | 4806 | 6195 | 6275 | 5254 | 3698 | 4111 | 3942 |
+| dive | 4706 | 4903 | 5042 | 5539 | 5787 | 7629 | 8117 | 8431 | 8180 | 6957 | 5752 | 5300 |
+| ski | 3232 | 3690 | 3325 | 2263 | 1231 | 552 | 305 | 369 | 451 | 769 | 1490 | 2424 |
+| winter | 5667 | 6198 | 4605 | 2048 | 1013 | 471 | 339 | 413 | 526 | 785 | 1472 | 3454 |
+| safari | 11984 | 13042 | 15399 | 21584 | 26280 | 26450 | 26100 | 26332 | 25767 | 22306 | 15124 | 12122 |
+| wild | 31511 | 33033 | 34853 | 35211 | 35039 | 34379 | 33890 | 34313 | 34923 | 35219 | 34319 | 32253 |
+| city | 31808 | 32576 | 34646 | 34743 | 34900 | 34931 | 35067 | 35324 | 35769 | 35696 | 34929 | 32631 |
+| desert | 18271 | 19001 | 23926 | 30509 | 33220 | 34124 | 34487 | 34674 | 34747 | 33070 | 25854 | 19568 |
+| drive | 29058 | 29404 | 31592 | 34283 | 35050 | 34773 | 34527 | 34805 | 35239 | 35222 | 33922 | 30771 |
+| paddle | 14975 | 15805 | 18591 | 25930 | 30997 | 30971 | 30694 | 31359 | 31943 | 29664 | 19945 | 16052 |
+| sky | 35105 | 35731 | 35919 | 35890 | 34602 | 31961 | 31794 | 33773 | 34785 | 35399 | 35291 | 35302 |
+| scenery | 21237 | 23220 | 27861 | 31427 | 31669 | 31009 | 30391 | 30869 | 31932 | 32502 | 29550 | 22798 |
+| any | 34653 | 35069 | 35789 | 35869 | 35885 | 36021 | 36023 | 36091 | 36275 | 36180 | 35845 | 35125 |

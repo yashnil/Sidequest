@@ -1,11 +1,156 @@
 [
-  { "id": "wikivoyage", "name": "Wikivoyage (English)", "use": "Which places are travel destinations, the travel hierarchy, guide text evidence, listed sights, first-sentence descriptions", "licence": "CC BY-SA 4.0", "attribution": "Wikivoyage contributors", "url": "https://dumps.wikimedia.org/enwikivoyage/latest/", "access": "bulk dump (pages-articles, page_props)", "update": "dumps twice a month", "cost": "free" },
-  { "id": "wikidata", "name": "Wikidata", "use": "Stable identity (QID), aliases, country, population, area, sitelink counts; the worldwide layer of notable features (parks, ranges, volcanoes, beaches, ski areas, reefs, heritage sites)", "licence": "CC0 1.0", "attribution": "none required", "url": "https://query.wikidata.org/", "access": "Wikidata Query Service, one query per class or per 150 items, cached", "update": "live", "cost": "free; 60 s query limit, one query at a time" },
-  { "id": "chelsa", "name": "CHELSA V2.1 climatologies 1981–2010", "use": "Monthly mean daily maximum and minimum temperature and precipitation at 30 arc-seconds, sampled where people stay and on the highest ground of each destination", "licence": "CC0 1.0 (per chelsa-climate.org; the files carry no licence attribute)", "attribution": "Karger et al. 2017, Scientific Data 4:170122", "url": "https://chelsa-climate.org/", "access": "36 NetCDF files, about 6 GB, downloaded once", "update": "static normals", "cost": "free" },
-  { "id": "etopo", "name": "ETOPO 2022 (60 arc-second surface)", "use": "Elevation where people stay, the highest ground within a destination, relief, the land/sea mask", "licence": "Public domain (NOAA NCEI)", "attribution": "NOAA National Centers for Environmental Information, 2022", "url": "https://www.ncei.noaa.gov/products/etopo-global-relief-model", "access": "one NetCDF file, 478 MB", "update": "static", "cost": "free" },
-  { "id": "oisst", "name": "NOAA OISST v2.1 monthly long-term mean 1991–2020", "use": "Sea-surface temperature of the nearest sea, for swimming and diving seasons", "licence": "Public domain (NOAA)", "attribution": "NOAA PSL; Huang et al. 2021", "url": "https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html", "access": "one NetCDF file, 46 MB", "update": "static normals", "cost": "free" },
-  { "id": "ourairports", "name": "OurAirports", "use": "Airports with scheduled service and an IATA code, for measured distance to the nearest airport and hub", "licence": "Public domain", "attribution": "none required", "url": "https://ourairports.com/data/", "access": "one CSV, 13 MB", "update": "nightly", "cost": "free" },
-  { "id": "worldbank", "name": "World Bank World Development Indicators", "use": "Household-consumption price level by country (US = 1), the basis of the cost estimate", "licence": "CC BY 4.0", "attribution": "World Bank", "url": "https://data.worldbank.org/", "access": "already in the repository (packages/core/src/intelligence/reference/price-levels.ts)", "update": "annual", "cost": "free" },
-  { "id": "state_advisories", "name": "U.S. Department of State travel advisories", "use": "Country advisory level with its date; a fresh do-not-travel level removes a destination, the level below it becomes a caution on the card", "licence": "Public domain (U.S. Government work)", "attribution": "travel.state.gov", "url": "https://cadataapi.state.gov/api/TravelAdvisories", "access": "one JSON request", "update": "continuous; refresh with `node packages/atlas/build/advisories.mjs`", "cost": "free" },
-  { "id": "sidequest_catalog", "name": "Sidequest editorial catalog", "use": "234 curated destinations: the editorial rows of the atlas and the labels every estimator is fitted to and checked against", "licence": "Sidequest", "attribution": "Sidequest", "url": "packages/core/src/advisor/catalog/regions/", "access": "in the repository", "update": "by hand", "cost": "editorial time" }
+  {
+    "id": "wikivoyage",
+    "name": "Wikivoyage (English)",
+    "use": "Which places are travel destinations, the travel hierarchy, guide text evidence, listed sights, first-sentence descriptions",
+    "licence": "CC BY-SA 4.0",
+    "attribution": "Wikivoyage contributors",
+    "url": "https://dumps.wikimedia.org/enwikivoyage/latest/",
+    "access": "bulk dump (pages-articles, page_props)",
+    "update": "dumps twice a month",
+    "cost": "free"
+  },
+  {
+    "id": "wikidata",
+    "name": "Wikidata",
+    "use": "Stable identity (QID), aliases, country, population, area, sitelink counts; the worldwide layer of notable features (parks, ranges, volcanoes, beaches, ski areas, reefs, heritage sites)",
+    "licence": "CC0 1.0",
+    "attribution": "none required",
+    "url": "https://query.wikidata.org/",
+    "access": "Wikidata Query Service, one query per class or per 150 items, cached",
+    "update": "live",
+    "cost": "free; 60 s query limit, one query at a time"
+  },
+  {
+    "id": "chelsa",
+    "name": "CHELSA V2.1 climatologies 1981–2010",
+    "use": "Monthly mean daily maximum and minimum temperature and precipitation at 30 arc-seconds, sampled where people stay and on the highest ground of each destination",
+    "licence": "CC0 1.0 (per chelsa-climate.org; the files carry no licence attribute)",
+    "attribution": "Karger et al. 2017, Scientific Data 4:170122",
+    "url": "https://chelsa-climate.org/",
+    "access": "36 NetCDF files, about 6 GB, downloaded once",
+    "update": "static normals",
+    "cost": "free"
+  },
+  {
+    "id": "etopo",
+    "name": "ETOPO 2022 (60 arc-second surface)",
+    "use": "Elevation where people stay, the highest ground within a destination, relief, the land/sea mask",
+    "licence": "Public domain (NOAA NCEI)",
+    "attribution": "NOAA National Centers for Environmental Information, 2022",
+    "url": "https://www.ncei.noaa.gov/products/etopo-global-relief-model",
+    "access": "one NetCDF file, 478 MB",
+    "update": "static",
+    "cost": "free"
+  },
+  {
+    "id": "oisst",
+    "name": "NOAA OISST v2.1 monthly long-term mean 1991–2020",
+    "use": "Sea-surface temperature of the nearest sea, for swimming and diving seasons",
+    "licence": "Public domain (NOAA)",
+    "attribution": "NOAA PSL; Huang et al. 2021",
+    "url": "https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html",
+    "access": "one NetCDF file, 46 MB",
+    "update": "static normals",
+    "cost": "free"
+  },
+  {
+    "id": "ourairports",
+    "name": "OurAirports",
+    "use": "Airports with scheduled service and an IATA code, for measured distance to the nearest airport and hub",
+    "licence": "Public domain",
+    "attribution": "none required",
+    "url": "https://ourairports.com/data/",
+    "access": "one CSV, 13 MB",
+    "update": "nightly",
+    "cost": "free"
+  },
+  {
+    "id": "worldbank",
+    "name": "World Bank World Development Indicators",
+    "use": "Household-consumption price level by country (US = 1), the basis of the cost estimate",
+    "licence": "CC BY 4.0",
+    "attribution": "World Bank",
+    "url": "https://data.worldbank.org/",
+    "access": "already in the repository (packages/core/src/intelligence/reference/price-levels.ts)",
+    "update": "annual",
+    "cost": "free"
+  },
+  {
+    "id": "state_advisories",
+    "name": "U.S. Department of State travel advisories",
+    "use": "Country advisory level with its date; a fresh do-not-travel level removes a destination, the level below it becomes a caution on the card",
+    "licence": "Public domain (U.S. Government work)",
+    "attribution": "travel.state.gov",
+    "url": "https://cadataapi.state.gov/api/TravelAdvisories",
+    "access": "one JSON request",
+    "update": "continuous; refresh with `node packages/atlas/build/advisories.mjs`",
+    "cost": "free"
+  },
+  {
+    "id": "sidequest_catalog",
+    "name": "Sidequest editorial catalog",
+    "use": "234 curated destinations: the editorial rows of the atlas and the labels every estimator is fitted to and checked against",
+    "licence": "Sidequest",
+    "attribution": "Sidequest",
+    "url": "packages/core/src/advisor/catalog/regions/",
+    "access": "in the repository",
+    "update": "by hand",
+    "cost": "editorial time"
+  },
+  {
+    "id": "natural-earth",
+    "name": "Natural Earth 1:10m",
+    "use": "Landmass identity, country, subunit and first-level boundaries, physical and marine regions",
+    "licence": "Public domain",
+    "attribution": "Made with Natural Earth (optional)",
+    "url": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "access": "bulk download",
+    "update": "irregular",
+    "cost": "free"
+  },
+  {
+    "id": "gmba",
+    "name": "GMBA Mountain Inventory v2.0",
+    "use": "Mountain-range polygons and hierarchy",
+    "licence": "CC BY 4.0",
+    "attribution": "Snethlage et al. 2022, Sci Data, doi:10.1038/s41597-022-01256-y; GMBA Mountain Inventory v2, doi:10.48601/earthenv-t9k2-1407 (changed: matched to destinations)",
+    "url": "https://www.earthenv.org/mountains",
+    "access": "bulk download",
+    "update": "versioned",
+    "cost": "free"
+  },
+  {
+    "id": "fcdo",
+    "name": "UK FCDO foreign travel advice",
+    "use": "National and regional travel advice",
+    "licence": "Open Government Licence v3.0",
+    "attribution": "Contains public sector information licensed under the Open Government Licence v3.0.",
+    "url": "https://www.gov.uk/foreign-travel-advice",
+    "access": "GOV.UK Content API",
+    "update": "continuous; snapshot per build",
+    "cost": "free"
+  },
+  {
+    "id": "canada-advice",
+    "name": "Government of Canada travel advice",
+    "use": "National and regional travel advice",
+    "licence": "Open Government Licence - Canada",
+    "attribution": "Contains information licensed under the Open Government Licence - Canada.",
+    "url": "https://travel.gc.ca/travelling/advisories",
+    "access": "open data JSON",
+    "update": "continuous; snapshot per build",
+    "cost": "free"
+  },
+  {
+    "id": "world-bank-fx",
+    "name": "World Bank WDI exchange rates and CPI",
+    "use": "Converting dated guide prices to constant US dollars",
+    "licence": "CC BY 4.0",
+    "attribution": "World Bank, WDI (source: IMF IFS), CC BY 4.0",
+    "url": "https://data.worldbank.org/indicator/PA.NUS.FCRF",
+    "access": "API",
+    "update": "annual",
+    "cost": "free"
+  }
 ]
