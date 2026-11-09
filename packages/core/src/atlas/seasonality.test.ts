@@ -154,3 +154,25 @@ describe('activity-specific seasonality', () => {
     expect(polarNight.fit.sky[11]!.value).toBeGreaterThan(polarNight.fit.sky[5]!.value);
   });
 });
+
+describe('sky and sea conditions when they are measured', () => {
+  const point = { elevM: 10, tmax: new Array(12).fill(28), tmin: new Array(12).fill(20), pr: new Array(12).fill(40) };
+  const coast = { lat: 10, base: point, high: null, sst: new Array(12).fill(27), coastKm: 2 };
+
+  it('takes a cloudy month away from the stars and leaves a clear one', () => {
+    const cloud = [10, 10, 10, 10, 10, 10, 85, 85, 85, 10, 10, 10];
+    const { fit } = seasonModel({ ...coast, cloud });
+    expect(fit.sky[0]!.value).toBeGreaterThan(0.9);
+    expect(fit.sky[7]!.value).toBeLessThan(0.3);
+    expect(fit.sky[7]!.limit).toBe('cloud');
+  });
+
+  it('marks a heavy swell against the beach and the dive boat, and treats sea ice as unknown', () => {
+    const waves = [0.5, 0.5, 0.5, 3.5, Number.NaN, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+    const { fit } = seasonModel({ ...coast, waves });
+    expect(fit.beach[0]!.value).toBeGreaterThan(fit.beach[3]!.value);
+    expect(fit.beach[3]!.limit).toBe('rough_sea');
+    expect(fit.dive[3]!.limit).toBe('rough_sea');
+    expect(fit.beach[4]!.value).toBeCloseTo(fit.beach[0]!.value, 5);
+  });
+});

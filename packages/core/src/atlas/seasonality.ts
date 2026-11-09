@@ -54,6 +54,10 @@ export interface SeasonInputs {
   sst: Monthly | null;
   /** Great-circle km from the centre to the sea; null when inland. */
   coastKm: number | null;
+  /** Mean cloud cover by month, %, when held. */
+  cloud?: Monthly | null;
+  /** Mean significant wave height by month, m, for a coast the wave grid resolves; NaN under sea ice. */
+  waves?: Monthly | null;
 }
 
 export const ACTIVITIES = [
@@ -87,6 +91,8 @@ export type Limit =
   | 'frozen_water'
   | 'bright_nights'
   | 'storm_season'
+  | 'cloud'
+  | 'rough_sea'
   | 'no_sea';
 
 export interface MonthFit {
@@ -107,6 +113,8 @@ export const LIMIT_WORDS: Record<Limit, string> = {
   frozen_water: 'frozen water',
   bright_nights: 'nights that never get dark',
   storm_season: 'storm season',
+  cloud: 'cloudy skies',
+  rough_sea: 'rough seas',
   no_sea: 'no sea nearby',
 };
 
@@ -338,13 +346,17 @@ export function seasonModel(inputs: SeasonInputs, lng = 0): SeasonModel {
 
     /* Swimming: the sea first, then the air, then the rain. Inland there is no beach month at all. */
     const storm: [number, Limit | null] = [stormSeason(lat, lng, month) ? 0.75 : 1, 'storm_season'];
+    const hs = inputs.waves?.[index];
+    /* Half a metre is a calm bay; past two metres a beach is for watching and a dive boat stays in. */
+    const swell: [number, Limit | null] = [hs === undefined || Number.isNaN(hs) ? 1 : falling(hs, 1.2, 3, 0.5), 'rough_sea'];
+    const boats: [number, Limit | null] = [hs === undefined || Number.isNaN(hs) ? 1 : falling(hs, 1.5, 3.5, 0.45), 'rough_sea'];
     if (coastal && inputs.sst) {
       const sea = inputs.sst[index]!;
       /* 25 °C is a bath; 22 is fine; 19 is brisk and people do swim in it; under 17 almost nobody does. */
       const seaFit = sea >= 25 ? 1 : sea >= 22 ? 0.6 + 0.4 * ((sea - 22) / 3) : sea >= 19 ? 0.28 + 0.32 * ((sea - 19) / 3) : sea >= 17 ? 0.08 + 0.2 * ((sea - 17) / 2) : 0.04;
-      fit.beach.push(worst([[seaFit, 'sea_too_cold'], heatOrCold(trapezoid(tmax, 18, 25, 33, 40), tmax, 25), [falling(pr, 110, 340, 0.4), 'rains'], storm]));
+      fit.beach.push(worst([[seaFit, 'sea_too_cold'], heatOrCold(trapezoid(tmax, 18, 25, 33, 40), tmax, 25), [falling(pr, 110, 340, 0.4), 'rains'], storm, swell]));
       const diveFit = sea >= 24 ? 1 : sea >= 19 ? 0.45 + 0.55 * ((sea - 19) / 5) : 0.3;
-      fit.dive.push(worst([[diveFit, 'sea_too_cold'], [falling(pr, 150, 420, 0.55), 'rains'], storm]));
+      fit.dive.push(worst([[diveFit, 'sea_too_cold'], [falling(pr, 150, 420, 0.55), 'rains'], storm, boats]));
     } else if (coastal) {
       /* A coast with no sea temperature on record: judged on the air alone, at reduced strength. */
       fit.beach.push(worst([heatOrCold(trapezoid(tmax, 20, 27, 33, 40) * 0.8, tmax, 27), [falling(pr, 110, 340, 0.4), 'rains'], storm]));
@@ -389,7 +401,7 @@ export function seasonModel(inputs: SeasonInputs, lng = 0): SeasonModel {
     fit.paddle.push(worst([[tmean <= -1 ? 0.05 : 1, 'frozen_water'], heatOrCold(trapezoid(tmax, 5, 17, 31, 39), tmax, 20), [falling(pr, 130, 400, 0.45), 'rains']]));
 
     /* Night skies need night. */
-    fit.sky.push(worst([[light <= 15 ? 1 : light >= 21 ? 0.05 : 1 - 0.95 * ((light - 15) / 6), 'bright_nights'], [falling(pr, 120, 380, 0.5), 'rains']]));
+    fit.sky.push(worst([[light <= 15 ? 1 : light >= 21 ? 0.05 : 1 - 0.95 * ((light - 15) / 6), 'bright_nights'], inputs.cloud ? [falling(inputs.cloud[index]!, 35, 85, 0.25), 'cloud'] : [falling(pr, 120, 380, 0.5), 'rains']]));
 
     /* Being outside by the sea or among ice without getting in: wider comfort than a hike, no swimming needed. */
     fit.scenery.push(worst([heatOrCold(trapezoid(tmax, -2, 11, 30, 39), tmax, 15), [falling(pr, 110, 380, 0.4), 'rains'], days]));

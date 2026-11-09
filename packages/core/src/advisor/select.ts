@@ -153,7 +153,12 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     remaining = remaining.filter((candidate) => !chosen.some((picked) => overlap(candidate.destination, picked.destination) >= 1));
     if (remaining.length === 0) break;
     /* Primaries come from the places that serve the lead while any are left. */
-    const eligible = chosen.length < size && remaining.some(leadOk) ? remaining.filter(leadOk) : remaining;
+    let eligible = chosen.length < size && remaining.some(leadOk) ? remaining.filter(leadOk) : remaining;
+    /* Nothing left serves the lead: the closest to it comes next, and being different is no qualification. */
+    if (chosen.length < size && profile.leadStated && !remaining.some(leadOk)) {
+      const closest = Math.max(...remaining.map((candidate) => candidate.interestFit[0]?.value ?? 0));
+      eligible = remaining.filter((candidate) => (candidate.interestFit[0]?.value ?? 0) >= closest - 0.1);
+    }
     let bestIndex = 0;
     let bestValue = -Infinity;
     eligible.forEach((candidate) => {

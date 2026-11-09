@@ -146,7 +146,7 @@ function withoutBroadStandIns(ranked: readonly ScoredDestination[], profile: Adv
     /* A country with a do-not-travel area inside it is no answer when somebody could be sent to exactly that area by following it. */
     const warnedInParts = country && (destination.advisory?.parts?.some((part) => part.level >= 4) ?? false);
     const best = parts.find((other) => other.destination.radiusKm < destination.radiusKm && !stoodDown.has(other.destination.id));
-    if (best && (warnedInParts || best.score >= entry.score - margin)) stoodDown.add(destination.id);
+    if (warnedInParts || (best && best.score >= entry.score - margin)) stoodDown.add(destination.id);
   }
   return stoodDown.size === 0 ? [...ranked] : ranked.filter((entry) => !stoodDown.has(entry.destination.id));
 }
@@ -353,7 +353,9 @@ export function seasonNoteFor(scored: ScoredDestination, profile: AdvisorProfile
   }
   if (parts.length === 0) return null;
   const source = destination.measured ? 'from 1981–2010 climate normals' : 'from our own reading of its climate';
-  return `${parts.join('. ')} (${source}).`;
+  /* A climate normal is not a sighting or an opening date, and the card says which it is. */
+  const caveat = drivers[0] === 'safari' || drivers[0] === 'wild' ? ' Wildlife timing here is a rule of thumb from rainfall, not sightings data.' : drivers[0] === 'ski' ? ' That is the snow; when the lifts run is up to the resort.' : '';
+  return `${parts.join('. ')} (${source}).${caveat}`;
 }
 
 function differsBy(scored: ScoredDestination, earlier: readonly ScoredDestination[]): string | null {

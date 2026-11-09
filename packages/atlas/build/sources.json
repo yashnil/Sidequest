@@ -152,5 +152,60 @@
     "access": "API",
     "update": "annual",
     "cost": "free"
+  },
+  {
+    "id": "gbif",
+    "name": "GBIF occurrence data (CC0 and CC BY records only)",
+    "use": "Which large mammals, birds and marine megafauna are documented in a 1° cell since 2000",
+    "licence": "Per record: CC0 1.0 or CC BY 4.0",
+    "attribution": "Credit publishers; cite a GBIF derived-dataset DOI (dataset list in .atlas-cache/work/wildlife-datasets.json; DOI not yet minted, needs an account)",
+    "url": "https://www.gbif.org/terms/data-user",
+    "access": "occurrence facet API, cached per cell",
+    "update": "continuous; snapshot per build",
+    "cost": "free"
+  },
+  {
+    "id": "chen-viirs",
+    "name": "Chen et al. NPP-VIIRS-like night lights 2023",
+    "use": "Modelled night-sky brightness (a model on measured radiance)",
+    "licence": "CC0 1.0 as declared by the depositors; upstream VIIRS rights not confirmed",
+    "attribution": "Chen et al. 2021, ESSD 13(3):889–906; doi:10.7910/DVN/YGIVCD; underlying VIIRS DNB",
+    "url": "https://doi.org/10.7910/DVN/YGIVCD",
+    "access": "bulk download",
+    "update": "annual",
+    "cost": "free"
+  },
+  {
+    "id": "chelsa-sky",
+    "name": "CHELSA V2.1 clt and sfcWind normals",
+    "use": "Monthly cloud cover and wind",
+    "licence": "CC0 1.0",
+    "attribution": "Karger et al. 2017, Sci Data 4:170122; doi:10.16904/envidat.228",
+    "url": "https://www.chelsa-climate.org/datasets/chelsa_climatologies",
+    "access": "bulk download",
+    "update": "versioned",
+    "cost": "free"
+  },
+  {
+    "id": "waverys",
+    "name": "WAVERYS monthly climatology (Copernicus Marine)",
+    "use": "Monthly significant wave height at the coast",
+    "licence": "Copernicus Marine Service licence (free; derivative works for any purpose)",
+    "attribution": "Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00022",
+    "url": "https://marine.copernicus.eu/user-corner/service-commitments-and-licence",
+    "access": "anonymous object storage",
+    "update": "versioned",
+    "cost": "free"
+  },
+  {
+    "id": "openskidata",
+    "name": "OpenSkiData / OpenSkiMap",
+    "use": "Operating lift-served ski areas; kept as its own ODbL file and joined in memory at run time",
+    "licence": "ODbL 1.0",
+    "attribution": "Data from OpenSkiData / OpenSkiMap.org, © OpenStreetMap contributors (ODbL), Skimap.org, Who's On First, © Mapterhorn",
+    "url": "https://openskidata.org/",
+    "access": "bulk download, at most once a day",
+    "update": "daily",
+    "cost": "free"
   }
 ]

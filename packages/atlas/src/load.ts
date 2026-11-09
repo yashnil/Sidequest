@@ -82,6 +82,15 @@ export function loadAtlas(options: AtlasOptions = {}): LoadedAtlas | null {
         embeddings = error instanceof Error ? error.message : 'unreadable embedding file';
       }
     }
+    /* Its own ODbL database, kept beside the atlas and joined only here, in memory. Absent means unknown, never "no skiing". */
+    const skiFile = join(dirname(path), 'ski-areas.odbl.json.gz');
+    if (existsSync(skiFile)) {
+      try {
+        atlas.attachSkiAreas((JSON.parse(gunzipSync(readFileSync(skiFile)).toString('utf8')) as { rows: number[][] }).rows);
+      } catch {
+        /* Unreadable ski data costs the lift check, nothing else. */
+      }
+    }
     held = { atlas, path, loadMs: Math.round(performance.now() - started), embeddings };
     return held;
   } catch (error) {

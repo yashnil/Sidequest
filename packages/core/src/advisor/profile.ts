@@ -99,6 +99,8 @@ export interface AdvisorInterest {
    * never on having all of them.
    */
   any?: boolean;
+  /** Skiing or snowboarding was asked for by name: snow without lifts is not what they mean. */
+  lifts?: boolean;
 }
 
 export const FACTOR_IDS = [
@@ -219,7 +221,7 @@ function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAns
     if (key === 'beaches' && discovery?.swimStyle === 'diving') mapping = { snorkel_dive: 0.75, beaches_swimming: 0.15, coastal_scenery: 0.1 };
     if (key === 'beaches' && discovery?.swimStyle === 'snorkel') mapping = { beaches_swimming: 0.45, snorkel_dive: 0.4, coastal_scenery: 0.15 };
     if (key === 'lakes' && discovery?.swimStyle === 'lakes') mapping = { lakes: 1 };
-    interests.push({ key, weight, mapping });
+    interests.push({ key, weight, mapping, ...(key === 'snow' && discovery?.skiing ? { lifts: true } : {}) });
   }
   /* A pursuit is something the traveller named outright, so it weighs as much as a lead interest. */
   for (const key of discovery?.pursuits ?? []) interests.push({ key, weight: 1, mapping: PURSUIT_EXPERIENCES[key] });

@@ -538,6 +538,7 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
     }
     if (/\b(outdoors?|outside|nature)\b/.test(t)) vague.push('outdoors');
   }
+  if (focus.includes('snow') && saysYes(/\b(ski(s|ing|ers?)?|snowboard(s|ing|ers?)?|lift pass|pistes?|powder)\b/, t)) patchDiscovery({ skiing: true });
   if (saysYes(/\bsafari\b/, t)) patchDiscovery({ wildlifeKind: 'safari' });
   else if (saysYes(/\b(whales?|snorkel|reef|marine|dolphins?)\b/, t) && focus.includes('wildlife')) patchDiscovery({ wildlifeKind: 'marine' });
   if (saysYes(/\b(glaciers?|icebergs?|ice ?(fields?|caps?))\b/, t) && !saysYes(/\b(trek(s|king)?|climb(ing)?|mountaineering|hut[- ]to[- ]hut)\b/, t)) patchDiscovery({ mountainStyle: 'glaciers' });

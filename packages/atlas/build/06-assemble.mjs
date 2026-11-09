@@ -40,6 +40,7 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { EXPERIENCES } from './lib/vocabulary.mjs';
+import { directFloors, loadSpecialist, skiRows, specialistSignals } from './lib/specialist.mjs';
 import { worldRegionFor, worldRegionByPoint, WORLD_REGIONS } from './lib/world-regions.mjs';
 import { advisoryTables, areaWarningFor, landmassOf, ols, ownRoomEvidence, ownWeight, placeKey, polygonScopes, refiledParents, spreadFor, suspectLocation, median as medianOf } from './lib/evidence.mjs';
 
@@ -129,13 +130,14 @@ function measuredProxies(candidate, raster) {
   return out;
 }
 
-function signalsFor(candidate, raster) {
+function signalsFor(candidate, raster, specialist) {
   const proxies = measuredProxies(candidate, raster);
   return EXPERIENCES.map((experience) => [
     saturate(candidate.hits[experience] ?? 0, 8),
     candidate.rolled?.[experience] ?? 0,
     saturate(candidate.featureSignal?.[experience] ?? 0, 3),
     proxies[experience] ?? 0,
+    specialist[experience] ?? 0,
   ]);
 }
 
@@ -265,7 +267,22 @@ async function main() {
 
   /* ── Experience model: fit on the destinations the curated catalog also holds ── */
   const twins = candidates.filter((candidate) => candidate.curated && curatedById.has(candidate.curated));
-  const signals = new Map(candidates.map((candidate) => [candidate.id, signalsFor(candidate, rasters.get(candidate.id))]));
+  const readLines = async (name) => {
+    const out = [];
+    if (existsSync(join(WORK, name))) await ndjson(join(WORK, name), (row) => out.push(row));
+    return out;
+  };
+  const byId = (rows) => new Map(rows.map((row) => [row.id, row]));
+  const skyClimate = byId(await readLines('sky-climate.ndjson'));
+  const waveRows = byId(await readLines('waves.ndjson'));
+  const specialist = await loadSpecialist({
+    features: await readLines('features.ndjson'),
+    night: byId(await readLines('nightsky.ndjson')),
+    sky: skyClimate,
+    wildlife: byId(await readLines('wildlife.ndjson')),
+    iucn: new Map((await readLines('iucn.ndjson')).map((row) => [row.qid, row.iucn])),
+  });
+  const signals = new Map(candidates.map((candidate) => [candidate.id, signalsFor(candidate, rasters.get(candidate.id), specialistSignals(candidate, candidate.scopeOnly ? 'travel_region' : kindOf(candidate), rasters.get(candidate.id), specialist))]));
   const models = [];
   const agreement = [];
   const FOLDS = 5;
@@ -287,7 +304,7 @@ async function main() {
     const hit = strong.filter((value, index) => value === 1 && called[index] === 1).length;
     agreement.push({
       experience: EXPERIENCES[e],
-      weights: { text: round(model.weights[0]), children: round(model.weights[1]), features: round(model.weights[2]), terrain: round(model.weights[3]), bias: round(model.bias) },
+      weights: { text: round(model.weights[0]), children: round(model.weights[1]), features: round(model.weights[2]), terrain: round(model.weights[3]), specialist: round(model.weights[4]), bias: round(model.bias) },
       heldOut: { n: rows.length, correlation: round(correlation(heldOut, targets)), maeOn0to3: round(mae * 3), strongLabelled: strong.reduce((s, v) => s + v, 0), strongRecall: strong.some(Boolean) ? round(hit / strong.reduce((s, v) => s + v, 0)) : null, strongPrecision: called.some(Boolean) ? round(hit / called.reduce((s, v) => s + v, 0)) : null },
     });
   }
@@ -459,7 +476,11 @@ async function main() {
   const u8 = () => new Uint8Array(N);
   const cols = { kind: u8(), region: u8(), flags: u8(), confidence: u8(), substance: u8(), familiarity: u8(), crowds: u8(), remoteness: u8(), easiest: u8(), typical: u8(), cost: u8(), costBasis: u8(), costSpread: u8(), reach: u8(), car: u8(), transit: u8(), family: u8(), lowMobility: u8(), lodging: u8() };
   const nights = new Uint8Array(N * 3);
+  const floorCheck = {};
   const landmass = new Uint16Array(N);
+  const cloud = new Uint8Array(N * 12).fill(255);
+  const waveIndex = [];
+  const waveData = [];
   const roomUsd = new Uint16Array(N);
   const priceYears = {};
   const clim = new Int16Array(N * 37).fill(-32768);
@@ -575,6 +596,16 @@ async function main() {
     /* Experiences. */
     const rowSignals = signals.get(candidate.id);
     const scores = rowSignals.map((row, e) => predict(models[e], row) * 3);
+    const floors = directFloors(candidate, specialist);
+    for (const [experience, floor] of Object.entries(floors)) {
+      const e = EXPERIENCES.indexOf(experience);
+      if (candidate.curated && curatedById.has(candidate.curated)) {
+        const slot = (floorCheck[experience] ??= { fired: 0, labelledStrong: 0 });
+        slot.fired += 1;
+        if ((curatedById.get(candidate.curated).experiences?.[experience] ?? 0) >= 2) slot.labelledStrong += 1;
+      }
+      scores[e] = Math.max(scores[e], floor);
+    }
     for (let e = 0; e < EXPERIENCES.length; e += 1) exp[i * EXPERIENCES.length + e] = Math.round(scores[e] * 10);
     const score = (experience) => scores[EXPERIENCES.indexOf(experience)];
 
@@ -715,6 +746,13 @@ async function main() {
         highData.push(...packClimate(raster.high));
         stats.withHigh += 1;
       }
+      const skyRow = skyClimate.get(`${candidate.id}#base`) ?? skyClimate.get(candidate.id);
+      if (skyRow?.cloud) skyRow.cloud.forEach((value, month) => (cloud[i * 12 + month] = value));
+      const waves = waveRows.get(`${candidate.id}#base`) ?? waveRows.get(candidate.id);
+      if (waves?.hs && (waves.at?.km ?? 0) <= 30) {
+        waveIndex.push(i);
+        waveData.push(...waves.hs.map((value) => (value === null ? 255 : Math.min(250, Math.round(value * 10)))));
+      }
       const coastKm = raster.sea?.coastKm ?? null;
       if (coastKm !== null) coast[i] = Math.min(32767, Math.round(coastKm));
       if (raster.sea?.sst && raster.sea.sst.every((value) => value !== null)) {
@@ -771,6 +809,10 @@ async function main() {
       const warning = warningFor(entry.countries[0], entry.name, twin !== undefined ? candidates[twin].parents : [], located?.adm1?.name ?? null, entry.radiusKm ?? 100);
       if (warning) out.advisory = warning;
     }
+    const skyRow = skyClimate.get(`cur:${entry.id}#base`) ?? skyClimate.get(`cur:${entry.id}`);
+    if (skyRow?.cloud) out.cloud = skyRow.cloud;
+    const waves = waveRows.get(`cur:${entry.id}#base`) ?? waveRows.get(`cur:${entry.id}`);
+    if (waves?.hs && (waves.at?.km ?? 0) <= 30) out.waves = waves.hs.map((value) => (value === null ? 255 : Math.min(250, Math.round(value * 10))));
     if (usable(raster?.base)) {
       out.base = packClimate(raster.base);
       if (usable(raster.high)) out.high = packClimate(raster.high);
@@ -788,7 +830,7 @@ async function main() {
     builtAt: BUILT_AT,
     counts: { destinations: N - stats.scopeOnly, scopes: stats.scopeOnly, fromGuides: stats.guide - stats.scopeOnly, fromDataOnly: stats.dataOnly, curatedTwins: Object.keys(curatedTwin).length, curated: curated.entries.length, withMeasuredClimate: stats.withClimate, withHighCountry: stats.withHigh, withSeaTemperature: stats.withSea, withPriceLevel: stats.costKnown, vocabulary: vocab.size, airports: airportTable.length, byKind: stats.byKind, byWorldRegion: stats.byRegion },
     estimators: {
-      experiences: { method: 'non-negative linear model per experience over four evidence signals (own guide text, children, Wikidata features in extent, terrain/climate proxy), fitted to curated editorial labels; 5-fold held-out agreement below', fittedOn: twins.length, agreement },
+      experiences: { method: 'non-negative linear model per experience over five evidence signals (own guide text, children, Wikidata features in extent, terrain/climate proxy, activity-specific evidence), fitted to curated editorial labels; 5-fold held-out agreement below', fittedOn: twins.length, agreement },
       meanAbsoluteErrorAgainstCurated: { challengeTypical0to3: mean(calibration.challenge), remoteness0to3: mean(calibration.remoteness), crowds0to3: mean(calibration.crowds), familiarity0to3: mean(calibration.familiarity), nightsIdeal: mean(calibration.nights), family0to3: mean(calibration.family), lowMobility0to3: mean(calibration.lowMobility), cost1to4: mean(calibration.cost) },
       cost: { method: 'World Bank household-consumption price level of the country, interpolated between the median price levels of curated entries at each cost level', anchors: monotone.map(([price, cost]) => ({ priceLevel: round(price, 3), cost })) },
       familiarity: { method: 'least-squares line from log(1 + Wikimedia sitelinks) to the curated 0–3 reading, plus guide prominence', slope: round(slope, 3), n: famPairs.length },
@@ -827,6 +869,8 @@ async function main() {
     clim: b64(clim),
     coastKm: b64(coast),
     landmass: b64(landmass),
+    cloud: b64(cloud),
+    waves: { rows: b64(Int32Array.from(waveIndex)), data: b64(Uint8Array.from(waveData)) },
     roomUsd: b64(roomUsd),
     priceYears,
     high: { rows: b64(Int32Array.from(highRows)), data: b64(Int16Array.from(highData)) },
@@ -865,11 +909,15 @@ async function main() {
   const json = JSON.stringify(artifact);
   const zipped = gzipSync(json, { level: 9 });
   writeFileSync(join(OUT_DIR, 'atlas.json.gz'), zipped);
+  /* Kept apart on purpose: ODbL, joined in memory at run time, never written into the atlas. */
+  const ski = skiRows(await readLines('ski.ndjson'));
+  if (ski.length > 0) writeFileSync(join(OUT_DIR, 'ski-areas.odbl.json.gz'), gzipSync(JSON.stringify({ licence: 'ODbL-1.0 https://opendatacommons.org/licenses/odbl/1-0/', attribution: "Data from OpenSkiData / OpenSkiMap.org, © OpenStreetMap contributors (ODbL), Skimap.org, Who's On First, © Mapterhorn", fields: ['lat', 'lng', 'lifts', 'verticalM', 'maxElevM', 'runKm'], rows: ski }), { level: 9 }));
   writeFileSync(join(OUT_DIR, 'manifest.json'), `${JSON.stringify({ ...manifest, bytes: { json: json.length, gzip: zipped.length } }, null, 1)}\n`);
   console.log(`${N} rows → ${join(OUT_DIR, 'atlas.json.gz')} (${(zipped.length / 1e6).toFixed(1)} MB gzip, ${(json.length / 1e6).toFixed(1)} MB json) in ${((Date.now() - started) / 1000).toFixed(1)} s`);
   console.log('experience agreement (held-out r):', agreement.map((row) => `${row.experience} ${row.heldOut.correlation}`).join(' · '));
   console.log('embeddings:', JSON.stringify(embeddings));
   const meanOf = (list) => (list.length === 0 ? null : Math.round((list.reduce((sum, value) => sum + value, 0) / list.length) * 1000) / 1000);
+  console.log(`direct-evidence floors, curated twins where one fired → labelled strong: ${JSON.stringify(floorCheck)}`);
   console.log(`geometry: ${refiled} rows re-filed, ${stats.suspectLocation ?? 0} suspect locations, ${landmassIndex.size - 1} landmasses in use, ${Object.keys(members).length} rows with explicit members`);
   console.log(`advisories: ${Object.keys(advisoryRows).length} rows under a matched area warning`);
   console.log(`cost: fits ${costFits.map((fit) => `${fit.shape.join('+')} n=${fit.n}`).join(' · ')}; slope ${costSlope.toFixed(2)}; leave-one-out MAE vs curated on ${heldOut.length} twins: country ${meanOf(heldOutCountry)} → with listings ${meanOf(heldOut)}`);

@@ -216,6 +216,8 @@ export const advisorAnswersSchema = z.object({
   swimStyle: z.enum(['warm_sea', 'lakes', 'either', 'diving', 'snorkel']).optional(),
   /** Specific things the request named that no focus says precisely ("hot springs", "stargazing"). */
   pursuits: z.array(z.enum(PURSUIT_KEYS)).max(PURSUIT_KEYS.length).optional(),
+  /** Skiing or snowboarding was asked for by name, rather than snow and winter in general. */
+  skiing: z.boolean().optional(),
   /** What a request with no activity in it leans towards ("beautiful and relaxing"). Used only while `focus` and `pursuits` are empty. */
   moods: z.array(z.enum(MOOD_KEYS)).max(MOOD_KEYS.length).optional(),
   /** What the traveller typed, verbatim, so a reading can always be checked against it. */

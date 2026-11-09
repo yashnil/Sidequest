@@ -1,4 +1,5 @@
 import { DESTINATION_KINDS, EXPERIENCES, WORLD_REGIONS, type CatalogDestination, type DestinationKind, type Experience, type WorldRegion } from '../advisor/catalog/schema';
+import { advisorKm } from '../advisor/origin';
 import { destinationFromCatalog, type CandidateQuery, type DestinationCostEvidence, type Destination, type DestinationWorld, type MeasuredClimate, type NearbyAirport } from '../advisor/destination';
 import { atlasStem, atlasTokens, foldPlaceName } from './lexical';
 import { AMBIGUOUS_LOWER, COUNTRY_ACRONYMS, DEMONYMS, NEVER_ALONE, ORDINARY_WORDS, REGION_ADJECTIVES } from '../naming/place-words';
@@ -97,9 +98,11 @@ export interface AtlasArtifact {
     rows?: Record<string, AreaWarning>;
   };
   landmass?: string;
+  cloud?: string;
+  waves?: { rows: string; data: string };
   roomUsd?: string;
   priceYears?: Record<string, [number, number]>;
-  curated: Record<string, { advisory?: AreaWarning; landmass?: number; airports: NearbyAirport[]; twin?: number; base?: number[]; high?: number[]; coastKm?: number; sst?: number[] }>;
+  curated: Record<string, { cloud?: number[]; waves?: number[]; advisory?: AreaWarning; landmass?: number; airports: NearbyAirport[]; twin?: number; base?: number[]; high?: number[]; coastKm?: number; sst?: number[] }>;
   /** A digest of the row ids in order; an embedding matrix is attached only when it was built for these rows. */
   rowsDigest?: string;
 }
@@ -202,6 +205,9 @@ interface AreaWarning {
   asOf?: string;
 }
 
+/** Stored in tenths of a metre; 255 is sea ice. */
+const waveHeight = (value: number): number => (value === 255 ? Number.NaN : value / 10);
+
 export type PlaceRole = 'scope' | 'similar' | 'avoid' | 'origin';
 
 export interface PlaceMention {
@@ -273,6 +279,10 @@ export class Atlas implements DestinationWorld {
   private seasonTable: Uint8Array | null = null;
   private names: Map<string, NameTarget[]> | null = null;
   private readonly advisoryFresh: boolean;
+  private readonly cloudCol: Uint8Array | null;
+  private readonly waveData: Uint8Array | null;
+  private readonly waveOf = new Map<number, number>();
+  private skiAreas: { rows: number[][]; grid: Map<string, number[]> } | null = null;
   private readonly landmassCol: Uint16Array | null;
   private readonly roomUsd: Uint16Array | null;
   private readonly countryRow = new Map<string, number>();
@@ -305,6 +315,9 @@ export class Atlas implements DestinationWorld {
     this.rowCache = new Array<Destination | undefined>(raw.n);
     const now = options.now ?? new Date();
     const snapshot = Date.parse(raw.advisories.fetchedAt ?? raw.builtAt);
+    this.cloudCol = raw.cloud ? bytesOf(raw.cloud) : null;
+    this.waveData = raw.waves ? bytesOf(raw.waves.data) : null;
+    if (raw.waves) uint32(raw.waves.rows).forEach((row, index) => this.waveOf.set(row, index));
     this.landmassCol = raw.landmass ? uint16(raw.landmass) : null;
     this.roomUsd = raw.roomUsd ? uint16(raw.roomUsd) : null;
     this.advisoryFresh = Number.isFinite(snapshot) && now.getTime() - snapshot <= ADVISORY_FRESH_DAYS * 86_400_000;
@@ -330,7 +343,7 @@ export class Atlas implements DestinationWorld {
       let measured: MeasuredClimate | null = null;
       if (extra?.base) {
         const base = climatePoint(extra.base, 0);
-        if (base) measured = { base, high: extra.high ? climatePoint(extra.high, 0) : null, sst: extra.sst ? extra.sst.map((value) => value / 10) : null, coastKm: extra.coastKm ?? null };
+        if (base) measured = { base, high: extra.high ? climatePoint(extra.high, 0) : null, sst: extra.sst ? extra.sst.map((value) => value / 10) : null, coastKm: extra.coastKm ?? null, cloud: extra.cloud ?? null, waves: extra.waves ? extra.waves.map(waveHeight) : null };
       }
       const destination = destinationFromCatalog(entry, {
         measured,
@@ -354,6 +367,54 @@ export class Atlas implements DestinationWorld {
   /** A row that can be recommended on its own: a real destination with a measured climate that no curated entry already stands for. */
   private offerable(row: number): boolean {
     return (this.flags[row]! & (FLAG_SCOPE | FLAG_TWIN | FLAG_SUSPECT_LOCATION)) === 0 && this.clim[row * CLIMATE_WIDTH + 1] !== NO_DATA;
+  }
+
+  /**
+   * Joins the separately licensed ski-area file, in memory. The file stays its
+   * own ODbL database: nothing derived from it is written into the atlas. A
+   * lift-served area within reach raises what a place offers for snow sports,
+   * and that is what candidate retrieval reads.
+   */
+  attachSkiAreas(rows: readonly (readonly number[])[]): void {
+    const grid = new Map<string, number[]>();
+    rows.forEach((row, index) => {
+      const key = `${Math.floor(row[0]!)}:${Math.floor(row[1]!)}`;
+      const list = grid.get(key);
+      if (list) list.push(index);
+      else grid.set(key, [index]);
+    });
+    this.skiAreas = { rows: rows as number[][], grid };
+    this.rowCache.fill(undefined);
+    const width = EXPERIENCES.length;
+    const snow = EXPERIENCES.indexOf('winter_snow');
+    for (let row = 0; row < this.raw.n; row += 1) {
+      const area = this.skiAreaNear(this.raw.lat[row]!, this.raw.lng[row]!, this.raw.radiusKm[row]!);
+      if (!area) continue;
+      /* A hill with a lift is some skiing; real vertical and lift counts are what make a ski trip. */
+      const offer = Math.round((1 + 2 * Math.min(1, (0.6 * area.verticalM) / 1000 + (0.4 * area.lifts) / 25)) * 10);
+      this.exp[row * width + snow] = Math.max(this.exp[row * width + snow]!, offer);
+    }
+    for (const entry of this.curatedList) entry.skiArea = this.skiAreaNear(entry.center.lat, entry.center.lng, entry.radiusKm);
+  }
+
+  /** Undefined when no ski file is attached (unknown); null when one is and nothing lift-served is in reach. */
+  private skiAreaNear(lat: number, lng: number, radiusKm: number): Destination['skiArea'] {
+    if (!this.skiAreas) return undefined;
+    const reach = Math.max(15, Math.min(120, radiusKm));
+    const latSpan = Math.ceil(reach / 111);
+    const span = Math.ceil(reach / 111 / Math.max(0.1, Math.cos((lat * Math.PI) / 180)));
+    let best: NonNullable<Destination['skiArea']> | null = null;
+    for (let a = Math.floor(lat) - latSpan; a <= Math.floor(lat) + latSpan; a += 1) {
+      for (let b = Math.floor(lng) - span; b <= Math.floor(lng) + span; b += 1) {
+        for (const index of this.skiAreas.grid.get(`${a}:${b}`) ?? []) {
+          const area = this.skiAreas.rows[index]!;
+          const km = advisorKm({ lat, lng }, { lat: area[0]!, lng: area[1]! });
+          if (km > reach) continue;
+          if (!best || area[3]! > best.verticalM) best = { lifts: area[2]!, verticalM: area[3]!, km: Math.round(km) };
+        }
+      }
+    }
+    return best;
   }
 
   private landmassOf(row: number): number | null {
@@ -418,6 +479,8 @@ export class Atlas implements DestinationWorld {
       base,
       high: highIndex === undefined ? null : climatePoint(this.highData, highIndex * CLIMATE_WIDTH),
       sst,
+      cloud: this.cloudCol && this.cloudCol[row * 12] !== 255 ? Array.from(this.cloudCol.subarray(row * 12, row * 12 + 12)) : null,
+      waves: this.waveData && this.waveOf.has(row) ? Array.from(this.waveData.subarray(this.waveOf.get(row)! * 12, this.waveOf.get(row)! * 12 + 12)).map(waveHeight) : null,
       coastKm: this.coast[row]! < 0 ? null : this.coast[row]!,
     };
   }
@@ -535,6 +598,7 @@ export class Atlas implements DestinationWorld {
       advisory: this.advisoryFor(countries[0] ?? null, countries.length === 1 ? raw.advisories.rows?.[String(row)] : undefined),
       landmass: this.landmassOf(row),
       costEvidence: this.costEvidenceOf(row),
+      skiArea: this.skiAreaNear(this.raw.lat[row]!, this.raw.lng[row]!, this.raw.radiusKm[row]!),
     };
     this.rowCache[row] = destination;
     return destination;

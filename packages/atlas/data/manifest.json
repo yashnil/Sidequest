@@ -1,7 +1,7 @@
 {
  "format": 1,
  "version": "2026-11.1",
- "builtAt": "2026-11-09T15:48:14.681Z",
+ "builtAt": "2026-11-09T16:36:24.382Z",
  "counts": {
   "destinations": 36782,
   "scopes": 34,
@@ -60,7 +60,7 @@
  },
  "estimators": {
   "experiences": {
-   "method": "non-negative linear model per experience over four evidence signals (own guide text, children, Wikidata features in extent, terrain/climate proxy), fitted to curated editorial labels; 5-fold held-out agreement below",
+   "method": "non-negative linear model per experience over five evidence signals (own guide text, children, Wikidata features in extent, terrain/climate proxy, activity-specific evidence), fitted to curated editorial labels; 5-fold held-out agreement below",
    "fittedOn": 216,
    "agreement": [
     {
@@ -70,6 +70,7 @@
       "children": 0,
       "features": 0.16,
       "terrain": 0.35,
+      "specialist": 0,
       "bias": 0.15
      },
      "heldOut": {
@@ -84,37 +85,39 @@
     {
      "experience": "multi_day_trekking",
      "weights": {
-      "text": 0.13,
+      "text": 0.15,
       "children": 0,
-      "features": 0.18,
-      "terrain": 0.38,
-      "bias": 0.14
+      "features": 0.14,
+      "terrain": 0.36,
+      "specialist": 0.23,
+      "bias": 0.13
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.45,
-      "maeOn0to3": 0.89,
+      "correlation": 0.47,
+      "maeOn0to3": 0.88,
       "strongLabelled": 77,
-      "strongRecall": 0.29,
-      "strongPrecision": 0.71
+      "strongRecall": 0.34,
+      "strongPrecision": 0.74
      }
     },
     {
      "experience": "high_mountains",
      "weights": {
-      "text": 0.09,
+      "text": 0.08,
       "children": 0,
-      "features": 0.22,
-      "terrain": 0.56,
+      "features": 0.17,
+      "terrain": 0.52,
+      "specialist": 0.19,
       "bias": 0
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.76,
-      "maeOn0to3": 0.59,
+      "correlation": 0.77,
+      "maeOn0to3": 0.57,
       "strongLabelled": 67,
       "strongRecall": 0.75,
-      "strongPrecision": 0.79
+      "strongPrecision": 0.83
      }
     },
     {
@@ -124,6 +127,7 @@
       "children": 0.1,
       "features": 0.32,
       "terrain": 0.42,
+      "specialist": 0,
       "bias": 0.03
      },
      "heldOut": {
@@ -142,6 +146,7 @@
       "children": 0.25,
       "features": 0.3,
       "terrain": 0,
+      "specialist": 0,
       "bias": 0.01
      },
      "heldOut": {
@@ -160,6 +165,7 @@
       "children": 0,
       "features": 0.37,
       "terrain": 0,
+      "specialist": 0,
       "bias": 0.1
      },
      "heldOut": {
@@ -178,6 +184,7 @@
       "children": 0.09,
       "features": 0.17,
       "terrain": 0.38,
+      "specialist": 0,
       "bias": 0.03
      },
      "heldOut": {
@@ -196,6 +203,7 @@
       "children": 0,
       "features": 0.18,
       "terrain": 0.33,
+      "specialist": 0,
       "bias": 0
      },
      "heldOut": {
@@ -214,6 +222,7 @@
       "children": 0.35,
       "features": 0.05,
       "terrain": 0.26,
+      "specialist": 0,
       "bias": 0
      },
      "heldOut": {
@@ -232,6 +241,7 @@
       "children": 0.31,
       "features": 0,
       "terrain": 0.11,
+      "specialist": 0,
       "bias": 0.15
      },
      "heldOut": {
@@ -246,55 +256,58 @@
     {
      "experience": "big_game_safari",
      "weights": {
-      "text": 0.31,
+      "text": 0.21,
       "children": 0,
-      "features": 0.1,
+      "features": 0.07,
       "terrain": 0,
-      "bias": 0.01
+      "specialist": 0.35,
+      "bias": 0
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.44,
-      "maeOn0to3": 0.21,
+      "correlation": 0.65,
+      "maeOn0to3": 0.19,
       "strongLabelled": 10,
-      "strongRecall": 0,
-      "strongPrecision": null
+      "strongRecall": 0.3,
+      "strongPrecision": 1
      }
     },
     {
      "experience": "wildlife_general",
      "weights": {
-      "text": 0.49,
-      "children": 0,
-      "features": 0.09,
+      "text": 0.41,
+      "children": 0.01,
+      "features": 0.06,
       "terrain": 0,
-      "bias": 0.1
+      "specialist": 0.38,
+      "bias": 0.05
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.46,
-      "maeOn0to3": 0.79,
+      "correlation": 0.53,
+      "maeOn0to3": 0.73,
       "strongLabelled": 54,
-      "strongRecall": 0.24,
-      "strongPrecision": 0.65
+      "strongRecall": 0.26,
+      "strongPrecision": 0.74
      }
     },
     {
      "experience": "marine_wildlife",
      "weights": {
-      "text": 0.58,
-      "children": 0.25,
+      "text": 0.46,
+      "children": 0.21,
       "features": 0.11,
       "terrain": 0,
-      "bias": 0.08
+      "specialist": 0.29,
+      "bias": 0.05
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.68,
-      "maeOn0to3": 0.53,
+      "correlation": 0.7,
+      "maeOn0to3": 0.49,
       "strongLabelled": 48,
-      "strongRecall": 0.46,
-      "strongPrecision": 0.81
+      "strongRecall": 0.5,
+      "strongPrecision": 0.83
      }
     },
     {
@@ -302,13 +315,14 @@
      "weights": {
       "text": 0.4,
       "children": 0.1,
-      "features": 0.1,
+      "features": 0.08,
       "terrain": 0,
-      "bias": 0.14
+      "specialist": 0.12,
+      "bias": 0.11
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.35,
+      "correlation": 0.34,
       "maeOn0to3": 0.79,
       "strongLabelled": 49,
       "strongRecall": 0.02,
@@ -322,6 +336,7 @@
       "children": 0.06,
       "features": 0.01,
       "terrain": 0.12,
+      "specialist": 0,
       "bias": 0.05
      },
      "heldOut": {
@@ -340,6 +355,7 @@
       "children": 0.03,
       "features": 0.08,
       "terrain": 0.36,
+      "specialist": 0,
       "bias": 0.03
      },
      "heldOut": {
@@ -354,33 +370,35 @@
     {
      "experience": "scenic_driving",
      "weights": {
-      "text": 0.24,
-      "children": 0.14,
-      "features": 0.47,
+      "text": 0.18,
+      "children": 0.06,
+      "features": 0.24,
       "terrain": 0,
+      "specialist": 0.25,
       "bias": 0.15
      },
      "heldOut": {
       "n": 216,
       "correlation": 0.22,
-      "maeOn0to3": 0.98,
+      "maeOn0to3": 1.02,
       "strongLabelled": 80,
-      "strongRecall": 0.04,
-      "strongPrecision": 0.5
+      "strongRecall": 0.06,
+      "strongPrecision": 0.63
      }
     },
     {
      "experience": "rail_journeys",
      "weights": {
-      "text": 0.23,
-      "children": 0.18,
-      "features": 0.07,
+      "text": 0.21,
+      "children": 0.16,
+      "features": 0.06,
       "terrain": 0,
+      "specialist": 0.2,
       "bias": 0.06
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.32,
+      "correlation": 0.25,
       "maeOn0to3": 0.37,
       "strongLabelled": 16,
       "strongRecall": 0,
@@ -394,6 +412,7 @@
       "children": 0.1,
       "features": 0.35,
       "terrain": 0.18,
+      "specialist": 0,
       "bias": 0
      },
      "heldOut": {
@@ -412,11 +431,12 @@
       "children": 0.06,
       "features": 0.31,
       "terrain": 0,
+      "specialist": 0,
       "bias": 0.08
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.45,
+      "correlation": 0.43,
       "maeOn0to3": 0.48,
       "strongLabelled": 26,
       "strongRecall": 0.04,
@@ -428,8 +448,9 @@
      "weights": {
       "text": 0.34,
       "children": 0.01,
-      "features": 0.44,
+      "features": 0.42,
       "terrain": 0,
+      "specialist": 0.11,
       "bias": 0.15
      },
      "heldOut": {
@@ -437,7 +458,7 @@
       "correlation": 0.5,
       "maeOn0to3": 0.91,
       "strongLabelled": 123,
-      "strongRecall": 0.48,
+      "strongRecall": 0.5,
       "strongPrecision": 0.82
      }
     },
@@ -447,8 +468,9 @@
       "text": 0.35,
       "children": 0.14,
       "features": 0.06,
-      "terrain": 0.37,
-      "bias": 0.13
+      "terrain": 0.35,
+      "specialist": 0.12,
+      "bias": 0.14
      },
      "heldOut": {
       "n": 216,
@@ -456,7 +478,7 @@
       "maeOn0to3": 0.77,
       "strongLabelled": 74,
       "strongRecall": 0.38,
-      "strongPrecision": 0.8
+      "strongPrecision": 0.82
      }
     },
     {
@@ -466,6 +488,7 @@
       "children": 0,
       "features": 0.3,
       "terrain": 0.29,
+      "specialist": 0,
       "bias": 0
      },
      "heldOut": {
@@ -480,16 +503,17 @@
     {
      "experience": "night_skies",
      "weights": {
-      "text": 0.33,
-      "children": 0.1,
+      "text": 0.34,
+      "children": 0.11,
       "features": 0,
       "terrain": 0,
-      "bias": 0.15
+      "specialist": 0.2,
+      "bias": 0
      },
      "heldOut": {
       "n": 216,
-      "correlation": 0.24,
-      "maeOn0to3": 0.74,
+      "correlation": 0.3,
+      "maeOn0to3": 0.73,
       "strongLabelled": 39,
       "strongRecall": 0,
       "strongPrecision": null
@@ -498,12 +522,12 @@
    ]
   },
   "meanAbsoluteErrorAgainstCurated": {
-   "challengeTypical0to3": 0.5,
+   "challengeTypical0to3": 0.49,
    "remoteness0to3": 0.76,
    "crowds0to3": 0.78,
    "familiarity0to3": 0.71,
-   "nightsIdeal": 1.98,
-   "family0to3": 1.12,
+   "nightsIdeal": 1.95,
+   "family0to3": 1.13,
    "lowMobility0to3": 0.92,
    "cost1to4": 0.71
   },
@@ -639,6 +663,116 @@
    "access": "in the repository",
    "update": "by hand",
    "cost": "editorial time"
+  },
+  {
+   "id": "natural-earth",
+   "name": "Natural Earth 1:10m",
+   "use": "Landmass identity, country, subunit and first-level boundaries, physical and marine regions",
+   "licence": "Public domain",
+   "attribution": "Made with Natural Earth (optional)",
+   "url": "https://www.naturalearthdata.com/about/terms-of-use/",
+   "access": "bulk download",
+   "update": "irregular",
+   "cost": "free"
+  },
+  {
+   "id": "gmba",
+   "name": "GMBA Mountain Inventory v2.0",
+   "use": "Mountain-range polygons and hierarchy",
+   "licence": "CC BY 4.0",
+   "attribution": "Snethlage et al. 2022, Sci Data, doi:10.1038/s41597-022-01256-y; GMBA Mountain Inventory v2, doi:10.48601/earthenv-t9k2-1407 (changed: matched to destinations)",
+   "url": "https://www.earthenv.org/mountains",
+   "access": "bulk download",
+   "update": "versioned",
+   "cost": "free"
+  },
+  {
+   "id": "fcdo",
+   "name": "UK FCDO foreign travel advice",
+   "use": "National and regional travel advice",
+   "licence": "Open Government Licence v3.0",
+   "attribution": "Contains public sector information licensed under the Open Government Licence v3.0.",
+   "url": "https://www.gov.uk/foreign-travel-advice",
+   "access": "GOV.UK Content API",
+   "update": "continuous; snapshot per build",
+   "cost": "free"
+  },
+  {
+   "id": "canada-advice",
+   "name": "Government of Canada travel advice",
+   "use": "National and regional travel advice",
+   "licence": "Open Government Licence - Canada",
+   "attribution": "Contains information licensed under the Open Government Licence - Canada.",
+   "url": "https://travel.gc.ca/travelling/advisories",
+   "access": "open data JSON",
+   "update": "continuous; snapshot per build",
+   "cost": "free"
+  },
+  {
+   "id": "world-bank-fx",
+   "name": "World Bank WDI exchange rates and CPI",
+   "use": "Converting dated guide prices to constant US dollars",
+   "licence": "CC BY 4.0",
+   "attribution": "World Bank, WDI (source: IMF IFS), CC BY 4.0",
+   "url": "https://data.worldbank.org/indicator/PA.NUS.FCRF",
+   "access": "API",
+   "update": "annual",
+   "cost": "free"
+  },
+  {
+   "id": "gbif",
+   "name": "GBIF occurrence data (CC0 and CC BY records only)",
+   "use": "Which large mammals, birds and marine megafauna are documented in a 1° cell since 2000",
+   "licence": "Per record: CC0 1.0 or CC BY 4.0",
+   "attribution": "Credit publishers; cite a GBIF derived-dataset DOI (dataset list in .atlas-cache/work/wildlife-datasets.json; DOI not yet minted, needs an account)",
+   "url": "https://www.gbif.org/terms/data-user",
+   "access": "occurrence facet API, cached per cell",
+   "update": "continuous; snapshot per build",
+   "cost": "free"
+  },
+  {
+   "id": "chen-viirs",
+   "name": "Chen et al. NPP-VIIRS-like night lights 2023",
+   "use": "Modelled night-sky brightness (a model on measured radiance)",
+   "licence": "CC0 1.0 as declared by the depositors; upstream VIIRS rights not confirmed",
+   "attribution": "Chen et al. 2021, ESSD 13(3):889–906; doi:10.7910/DVN/YGIVCD; underlying VIIRS DNB",
+   "url": "https://doi.org/10.7910/DVN/YGIVCD",
+   "access": "bulk download",
+   "update": "annual",
+   "cost": "free"
+  },
+  {
+   "id": "chelsa-sky",
+   "name": "CHELSA V2.1 clt and sfcWind normals",
+   "use": "Monthly cloud cover and wind",
+   "licence": "CC0 1.0",
+   "attribution": "Karger et al. 2017, Sci Data 4:170122; doi:10.16904/envidat.228",
+   "url": "https://www.chelsa-climate.org/datasets/chelsa_climatologies",
+   "access": "bulk download",
+   "update": "versioned",
+   "cost": "free"
+  },
+  {
+   "id": "waverys",
+   "name": "WAVERYS monthly climatology (Copernicus Marine)",
+   "use": "Monthly significant wave height at the coast",
+   "licence": "Copernicus Marine Service licence (free; derivative works for any purpose)",
+   "attribution": "Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/moi-00022",
+   "url": "https://marine.copernicus.eu/user-corner/service-commitments-and-licence",
+   "access": "anonymous object storage",
+   "update": "versioned",
+   "cost": "free"
+  },
+  {
+   "id": "openskidata",
+   "name": "OpenSkiData / OpenSkiMap",
+   "use": "Operating lift-served ski areas; kept as its own ODbL file and joined in memory at run time",
+   "licence": "ODbL 1.0",
+   "attribution": "Data from OpenSkiData / OpenSkiMap.org, © OpenStreetMap contributors (ODbL), Skimap.org, Who's On First, © Mapterhorn",
+   "url": "https://openskidata.org/",
+   "access": "bulk download, at most once a day",
+   "update": "daily",
+   "cost": "free"
   }
  ],
  "embeddings": {
@@ -648,7 +782,7 @@
   "gzipBytes": 6019739
  },
  "bytes": {
-  "json": 27091908,
-  "gzip": 10677424
+  "json": 28068229,
+  "gzip": 11155667
  }
 }

@@ -138,7 +138,7 @@ export function seasonModelFor(destination: Destination): SeasonModel {
   const offersCoast = (destination.experiences.beaches_swimming ?? 0) > 0 || (destination.experiences.coastal_scenery ?? 0) >= 2 || (destination.experiences.snorkel_dive ?? 0) > 0;
   let model: SeasonModel;
   if (measured) {
-    model = seasonModel({ lat: destination.center.lat, base: measured.base, high: measured.high, sst: measured.sst, coastKm: measured.coastKm ?? (offersCoast && destination.origin === 'editorial' ? 0 : null) }, destination.center.lng);
+    model = seasonModel({ lat: destination.center.lat, base: measured.base, high: measured.high, sst: measured.sst, cloud: measured.cloud ?? null, waves: measured.waves ?? null, coastKm: measured.coastKm ?? (offersCoast && destination.origin === 'editorial' ? 0 : null) }, destination.center.lng);
   } else {
     /*
      * No normals for this place: the same questions are asked of the editorial
@@ -207,7 +207,7 @@ export function interestValue(input: CatalogDestination | Destination, interest:
   const majors = (Object.entries(interest.mapping) as [Experience, number][]).filter(([, share]) => share / shares >= 0.3).map(([experience]) => experience);
   const best = Math.max(0, ...majors.map((experience) => experienceValue(destination, experience, months)));
   /* A city break is a break in a city: a coast with good restaurants is not what was asked for, however well it eats. */
-  const shape = interest.key === 'cities' && !URBAN_KINDS.has(destination.kind) ? 0.75 : 1;
+  const shape = interest.key === 'cities' && !URBAN_KINDS.has(destination.kind) ? 0.75 : interest.lifts && destination.skiArea === null ? 0.3 : 1;
   return clamp01((0.6 * (total / shares) + 0.4 * best) * trust(destination) * shape);
 }
 

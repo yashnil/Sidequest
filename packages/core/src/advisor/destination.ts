@@ -37,6 +37,10 @@ export interface MeasuredClimate {
   sst: Monthly | null;
   /** Great-circle km to the sea; null when inland. */
   coastKm: number | null;
+  /** Mean cloud cover by month, %, when held. */
+  cloud?: Monthly | null;
+  /** Mean significant wave height by month, m; NaN under sea ice. */
+  waves?: Monthly | null;
 }
 
 export interface NearbyAirport {
@@ -113,6 +117,8 @@ export interface Destination {
    * never a statement that it is outside.
    */
   advisory: DestinationAdvisory | null;
+  /** The nearest lift-served ski area, when one is within reach. Says lifts exist, not that they are running. */
+  skiArea?: { lifts: number; verticalM: number; km: number } | null;
   /** The landmass it stands on, as an opaque number, when that is known. */
   landmass?: number | null;
   /** What a room costs here, as a range, when listings or a fitted estimate say. Never a current price. */
