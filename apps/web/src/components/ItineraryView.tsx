@@ -729,7 +729,7 @@ export function ItineraryView({
       {today?.active ? <TodaySection today={today} minuteLabel={(minute) => formatMinuteOfDay(minute)} {...(tripId ? { tripId } : {})} /> : null}
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(20rem,5fr)] lg:gap-12">
         <div className="min-w-0">
-          <section aria-labelledby="trip-thesis" data-testid="trip-thesis" className="fade-up">
+          <section aria-labelledby="trip-thesis" data-testid="trip-thesis" className="rise-in">
             <p className="eyebrow">This trip</p>
             <p id="trip-thesis" className="mt-2 max-w-[34ch] font-display text-[clamp(1.5rem,1.25rem+0.9vw,2.125rem)] leading-[1.15] text-ink" data-testid="trip-personality-line">
               {headline}

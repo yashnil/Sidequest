@@ -95,6 +95,16 @@ const nextConfig: NextConfig = {
    * advisories). Images are served as-is.
    */
   images: { unoptimized: true },
+  /*
+   * The stylesheet in the document rather than one more round trip before first
+   * paint. Measured under applied Slow-4G throttling, three interleaved rounds:
+   * mobile LCP 1.98 s to 1.03 s on `/`, 1.91 s to 0.97 s on `/decide`. The price
+   * is about 100 KB gzipped on every full document (the CSS is also repeated in
+   * the RSC payload), which a returning visitor pays where a cached stylesheet
+   * would have been free; client-side navigations are unchanged. Experimental in
+   * this Next version, so re-measure when upgrading. docs/release-candidate/perf/.
+   */
+  experimental: { inlineCss: true },
   async headers() {
     return [
       {

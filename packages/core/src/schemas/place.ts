@@ -13,7 +13,7 @@ import {
 } from './common';
 import { POI_BASE_FIELDS } from './poi';
 import { placeWeatherProfileSchema } from './weather';
-import { displayNameSchema } from '../naming/display-name';
+import { displayNameSchema } from '../naming/display-name-schema';
 /*
  * The standing model's own vocabulary, imported rather than restated: a second
  * copy of these three words here is a second place they can drift apart. The

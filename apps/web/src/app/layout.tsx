@@ -29,7 +29,17 @@ import './globals.css';
  * pins it to 0, its default), so its axis is not requested. The mono face sets
  * figures below the fold and is not preloaded at all.
  */
-const displayFont = Fraunces({ subsets: ['latin'], axes: ['opsz', 'SOFT'], style: ['normal', 'italic'], variable: '--font-fraunces', display: 'swap' });
+/*
+ * THE ITALIC CUT IS DECLARED BUT NOT PRELOADED (performance pass, 2026-11).
+ *
+ * It sets one word on the landing page ("detour.") and a clause on /decide, and
+ * at 149 KB it was the largest of the three files sent at High priority ahead of
+ * the render-blocking stylesheet. The metric-matched fallback holds its place
+ * until it arrives. Same family name, so `font-style: italic` still finds it;
+ * `preload` is per call, which is the only reason this is a second call.
+ */
+const displayFont = Fraunces({ subsets: ['latin'], axes: ['opsz', 'SOFT'], style: ['normal'], variable: '--font-fraunces', display: 'swap' });
+const displayItalicFont = Fraunces({ subsets: ['latin'], axes: ['opsz', 'SOFT'], style: ['italic'], variable: '--font-fraunces-italic', display: 'swap', preload: false });
 const uiFont = Bricolage_Grotesque({ subsets: ['latin'], axes: ['opsz'], variable: '--font-bricolage', display: 'swap' });
 const monoFont = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap', preload: false });
 
@@ -95,7 +105,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${displayFont.variable} ${uiFont.variable} ${monoFont.variable}`}>
+    <html lang="en" className={`${displayFont.variable} ${displayItalicFont.variable} ${uiFont.variable} ${monoFont.variable}`}>
       <body className="flex min-h-dvh flex-col paper-grain">
         {children}
         <ServiceWorkerRegistrar />

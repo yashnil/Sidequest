@@ -53,8 +53,21 @@ export interface LoadedAtlas {
   embeddings: 'attached' | string;
 }
 
-let held: LoadedAtlas | null = null;
-let failed: string | null = null;
+/*
+ * Process-wide rather than module-local. Next bundles the instrumentation hook
+ * separately from the pages, so a plain `let` gave the warm-up at start-up one
+ * copy of this module and the first request another: two decoded atlases and no
+ * benefit (performance pass, 2026-11).
+ */
+const SLOT = Symbol.for('sidequest.atlas.state');
+interface AtlasState {
+  held: LoadedAtlas | null;
+  failed: string | null;
+}
+function state(): AtlasState {
+  const scope = globalThis as unknown as Record<symbol, AtlasState | undefined>;
+  return (scope[SLOT] ??= { held: null, failed: null });
+}
 
 /**
  * The atlas, or null with the reason when the file is missing or unreadable —
@@ -62,11 +75,12 @@ let failed: string | null = null;
  * A missing file never throws on a request path.
  */
 export function loadAtlas(options: AtlasOptions = {}): LoadedAtlas | null {
-  if (held) return held;
-  if (failed) return null;
+  const slot = state();
+  if (slot.held) return slot.held;
+  if (slot.failed) return null;
   const path = atlasPath();
   if (!path) {
-    failed = 'atlas file not found';
+    slot.failed = 'atlas file not found';
     return null;
   }
   try {
@@ -91,20 +105,21 @@ export function loadAtlas(options: AtlasOptions = {}): LoadedAtlas | null {
         /* Unreadable ski data costs the lift check, nothing else. */
       }
     }
-    held = { atlas, path, loadMs: Math.round(performance.now() - started), embeddings };
-    return held;
+    slot.held = { atlas, path, loadMs: Math.round(performance.now() - started), embeddings };
+    return slot.held;
   } catch (error) {
-    failed = error instanceof Error ? error.message : String(error);
+    slot.failed = error instanceof Error ? error.message : String(error);
     return null;
   }
 }
 
 export function atlasFailure(): string | null {
-  return failed;
+  return state().failed;
 }
 
 /** For tests: forget the loaded atlas so the next call reads the file again. */
 export function resetAtlasForTests(): void {
-  held = null;
-  failed = null;
+  const slot = state();
+  slot.held = null;
+  slot.failed = null;
 }

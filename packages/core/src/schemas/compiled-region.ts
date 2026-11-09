@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { accessDatasetSchema, transportModeSchema } from './access';
 import { coordinatesSchema, isoDateSchema } from './common';
-import { displayNameSchema } from '../naming/display-name';
+import { displayNameSchema } from '../naming/display-name-schema';
 import { foodDatasetSchema } from './food';
 import { regionEvidenceSchema } from './evidence';
 import { destinationEntityTypeSchema, scopeBreadthSchema } from './geography';

@@ -155,6 +155,7 @@ export * from './routing/portfolio';
 
 export * from './naming/aliases';
 export * from './naming/display-name';
+export * from './naming/display-name-schema';
 
 export * from './pricing/model-rates';
 

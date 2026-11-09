@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { foldForMatch, sanitizePlaceText } from '../destinations/normalize';
+import type { DisplayName, NameCandidate } from './display-name-schema';
 
 /**
  * ONE PLACE DECIDES WHAT A PLACE IS CALLED.
@@ -36,44 +36,7 @@ import { foldForMatch, sanitizePlaceText } from '../destinations/normalize';
  * in a script the reader does not know.
  */
 
-/** One name a source published, with whatever metadata it came with. */
-export const nameCandidateSchema = z.object({
-  value: z.string().min(1),
-  /**
-   * BCP-47-ish, exactly as the source gave it: `en`, `en-GB`, `ky`, `zh-Hant`.
-   * Absent is meaningful — it means the source did not say, not that it is
-   * English.
-   */
-  language: z.string().min(1).optional(),
-  /** Where this name came from, so provenance survives the resolution. */
-  source: z.string().min(1),
-  /** The source's own primary/official name for the entity. */
-  primary: z.boolean().optional(),
-});
-export type NameCandidate = z.infer<typeof nameCandidateSchema>;
-
 export const DISPLAY_NAME_VERSION = 1 as const;
-
-export const displayNameSchema = z.object({
-  schemaVersion: z.literal(DISPLAY_NAME_VERSION),
-  /** What leads on screen. */
-  display: z.string().min(1),
-  /** IETF tag of `display`, when a source said. */
-  displayLanguage: z.string().min(1).optional(),
-  /**
-   * The native name, when it is genuinely different from `display`.
-   *
-   * Absent when the official English name *is* the local name — which is common
-   * and correct, and rendering it twice would read as a mistake.
-   */
-  local: z.string().min(1).optional(),
-  localLanguage: z.string().min(1).optional(),
-  /** What the source called it. Never shown; kept so a record still matches. */
-  canonical: z.string().min(1),
-  /** Every source that contributed a name, deduplicated and ordered. */
-  sources: z.array(z.string().min(1)).default([]),
-});
-export type DisplayName = z.infer<typeof displayNameSchema>;
 
 /** Whether a language tag is a variety of English. */
 export function isEnglish(language: string | undefined): boolean {

@@ -53,6 +53,28 @@ export async function register(): Promise<void> {
   } catch {
     /* A probe that cannot be warmed is a probe the readiness route will run on its first request. */
   }
+  /*
+   * THE DESTINATION ATLAS, DECODED BEFORE ANYONE ASKS (performance pass, 2026-11).
+   *
+   * Read, decoded and indexed lazily, the atlas made the first "Help me choose"
+   * visitor after every deploy wait 1.7 s on /decide and 3.6 s on the first
+   * interview step, with the whole server stalled meanwhile: it is synchronous
+   * work on the one event loop. Done here it stalls a server nobody is routed
+   * to yet. It costs memory the process would hold after its first /decide
+   * anyway. A failure leaves the lazy path, which reports it the usual way.
+   *
+   * Awaited, and that is the point: this hook finishes before the server answers
+   * anything, `/api/health` included, so the platform's health check holds
+   * travellers back until the atlas is ready. Deferring it with a timer ran the
+   * decode after the health check passed and stalled the first requests instead
+   * (measured: landing page 1.4 s to 5.9 s for the first visitor).
+   */
+  try {
+    const { loadAtlas } = await import('@sidequest/atlas');
+    loadAtlas()?.atlas.warm();
+  } catch {
+    /* The lazy path loads it on first use and reports a missing file there. */
+  }
 }
 
 /**

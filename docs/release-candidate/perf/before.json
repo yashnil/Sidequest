@@ -1,0 +1,2652 @@
+{
+ "environment": {
+  "machine": "Apple Silicon laptop, 10 cores, 64 GB, shared with parallel worktrees; load average ranged 11 to 115 during this pass",
+  "server": "next start, single Node 22 process, fixture providers, SQLite, loopback (no TLS, no CDN, no real network)",
+  "lighthouse": "13.6.0, default mobile profile (Moto G Power, Slow 4G 150 ms RTT 1.6 Mbps, 4x CPU) and desktop",
+  "tilesNote": "The landing globe reached live OpenFreeMap and AWS terrain hosts during Lighthouse runs, so transfer bytes on `/` and the trip page include third-party tiles and vary run to run.",
+  "fixtureNote": "The trip page renders a fixture-only badge that production does not, and it is sometimes the reported LCP element."
+ },
+ "build": "de9f5e8 (feat/trip-experience-release-pass tip), snapshot served for every before figure",
+ "lighthouseInterleaved": {
+  "method": "three rounds alternating with the after build on one port; one run per page per round; medians",
+  "simulate": {
+   "landing": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1216,
+      5426,
+      5601
+     ],
+     "lcpMs": 5426,
+     "fcpMs": 1225,
+     "tbtMs": 254,
+     "cls": 0.0091,
+     "speedIndexMs": 2903,
+     "performanceScore": 75,
+     "serverResponseMs": 12,
+     "totalTransferBytes": 8555855,
+     "requestCount": 88,
+     "mainThreadTotalMs": 3860,
+     "scriptBootupMs": 2545,
+     "lcpElements": [
+      "div.mx-auto > a.inline-flex > span.inline-flex > span.font-display",
+      "div.relative > div.pointer-events-none > div.pointer-events-auto > p.sheet-label"
+     ],
+     "transferBytes": {
+      "document": 15497,
+      "fetch": 7529072,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 561203,
+      "stylesheet": 47760
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 55,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 21,
+      "stylesheet": 3
+     },
+     "mainThreadMs": {
+      "garbageCollection": 52,
+      "other": 761,
+      "paintCompositeRender": 164,
+      "parseHTML": 13,
+      "scriptEvaluation": 2552,
+      "scriptParseCompile": 69,
+      "styleLayout": 245
+     }
+    },
+    "desktop": {
+     "runs": 3,
+     "lcpMsRuns": [
+      335,
+      342,
+      358
+     ],
+     "lcpMs": 342,
+     "fcpMs": 342,
+     "tbtMs": 0,
+     "cls": 0.0009,
+     "speedIndexMs": 1329,
+     "performanceScore": 99,
+     "serverResponseMs": 12,
+     "totalTransferBytes": 14577435,
+     "requestCount": 184,
+     "mainThreadTotalMs": 2458,
+     "scriptBootupMs": 1901,
+     "lcpElements": [
+      "div.pointer-events-none > div.pointer-events-auto > div.mt-3 > p.min-w-0"
+     ],
+     "transferBytes": {
+      "document": 15497,
+      "fetch": 13537358,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 574497,
+      "stylesheet": 47760
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 151,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 21,
+      "stylesheet": 3
+     },
+     "mainThreadMs": {
+      "garbageCollection": 45,
+      "other": 298,
+      "paintCompositeRender": 64,
+      "parseHTML": 3,
+      "scriptEvaluation": 1940,
+      "scriptParseCompile": 17,
+      "styleLayout": 90
+     }
+    }
+   },
+   "decide": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1217,
+      4979,
+      1220
+     ],
+     "lcpMs": 1220,
+     "fcpMs": 1220,
+     "tbtMs": 19,
+     "cls": 0,
+     "speedIndexMs": 1220,
+     "performanceScore": 100,
+     "serverResponseMs": 11,
+     "totalTransferBytes": 688830,
+     "requestCount": 32,
+     "mainThreadTotalMs": 550,
+     "scriptBootupMs": 151,
+     "lcpElements": [
+      "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3"
+     ],
+     "transferBytes": {
+      "document": 32680,
+      "fetch": 14774,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 203084,
+      "stylesheet": 35969
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 8,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 13,
+      "stylesheet": 2
+     },
+     "mainThreadMs": {
+      "garbageCollection": 9,
+      "other": 168,
+      "paintCompositeRender": 12,
+      "parseHTML": 12,
+      "scriptEvaluation": 186,
+      "scriptParseCompile": 51,
+      "styleLayout": 85
+     }
+    },
+    "desktop": {
+     "runs": 3,
+     "lcpMsRuns": [
+      341,
+      334,
+      354
+     ],
+     "lcpMs": 341,
+     "fcpMs": 341,
+     "tbtMs": 0,
+     "cls": 0,
+     "speedIndexMs": 341,
+     "performanceScore": 100,
+     "serverResponseMs": 9,
+     "totalTransferBytes": 689351,
+     "requestCount": 32,
+     "mainThreadTotalMs": 119,
+     "scriptBootupMs": 0,
+     "lcpElements": [
+      "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3"
+     ],
+     "transferBytes": {
+      "document": 32680,
+      "fetch": 15295,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 203084,
+      "stylesheet": 35969
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 8,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 13,
+      "stylesheet": 2
+     },
+     "mainThreadMs": {
+      "garbageCollection": 2,
+      "other": 33,
+      "paintCompositeRender": 3,
+      "parseHTML": 3,
+      "scriptEvaluation": 46,
+      "scriptParseCompile": 13,
+      "styleLayout": 20
+     }
+    }
+   },
+   "trip": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1670,
+      1717,
+      1677
+     ],
+     "lcpMs": 1677,
+     "fcpMs": 1677,
+     "tbtMs": 424,
+     "cls": 0,
+     "speedIndexMs": 5148,
+     "performanceScore": 85,
+     "serverResponseMs": 930,
+     "totalTransferBytes": 2581480,
+     "requestCount": 78,
+     "mainThreadTotalMs": 3932,
+     "scriptBootupMs": 2654,
+     "lcpElements": [
+      "(none reported)",
+      "body.flex > main#main > p.mx-auto > span.inline-flex"
+     ],
+     "transferBytes": {
+      "document": 91347,
+      "fetch": 1367718,
+      "font": 392053,
+      "image": 24051,
+      "manifest": 3392,
+      "other": 14805,
+      "script": 637273,
+      "stylesheet": 50841
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 39,
+      "font": 4,
+      "image": 2,
+      "manifest": 2,
+      "other": 3,
+      "script": 23,
+      "stylesheet": 4
+     },
+     "mainThreadMs": {
+      "garbageCollection": 89,
+      "other": 649,
+      "paintCompositeRender": 77,
+      "parseHTML": 36,
+      "scriptEvaluation": 2641,
+      "scriptParseCompile": 119,
+      "styleLayout": 310
+     }
+    },
+    "desktop": {
+     "runs": 3,
+     "lcpMsRuns": [
+      389,
+      406,
+      1121
+     ],
+     "lcpMs": 406,
+     "fcpMs": 392,
+     "tbtMs": 0,
+     "cls": 0,
+     "speedIndexMs": 1524,
+     "performanceScore": 98,
+     "serverResponseMs": 113,
+     "totalTransferBytes": 7579429,
+     "requestCount": 122,
+     "mainThreadTotalMs": 1325,
+     "scriptBootupMs": 832,
+     "lcpElements": [
+      "(none reported)",
+      "div.mt-8 > div.min-w-0 > section.fade-up > p#trip-thesis"
+     ],
+     "transferBytes": {
+      "document": 91347,
+      "fetch": 6365667,
+      "font": 392053,
+      "image": 24051,
+      "manifest": 3392,
+      "other": 14805,
+      "script": 637273,
+      "stylesheet": 50841
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 83,
+      "font": 4,
+      "image": 2,
+      "manifest": 2,
+      "other": 3,
+      "script": 23,
+      "stylesheet": 4
+     },
+     "mainThreadMs": {
+      "garbageCollection": 28,
+      "other": 212,
+      "paintCompositeRender": 26,
+      "parseHTML": 9,
+      "scriptEvaluation": 906,
+      "scriptParseCompile": 29,
+      "styleLayout": 88
+     }
+    }
+   }
+  },
+  "devtoolsAppliedThrottling": {
+   "landing": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      3001,
+      3162,
+      2959
+     ],
+     "lcpMs": 3001,
+     "fcpMs": 2370,
+     "tbtMs": 1907,
+     "cls": 0.0153,
+     "speedIndexMs": 2640,
+     "performanceScore": 64,
+     "serverResponseMs": 17,
+     "totalTransferBytes": 3676302,
+     "requestCount": 182,
+     "mainThreadTotalMs": 14986,
+     "scriptBootupMs": 9754,
+     "lcpElements": [
+      "div.relative > div.pointer-events-none > div.pointer-events-auto > p.fade-up"
+     ],
+     "transferBytes": {
+      "document": 15497,
+      "fetch": 2649519,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 561203,
+      "stylesheet": 47760
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 149,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 21,
+      "stylesheet": 3
+     },
+     "mainThreadMs": {
+      "garbageCollection": 140,
+      "other": 2879,
+      "paintCompositeRender": 1429,
+      "parseHTML": 19,
+      "scriptEvaluation": 9773,
+      "scriptParseCompile": 78,
+      "styleLayout": 728
+     }
+    }
+   },
+   "decide": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      2350,
+      2635,
+      2348
+     ],
+     "lcpMs": 2350,
+     "fcpMs": 2109,
+     "tbtMs": 47,
+     "cls": 0.0012,
+     "speedIndexMs": 2276,
+     "performanceScore": 96,
+     "serverResponseMs": 23,
+     "totalTransferBytes": 689082,
+     "requestCount": 32,
+     "mainThreadTotalMs": 1077,
+     "scriptBootupMs": 509,
+     "lcpElements": [
+      "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3"
+     ],
+     "transferBytes": {
+      "document": 32680,
+      "fetch": 15026,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 203084,
+      "stylesheet": 35969
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 8,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 13,
+      "stylesheet": 2
+     },
+     "mainThreadMs": {
+      "garbageCollection": 12,
+      "other": 246,
+      "paintCompositeRender": 23,
+      "parseHTML": 16,
+      "scriptEvaluation": 562,
+      "scriptParseCompile": 57,
+      "styleLayout": 133
+     }
+    }
+   },
+   "trip": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      4767,
+      3797,
+      3059
+     ],
+     "lcpMs": 3797,
+     "fcpMs": 3797,
+     "tbtMs": 782,
+     "cls": 0.1282,
+     "speedIndexMs": 9816,
+     "performanceScore": 49,
+     "serverResponseMs": 2289,
+     "totalTransferBytes": 2577199,
+     "requestCount": 78,
+     "mainThreadTotalMs": 5932,
+     "scriptBootupMs": 3736,
+     "lcpElements": [
+      "(none reported)"
+     ],
+     "transferBytes": {
+      "document": 91347,
+      "fetch": 1363437,
+      "font": 392053,
+      "image": 24051,
+      "manifest": 3392,
+      "other": 14805,
+      "script": 637273,
+      "stylesheet": 50841
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 39,
+      "font": 4,
+      "image": 2,
+      "manifest": 2,
+      "other": 3,
+      "script": 23,
+      "stylesheet": 4
+     },
+     "mainThreadMs": {
+      "garbageCollection": 117,
+      "other": 1063,
+      "paintCompositeRender": 137,
+      "parseHTML": 49,
+      "scriptEvaluation": 3749,
+      "scriptParseCompile": 126,
+      "styleLayout": 473
+     }
+    }
+   }
+  }
+ },
+ "lighthouseFiveRunBaseline": {
+  "note": "First block, five runs per page, simulate, before any change; load average about 13-23",
+  "data": {
+   "at": "2026-11-09T15:11:20.426Z",
+   "origin": "http://127.0.0.1:4420",
+   "runs": 5,
+   "throttlingMethod": "simulate",
+   "lighthouseVersion": "13.6.0",
+   "pages": {
+    "landing": {
+     "url": "/",
+     "mobile": {
+      "runs": 5,
+      "performanceScore": 77,
+      "lcpMs": 5426,
+      "lcpMsRuns": [
+       5620,
+       5445,
+       1212,
+       5414,
+       5426
+      ],
+      "fcpMs": 1219,
+      "tbtMs": 198,
+      "cls": 0.0091,
+      "speedIndexMs": 2673,
+      "ttiMs": 7698,
+      "serverResponseMs": 12,
+      "observed": {
+       "lcpMs": 163,
+       "fcpMs": 115,
+       "domContentLoadedMs": 51,
+       "loadMs": 151
+      },
+      "lcpElement": {
+       "selector": "div.relative > div.pointer-events-none > div.pointer-events-auto > p.sheet-label",
+       "snippet": "<p class=\"sheet-label fade-up text-[var(--color-glacier)]\">",
+       "label": "TRIP PLANNING THAT FITS HOW YOU TRAVEL"
+      },
+      "lcpElementCounts": {
+       "div.relative > div.pointer-events-none > div.pointer-events-auto > p.sheet-label": 4,
+       "div.mx-auto > a.inline-flex > span.inline-flex > span.font-display": 1
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 13
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 120
+       }
+      ],
+      "transferBytes": {
+       "document": 15497,
+       "font": 392053,
+       "stylesheet": 47760,
+       "script": 574497,
+       "image": 0,
+       "manifest": 1696,
+       "fetch": 513450,
+       "other": 8574
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 3,
+       "script": 21,
+       "image": 1,
+       "manifest": 1,
+       "fetch": 38,
+       "other": 2
+      },
+      "totalTransferBytes": 1548194,
+      "requestCount": 71,
+      "thirdParty": {
+       "bytes": 489473,
+       "requests": 26
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 1240,
+       "other": 1103,
+       "styleLayout": 327,
+       "paintCompositeRender": 490,
+       "garbageCollection": 28,
+       "scriptParseCompile": 69,
+       "parseHTML": 13
+      },
+      "mainThreadTotalMs": 3308,
+      "scriptBootupMs": 1229
+     },
+     "desktop": {
+      "runs": 5,
+      "performanceScore": 99,
+      "lcpMs": 336,
+      "lcpMsRuns": [
+       338,
+       336,
+       333,
+       339,
+       335
+      ],
+      "fcpMs": 336,
+      "tbtMs": 0,
+      "cls": 0.0009,
+      "speedIndexMs": 1188,
+      "ttiMs": 336,
+      "serverResponseMs": 12,
+      "observed": {
+       "lcpMs": 121,
+       "fcpMs": 121,
+       "domContentLoadedMs": 1,
+       "loadMs": 147
+      },
+      "lcpElement": {
+       "selector": "div.pointer-events-none > div.pointer-events-auto > div.mt-3 > p.min-w-0",
+       "snippet": "<p class=\"min-w-0 flex-1 text-sm leading-snug text-[var(--color-atlas-muted)] lg:bas\u2026\" aria-live=\"polite\">",
+       "label": "EXAMPLE\nKenya and Tanzania.\nOne border, two great parks and a crater floor."
+      },
+      "lcpElementCounts": {
+       "div.pointer-events-none > div.pointer-events-auto > div.mt-3 > p.min-w-0": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 13
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 100
+       }
+      ],
+      "transferBytes": {
+       "document": 15497,
+       "font": 392053,
+       "stylesheet": 47760,
+       "script": 574497,
+       "manifest": 1696,
+       "image": 0,
+       "other": 8574,
+       "fetch": 12793947
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 3,
+       "script": 21,
+       "manifest": 1,
+       "image": 1,
+       "other": 2,
+       "fetch": 152
+      },
+      "totalTransferBytes": 13834024,
+      "requestCount": 185,
+      "thirdParty": {
+       "bytes": 12772044,
+       "requests": 141
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 1903,
+       "other": 293,
+       "paintCompositeRender": 65,
+       "styleLayout": 90,
+       "scriptParseCompile": 17,
+       "garbageCollection": 44,
+       "parseHTML": 3
+      },
+      "mainThreadTotalMs": 2393,
+      "scriptBootupMs": 1865
+     }
+    },
+    "decide": {
+     "url": "/decide",
+     "mobile": {
+      "runs": 5,
+      "performanceScore": 73,
+      "lcpMs": 4976,
+      "lcpMsRuns": [
+       4976,
+       5558,
+       5563,
+       1235,
+       1248
+      ],
+      "fcpMs": 1226,
+      "tbtMs": 33,
+      "cls": 0.1823,
+      "speedIndexMs": 1226,
+      "ttiMs": 4976,
+      "serverResponseMs": 12,
+      "observed": {
+       "lcpMs": 402,
+       "fcpMs": 117,
+       "domContentLoadedMs": 89,
+       "loadMs": 159
+      },
+      "lcpElement": {
+       "selector": "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3",
+       "snippet": "<h1 class=\"mt-3 max-w-[18ch] font-display text-[clamp(2.4rem,1.5rem+3vw,4.4rem)] lead\u2026\">",
+       "label": "Not sure where? Tell us what you\u2019re after."
+      },
+      "lcpElementCounts": {
+       "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 16
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 408
+       }
+      ],
+      "transferBytes": {
+       "document": 32680,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 203084,
+       "manifest": 1696,
+       "image": 0,
+       "fetch": 22784,
+       "other": 8574
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 13,
+       "manifest": 1,
+       "image": 1,
+       "fetch": 14,
+       "other": 2
+      },
+      "totalTransferBytes": 696840,
+      "requestCount": 38,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 0
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 195,
+       "other": 134,
+       "styleLayout": 85,
+       "scriptParseCompile": 51,
+       "paintCompositeRender": 12,
+       "parseHTML": 12,
+       "garbageCollection": 7
+      },
+      "mainThreadTotalMs": 554,
+      "scriptBootupMs": 180
+     },
+     "desktop": {
+      "runs": 5,
+      "performanceScore": 100,
+      "lcpMs": 336,
+      "lcpMsRuns": [
+       338,
+       334,
+       336,
+       335,
+       1094
+      ],
+      "fcpMs": 335,
+      "tbtMs": 0,
+      "cls": 0,
+      "speedIndexMs": 336,
+      "ttiMs": 336,
+      "serverResponseMs": 6,
+      "observed": {
+       "lcpMs": 124,
+       "fcpMs": 123,
+       "domContentLoadedMs": 4,
+       "loadMs": 142
+      },
+      "lcpElement": {
+       "selector": "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3",
+       "snippet": "<h1 class=\"mt-3 max-w-[18ch] font-display text-[clamp(2.4rem,1.5rem+3vw,4.4rem)] lead\u2026\">",
+       "label": "Not sure where? Tell us what you\u2019re after."
+      },
+      "lcpElementCounts": {
+       "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 6
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 111
+       }
+      ],
+      "transferBytes": {
+       "document": 32680,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 203084,
+       "manifest": 1696,
+       "image": 0,
+       "fetch": 15400,
+       "other": 8574
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 13,
+       "manifest": 1,
+       "image": 1,
+       "fetch": 8,
+       "other": 2
+      },
+      "totalTransferBytes": 689456,
+      "requestCount": 32,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 0
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 46,
+       "other": 43,
+       "styleLayout": 20,
+       "scriptParseCompile": 13,
+       "parseHTML": 3,
+       "paintCompositeRender": 3,
+       "garbageCollection": 2
+      },
+      "mainThreadTotalMs": 130,
+      "scriptBootupMs": 0
+     }
+    },
+    "tripNew": {
+     "url": "/trips/new",
+     "mobile": {
+      "runs": 5,
+      "performanceScore": 100,
+      "lcpMs": 1064,
+      "lcpMsRuns": [
+       1070,
+       1062,
+       1064,
+       1060,
+       1065
+      ],
+      "fcpMs": 1064,
+      "tbtMs": 22,
+      "cls": 0.0001,
+      "speedIndexMs": 1064,
+      "ttiMs": 4822,
+      "serverResponseMs": 8,
+      "observed": {
+       "lcpMs": 132,
+       "fcpMs": 132,
+       "domContentLoadedMs": 2,
+       "loadMs": 160
+      },
+      "lcpElement": {
+       "selector": "div.min-w-0 > div > div.mt-8 > p.text-sm",
+       "snippet": "<p class=\"text-sm text-ink-muted\">",
+       "label": "A city, a whole country, a region with no borders \u2014 or try one of these:"
+      },
+      "lcpElementCounts": {
+       "div.min-w-0 > div > div.mt-8 > p.text-sm": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 13
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 91
+       }
+      ],
+      "transferBytes": {
+       "document": 11250,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 288261,
+       "image": 24051,
+       "manifest": 1696,
+       "fetch": 6430,
+       "other": 8574
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 16,
+       "image": 2,
+       "manifest": 1,
+       "fetch": 4,
+       "other": 2
+      },
+      "totalTransferBytes": 768284,
+      "requestCount": 32,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 0
+      },
+      "mainThreadMs": {
+       "other": 207,
+       "scriptEvaluation": 257,
+       "styleLayout": 105,
+       "scriptParseCompile": 67,
+       "paintCompositeRender": 23,
+       "parseHTML": 11,
+       "garbageCollection": 8
+      },
+      "mainThreadTotalMs": 672,
+      "scriptBootupMs": 233
+     },
+     "desktop": {
+      "runs": 5,
+      "performanceScore": 98,
+      "lcpMs": 1111,
+      "lcpMsRuns": [
+       1125,
+       1122,
+       289,
+       1111,
+       289
+      ],
+      "fcpMs": 289,
+      "tbtMs": 0,
+      "cls": 0.0451,
+      "speedIndexMs": 298,
+      "ttiMs": 1111,
+      "serverResponseMs": 6,
+      "observed": {
+       "lcpMs": 416,
+       "fcpMs": 103,
+       "domContentLoadedMs": 69,
+       "loadMs": 131
+      },
+      "lcpElement": {
+       "selector": "div#placeholder",
+       "snippet": "<div pseudo=\"-webkit-input-placeholder\" id=\"placeholder\" style=\"display: block !important;\">",
+       "label": "Anywhere you can name"
+      },
+      "lcpElementCounts": {
+       "div#placeholder": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 10
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 421
+       }
+      ],
+      "transferBytes": {
+       "document": 11250,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 288261,
+       "manifest": 1696,
+       "image": 24051,
+       "other": 8574,
+       "fetch": 18029
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 16,
+       "manifest": 1,
+       "image": 2,
+       "other": 2,
+       "fetch": 12
+      },
+      "totalTransferBytes": 779883,
+      "requestCount": 40,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 0
+      },
+      "mainThreadMs": {
+       "other": 71,
+       "scriptEvaluation": 64,
+       "styleLayout": 25,
+       "scriptParseCompile": 16,
+       "paintCompositeRender": 6,
+       "parseHTML": 3,
+       "garbageCollection": 2
+      },
+      "mainThreadTotalMs": 190,
+      "scriptBootupMs": 48
+     }
+    },
+    "trip": {
+     "url": "/trips/:id/itinerary",
+     "mobile": {
+      "runs": 5,
+      "performanceScore": 86,
+      "lcpMs": 1660,
+      "lcpMsRuns": [
+       1660,
+       1658,
+       1659,
+       5865,
+       1663
+      ],
+      "fcpMs": 1660,
+      "tbtMs": 411,
+      "cls": 0.0919,
+      "speedIndexMs": 3089,
+      "ttiMs": 8742,
+      "serverResponseMs": 52,
+      "observed": {
+       "lcpMs": 203,
+       "fcpMs": 203,
+       "domContentLoadedMs": 199,
+       "loadMs": 245
+      },
+      "lcpElement": {
+       "selector": "body.flex > main#main > p.mx-auto > span.inline-flex",
+       "snippet": "<span class=\"inline-flex items-center gap-2 rounded-[var(--radius-control)] border bord\u2026\" data-testid=\"fixture-planning-badge\">",
+       "label": "Fixture planning data \u2014 this plan was composed from a saved fixture, not the li\u2026"
+      },
+      "lcpElementCounts": {
+       "body.flex > main#main > p.mx-auto > span.inline-flex": 2,
+       "(none reported)": 2,
+       "div.mt-8 > div.min-w-0 > section.fade-up > p#trip-thesis": 1
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 53
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 156
+       }
+      ],
+      "transferBytes": {
+       "document": 91356,
+       "font": 392053,
+       "stylesheet": 50841,
+       "script": 637273,
+       "manifest": 3392,
+       "image": 24051,
+       "other": 14805,
+       "fetch": 1326350
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 4,
+       "script": 23,
+       "manifest": 2,
+       "image": 2,
+       "other": 3,
+       "fetch": 39
+      },
+      "totalTransferBytes": 2540121,
+      "requestCount": 78,
+      "thirdParty": {
+       "bytes": 1252157,
+       "requests": 26
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 2158,
+       "other": 565,
+       "styleLayout": 304,
+       "scriptParseCompile": 115,
+       "paintCompositeRender": 74,
+       "parseHTML": 38,
+       "garbageCollection": 30
+      },
+      "mainThreadTotalMs": 3281,
+      "scriptBootupMs": 2177
+     },
+     "desktop": {
+      "runs": 5,
+      "performanceScore": 99,
+      "lcpMs": 370,
+      "lcpMsRuns": [
+       374,
+       370,
+       370,
+       370,
+       420
+      ],
+      "fcpMs": 370,
+      "tbtMs": 0,
+      "cls": 0.0001,
+      "speedIndexMs": 1334,
+      "ttiMs": 374,
+      "serverResponseMs": 46,
+      "observed": {
+       "lcpMs": 175,
+       "fcpMs": 175,
+       "domContentLoadedMs": 157,
+       "loadMs": 203
+      },
+      "lcpElement": {
+       "selector": "div.relative > h1.display-stage > span.mask-rise > span",
+       "snippet": "<span>",
+       "label": "Harbour City"
+      },
+      "lcpElementCounts": {
+       "(none reported)": 2,
+       "div.relative > h1.display-stage > span.mask-rise > span": 3
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 41
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 134
+       }
+      ],
+      "transferBytes": {
+       "document": 91356,
+       "font": 392053,
+       "stylesheet": 50841,
+       "script": 637273,
+       "manifest": 3392,
+       "image": 24051,
+       "other": 14805,
+       "fetch": 4197132
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 4,
+       "script": 23,
+       "manifest": 2,
+       "image": 2,
+       "other": 3,
+       "fetch": 83
+      },
+      "totalTransferBytes": 5410903,
+      "requestCount": 122,
+      "thirdParty": {
+       "bytes": 4090777,
+       "requests": 62
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 637,
+       "other": 171,
+       "styleLayout": 85,
+       "scriptParseCompile": 29,
+       "paintCompositeRender": 25,
+       "garbageCollection": 10,
+       "parseHTML": 9
+      },
+      "mainThreadTotalMs": 966,
+      "scriptBootupMs": 581
+     }
+    },
+    "shortlist": {
+     "url": "/decide/:id",
+     "mobile": {
+      "runs": 5,
+      "performanceScore": 67,
+      "lcpMs": 5783,
+      "lcpMsRuns": [
+       5783,
+       1361,
+       1354,
+       5784,
+       5794
+      ],
+      "fcpMs": 1359,
+      "tbtMs": 34,
+      "cls": 0.2309,
+      "speedIndexMs": 1515,
+      "ttiMs": 5790,
+      "serverResponseMs": 13,
+      "observed": {
+       "lcpMs": 384,
+       "fcpMs": 114,
+       "domContentLoadedMs": 67,
+       "loadMs": 144
+      },
+      "lcpElement": {
+       "selector": "div > header.grid > div.min-w-0 > p.measure",
+       "snippet": "<p class=\"measure mt-4 type-body text-ink-muted\">",
+       "label": "Three different answers \u2014 Rila & Pirin Mountains for high mountains and lakes; \u2026"
+      },
+      "lcpElementCounts": {
+       "div > header.grid > div.min-w-0 > p.measure": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 16
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 368
+       }
+      ],
+      "transferBytes": {
+       "document": 51148,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 237019,
+       "manifest": 3392,
+       "image": 24051,
+       "other": 14805,
+       "fetch": 92982
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 14,
+       "manifest": 2,
+       "image": 3,
+       "other": 3,
+       "fetch": 16
+      },
+      "totalTransferBytes": 851419,
+      "requestCount": 45,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 1
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 294,
+       "other": 256,
+       "styleLayout": 120,
+       "scriptParseCompile": 65,
+       "paintCompositeRender": 30,
+       "parseHTML": 20,
+       "garbageCollection": 9
+      },
+      "mainThreadTotalMs": 825,
+      "scriptBootupMs": 288
+     },
+     "desktop": {
+      "runs": 5,
+      "performanceScore": 100,
+      "lcpMs": 370,
+      "lcpMsRuns": [
+       386,
+       366,
+       369,
+       370,
+       372
+      ],
+      "fcpMs": 370,
+      "tbtMs": 0,
+      "cls": 0,
+      "speedIndexMs": 370,
+      "ttiMs": 370,
+      "serverResponseMs": 10,
+      "observed": {
+       "lcpMs": 132,
+       "fcpMs": 132,
+       "domContentLoadedMs": 99,
+       "loadMs": 164
+      },
+      "lcpElement": {
+       "selector": "div > header.grid > div.min-w-0 > h1.mt-3",
+       "snippet": "<h1 class=\"mt-3 max-w-[20ch] font-display text-[clamp(2.3rem,1.5rem+2.8vw,4rem)] lead\u2026\">",
+       "label": "Three places, three different trips."
+      },
+      "lcpElementCounts": {
+       "div > header.grid > div.min-w-0 > h1.mt-3": 5
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 13
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 118
+       }
+      ],
+      "transferBytes": {
+       "document": 51148,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 237019,
+       "image": 24051,
+       "manifest": 3392,
+       "fetch": 103693,
+       "other": 14805
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 14,
+       "image": 4,
+       "manifest": 2,
+       "fetch": 18,
+       "other": 3
+      },
+      "totalTransferBytes": 862130,
+      "requestCount": 48,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 2
+      },
+      "mainThreadMs": {
+       "other": 80,
+       "scriptEvaluation": 77,
+       "styleLayout": 30,
+       "scriptParseCompile": 16,
+       "paintCompositeRender": 8,
+       "parseHTML": 5,
+       "garbageCollection": 2
+      },
+      "mainThreadTotalMs": 213,
+      "scriptBootupMs": 61
+     }
+    }
+   }
+  }
+ },
+ "lighthouseAppliedThreeRunBaseline": {
+  "note": "Three runs per page, devtools throttling; load average 57-115",
+  "data": {
+   "at": "2026-11-09T16:09:46.829Z",
+   "origin": "http://127.0.0.1:4420",
+   "runs": 3,
+   "throttlingMethod": "devtools",
+   "lighthouseVersion": "13.6.0",
+   "pages": {
+    "landing": {
+     "url": "/",
+     "mobile": {
+      "runs": 3,
+      "performanceScore": 60,
+      "lcpMs": 3296,
+      "lcpMsRuns": [
+       3318,
+       3296,
+       2965
+      ],
+      "fcpMs": 2806,
+      "tbtMs": 1836,
+      "cls": 0.0153,
+      "speedIndexMs": 3143,
+      "ttiMs": 19916,
+      "serverResponseMs": 11,
+      "observed": {
+       "lcpMs": 3296,
+       "fcpMs": 2806,
+       "domContentLoadedMs": 1,
+       "loadMs": 5357
+      },
+      "lcpElement": {
+       "selector": "div.relative > div.pointer-events-none > div.pointer-events-auto > p.fade-up",
+       "snippet": "<p class=\"fade-up mt-5 max-w-[27rem] text-base leading-relaxed sm:mt-6 sm:text-lg te\u2026\" style=\"--d:420ms\">",
+       "label": "Name a place. Sidequest finds the famous stops and the quiet ones, routes the d\u2026"
+      },
+      "lcpElementCounts": {
+       "div.relative > div.pointer-events-none > div.pointer-events-auto > p.fade-up": 3
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 12
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 3285
+       }
+      ],
+      "transferBytes": {
+       "document": 15497,
+       "font": 392053,
+       "stylesheet": 47760,
+       "script": 561203,
+       "manifest": 1696,
+       "image": 0,
+       "fetch": 2658056,
+       "other": 8574
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 3,
+       "script": 21,
+       "manifest": 1,
+       "image": 1,
+       "fetch": 150,
+       "other": 2
+      },
+      "totalTransferBytes": 3684839,
+      "requestCount": 183,
+      "thirdParty": {
+       "bytes": 2634942,
+       "requests": 137
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 9436,
+       "other": 2521,
+       "paintCompositeRender": 1316,
+       "styleLayout": 669,
+       "garbageCollection": 176,
+       "scriptParseCompile": 73,
+       "parseHTML": 15
+      },
+      "mainThreadTotalMs": 14196,
+      "scriptBootupMs": 9408
+     }
+    },
+    "decide": {
+     "url": "/decide",
+     "mobile": {
+      "runs": 3,
+      "performanceScore": 93,
+      "lcpMs": 2350,
+      "lcpMsRuns": [
+       2729,
+       2350,
+       2345
+      ],
+      "fcpMs": 2067,
+      "tbtMs": 35,
+      "cls": 0.0012,
+      "speedIndexMs": 2213,
+      "ttiMs": 4284,
+      "serverResponseMs": 9,
+      "observed": {
+       "lcpMs": 2350,
+       "fcpMs": 2067,
+       "domContentLoadedMs": 1,
+       "loadMs": 4969
+      },
+      "lcpElement": {
+       "selector": "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3",
+       "snippet": "<h1 class=\"mt-3 max-w-[18ch] font-display text-[clamp(2.4rem,1.5rem+3vw,4.4rem)] lead\u2026\">",
+       "label": "Not sure where? Tell us what you\u2019re after."
+      },
+      "lcpElementCounts": {
+       "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3": 3
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 11
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 2339
+       }
+      ],
+      "transferBytes": {
+       "document": 32680,
+       "font": 392053,
+       "stylesheet": 35969,
+       "script": 203084,
+       "manifest": 1696,
+       "image": 0,
+       "fetch": 13925,
+       "other": 8574
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 2,
+       "script": 13,
+       "manifest": 1,
+       "image": 1,
+       "fetch": 8,
+       "other": 2
+      },
+      "totalTransferBytes": 687981,
+      "requestCount": 32,
+      "thirdParty": {
+       "bytes": 0,
+       "requests": 0
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 560,
+       "other": 208,
+       "styleLayout": 121,
+       "scriptParseCompile": 53,
+       "paintCompositeRender": 26,
+       "parseHTML": 14,
+       "garbageCollection": 12
+      },
+      "mainThreadTotalMs": 1008,
+      "scriptBootupMs": 522
+     }
+    },
+    "trip": {
+     "url": "/trips/:id/itinerary",
+     "mobile": {
+      "runs": 3,
+      "performanceScore": 73,
+      "lcpMs": 2078,
+      "lcpMsRuns": [
+       2045,
+       2078,
+       2222
+      ],
+      "fcpMs": 2078,
+      "tbtMs": 452,
+      "cls": 0.1282,
+      "speedIndexMs": 7944,
+      "ttiMs": 17428,
+      "serverResponseMs": 591,
+      "observed": {
+       "lcpMs": 2078,
+       "fcpMs": 2078,
+       "domContentLoadedMs": 2,
+       "loadMs": 5975
+      },
+      "lcpElement": null,
+      "lcpElementCounts": {
+       "(none reported)": 3
+      },
+      "lcpBreakdown": [
+       {
+        "phase": "Time to first byte",
+        "ms": 594
+       },
+       {
+        "phase": "Element render delay",
+        "ms": 1484
+       }
+      ],
+      "transferBytes": {
+       "document": 91355,
+       "font": 392053,
+       "stylesheet": 50841,
+       "script": 637273,
+       "manifest": 3392,
+       "image": 24051,
+       "other": 14805,
+       "fetch": 1360615
+      },
+      "requestCounts": {
+       "document": 1,
+       "font": 4,
+       "stylesheet": 4,
+       "script": 23,
+       "manifest": 2,
+       "image": 2,
+       "other": 3,
+       "fetch": 39
+      },
+      "totalTransferBytes": 2574386,
+      "requestCount": 78,
+      "thirdParty": {
+       "bytes": 1252295,
+       "requests": 26
+      },
+      "mainThreadMs": {
+       "scriptEvaluation": 3534,
+       "other": 1008,
+       "styleLayout": 476,
+       "paintCompositeRender": 137,
+       "scriptParseCompile": 126,
+       "garbageCollection": 100,
+       "parseHTML": 46
+      },
+      "mainThreadTotalMs": 5374,
+      "scriptBootupMs": 3525
+     }
+    }
+   }
+  }
+ },
+ "routeBundles": {
+  "at": "2026-11-09T15:13:27.248Z",
+  "pages": {
+   "landing": {
+    "status": 200,
+    "htmlBytes": 66989,
+    "htmlGzipBytes": 12659,
+    "scripts": 14,
+    "scriptRawBytes": 812786,
+    "scriptGzipBytes": 252926,
+    "styles": 2,
+    "styleRawBytes": 195389,
+    "styleGzipBytes": 33089,
+    "fontPreloads": 3,
+    "fontPreloadBytes": 346860,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "3x_w43kfdxcu0.js",
+      "raw": 127091,
+      "gzip": 42707,
+      "libraries": [
+       "motion"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "08tbe10zc31vf.js",
+      "raw": 122367,
+      "gzip": 35717,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1j9ggpgt89xh_.js",
+      "raw": 33723,
+      "gzip": 13220,
+      "libraries": [
+       "maplibre"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0x52qn7zdaqtv.js",
+      "raw": 32434,
+      "gzip": 11043,
+      "libraries": [
+       "motion"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1yb5n9_haz923.js",
+      "raw": 28398,
+      "gzip": 9437,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "decide": {
+    "status": 200,
+    "htmlBytes": 96942,
+    "htmlGzipBytes": 30759,
+    "scripts": 13,
+    "scriptRawBytes": 613760,
+    "scriptGzipBytes": 185992,
+    "styles": 2,
+    "styleRawBytes": 195389,
+    "styleGzipBytes": 33089,
+    "fontPreloads": 3,
+    "fontPreloadBytes": 346860,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "08tbe10zc31vf.js",
+      "raw": 122367,
+      "gzip": 35717,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "2at7qonbk7p0d.js",
+      "raw": 29991,
+      "gzip": 8127,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "10_6072554y3j.js",
+      "raw": 17201,
+      "gzip": 6685,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "36rl0wfdfcv5v.js",
+      "raw": 10826,
+      "gzip": 4552,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "turbopack-2c3mg3r-05n1w.js",
+      "raw": 11255,
+      "gzip": 4390,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "tripNew": {
+    "status": 200,
+    "htmlBytes": 40377,
+    "htmlGzipBytes": 8462,
+    "scripts": 16,
+    "scriptRawBytes": 859902,
+    "scriptGzipBytes": 267152,
+    "styles": 2,
+    "styleRawBytes": 195389,
+    "styleGzipBytes": 33089,
+    "fontPreloads": 3,
+    "fontPreloadBytes": 346860,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "3x_w43kfdxcu0.js",
+      "raw": 127091,
+      "gzip": 42707,
+      "libraries": [
+       "motion"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "08tbe10zc31vf.js",
+      "raw": 122367,
+      "gzip": 35717,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "314vlcdze78x-.js",
+      "raw": 53774,
+      "gzip": 15615,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0zgzgi58g3xwp.js",
+      "raw": 30795,
+      "gzip": 10336,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "34v5e7emv1faa.js",
+      "raw": 21964,
+      "gzip": 8731,
+      "libraries": [
+       "maplibre"
+      ],
+      "serverOnly": []
+     }
+    ]
+   },
+   "shortlist": {
+    "status": 200,
+    "htmlBytes": 229762,
+    "htmlGzipBytes": 48914,
+    "scripts": 14,
+    "scriptRawBytes": 704876,
+    "scriptGzipBytes": 218592,
+    "styles": 2,
+    "styleRawBytes": 195389,
+    "styleGzipBytes": 33089,
+    "fontPreloads": 3,
+    "fontPreloadBytes": 346860,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "08tbe10zc31vf.js",
+      "raw": 122367,
+      "gzip": 35717,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "02g078g3gxbtn.js",
+      "raw": 77430,
+      "gzip": 27425,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "2at7qonbk7p0d.js",
+      "raw": 29991,
+      "gzip": 8127,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "10_6072554y3j.js",
+      "raw": 17201,
+      "gzip": 6685,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "3w2j0n4m089xz.js",
+      "raw": 16129,
+      "gzip": 6550,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "trip": {
+    "status": 200,
+    "htmlBytes": 689768,
+    "htmlGzipBytes": 89105,
+    "scripts": 19,
+    "scriptRawBytes": 1055213,
+    "scriptGzipBytes": 322402,
+    "styles": 3,
+    "styleRawBytes": 202292,
+    "styleGzipBytes": 34907,
+    "fontPreloads": 3,
+    "fontPreloadBytes": 346860,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "3ojz0rkejwi9s.js",
+      "raw": 160722,
+      "gzip": 44540,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "3x_w43kfdxcu0.js",
+      "raw": 127091,
+      "gzip": 42707,
+      "libraries": [
+       "motion"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "08tbe10zc31vf.js",
+      "raw": 122367,
+      "gzip": 35717,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0sc8kte5lzdq8.js",
+      "raw": 39698,
+      "gzip": 13522,
+      "libraries": [
+       "maplibre"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0-0gza0jq7umq.js",
+      "raw": 40564,
+      "gzip": 11063,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0zgzgi58g3xwp.js",
+      "raw": 30795,
+      "gzip": 10336,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   }
+  },
+  "allChunks": {
+   "0-0gza0jq7umq.js": {
+    "raw": 40564,
+    "gzip": 11063,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "02g078g3gxbtn.js": {
+    "raw": 77430,
+    "gzip": 27425,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "08tbe10zc31vf.js": {
+    "raw": 122367,
+    "gzip": 35717,
+    "libraries": [
+     "zod"
+    ],
+    "serverOnly": []
+   },
+   "0_rdvd0p0d6hf.js": {
+    "raw": 17919,
+    "gzip": 6311,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0cqmv1hp7kciq.js": {
+    "raw": 99410,
+    "gzip": 28133,
+    "libraries": [],
+    "serverOnly": [
+     "curatedCatalog"
+    ]
+   },
+   "0cz1d0mv5g_q7.js": {
+    "raw": 112594,
+    "gzip": 39520,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0j-mwpm50l08k.js": {
+    "raw": 2241,
+    "gzip": 1099,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0r1v-j3ceuj20.js": {
+    "raw": 435,
+    "gzip": 324,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0sc8kte5lzdq8.js": {
+    "raw": 39698,
+    "gzip": 13522,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "0txo6i9c0cv9_.js": {
+    "raw": 25799,
+    "gzip": 9816,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "0wmdorlot2hvo.js": {
+    "raw": 27818,
+    "gzip": 8733,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0x52qn7zdaqtv.js": {
+    "raw": 32434,
+    "gzip": 11043,
+    "libraries": [
+     "motion"
+    ],
+    "serverOnly": []
+   },
+   "0x5dsg_zpbny8.js": {
+    "raw": 13827,
+    "gzip": 3512,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0zefgrqv20jjl.js": {
+    "raw": 16172,
+    "gzip": 4997,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0zgzgi58g3xwp.js": {
+    "raw": 30795,
+    "gzip": 10336,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "10_6072554y3j.js": {
+    "raw": 17201,
+    "gzip": 6685,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "14ssg7nibyzr4.js": {
+    "raw": 4072,
+    "gzip": 1571,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "17esrfdp6m206.js": {
+    "raw": 22059,
+    "gzip": 8159,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "1_xb_gk2qh6dq.js": {
+    "raw": 7819,
+    "gzip": 3310,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1eht6slqnxjqd.js": {
+    "raw": 22612,
+    "gzip": 8658,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1erwrf7515rt5.js": {
+    "raw": 131536,
+    "gzip": 35659,
+    "libraries": [
+     "nextRuntime"
+    ],
+    "serverOnly": []
+   },
+   "1f0mq0833vr4g.js": {
+    "raw": 3090,
+    "gzip": 1457,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1gzpguxwjxahs.js": {
+    "raw": 17937,
+    "gzip": 6559,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1j9ggpgt89xh_.js": {
+    "raw": 33723,
+    "gzip": 13220,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "1kisdzut3q72g.js": {
+    "raw": 90926,
+    "gzip": 26933,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1lp7i6k6v8ol_.js": {
+    "raw": 30039,
+    "gzip": 10067,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "1mqm72gh732op.js": {
+    "raw": 27489,
+    "gzip": 9866,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "1mwetodf-uw8-.js": {
+    "raw": 40809,
+    "gzip": 12821,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "1q0xd7angeid-.js": {
+    "raw": 34255,
+    "gzip": 11637,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1rvt_zvjd9p8i.js": {
+    "raw": 23706,
+    "gzip": 7756,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1v9vue-pmu92u.js": {
+    "raw": 15143,
+    "gzip": 5443,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1x60jto6nhal4.js": {
+    "raw": 22007,
+    "gzip": 8747,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "1yb5n9_haz923.js": {
+    "raw": 28398,
+    "gzip": 9437,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "26d_d8eqlbm01.js": {
+    "raw": 30252,
+    "gzip": 10999,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2a3eh7drc9ur_.js": {
+    "raw": 37677,
+    "gzip": 14106,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "2at7qonbk7p0d.js": {
+    "raw": 29991,
+    "gzip": 8127,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2av3e21uvd6-2.js": {
+    "raw": 309,
+    "gzip": 246,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2hah7js84phd6.js": {
+    "raw": 3139,
+    "gzip": 1491,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2hv7zvuwnk_30.js": {
+    "raw": 12597,
+    "gzip": 3845,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2i66m0j7fx2gn.js": {
+    "raw": 34866,
+    "gzip": 13133,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2m_tu33cn8atp.js": {
+    "raw": 2443,
+    "gzip": 1375,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2ow393y6ee8-b.js": {
+    "raw": 17153,
+    "gzip": 5061,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2pfqj8grjvbpd.js": {
+    "raw": 229817,
+    "gzip": 71812,
+    "libraries": [
+     "react",
+     "nextRuntime"
+    ],
+    "serverOnly": []
+   },
+   "2so2t886-uh4k.js": {
+    "raw": 2976,
+    "gzip": 1413,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2t5m5msf6zle9.js": {
+    "raw": 36038,
+    "gzip": 12263,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "314vlcdze78x-.js": {
+    "raw": 53774,
+    "gzip": 15615,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "336g-nib60euo.js": {
+    "raw": 9015,
+    "gzip": 3000,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "34v5e7emv1faa.js": {
+    "raw": 21964,
+    "gzip": 8731,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "36rl0wfdfcv5v.js": {
+    "raw": 10826,
+    "gzip": 4552,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "36xxtwl1h7ne2.js": {
+    "raw": 13268,
+    "gzip": 3693,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3fk8bthgp4zxe.js": {
+    "raw": 251344,
+    "gzip": 70189,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3ojz0rkejwi9s.js": {
+    "raw": 160722,
+    "gzip": 44540,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3w2j0n4m089xz.js": {
+    "raw": 16129,
+    "gzip": 6550,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3w36d3l32qbhn.js": {
+    "raw": 27365,
+    "gzip": 9244,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3w_a43cfsv-xu.js": {
+    "raw": 30837,
+    "gzip": 11569,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "3wth-d2dbf2gm.js": {
+    "raw": 11236,
+    "gzip": 3523,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3x_w43kfdxcu0.js": {
+    "raw": 127091,
+    "gzip": 42707,
+    "libraries": [
+     "motion"
+    ],
+    "serverOnly": []
+   },
+   "438y5-vt9hxrj.js": {
+    "raw": 22300,
+    "gzip": 6915,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "43ivhgwh-0xjj.js": {
+    "raw": 3066,
+    "gzip": 1456,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "43z02rjoi2ogi.js": {
+    "raw": 19954,
+    "gzip": 7010,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "turbopack-2c3mg3r-05n1w.js": {
+    "raw": 11255,
+    "gzip": 4390,
+    "libraries": [],
+    "serverOnly": []
+   }
+  },
+  "serverOnlyCodeInClientChunks": [
+   {
+    "file": "0cqmv1hp7kciq.js",
+    "markers": [
+     "curatedCatalog"
+    ],
+    "gzip": 28133
+   }
+  ],
+  "totalClientJs": {
+   "files": 61,
+   "raw": 2459728,
+   "gzip": 787091
+  }
+ },
+ "serverTimings": {
+  "firstRequestImmediatelyAfterListen": {
+   "at": "2026-11-09T16:26:18.135Z",
+   "map": "openfreemap",
+   "repeats": 10,
+   "note": "One fresh process per target. cold = request 1, warm = request 10; loopback, no browser.",
+   "targets": {
+    "landing": {
+     "status": 200,
+     "bytes": 66989,
+     "bootToListenMs": 298,
+     "coldMs": 596.4,
+     "coldTtfbMs": 580.9,
+     "secondMs": 20.7,
+     "warmMs": 19.3,
+     "warmTtfbMs": 12.5,
+     "warmMedianMs": 18.4,
+     "afterIdleMs": 12,
+     "allMs": [
+      596.4,
+      20.7,
+      15.7,
+      16.4,
+      18.4,
+      11.7,
+      13.6,
+      18.4,
+      29.8,
+      19.3
+     ],
+     "rssAtBootMb": 94,
+     "rssAfterMb": 189
+    },
+    "decide": {
+     "status": 200,
+     "bytes": 96942,
+     "bootToListenMs": 216,
+     "coldMs": 1650.6,
+     "coldTtfbMs": 1646.4,
+     "secondMs": 20.5,
+     "warmMs": 14,
+     "warmTtfbMs": 9.3,
+     "warmMedianMs": 17.4,
+     "afterIdleMs": 15.4,
+     "allMs": [
+      1650.6,
+      20.5,
+      13.2,
+      12.8,
+      17.6,
+      17.4,
+      13.2,
+      19.5,
+      22,
+      14
+     ],
+     "rssAtBootMb": 80,
+     "rssAfterMb": 482
+    },
+    "interviewStep": {
+     "status": 200,
+     "bytes": 1149,
+     "bootToListenMs": 362,
+     "coldMs": 3647.1,
+     "coldTtfbMs": 3048.9,
+     "secondMs": 519.1,
+     "warmMs": 440.1,
+     "warmTtfbMs": 437.2,
+     "warmMedianMs": 479,
+     "afterIdleMs": 730.3,
+     "allMs": [
+      3647.1,
+      519.1,
+      452.5,
+      541.9,
+      524.3,
+      434.2,
+      575.1,
+      671.5,
+      479,
+      440.1
+     ],
+     "rssAtBootMb": 79,
+     "rssAfterMb": 915
+    },
+    "shortlist": {
+     "status": 200,
+     "bytes": 229762,
+     "bootToListenMs": 274,
+     "coldMs": 2018,
+     "coldTtfbMs": 2010.7,
+     "secondMs": 34.6,
+     "warmMs": 33.7,
+     "warmTtfbMs": 27.6,
+     "warmMedianMs": 20.5,
+     "afterIdleMs": 23.3,
+     "allMs": [
+      2018,
+      34.6,
+      27.1,
+      21,
+      27,
+      20.2,
+      19.4,
+      20.5,
+      36,
+      33.7
+     ],
+     "rssAtBootMb": 82,
+     "rssAfterMb": 497
+    },
+    "trip": {
+     "status": 200,
+     "bytes": 689768,
+     "bootToListenMs": 247,
+     "coldMs": 856.8,
+     "coldTtfbMs": 847.3,
+     "secondMs": 89.7,
+     "warmMs": 55.8,
+     "warmTtfbMs": 47.2,
+     "warmMedianMs": 55.8,
+     "afterIdleMs": 54.5,
+     "allMs": [
+      856.8,
+      89.7,
+      84.8,
+      55.2,
+      59.1,
+      55.6,
+      54.9,
+      57.6,
+      77.4,
+      55.8
+     ],
+     "rssAtBootMb": 89,
+     "rssAfterMb": 254
+    }
+   },
+   "warmProcess": {
+    "rssAtBootMb": 92,
+    "rssAfterAllTargetsMb": 952
+   }
+  },
+  "firstRequestAfterHealthPasses": {
+   "at": "2026-11-09T17:42:50.818Z",
+   "map": "openfreemap",
+   "repeats": 10,
+   "note": "One fresh process per target. cold = request 1, warm = request 10; loopback, no browser.",
+   "targets": {
+    "landing": {
+     "status": 200,
+     "bytes": 66989,
+     "bootToListenMs": 837,
+     "firstHealthAnswerMs": 1562,
+     "coldMs": 1376.2,
+     "coldTtfbMs": 1281.8,
+     "secondMs": 140.9,
+     "warmMs": 30.9,
+     "warmTtfbMs": 18.3,
+     "warmMedianMs": 30.9,
+     "afterIdleMs": 15.4,
+     "allMs": [
+      1376.2,
+      140.9,
+      165.4,
+      284.1,
+      184.6,
+      27.5,
+      76.9,
+      29,
+      35.2,
+      30.9
+     ],
+     "rssAtBootMb": 143,
+     "rssAfterMb": 190
+    },
+    "decide": {
+     "status": 200,
+     "bytes": 96942,
+     "bootToListenMs": 1138,
+     "firstHealthAnswerMs": 1930,
+     "coldMs": 4264.1,
+     "coldTtfbMs": 4259.8,
+     "secondMs": 37.7,
+     "warmMs": 17,
+     "warmTtfbMs": 12.1,
+     "warmMedianMs": 23.6,
+     "afterIdleMs": 25.2,
+     "allMs": [
+      4264.1,
+      37.7,
+      34.5,
+      59.4,
+      17.7,
+      20.1,
+      23.6,
+      25.3,
+      27.8,
+      17
+     ],
+     "rssAtBootMb": 147,
+     "rssAfterMb": 396
+    },
+    "interviewStep": {
+     "status": 200,
+     "bytes": 1149,
+     "bootToListenMs": 424,
+     "firstHealthAnswerMs": 615,
+     "coldMs": 5402,
+     "coldTtfbMs": 4519.2,
+     "secondMs": 1077.7,
+     "warmMs": 1727.9,
+     "warmTtfbMs": 1648.8,
+     "warmMedianMs": 1315.8,
+     "afterIdleMs": 885.3,
+     "allMs": [
+      5402,
+      1077.7,
+      1020.9,
+      799.5,
+      1115.9,
+      1326.9,
+      957.9,
+      1315.8,
+      1208.9,
+      1727.9
+     ],
+     "rssAtBootMb": 143,
+     "rssAfterMb": 912
+    }
+   },
+   "warmProcess": {
+    "rssAtBootMb": 80,
+    "rssAfterAllTargetsMb": 949
+   }
+  }
+ },
+ "tripCreationFixture": {
+  "browserWaitsMs": {
+   "setup_to_interview_ms": 5561,
+   "interview_walk_ms": 23473,
+   "scan_press_to_board_ms": 23857,
+   "build_press_to_itinerary_ms": 6887
+  },
+  "advisorRequestToShortlistMs": 16118,
+  "discoveryScanStagesMs": {
+   "preparingMs": 3,
+   "totalMs": 273,
+   "proposingMs": 3,
+   "placingMs": 1,
+   "timingMs": 6,
+   "assemblingMs": 260
+  },
+  "plannerBuildStagesMs": {
+   "preparationMs": 128,
+   "identityResolutionMs": 63,
+   "compositionMs": 100,
+   "placeResolutionMs": 0,
+   "routingMs": 1,
+   "reconciliationMs": 116,
+   "verificationMs": 117,
+   "intelligenceMs": 33,
+   "totalMs": 636
+  },
+  "note": "Fixture providers and a contended machine. Stage timings are the server's own; browser waits include rendering under load."
+ }
+}

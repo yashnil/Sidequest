@@ -293,15 +293,28 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
     };
     const idle = (fn: () => void) => {
       const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
-      if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 700 });
+      if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 1200 });
       else window.setTimeout(fn, 300);
     };
-    /* The hero is the first screen: start at once rather than waiting for the browser to go idle (that wait was most of the delay). */
-    void idle;
+    /*
+     * Wide screens start at once: the globe is the stage there, and the wait was
+     * most of the delay. A phone shows the words first with the globe under them,
+     * and 441 KB of map library plus about a second of main thread at 4x slowdown
+     * is not what its first seconds should go on (performance pass, 2026-11), so
+     * it waits for the load event and an idle moment.
+     */
+    const begin = () => {
+      if (window.innerWidth >= 1024) {
+        start();
+        return;
+      }
+      if (document.readyState === 'complete') idle(start);
+      else window.addEventListener('load', () => idle(start), { once: true });
+    };
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) {
         observer.disconnect();
-        start();
+        begin();
       }
     });
     observer.observe(element);

@@ -1315,6 +1315,48 @@
       clip-path: inset(0 0 0 0);
     }
   }
+  /*
+   * THE FIRST VIEW'S ENTRANCE: MOVEMENT, NEVER ABSENCE (performance pass, 2026-11).
+   *
+   * `.fade-up` starts at opacity 0, and an element at opacity 0 has not been
+   * painted as far as the browser's LCP is concerned, so the hero's largest text
+   * was reported only after its 420 ms delay and the fade. In Lighthouse's model
+   * that small gap is what separated a 1.2 s run from a 5.4 s one. `.rise-in`
+   * keeps the arrival and is legible from its first frame.
+   */
+  .rise-in {
+    animation: sq-rise-in 520ms var(--ease-out) both;
+    animation-delay: var(--d, 0ms);
+  }
+  @keyframes sq-rise-in {
+    from {
+      transform: translateY(10px);
+    }
+    to {
+      transform: none;
+    }
+  }
+  /*
+   * A section's words arriving as they scroll into view, in CSS, so the landing
+   * page no longer loads the animation library for one heading. Where scroll
+   * timelines are missing the words are simply there.
+   */
+  @supports (animation-timeline: view()) {
+    .scroll-reveal {
+      animation: sq-fade-up linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 45%;
+    }
+  }
+  /*
+   * A route's loading screen fills the sheet. Without this the footer sat in the
+   * viewport under a short skeleton and was pushed off when the page streamed in:
+   * 0.14-0.23 of layout shift on /decide, /trips/new and the shortlist, and the
+   * footer's sentence reported as the page's largest text.
+   */
+  [data-loading='true'] {
+    min-height: 100svh;
+  }
   .fade-up {
     animation: sq-fade-up 520ms var(--ease-out) both;
     animation-delay: var(--d, 0ms);

@@ -1,0 +1,1643 @@
+{
+ "environment": {
+  "machine": "Apple Silicon laptop, 10 cores, 64 GB, shared with parallel worktrees; load average ranged 11 to 115 during this pass",
+  "server": "next start, single Node 22 process, fixture providers, SQLite, loopback (no TLS, no CDN, no real network)",
+  "lighthouse": "13.6.0, default mobile profile (Moto G Power, Slow 4G 150 ms RTT 1.6 Mbps, 4x CPU) and desktop",
+  "tilesNote": "The landing globe reached live OpenFreeMap and AWS terrain hosts during Lighthouse runs, so transfer bytes on `/` and the trip page include third-party tiles and vary run to run.",
+  "fixtureNote": "The trip page renders a fixture-only badge that production does not, and it is sometimes the reported LCP element."
+ },
+ "build": "this branch; the Lighthouse rounds ran on the build before the final warm-up correction, which changes only the server hook in instrumentation.ts, so no client output differs",
+ "lighthouseInterleaved": {
+  "method": "three rounds alternating with the before build on one port; one run per page per round; medians",
+  "simulate": {
+   "landing": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1274,
+      1327,
+      1344
+     ],
+     "lcpMs": 1327,
+     "fcpMs": 1327,
+     "tbtMs": 265,
+     "cls": 0.015,
+     "speedIndexMs": 2874,
+     "performanceScore": 94,
+     "serverResponseMs": 18,
+     "totalTransferBytes": 8710603,
+     "requestCount": 88,
+     "mainThreadTotalMs": 6428,
+     "scriptBootupMs": 4607,
+     "lcpElements": [
+      "div.relative > div.pointer-events-none > div.pointer-events-auto > p.rise-in"
+     ],
+     "transferBytes": {
+      "document": 115954,
+      "fetch": 7706806,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 468763,
+      "stylesheet": 11791
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 61,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 17,
+      "stylesheet": 1
+     },
+     "mainThreadMs": {
+      "garbageCollection": 88,
+      "other": 1031,
+      "paintCompositeRender": 276,
+      "parseHTML": 30,
+      "scriptEvaluation": 4547,
+      "scriptParseCompile": 79,
+      "styleLayout": 293
+     }
+    },
+    "desktop": {
+     "runs": 3,
+     "lcpMsRuns": [
+      304,
+      316,
+      329
+     ],
+     "lcpMs": 316,
+     "fcpMs": 316,
+     "tbtMs": 0,
+     "cls": 0.0009,
+     "speedIndexMs": 1228,
+     "performanceScore": 99,
+     "serverResponseMs": 25,
+     "totalTransferBytes": 14782654,
+     "requestCount": 174,
+     "mainThreadTotalMs": 2488,
+     "scriptBootupMs": 1910,
+     "lcpElements": [
+      "div.relative > div.pointer-events-none > div.pointer-events-auto > p.rise-in"
+     ],
+     "transferBytes": {
+      "document": 115954,
+      "fetch": 13783823,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 468763,
+      "stylesheet": 11791
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 147,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 17,
+      "stylesheet": 1
+     },
+     "mainThreadMs": {
+      "garbageCollection": 46,
+      "other": 323,
+      "paintCompositeRender": 63,
+      "parseHTML": 8,
+      "scriptEvaluation": 1933,
+      "scriptParseCompile": 20,
+      "styleLayout": 90
+     }
+    }
+   },
+   "decide": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1283,
+      1251,
+      1248
+     ],
+     "lcpMs": 1251,
+     "fcpMs": 1251,
+     "tbtMs": 22,
+     "cls": 0,
+     "speedIndexMs": 1251,
+     "performanceScore": 100,
+     "serverResponseMs": 30,
+     "totalTransferBytes": 718154,
+     "requestCount": 30,
+     "mainThreadTotalMs": 565,
+     "scriptBootupMs": 191,
+     "lcpElements": [
+      "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3"
+     ],
+     "transferBytes": {
+      "document": 132860,
+      "fetch": 14764,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 168207
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 8,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 13
+     },
+     "mainThreadMs": {
+      "garbageCollection": 7,
+      "other": 196,
+      "paintCompositeRender": 11,
+      "parseHTML": 28,
+      "scriptEvaluation": 165,
+      "scriptParseCompile": 74,
+      "styleLayout": 76
+     }
+    },
+    "desktop": {
+     "runs": 3,
+     "lcpMsRuns": [
+      321,
+      315,
+      317
+     ],
+     "lcpMs": 317,
+     "fcpMs": 317,
+     "tbtMs": 0,
+     "cls": 0,
+     "speedIndexMs": 321,
+     "performanceScore": 100,
+     "serverResponseMs": 13,
+     "totalTransferBytes": 717439,
+     "requestCount": 30,
+     "mainThreadTotalMs": 146,
+     "scriptBootupMs": 2,
+     "lcpElements": [
+      "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3"
+     ],
+     "transferBytes": {
+      "document": 132860,
+      "fetch": 14049,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 168207
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 8,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 13
+     },
+     "mainThreadMs": {
+      "garbageCollection": 2,
+      "other": 56,
+      "paintCompositeRender": 3,
+      "parseHTML": 7,
+      "scriptEvaluation": 41,
+      "scriptParseCompile": 18,
+      "styleLayout": 20
+     }
+    }
+   },
+   "trip": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      5130,
+      1551,
+      5662
+     ],
+     "lcpMs": 5130,
+     "fcpMs": 1624,
+     "tbtMs": 538,
+     "cls": 0,
+     "speedIndexMs": 6086,
+     "performanceScore": 63,
+     "serverResponseMs": 1463,
+     "totalTransferBytes": 2527900,
+     "requestCount": 75,
+     "mainThreadTotalMs": 3856,
+     "scriptBootupMs": 2623,
+     "lcpElements": [
+      "(none reported)",
+      "div.mt-8 > div.min-w-0 > section.rise-in > p#trip-thesis"
+     ],
+     "transferBytes": {
+      "document": 194772,
+      "fetch": 1402429,
+      "font": 241606,
+      "image": 24051,
+      "manifest": 3392,
+      "other": 14805,
+      "script": 635054,
+      "stylesheet": 11791
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 39,
+      "font": 3,
+      "image": 2,
+      "manifest": 2,
+      "other": 3,
+      "script": 24,
+      "stylesheet": 1
+     },
+     "mainThreadMs": {
+      "garbageCollection": 43,
+      "other": 660,
+      "paintCompositeRender": 86,
+      "parseHTML": 56,
+      "scriptEvaluation": 2528,
+      "scriptParseCompile": 151,
+      "styleLayout": 307
+     }
+    },
+    "desktop": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1147,
+      364,
+      395
+     ],
+     "lcpMs": 395,
+     "fcpMs": 375,
+     "tbtMs": 0,
+     "cls": 0.0001,
+     "speedIndexMs": 1318,
+     "performanceScore": 97,
+     "serverResponseMs": 220,
+     "totalTransferBytes": 7167617,
+     "requestCount": 117,
+     "mainThreadTotalMs": 1039,
+     "scriptBootupMs": 624,
+     "lcpElements": [
+      "div.mt-8 > div.min-w-0 > section.rise-in > p#trip-thesis",
+      "div.relative > h1.display-stage > span.mask-rise > span"
+     ],
+     "transferBytes": {
+      "document": 194772,
+      "fetch": 6042145,
+      "font": 241606,
+      "image": 24051,
+      "manifest": 3392,
+      "other": 14805,
+      "script": 635054,
+      "stylesheet": 11791
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 81,
+      "font": 3,
+      "image": 2,
+      "manifest": 2,
+      "other": 3,
+      "script": 24,
+      "stylesheet": 1
+     },
+     "mainThreadMs": {
+      "garbageCollection": 11,
+      "other": 191,
+      "paintCompositeRender": 27,
+      "parseHTML": 13,
+      "scriptEvaluation": 676,
+      "scriptParseCompile": 37,
+      "styleLayout": 94
+     }
+    }
+   }
+  },
+  "devtoolsAppliedThrottling": {
+   "landing": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1138,
+      1174,
+      1064
+     ],
+     "lcpMs": 1138,
+     "fcpMs": 1138,
+     "tbtMs": 376,
+     "cls": 0.0155,
+     "speedIndexMs": 1426,
+     "performanceScore": 91,
+     "serverResponseMs": 27,
+     "totalTransferBytes": 3722650,
+     "requestCount": 177,
+     "mainThreadTotalMs": 15134,
+     "scriptBootupMs": 9376,
+     "lcpElements": [
+      "div.relative > div.pointer-events-none > div.pointer-events-auto > p.rise-in"
+     ],
+     "transferBytes": {
+      "document": 115954,
+      "fetch": 2723819,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 468763,
+      "stylesheet": 11791
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 150,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 17,
+      "stylesheet": 1
+     },
+     "mainThreadMs": {
+      "garbageCollection": 153,
+      "other": 3255,
+      "paintCompositeRender": 1544,
+      "parseHTML": 43,
+      "scriptEvaluation": 9313,
+      "scriptParseCompile": 93,
+      "styleLayout": 766
+     }
+    }
+   },
+   "decide": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      1011,
+      1033,
+      984
+     ],
+     "lcpMs": 1011,
+     "fcpMs": 1011,
+     "tbtMs": 74,
+     "cls": 0.0012,
+     "speedIndexMs": 1129,
+     "performanceScore": 100,
+     "serverResponseMs": 27,
+     "totalTransferBytes": 717313,
+     "requestCount": 30,
+     "mainThreadTotalMs": 1488,
+     "scriptBootupMs": 920,
+     "lcpElements": [
+      "div.mx-auto > div.grid > div.min-w-0 > h1.mt-3"
+     ],
+     "transferBytes": {
+      "document": 132860,
+      "fetch": 13923,
+      "font": 392053,
+      "image": 0,
+      "manifest": 1696,
+      "other": 8574,
+      "script": 168207
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 8,
+      "font": 4,
+      "image": 1,
+      "manifest": 1,
+      "other": 2,
+      "script": 13
+     },
+     "mainThreadMs": {
+      "garbageCollection": 14,
+      "other": 298,
+      "paintCompositeRender": 27,
+      "parseHTML": 44,
+      "scriptEvaluation": 868,
+      "scriptParseCompile": 76,
+      "styleLayout": 134
+     }
+    }
+   },
+   "trip": {
+    "mobile": {
+     "runs": 3,
+     "lcpMsRuns": [
+      4466,
+      3448,
+      2942
+     ],
+     "lcpMs": 3448,
+     "fcpMs": 3448,
+     "tbtMs": 2035,
+     "cls": 0.1286,
+     "speedIndexMs": 10181,
+     "performanceScore": 43,
+     "serverResponseMs": 2877,
+     "totalTransferBytes": 2525265,
+     "requestCount": 75,
+     "mainThreadTotalMs": 7512,
+     "scriptBootupMs": 4685,
+     "lcpElements": [
+      "(none reported)",
+      "body.flex > main#main > p.mx-auto > span.inline-flex"
+     ],
+     "transferBytes": {
+      "document": 194772,
+      "fetch": 1399794,
+      "font": 241606,
+      "image": 24051,
+      "manifest": 3392,
+      "other": 14805,
+      "script": 635054,
+      "stylesheet": 11791
+     },
+     "requestCounts": {
+      "document": 1,
+      "fetch": 39,
+      "font": 3,
+      "image": 2,
+      "manifest": 2,
+      "other": 3,
+      "script": 24,
+      "stylesheet": 1
+     },
+     "mainThreadMs": {
+      "garbageCollection": 103,
+      "other": 1591,
+      "paintCompositeRender": 137,
+      "parseHTML": 85,
+      "scriptEvaluation": 4619,
+      "scriptParseCompile": 163,
+      "styleLayout": 516
+     }
+    }
+   }
+  }
+ },
+ "experiments": {
+  "inlineCssAppliedThrottling": {
+   "landingLcpMs": {
+    "withoutInline": [
+     1977,
+     1969,
+     1997
+    ],
+    "inline": [
+     1030,
+     1044,
+     1013
+    ]
+   },
+   "decideLcpMs": {
+    "withoutInline": [
+     1905,
+     1907,
+     1956
+    ],
+    "inline": [
+     967,
+     962,
+     974
+    ]
+   },
+   "htmlGzipBytes": {
+    "landing": [
+     12615,
+     113880
+    ],
+    "decide": [
+     30746,
+     131105
+    ],
+    "trip": [
+     89155,
+     192875
+    ]
+   },
+   "clientNavigationRscGzipBytes": {
+    "landing": [
+     8750,
+     8746
+    ],
+    "decide": [
+     15796,
+     15796
+    ]
+   }
+  },
+  "tripPageWithRouteWarmedSimulate": "After 3940, 5136, 1557 ms; before 1701, 1889, 1671 ms",
+  "tripPageWithoutItineraryLoadingSimulate": "After 5159, 4849, 1605 ms; before 5161, 1737, 1717 ms; change reverted"
+ },
+ "routeBundles": {
+  "at": "2026-11-09T16:51:01.163Z",
+  "pages": {
+   "landing": {
+    "status": 200,
+    "htmlBytes": 663910,
+    "htmlGzipBytes": 113880,
+    "scripts": 12,
+    "scriptRawBytes": 530234,
+    "scriptGzipBytes": 163287,
+    "styles": 0,
+    "styleRawBytes": 0,
+    "styleGzipBytes": 0,
+    "fontPreloads": 2,
+    "fontPreloadBytes": 197592,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "3vcynos_lba2u.js",
+      "raw": 34873,
+      "gzip": 11726,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "2at7qonbk7p0d.js",
+      "raw": 29991,
+      "gzip": 8127,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "401p_0xfqsdh1.js",
+      "raw": 17446,
+      "gzip": 6995,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0tm-ssrhon31_.js",
+      "raw": 16800,
+      "gzip": 6818,
+      "libraries": [
+       "maplibre"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "turbopack-2c3mg3r-05n1w.js",
+      "raw": 11255,
+      "gzip": 4390,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "decide": {
+    "status": 200,
+    "htmlBytes": 691463,
+    "htmlGzipBytes": 131105,
+    "scripts": 13,
+    "scriptRawBytes": 493499,
+    "scriptGzipBytes": 151223,
+    "styles": 0,
+    "styleRawBytes": 0,
+    "styleGzipBytes": 0,
+    "fontPreloads": 2,
+    "fontPreloadBytes": 197592,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "2at7qonbk7p0d.js",
+      "raw": 29991,
+      "gzip": 8127,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "401p_0xfqsdh1.js",
+      "raw": 17446,
+      "gzip": 6995,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "turbopack-2c3mg3r-05n1w.js",
+      "raw": 11255,
+      "gzip": 4390,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "36xxtwl1h7ne2.js",
+      "raw": 13268,
+      "gzip": 3693,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "2sn43t3fzxp9f.js",
+      "raw": 9519,
+      "gzip": 3692,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "tripNew": {
+    "status": 200,
+    "htmlBytes": 637933,
+    "htmlGzipBytes": 109897,
+    "scripts": 16,
+    "scriptRawBytes": 851579,
+    "scriptGzipBytes": 263039,
+    "styles": 0,
+    "styleRawBytes": 0,
+    "styleGzipBytes": 0,
+    "fontPreloads": 2,
+    "fontPreloadBytes": 197592,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "3vqovdi4-zc0y.js",
+      "raw": 131339,
+      "gzip": 43925,
+      "libraries": [
+       "motion"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "2j4tkoyl6rcu0.js",
+      "raw": 112069,
+      "gzip": 31823,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "314vlcdze78x-.js",
+      "raw": 53774,
+      "gzip": 15615,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "1sksk574k4td6.js",
+      "raw": 35522,
+      "gzip": 12905,
+      "libraries": [
+       "maplibre"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0zgzgi58g3xwp.js",
+      "raw": 30795,
+      "gzip": 10336,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "shortlist": {
+    "status": 200,
+    "htmlBytes": 826459,
+    "htmlGzipBytes": 150024,
+    "scripts": 15,
+    "scriptRawBytes": 696856,
+    "scriptGzipBytes": 215664,
+    "styles": 0,
+    "styleRawBytes": 0,
+    "styleGzipBytes": 0,
+    "fontPreloads": 2,
+    "fontPreloadBytes": 197592,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "2j4tkoyl6rcu0.js",
+      "raw": 112069,
+      "gzip": 31823,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "02g078g3gxbtn.js",
+      "raw": 77430,
+      "gzip": 27425,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0wmdorlot2hvo.js",
+      "raw": 27818,
+      "gzip": 8733,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "2at7qonbk7p0d.js",
+      "raw": 29991,
+      "gzip": 8127,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "401p_0xfqsdh1.js",
+      "raw": 17446,
+      "gzip": 6995,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "1tmtskrdszpt5.js",
+      "raw": 16301,
+      "gzip": 6568,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   },
+   "trip": {
+    "status": 200,
+    "htmlBytes": 1302030,
+    "htmlGzipBytes": 192875,
+    "scripts": 20,
+    "scriptRawBytes": 1047027,
+    "scriptGzipBytes": 318915,
+    "styles": 0,
+    "styleRawBytes": 0,
+    "styleGzipBytes": 0,
+    "fontPreloads": 2,
+    "fontPreloadBytes": 197592,
+    "largestScripts": [
+     {
+      "path": "2pfqj8grjvbpd.js",
+      "raw": 229817,
+      "gzip": 71812,
+      "libraries": [
+       "react",
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "3ojz0rkejwi9s.js",
+      "raw": 160722,
+      "gzip": 44540,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "3vqovdi4-zc0y.js",
+      "raw": 131339,
+      "gzip": 43925,
+      "libraries": [
+       "motion"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "1erwrf7515rt5.js",
+      "raw": 131536,
+      "gzip": 35659,
+      "libraries": [
+       "nextRuntime"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "2j4tkoyl6rcu0.js",
+      "raw": 112069,
+      "gzip": 31823,
+      "libraries": [
+       "zod"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "22rvingaoga4p.js",
+      "raw": 35284,
+      "gzip": 11750,
+      "libraries": [
+       "maplibre"
+      ],
+      "serverOnly": []
+     },
+     {
+      "path": "0-0gza0jq7umq.js",
+      "raw": 40564,
+      "gzip": 11063,
+      "libraries": [],
+      "serverOnly": []
+     },
+     {
+      "path": "0zgzgi58g3xwp.js",
+      "raw": 30795,
+      "gzip": 10336,
+      "libraries": [],
+      "serverOnly": []
+     }
+    ]
+   }
+  },
+  "allChunks": {
+   "0-0gza0jq7umq.js": {
+    "raw": 40564,
+    "gzip": 11063,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "02g078g3gxbtn.js": {
+    "raw": 77430,
+    "gzip": 27425,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "05aqov08m3ujw.js": {
+    "raw": 691,
+    "gzip": 434,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "09w4c8rmqwurt.js": {
+    "raw": 22427,
+    "gzip": 7133,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0_rdvd0p0d6hf.js": {
+    "raw": 17919,
+    "gzip": 6311,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0cz1d0mv5g_q7.js": {
+    "raw": 112594,
+    "gzip": 39520,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0d2sfx2n2fbei.js": {
+    "raw": 31590,
+    "gzip": 11816,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "0j-mwpm50l08k.js": {
+    "raw": 2241,
+    "gzip": 1099,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0kyfr75k9npzi.js": {
+    "raw": 21385,
+    "gzip": 7999,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "0r1v-j3ceuj20.js": {
+    "raw": 435,
+    "gzip": 324,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0tm-ssrhon31_.js": {
+    "raw": 16800,
+    "gzip": 6818,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "0uaz6vez58kra.js": {
+    "raw": 3168,
+    "gzip": 1498,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0wmdorlot2hvo.js": {
+    "raw": 27818,
+    "gzip": 8733,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0x5dsg_zpbny8.js": {
+    "raw": 13827,
+    "gzip": 3512,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0zefgrqv20jjl.js": {
+    "raw": 16172,
+    "gzip": 4997,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "0zgzgi58g3xwp.js": {
+    "raw": 30795,
+    "gzip": 10336,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "120o-xbqv4di4.js": {
+    "raw": 31482,
+    "gzip": 11669,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "14ssg7nibyzr4.js": {
+    "raw": 4072,
+    "gzip": 1571,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1_xb_gk2qh6dq.js": {
+    "raw": 7819,
+    "gzip": 3310,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1eht6slqnxjqd.js": {
+    "raw": 22612,
+    "gzip": 8658,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1erwrf7515rt5.js": {
+    "raw": 131536,
+    "gzip": 35659,
+    "libraries": [
+     "nextRuntime"
+    ],
+    "serverOnly": []
+   },
+   "1f0mq0833vr4g.js": {
+    "raw": 3090,
+    "gzip": 1457,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1hgnyvy20zta5.js": {
+    "raw": 1863,
+    "gzip": 915,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1k3sa5v024229.js": {
+    "raw": 52322,
+    "gzip": 19074,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "1kisdzut3q72g.js": {
+    "raw": 90926,
+    "gzip": 26933,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1pq-i8qtr1rpz.js": {
+    "raw": 33392,
+    "gzip": 12354,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "1rvt_zvjd9p8i.js": {
+    "raw": 23706,
+    "gzip": 7756,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "1sksk574k4td6.js": {
+    "raw": 35522,
+    "gzip": 12905,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "1tmtskrdszpt5.js": {
+    "raw": 16301,
+    "gzip": 6568,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "22rvingaoga4p.js": {
+    "raw": 35284,
+    "gzip": 11750,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "22tz3jy4hdw13.js": {
+    "raw": 99839,
+    "gzip": 28189,
+    "libraries": [],
+    "serverOnly": [
+     "curatedCatalog"
+    ]
+   },
+   "2at7qonbk7p0d.js": {
+    "raw": 29991,
+    "gzip": 8127,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2av3e21uvd6-2.js": {
+    "raw": 309,
+    "gzip": 246,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2axkpupkt7gpi.js": {
+    "raw": 40355,
+    "gzip": 13857,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2hah7js84phd6.js": {
+    "raw": 3139,
+    "gzip": 1491,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2hv7zvuwnk_30.js": {
+    "raw": 12597,
+    "gzip": 3845,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2izrh9tm31vq_.js": {
+    "raw": 19253,
+    "gzip": 5172,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2j4tkoyl6rcu0.js": {
+    "raw": 112069,
+    "gzip": 31823,
+    "libraries": [
+     "zod"
+    ],
+    "serverOnly": []
+   },
+   "2m_tu33cn8atp.js": {
+    "raw": 2443,
+    "gzip": 1375,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2ow393y6ee8-b.js": {
+    "raw": 17153,
+    "gzip": 5061,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2pfqj8grjvbpd.js": {
+    "raw": 229817,
+    "gzip": 71812,
+    "libraries": [
+     "react",
+     "nextRuntime"
+    ],
+    "serverOnly": []
+   },
+   "2sn43t3fzxp9f.js": {
+    "raw": 9519,
+    "gzip": 3692,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2so2t886-uh4k.js": {
+    "raw": 2976,
+    "gzip": 1413,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "2ui59dad3q2j5.js": {
+    "raw": 37934,
+    "gzip": 12905,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3-szm83u6r5x6.js": {
+    "raw": 22472,
+    "gzip": 6928,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "314vlcdze78x-.js": {
+    "raw": 53774,
+    "gzip": 15615,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "32uyvs6173lds.js": {
+    "raw": 39838,
+    "gzip": 13580,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "336g-nib60euo.js": {
+    "raw": 9015,
+    "gzip": 3000,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "35tzrii_w4-vb.js": {
+    "raw": 26010,
+    "gzip": 9040,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "36xxtwl1h7ne2.js": {
+    "raw": 13268,
+    "gzip": 3693,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3fk8bthgp4zxe.js": {
+    "raw": 251344,
+    "gzip": 70189,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3lk3fkk7rjl66.js": {
+    "raw": 15315,
+    "gzip": 5457,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3mxwe6najg9t7.js": {
+    "raw": 31710,
+    "gzip": 10467,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3nob9m9u-8xqo.js": {
+    "raw": 5610,
+    "gzip": 2042,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3ojz0rkejwi9s.js": {
+    "raw": 160722,
+    "gzip": 44540,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3vcynos_lba2u.js": {
+    "raw": 34873,
+    "gzip": 11726,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3vqovdi4-zc0y.js": {
+    "raw": 131339,
+    "gzip": 43925,
+    "libraries": [
+     "motion"
+    ],
+    "serverOnly": []
+   },
+   "3w36d3l32qbhn.js": {
+    "raw": 27365,
+    "gzip": 9244,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "3w_a43cfsv-xu.js": {
+    "raw": 30837,
+    "gzip": 11569,
+    "libraries": [
+     "maplibre"
+    ],
+    "serverOnly": []
+   },
+   "3wth-d2dbf2gm.js": {
+    "raw": 11236,
+    "gzip": 3523,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "401p_0xfqsdh1.js": {
+    "raw": 17446,
+    "gzip": 6995,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "43ivhgwh-0xjj.js": {
+    "raw": 3066,
+    "gzip": 1456,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "43lz_5_s_6_wu.js": {
+    "raw": 31079,
+    "gzip": 11585,
+    "libraries": [
+     "react"
+    ],
+    "serverOnly": []
+   },
+   "43z02rjoi2ogi.js": {
+    "raw": 19954,
+    "gzip": 7010,
+    "libraries": [],
+    "serverOnly": []
+   },
+   "turbopack-2c3mg3r-05n1w.js": {
+    "raw": 11255,
+    "gzip": 4390,
+    "libraries": [],
+    "serverOnly": []
+   }
+  },
+  "serverOnlyCodeInClientChunks": [
+   {
+    "file": "22tz3jy4hdw13.js",
+    "markers": [
+     "curatedCatalog"
+    ],
+    "gzip": 28189
+   }
+  ],
+  "totalClientJs": {
+   "files": 65,
+   "raw": 2490705,
+   "gzip": 794579
+  }
+ },
+ "serverTimings": {
+  "firstRequestAfterHealthPasses": {
+   "at": "2026-11-09T17:47:45.065Z",
+   "map": "openfreemap",
+   "repeats": 10,
+   "note": "One fresh process per target. cold = request 1, warm = request 10; loopback, no browser.",
+   "targets": {
+    "landing": {
+     "status": 200,
+     "bytes": 663910,
+     "bootToListenMs": 1993,
+     "firstHealthAnswerMs": 6460,
+     "coldMs": 450.5,
+     "coldTtfbMs": 425.7,
+     "secondMs": 65.2,
+     "warmMs": 210.1,
+     "warmTtfbMs": 41.8,
+     "warmMedianMs": 50.6,
+     "afterIdleMs": 46.8,
+     "allMs": [
+      450.5,
+      65.2,
+      127.4,
+      48.4,
+      37.5,
+      44.7,
+      113.6,
+      50.6,
+      37.5,
+      210.1
+     ],
+     "rssAtBootMb": 460,
+     "rssAfterMb": 541
+    },
+    "decide": {
+     "status": 200,
+     "bytes": 691463,
+     "bootToListenMs": 792,
+     "firstHealthAnswerMs": 7812,
+     "coldMs": 1354.9,
+     "coldTtfbMs": 1212,
+     "secondMs": 343.3,
+     "warmMs": 276.9,
+     "warmTtfbMs": 177.7,
+     "warmMedianMs": 39.7,
+     "afterIdleMs": 42.8,
+     "allMs": [
+      1354.9,
+      343.3,
+      213.8,
+      267.2,
+      101.6,
+      37.1,
+      178.9,
+      38.4,
+      39.7,
+      276.9
+     ],
+     "rssAtBootMb": 460,
+     "rssAfterMb": 532
+    },
+    "interviewStep": {
+     "status": 200,
+     "bytes": 1149,
+     "bootToListenMs": 913,
+     "firstHealthAnswerMs": 7543,
+     "coldMs": 4018.4,
+     "coldTtfbMs": 4016.8,
+     "secondMs": 2214.4,
+     "warmMs": 901.3,
+     "warmTtfbMs": 890.6,
+     "warmMedianMs": 1658.1,
+     "afterIdleMs": 2581.9,
+     "allMs": [
+      4018.4,
+      2214.4,
+      1744.8,
+      1719.4,
+      1592.8,
+      1658.1,
+      1711.4,
+      2013.6,
+      1495.5,
+      901.3
+     ],
+     "rssAtBootMb": 461,
+     "rssAfterMb": 929
+    }
+   },
+   "warmProcess": {
+    "rssAtBootMb": 93,
+    "rssAfterAllTargetsMb": 1051
+   }
+  }
+ },
+ "loadTest": {
+  "at": "2026-11-09T17:51:25.988Z",
+  "connections": 30,
+  "durationSeconds": 30,
+  "note": "Generator and server on one machine, loopback, HTTP/1.1 keep-alive, fixture providers. Not a production forecast.",
+  "targets": {
+   "landing": {
+    "requests": 666,
+    "requestsPerSecond": 22.2,
+    "latencyMs": {
+     "p50": 1229,
+     "p90": 2000,
+     "p97_5": 2414,
+     "p99": 2420,
+     "max": 2447,
+     "mean": 1323
+    },
+    "status": {
+     "ok2xx": 666,
+     "redirects3xx": 0,
+     "client4xx": 0,
+     "server5xx": 0
+    },
+    "errors": 0,
+    "timeouts": 0,
+    "megabytesPerSecond": 14.77,
+    "serverCpuPercent": {
+     "median": 33,
+     "max": 92.2
+    },
+    "serverRssMb": {
+     "before": 464,
+     "peak": 622,
+     "after": 563
+    }
+   },
+   "trip": {
+    "requests": 141,
+    "requestsPerSecond": 4.7,
+    "latencyMs": {
+     "p50": 5594,
+     "p90": 6804,
+     "p97_5": 9704,
+     "p99": 10850,
+     "max": 12404,
+     "mean": 5842.1
+    },
+    "status": {
+     "ok2xx": 141,
+     "redirects3xx": 0,
+     "client4xx": 0,
+     "server5xx": 0
+    },
+    "errors": 0,
+    "timeouts": 0,
+    "megabytesPerSecond": 6.13,
+    "serverCpuPercent": {
+     "median": 41,
+     "max": 86.9
+    },
+    "serverRssMb": {
+     "before": 578,
+     "peak": 670,
+     "after": 635
+    }
+   },
+   "interviewStep": {
+    "requests": 24,
+    "requestsPerSecond": 0.8,
+    "latencyMs": {
+     "p50": 17902,
+     "p90": 28751,
+     "p97_5": 29614,
+     "p99": 29614,
+     "max": 29614,
+     "mean": 17664.5
+    },
+    "status": {
+     "ok2xx": 24,
+     "redirects3xx": 0,
+     "client4xx": 0,
+     "server5xx": 0
+    },
+    "errors": 6,
+    "timeouts": 6,
+    "megabytesPerSecond": 0,
+    "serverCpuPercent": {
+     "median": 38.6,
+     "max": 136.3
+    },
+    "serverRssMb": {
+     "before": 644,
+     "peak": 1208,
+     "after": 1181
+    }
+   }
+  }
+ },
+ "sqliteOnTripPage": {
+  "prepares": 37,
+  "prepareMs": 1.47,
+  "statements": 37,
+  "statementMs": 1.66,
+  "execs": 0,
+  "execMs": 0,
+  "distinctSql": 25,
+  "top": [
+   {
+    "n": 3,
+    "ms": 0.49,
+    "sql": "SELECT id, payload_json FROM compiled_regions WHERE id = ?"
+   },
+   {
+    "n": 1,
+    "ms": 0.22,
+    "sql": "SELECT * FROM itinerary_days WHERE trip_id = ? ORDER BY day_number"
+   },
+   {
+    "n": 4,
+    "ms": 0.13,
+    "sql": "SELECT trip_id, mode, destination_query, resolution_json, selected_candidate_id, clarifications_json, scope_js"
+   },
+   {
+    "n": 2,
+    "ms": 0.13,
+    "sql": "SELECT * FROM trips WHERE id = ?"
+   },
+   {
+    "n": 3,
+    "ms": 0.11,
+    "sql": "SELECT * FROM traveler_profiles WHERE trip_id = ?"
+   },
+   {
+    "n": 2,
+    "ms": 0.09,
+    "sql": "SELECT trip_id, draft_json, model_json, created_at FROM trip_drafts WHERE trip_id = ?"
+   },
+   {
+    "n": 1,
+    "ms": 0.08,
+    "sql": "SELECT payload_json FROM trip_intelligence WHERE trip_id = ?"
+   },
+   {
+    "n": 1,
+    "ms": 0.08,
+    "sql": "SELECT * FROM itineraries WHERE trip_id = ?"
+   },
+   {
+    "n": 1,
+    "ms": 0.06,
+    "sql": "SELECT * FROM itinerary_items WHERE trip_id = ? ORDER BY day_number, position"
+   },
+   {
+    "n": 1,
+    "ms": 0.05,
+    "sql": "SELECT payload_json FROM weather_snapshots WHERE trip_id = ? AND scope_key = ?"
+   },
+   {
+    "n": 1,
+    "ms": 0.03,
+    "sql": "SELECT decision_key, payload_json, decided_by, decided_at FROM trip_decisions WHERE trip_id = ? ORDER BY decid"
+   },
+   {
+    "n": 2,
+    "ms": 0.03,
+    "sql": "SELECT owner_token, user_id FROM trips WHERE id = ?"
+   }
+  ]
+ }
+}

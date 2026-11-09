@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { ProductChrome } from '@/components/ProductChrome';
 import { buttonClass } from '@/components/ui';
 import { AtlasGlobe } from '@/components/landing/AtlasGlobe';
-import { HomeReveal } from '@/components/landing/HomeMotion';
 import { HowSheet } from '@/components/landing/HowSheet';
 import { resolveVectorBasemap } from '@/components/map-adapter';
 import { chromeAccount } from '@/lib/auth/chrome';
@@ -13,7 +12,7 @@ import { currentUserId } from '@/lib/auth/session';
 import { sessionToken } from '@/lib/net/caller';
 import { dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
 import type { DashboardCardRow } from './trips/TripCard';
-import { TripList } from './TripList';
+import { LazyTripList } from './LazyTripList';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,7 +100,7 @@ export default async function HomePage() {
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[2] hidden bg-[linear-gradient(90deg,rgb(8_20_26/0.94)_0%,rgb(8_20_26/0.72)_34%,transparent_62%)] lg:block" />
           <div className="pointer-events-none relative z-[4] mx-auto w-full max-w-7xl px-5 pt-9 pb-6 sm:px-8 sm:pt-16 lg:pt-24 lg:pb-40">
             <div className="pointer-events-auto max-w-[38rem]">
-              <p className="sheet-label fade-up text-[var(--color-glacier)]">Trip planning that fits how you travel</p>
+              <p className="sheet-label rise-in text-[var(--color-glacier)]">Trip planning that fits how you travel</p>
               <h1 id="home-heading" className="mt-5 font-display text-[clamp(3.5rem,2rem+7vw,8.25rem)] leading-[0.88] font-[380] tracking-[-0.045em] text-[var(--color-atlas-ink)]">
                 <span className="mask-rise">
                   <span style={{ ['--d' as string]: '60ms' }}>Take the</span>
@@ -113,13 +112,13 @@ export default async function HomePage() {
                   </span>
                 </span>
               </h1>
-              <p className="fade-up mt-5 max-w-[27rem] text-base leading-relaxed sm:mt-6 sm:text-lg text-[var(--color-atlas-muted)]" style={{ ['--d' as string]: '420ms' }}>
+              <p className="rise-in mt-5 max-w-[27rem] text-base leading-relaxed sm:mt-6 sm:text-lg text-[var(--color-atlas-muted)]" style={{ ['--d' as string]: '60ms' }}>
                 Name a place. Sidequest finds the famous stops and the quiet ones, routes the days, and checks them before you see them.
               </p>
-              <div className="fade-up" style={{ ['--d' as string]: '540ms' }}>
+              <div className="rise-in" style={{ ['--d' as string]: '120ms' }}>
                 <HomeDestinationForm />
               </div>
-              <ul className="fade-up mt-5 flex flex-wrap gap-x-6 gap-y-1 text-sm" style={{ ['--d' as string]: '640ms' }} aria-label="Two ways to start">
+              <ul className="rise-in mt-5 flex flex-wrap gap-x-6 gap-y-1 text-sm" style={{ ['--d' as string]: '180ms' }} aria-label="Two ways to start">
                 <li>
                   <Link href="/trips/new" className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--color-atlas-ink)] underline decoration-white/25 underline-offset-[6px] hover:decoration-[var(--color-flare)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2" data-testid="home-new-trip">
                     I know where I want to go
@@ -165,7 +164,7 @@ export default async function HomePage() {
             </Link>
           </div>
           <div className="mt-6">
-            <TripList rows={rows} />
+            <LazyTripList rows={rows} />
           </div>
         </section>
       ) : null}
@@ -174,12 +173,12 @@ export default async function HomePage() {
 
       <section className="survey-night relative isolate overflow-hidden" aria-labelledby="cta-heading">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 px-5 py-20 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
-          <HomeReveal>
+          <div className="scroll-reveal">
             <p className="sheet-label text-[var(--color-glacier)]">Your turn</p>
             <h2 id="cta-heading" className="mt-4 max-w-2xl font-display text-[clamp(2.4rem,1.6rem+3vw,4.5rem)] leading-[0.95] font-[340] tracking-[-0.035em] text-[var(--color-atlas-ink)]">
               Where are you <em className="font-[300]">thinking</em> of going?
             </h2>
-          </HomeReveal>
+          </div>
           <div className="w-full max-w-md">
             <HomeDestinationForm compact />
           </div>
