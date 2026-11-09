@@ -100,12 +100,12 @@ railway ssh -p diligent-celebration -e production -s @sidequest/web -- \
 
 `backup-db.mjs` uses SQLite's online backup API, which is safe while the app is writing, unlike `cp`. It then runs `integrity_check` and prints row counts for the traveller tables. Copy the file off the volume before relying on it.
 
-**Restore:**
+**Restore** (`apps/web/scripts/restore-db.mjs`, tested by `lib/db/backup-restore.test.ts`):
 1. Take a backup of the current state first.
-2. Stop the service (scale to 0, or remove the start command).
-3. Replace `/data/sidequest.db` with the backup, and delete `sidequest.db-wal` and `sidequest.db-shm`.
+2. Stop the service (scale to 0, or remove the start command). The script refuses while anything still has the database open.
+3. `node apps/web/scripts/restore-db.mjs <backup.db> /data/sidequest.db`. It verifies the backup first, moves the current database and its `-wal`/`-shm` aside to `sidequest.db.pre-restore-<stamp>`, copies with SQLite's backup API, re-verifies row counts in place, and puts the old file back if any check fails.
 4. Start the service.
-5. Check `/api/readiness` reports database `ready`.
+5. Check `/api/readiness` reports database `ready`, then delete the `.pre-restore-*` copy.
 
 The round trip was tested locally on 2026-10-06: backup, row counts equal, `integrity_check` ok, production build served from the restored file.
 

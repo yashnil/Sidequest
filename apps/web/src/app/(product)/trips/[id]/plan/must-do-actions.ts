@@ -36,6 +36,10 @@ export async function decideMustDoAction(
     const refusal = await tripAccessRefusal(tripId);
     if (refusal) return { ok: false, error: refusal };
 
+    /* RELEASE PASS — the composer is re-read against max(120)/max(200): one oversized value here made every later read of it null. */
+    if (typeof requestId !== 'string' || requestId.length < 1 || requestId.length > 120 || (chosenId !== undefined && (typeof chosenId !== 'string' || chosenId.length > 200))) {
+      return { ok: false, error: 'That is not something we can record.' };
+    }
     const parsedKind = mustDoDecisionKindSchema.safeParse(kind);
     if (!parsedKind.success) return { ok: false, error: 'That is not something we can record.' };
     if (parsedKind.data === 'chose' && !chosenId) {

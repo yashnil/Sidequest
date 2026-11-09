@@ -207,20 +207,20 @@ const PRESSES: readonly [name: keyof Actions, press: (actions: Actions, id: stri
 ];
 
 const STRANGERS: readonly [label: string, arrive: () => void][] = [
-  ['a different browser', () => jar.set('sidequest_session', 'session:theirs')],
+  ['a different browser', () => jar.set('sidequest_session', 'session-theirs')],
   ['a browser with no cookie at all', () => jar.clear()],
 ];
 
 describe('a decision session belongs to the browser that started it', () => {
   it('stamps the starting browser onto the session row', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     const { decisionOwnerToken } = await import('@/lib/db/decision-repository');
-    expect(decisionOwnerToken(id)).toBe('session:mine');
+    expect(decisionOwnerToken(id)).toBe('session-mine');
   });
 
   describe.each(STRANGERS)('from %s', (_label, arrive) => {
     it.each(PRESSES)('%s is refused as a missing session, before any work, and writes nothing', async (_name, press) => {
-      const id = await sessionStartedBy('session:mine');
+      const id = await sessionStartedBy('session-mine');
       const pickId = await withStoredShortlist(id);
       const before = await snapshot(id);
 
@@ -237,10 +237,10 @@ describe('a decision session belongs to the browser that started it', () => {
   });
 
   it('refuses adoption from a different browser: no trip is minted, the session stays open for its owner', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     const pickId = await withStoredShortlist(id);
 
-    jar.set('sidequest_session', 'session:theirs');
+    jar.set('sidequest_session', 'session-theirs');
     const { adoptAdvisorPickAction } = await import('./advisor-actions');
     expect((await adoptAdvisorPickAction(id, pickId)).error).toBe(REFUSAL);
 
@@ -249,7 +249,7 @@ describe('a decision session belongs to the browser that started it', () => {
 
     // The control: the very same press from the owner mints exactly one trip,
     // under the owner's cookie, and closes the session.
-    jar.set('sidequest_session', 'session:mine');
+    jar.set('sidequest_session', 'session-mine');
     const digest = await adoptAdvisorPickAction(id, pickId).then(
       (result) => expect.fail(`the owner's adoption returned instead of redirecting: ${result.error}`),
       redirected,
@@ -258,18 +258,18 @@ describe('a decision session belongs to the browser that started it', () => {
     expect(tripId).toBeTruthy();
     expect(digest).toContain(`/trips/${tripId}/plan`);
     const { getDb } = await import('@/lib/db/client');
-    expect(getDb().prepare('SELECT id, owner_token FROM trips').all()).toEqual([{ id: tripId, owner_token: 'session:mine' }]);
+    expect(getDb().prepare('SELECT id, owner_token FROM trips').all()).toEqual([{ id: tripId, owner_token: 'session-mine' }]);
   });
 
   it('does not let a stranger learn whether the deployment is busy, or drain the owner’s allowance', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     await withStoredShortlist(id);
     const { buildAdvisorShortlistAction, refineAdvisorAction, resolveAdvisorImageryAction } = await import('./advisor-actions');
     const { ACTION_RATE_RULES } = await import('@/lib/net/rate-limit');
 
     // Ownership answers before the fence: however often a stranger presses, the
     // answer is the missing-session sentence and never the throttling one.
-    jar.set('sidequest_session', 'session:theirs');
+    jar.set('sidequest_session', 'session-theirs');
     for (let i = 0; i < ACTION_RATE_RULES.decide_shortlist.capacity * 3; i += 1) {
       for (const result of [await buildAdvisorShortlistAction(id), await refineAdvisorAction(id, { reset: true }), await resolveAdvisorImageryAction(id)]) {
         expect(result.error).toBe(REFUSAL);
@@ -277,14 +277,14 @@ describe('a decision session belongs to the browser that started it', () => {
     }
 
     // And the owner's next press is still served: it reaches the (stubbed) ranking.
-    jar.set('sidequest_session', 'session:mine');
+    jar.set('sidequest_session', 'session-mine');
     const mine = await buildAdvisorShortlistAction(id);
     expect(mine.error).not.toMatch(THROTTLED);
     expect(work.ranking).toBe(1);
   });
 
   it('still lets the owning browser act on its own session — the control', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     const { getDecisionSession } = await import('@/lib/db/decision-repository');
     const actions = await import('./advisor-actions');
 
@@ -304,7 +304,7 @@ describe('a decision session belongs to the browser that started it', () => {
   });
 
   it('keeps what a browser must not change: the mode and the absence of a destination', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     const { getDecisionSession } = await import('@/lib/db/decision-repository');
     const { saveAdvisorAnswersAction } = await import('./advisor-actions');
 
@@ -335,7 +335,7 @@ describe('a decision session belongs to the browser that started it', () => {
       const pickId = await withStoredShortlist(id);
       const before = await snapshot(id);
 
-      jar.set('sidequest_session', 'session:anyone');
+      jar.set('sidequest_session', 'session-anyone');
       const result = await press(await import('./advisor-actions'), id, pickId);
 
       expect(result.ok).toBe(false);
@@ -348,7 +348,7 @@ describe('a decision session belongs to the browser that started it', () => {
 
 describe('the decide surface sits inside the rate fence', () => {
   it('refuses unbounded session creation, and writes no row for the refused call', async () => {
-    jar.set('sidequest_session', 'session:script');
+    jar.set('sidequest_session', 'session-script');
     const { startAdvisorAction } = await import('./advisor-actions');
     const { ACTION_RATE_RULES } = await import('@/lib/net/rate-limit');
     const allowance = ACTION_RATE_RULES.decide_start.capacity;
@@ -368,7 +368,7 @@ describe('the decide surface sits inside the rate fence', () => {
   });
 
   it('refuses unbounded shortlist builds from one caller', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     const { buildAdvisorShortlistAction } = await import('./advisor-actions');
     const { ACTION_RATE_RULES } = await import('@/lib/net/rate-limit');
     const allowance = ACTION_RATE_RULES.decide_shortlist.capacity;
@@ -387,7 +387,7 @@ describe('the decide surface sits inside the rate fence', () => {
   });
 
   it('fences the interview step, which reads no stored row and so has no owner to check', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     const { getDecisionSession } = await import('@/lib/db/decision-repository');
     const answers = getDecisionSession(id)!.answers;
     const before = await snapshot(id);
@@ -405,7 +405,7 @@ describe('the decide surface sits inside the rate fence', () => {
     try {
       // Any browser may ask what the next question would be for answers it holds
       // itself: nothing stored is read, so there is nothing of the owner's to leak.
-      jar.set('sidequest_session', 'session:script');
+      jar.set('sidequest_session', 'session-script');
       for (let i = 0; i < allowance; i += 1) {
         const step = await advisorStepAction(answers);
         expect(step.ok, `step ${i + 1} of ${allowance} was refused early`).toBe(true);
@@ -417,7 +417,7 @@ describe('the decide surface sits inside the rate fence', () => {
       expect(refused).toMatchObject({ ok: false, questionId: null, ready: false, leaders: [], values: [], worldSize: 0 });
 
       // The script's allowance is its own: the owner is still served.
-      jar.set('sidequest_session', 'session:mine');
+      jar.set('sidequest_session', 'session-mine');
       expect((await advisorStepAction(answers)).ok).toBe(true);
     } finally {
       vi.useRealTimers();
@@ -429,7 +429,7 @@ describe('the decide surface sits inside the rate fence', () => {
   }, 60_000);
 
   it('draws the refinement, the research and the pictures from that same allowance', async () => {
-    const id = await sessionStartedBy('session:mine');
+    const id = await sessionStartedBy('session-mine');
     await withStoredShortlist(id);
     const actions = await import('./advisor-actions');
     const { ACTION_RATE_RULES } = await import('@/lib/net/rate-limit');

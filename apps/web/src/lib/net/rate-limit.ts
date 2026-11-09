@@ -301,6 +301,37 @@ export const ACTION_RATE_RULES = {
   auth_start: { capacity: 6, refillPerMinute: 3 },
   /** V8 — a browser reporting a page failure so its reference reaches the log. Local write only. */
   client_failure_report: { capacity: 6, refillPerMinute: 2 },
+  /**
+   * Release pass — "Read with Sidequest" on a confirmation: one billed model
+   * call per press (up to 60k characters or a photograph). It had no fence at
+   * all. Taken through `guardBilledAction`, so it also draws on `billed_hourly`.
+   */
+  import_read: { capacity: 4, refillPerMinute: 1 },
+  /**
+   * Release pass — importing a confirmation: local work only, but it is a
+   * parse of an e-mail or PDF somebody else authored (CPU on the one thread)
+   * and one stored row per call.
+   */
+  import_prepare: { capacity: 8, refillPerMinute: 4 },
+  /**
+   * Release pass — "Places to stay / eat near here": one request per press to a
+   * places provider that bills per request, for display only. Sized for
+   * somebody browsing a few stops, not for a loop over coordinates.
+   */
+  place_lookup: { capacity: 10, refillPerMinute: 4 },
+  /**
+   * Release pass — `/api/place-photo`: two billed provider requests per image
+   * the browser has not cached. A trip page can show a few dozen at once, so
+   * the burst is a page's worth; the refill is what stops a cache-busting loop.
+   */
+  place_photo: { capacity: 60, refillPerMinute: 20 },
+  /**
+   * Release pass — "Refresh trip information": free to press, but each pass
+   * reaches the weather and imagery providers. Its per-trip throttle is written
+   * after the work, so concurrent presses each did a full pass; this bounds
+   * the presser.
+   */
+  trip_recheck: { capacity: 12, refillPerMinute: 4 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type GuardedActionKind = keyof typeof ACTION_RATE_RULES;

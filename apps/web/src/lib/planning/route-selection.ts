@@ -34,7 +34,7 @@ export async function policyConfirmRoute(input: {
   if (decision.provider === 'google-routes') {
     const result = await computeGoogleRoute({ from: input.from, to: input.to, mode: requested === 'drive' ? 'DRIVE' : requested === 'walk' ? 'WALK' : 'TRANSIT', ...(input.departAt ? { departAt: input.departAt } : {}), traffic: decision.traffic, now: input.now }, { ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}) });
     if (!result.found) {
-      return { found: false, minutes: null, km: null, reason: result.reason === 'no_route' || result.reason === 'not_found' ? 'not_found' : result.reason === 'rate_limited' ? 'rate_limited' : 'provider_error', provider: 'google-routes' };
+      return { found: false, minutes: null, km: null, /* RELEASE PASS — only the router saying it found no route is a verdict; an HTTP 404 is a silence. */ reason: result.reason === 'no_route' ? 'not_found' : result.reason === 'rate_limited' ? 'rate_limited' : 'provider_error', provider: 'google-routes' };
     }
     return {
       found: true,

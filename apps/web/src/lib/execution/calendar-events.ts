@@ -4,6 +4,7 @@ import {
   buildCalendar,
   deriveTimeZoneFromLongitude,
   formatMinuteOfDay,
+  isKnownTimeZone,
   licence,
   yearsBetween,
   type BookedPlanItem,
@@ -109,14 +110,37 @@ export function calendarEventsFor(source: TripCalendarSource): TripCalendarEvent
    * Booked facts first: a calendar that carried the model's hotel while the
    * traveller has booked a different one would be the wrong calendar.
    */
+  /*
+   * RELEASE PASS — a booked fact's date and zone are stored text, not facts
+   * about the calendar. Only a real date within a year of the trip becomes an
+   * event (a booking for the trip is on or near it; one dated 9999 is a typo,
+   * and it sized a loop), and only a zone the runtime knows is used — anything
+   * else ("Pacific time", "local time") falls back to the zone of the day it happens on.
+   */
+  const realDate = (date: string | undefined): date is string => {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    const at = Date.parse(`${date}T00:00:00Z`);
+    return !Number.isNaN(at) && new Date(at).toISOString().slice(0, 10) === date;
+  };
+  const YEAR_MS = 366 * 86_400_000;
+  const tripStart = Date.parse(`${itinerary.startDate}T00:00:00Z`);
+  const tripEnd = Date.parse(`${itinerary.endDate}T00:00:00Z`);
+  const nearTrip = (date: string): boolean => {
+    const at = Date.parse(`${date}T00:00:00Z`);
+    return Number.isNaN(tripStart) || Number.isNaN(tripEnd) || (at >= tripStart - YEAR_MS && at <= tripEnd + YEAR_MS);
+  };
+  const eventDates: string[] = [];
+
   for (const booking of source.booked) {
-    if (booking.status !== 'booked' || !booking.date) continue;
+    if (booking.status !== 'booked' || !realDate(booking.date) || !nearTrip(booking.date)) continue;
     const start = booking.startTime ?? (booking.type === 'lodging' ? '15:00' : '09:00');
     const end = booking.endTime ?? (booking.type === 'lodging' ? '11:00' : null);
-    const endDate = booking.type === 'lodging' ? (booking.endDate ?? booking.date) : booking.date;
+    const statedEnd = realDate(booking.endDate) && nearTrip(booking.endDate) && booking.endDate >= booking.date ? booking.endDate : booking.date;
+    const endDate = booking.type === 'lodging' ? statedEnd : booking.date;
+    eventDates.push(booking.date, endDate);
     const startMinute = timeToMinute(start);
     const endMinute = end ? timeToMinute(end) : Math.min(23 * 60 + 59, startMinute + 120);
-    const timeZone = booking.timeZone ?? zoneOfDate(booking.date);
+    const timeZone = isKnownTimeZone(booking.timeZone) ? booking.timeZone : zoneOfDate(booking.date);
     zones.add(timeZone);
     const geo = booking.placeId ? source.coordinates[booking.placeId] : booking.baseId ? source.coordinates[booking.baseId] : undefined;
     events.push({
@@ -165,7 +189,8 @@ export function calendarEventsFor(source: TripCalendarSource): TripCalendarEvent
     }
   }
 
-  const dates = [itinerary.startDate, itinerary.endDate, ...source.booked.flatMap((b) => [b.date, b.endDate].filter((d): d is string => Boolean(d)))].sort();
+  /* The years of the events actually written — never of every date a booked fact happens to carry. */
+  const dates = [itinerary.startDate, itinerary.endDate, ...eventDates].sort();
   const years = yearsBetween(dates[0]!, dates[dates.length - 1]!);
   return { events, timeZones: [...zones], years };
 }

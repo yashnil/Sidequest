@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isKnownTimeZone } from '../time/zone';
 
 /**
  * BOOKING INTELLIGENCE AND BOOKED REALITY.
@@ -183,9 +184,80 @@ export const bookedPlanItemSchema = z.object({
 });
 export type BookedPlanItem = z.infer<typeof bookedPlanItemSchema>;
 
+/**
+ * RELEASE PASS — WHAT MAY BE *WRITTEN* IS NARROWER THAN WHAT MAY BE *READ*.
+ *
+ * `bookedPlanItemSchema` above reads stored rows, and a row that fails it is
+ * dropped from the list — so it stays as loose as it ever was: tightening it
+ * would silently delete bookings travellers already have. The input is where
+ * the limits belong, and it had almost none. A date was any ten characters of
+ * the right shape (`9999-99-99`), and the calendar sized a loop from it. A zone
+ * was any non-empty string, and one the runtime does not know failed every
+ * calendar built for the trip. Ids had no length. A link could carry any
+ * scheme.
+ *
+ * - A date is a real calendar date in 2000–2100, the range trip dates take.
+ * - A zone the runtime does not recognise is **dropped, not refused**: the
+ *   traveller (or a model reading their confirmation e-mail) wrote "Pacific time", and
+ *   the honest reading of that is "no zone recorded", which falls back to the
+ *   zone of the day. Refusing the whole booking over it would be worse.
+ * - A link is http(s) with no embedded credentials (`httpUrlSchema`'s rule).
+ */
+const realDateSchema = dateSchema.refine((value) => {
+  const at = Date.parse(`${value}T00:00:00Z`);
+  if (Number.isNaN(at) || new Date(at).toISOString().slice(0, 10) !== value) return false;
+  const year = Number(value.slice(0, 4));
+  return year >= 2000 && year <= 2100;
+}, 'Not a real date between 2000 and 2100');
+const clockTimeSchema = timeSchema.refine((value) => Number(value.slice(0, 2)) <= 23 && Number(value.slice(3)) <= 59, 'Not a real 24-hour time');
+const referenceIdSchema = z.string().min(1).max(200);
+const knownZoneSchema = z
+  .string()
+  .transform((value) => (isKnownTimeZone(value) ? value : undefined))
+  .optional();
+const webLinkSchema = z
+  .string()
+  .max(2000)
+  .url()
+  .refine((value) => {
+    try {
+      const parsed = new URL(value);
+      return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && parsed.username === '' && parsed.password === '';
+    } catch {
+      return false;
+    }
+  }, 'Only http(s) links are allowed');
+
 /** What a traveller types to add a booking; the server fills id, tripId and createdAt. */
-export const bookedPlanItemInputSchema = bookedPlanItemSchema.omit({ id: true, tripId: true, createdAt: true });
+export const bookedPlanItemInputSchema = bookedPlanItemSchema.omit({ id: true, tripId: true, createdAt: true }).extend({
+  date: realDateSchema.optional(),
+  endDate: realDateSchema.optional(),
+  cancellationDeadline: realDateSchema.optional(),
+  startTime: clockTimeSchema.optional(),
+  endTime: clockTimeSchema.optional(),
+  timeZone: knownZoneSchema,
+  placeId: referenceIdSchema.optional(),
+  baseId: referenceIdSchema.optional(),
+  bookingItemId: referenceIdSchema.optional(),
+  travelerIds: z.array(z.string().min(1).max(80)).max(12).optional(),
+  url: webLinkSchema.optional(),
+});
 export type BookedPlanItemInput = z.infer<typeof bookedPlanItemInputSchema>;
+
+/**
+ * RELEASE PASS — A PATCH CHANGES WHAT IT NAMES AND NOTHING ELSE.
+ *
+ * The edit door parsed a patch with `bookedPlanItemInputSchema.partial()`, and
+ * `.partial()` keeps a field's `.default()`: a patch of `{ cost }` came back as
+ * `{ cost, status: 'booked', locked: true }`. Setting a price on something a
+ * traveller had saved as an *idea* silently made it a locked, booked fact — one
+ * the planner will not move and the calendar exports as CONFIRMED. Here the two
+ * defaulted fields are plainly optional, so an absent field is an absent field.
+ */
+export const bookedPlanItemPatchSchema = bookedPlanItemInputSchema
+  .extend({ status: bookedStatusSchema.optional(), locked: z.boolean().optional() })
+  .partial();
+export type BookedPlanItemPatch = z.infer<typeof bookedPlanItemPatchSchema>;
 
 /** A booked fact is stronger than a model preference; a soft hold is a plan; an idea is a note. */
 export function bookedItemBinds(item: Pick<BookedPlanItem, 'status' | 'locked'>): boolean {

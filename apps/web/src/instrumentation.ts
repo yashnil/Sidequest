@@ -39,6 +39,13 @@ export async function register(): Promise<void> {
     throw new Error(`Sidequest refused to start: ${required.length} required configuration problem(s); see the lines above.`);
   }
   if (process.env.NODE_ENV !== 'production') return;
+  /* RELEASE PASS — retention's only trigger was the optional heavy compiler, so a planner-first deployment never swept anything. */
+  try {
+    const { startRetentionSchedule } = await import('./lib/db/retention');
+    startRetentionSchedule();
+  } catch {
+    /* Retention is housekeeping: a server that cannot schedule it still serves trips. */
+  }
   try {
     const { warmProbe } = await import('./lib/readiness/probe-cache');
     warmProbe('routing.local');

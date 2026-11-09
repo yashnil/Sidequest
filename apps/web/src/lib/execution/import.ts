@@ -106,20 +106,49 @@ function looksLikeBinary(sample: string): boolean {
 }
 
 /** HTML to readable lines: block boundaries become newlines, tags go, entities are decoded. */
+/**
+ * RELEASE PASS — drop `<script>` and `<style>` blocks by scanning, not by a
+ * backtracking pattern: the old expression re-walked the rest of the document
+ * from every unclosed opening tag. One pass, and an opening tag that is never
+ * closed takes the rest of the document with it (it was never text).
+ */
+function dropBlocks(html: string, tag: 'script' | 'style'): string {
+  const lower = html.toLowerCase();
+  const open = `<${tag}`;
+  const close = `</${tag}`;
+  let out = '';
+  let at = 0;
+  for (;;) {
+    const start = lower.indexOf(open, at);
+    if (start < 0) return out + html.slice(at);
+    out += `${html.slice(at, start)} `;
+    const end = lower.indexOf(close, start + open.length);
+    if (end < 0) return out;
+    const after = lower.indexOf('>', end);
+    if (after < 0) return out;
+    at = after + 1;
+  }
+}
+
 export function htmlToText(html: string): string {
-  return html
-    .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, ' ')
+  /*
+   * RELEASE PASS — every tag pattern below excludes `<` as well as `>` from
+   * its body. `<[^>]+>` on a run of `<` (or `<td` repeated) scanned to the end
+   * of the document from each one: 2.4 s for 40 KB, quadratic, on an e-mail
+   * somebody else wrote.
+   */
+  return dropBlocks(dropBlocks(html, 'script'), 'style')
     .replace(/<\s*br\s*\/?\s*>/gi, '\n')
     .replace(/<\s*\/\s*(p|div|tr|li|h[1-6]|table|section|article|header|footer|blockquote)\s*>/gi, '\n')
-    .replace(/<\s*(td|th)[^>]*>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+    .replace(/<\s*(td|th)[^<>]*>/gi, ' ')
+    .replace(/<[^<>]*>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
+    .replace(/&#(\d{1,7});/g, (_, n: string) => (Number(n) <= 0x10ffff ? String.fromCodePoint(Number(n)) : ' '))
     .replace(/[ \t]+/g, ' ')
     .replace(/[ \t]*\n[ \t]*/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -136,7 +165,8 @@ export function senderDomainOf(sender: string | undefined): string | undefined {
 async function pdfToText(bytes: Uint8Array): Promise<string> {
   const { extractText } = await import('unpdf');
   const result = await extractText(bytes, { mergePages: true });
-  return result.text.replace(/[ \t]+\n/g, '\n').trim();
+  /* RELEASE PASS — trailing blanks per line by `trimEnd`, which is linear; `/[ \t]+\n/` rescanned every long run of spaces from each of its characters. */
+  return result.text.split('\n').map((line) => line.trimEnd()).join('\n').trim();
 }
 
 async function emlToText(bytes: Uint8Array): Promise<{ text: string; subject?: string; senderDomain?: string; attachmentsRead: number }> {

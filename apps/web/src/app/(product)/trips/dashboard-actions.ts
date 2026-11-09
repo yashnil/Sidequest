@@ -6,7 +6,7 @@ import { overrideRefusal, readLifecycle, tripLifecycleSchema, type TripLifecycle
 import { currentUserId } from '@/lib/auth/session';
 import { listBookedItems } from '@/lib/db/intelligence-repository';
 import { duplicateTrip, getItinerary, getProfile, getTrip, recordLifecycleChange, renameTrip, setLifecycleOverride, setTripArchived } from '@/lib/db/repository';
-import { sessionToken } from '@/lib/net/caller';
+import { guardAction, sessionToken } from '@/lib/net/caller';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 
 /**
@@ -34,6 +34,9 @@ export async function duplicateTripAction(id: string): Promise<DashboardActionRe
   if (!tripId.safeParse(id).success) return { ok: false, error: 'We could not find that trip.' };
   const refusal = await tripAccessRefusal(id);
   if (refusal) return { ok: false, error: refusal };
+  /* RELEASE PASS — a copy is a new trip row with its answers and party, so it draws on the fence that creating one does; it was the one unfenced way to write trips in a loop. */
+  const fence = await guardAction('trip_create');
+  if (fence) return { ok: false, error: fence };
   const copy = duplicateTrip(id, { ownerToken: await sessionToken({ mint: true }), userId: await currentUserId() });
   if (!copy) return { ok: false, error: 'We could not copy that trip just now. Nothing was changed.' };
   revalidatePath('/trips');

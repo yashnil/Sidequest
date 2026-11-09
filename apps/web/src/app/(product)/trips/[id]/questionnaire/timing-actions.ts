@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { MAX_TRIP_NIGHTS } from '@sidequest/core';
 import { chosenInterests, concreteWindow, crowdPeriodsTouching, diagonalKm, monthsBetween, recommendDateWindows, scaleOfDiagonalKm, seasonMonths, type DateWindow, type GeographicScale } from '@sidequest/core';
 import { regionalClimate } from '@/lib/climate/regional';
 import { getAnswers, getTrip, updateTripDates } from '@/lib/db/repository';
@@ -164,6 +165,8 @@ export async function acceptTripTimingAction(tripId: string, raw: z.input<typeof
   const start = Date.parse(`${window.startDate}T00:00:00Z`);
   const end = Date.parse(`${window.endDate}T00:00:00Z`);
   if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return { ok: false, error: 'That window ends before it starts.' };
+  /* RELEASE PASS — every read of a trip parses it against this limit, so a longer window written here made the trip, and the owner's whole list, unreadable. */
+  if ((end - start) / 86_400_000 > MAX_TRIP_NIGHTS) return { ok: false, error: `Trips longer than ${MAX_TRIP_NIGHTS} nights are not supported yet.` };
   /* A locked row belongs to whoever locked it; this door only closes an open question. */
   if (trip.basics.timingLock === 'traveler') return { ok: false, error: 'The dates for this trip are already decided.' };
 

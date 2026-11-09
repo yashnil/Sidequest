@@ -52,18 +52,27 @@ export async function GET(
   if (!itinerary) return new NextResponse('No plan has been built for this trip yet.', { status: 404 });
 
   const now = new Date();
-  const loaded = await loadTripCalendarSource(trip, itinerary, now);
-  const body = buildTripCalendar(loaded.source, {
-    name: `${loaded.source.itinerary.baseName} — Sidequest itinerary`,
-    summary: loaded.source.itinerary.summary,
-    attributions: loaded.attributions,
-    stamp: now.toISOString(),
-  });
+  let body: string;
+  try {
+    const loaded = await loadTripCalendarSource(trip, itinerary, now);
+    body = buildTripCalendar(loaded.source, {
+      name: `${loaded.source.itinerary.baseName} — Sidequest itinerary`,
+      summary: loaded.source.itinerary.summary,
+      attributions: loaded.attributions,
+      stamp: now.toISOString(),
+    });
+  } catch (error) {
+    /* RELEASE PASS — a sentence the traveller can act on, never an unhandled 500. */
+    console.error('Calendar export could not be built', { ref: id.slice(0, 8), error: error instanceof Error ? error.name : 'unknown' });
+    return new NextResponse('The calendar file could not be prepared just now. Your plan is unchanged — try again in a moment.', { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+  }
 
   return new NextResponse(body, {
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': `attachment; filename="sidequest-${id}.ics"`,
+      /* RELEASE PASS — the whole plan, owner-gated: never stored by a shared cache, like the card routes beside it. */
+      'Cache-Control': 'private, no-store',
     },
   });
 }

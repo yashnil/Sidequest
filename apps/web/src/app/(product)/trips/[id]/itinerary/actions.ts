@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { bookedPlanItemInputSchema, bookedPlanItemSchema, formatCount, rankVenues, travelReadinessProfileSchema, type BookedPlanItem, type ExtractedConfirmation, type Itinerary, type VenueFit } from '@sidequest/core';
+import { bookedPlanItemInputSchema, bookedPlanItemPatchSchema, bookedPlanItemSchema, formatCount, rankVenues, travelReadinessProfileSchema, type BookedPlanItem, type ExtractedConfirmation, type Itinerary, type VenueFit } from '@sidequest/core';
 import { addBookedItem, clearReadinessProfile, getTravelIntelligence, listBookedItems, removeBookedItem, saveReadinessProfile, setCheck, updateBookedItem } from '@/lib/db/intelligence-repository';
 import { clearBookingResolution, getImport, recordImport, resolveImport, setBookingResolution, type ImportSourceKind } from '@/lib/db/execution-repository';
 import { applyBookedFacts } from '@/lib/intelligence/booked-reconcile';
@@ -24,7 +24,7 @@ import {
 import { type BuildResult, plannerInputForTrip } from '@/lib/planning/build';
 import { buildPreflight } from '@/lib/planning/build-preflight';
 import { buildRunView, startBuildRun } from '@/lib/planning/build-runs';
-import { callerKey, guardAction } from '@/lib/net/caller';
+import { callerKey, guardAction, guardBilledAction } from '@/lib/net/caller';
 import { keepsToCarry, regenerationPreview } from './regenerate-summary';
 import { addCustomStop, easeReconciledDay, isReconciledItinerary, moveStopToDay, removeStopFromReconciledItinerary, setStopDuration, setStopKeep, shiftStop } from '@/lib/planning/reconciled-edits';
 import { repairReconciledDay } from '@/lib/planning/day-repair';
@@ -333,6 +333,10 @@ export async function toggleLockAction(
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
+  /* RELEASE PASS — a lock row per distinct id was a table anybody with one trip could grow without limit. */
+  if (typeof placeId !== 'string' || placeId.length < 1 || placeId.length > 200 || !Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 400) {
+    return { ok: false, error: 'That stop is no longer on this plan.' };
+  }
   if (locked) setItineraryLock(tripId, placeId, dayNumber);
   else clearItineraryLock(tripId, placeId);
   revalidatePath(`/trips/${tripId}/itinerary`);
@@ -393,10 +397,19 @@ export async function clearReadinessProfileAction(tripId: string): Promise<HubAc
   return { ok: true };
 }
 
+const CHECK_LISTS: readonly string[] = ['packing', 'checklist', 'preflight'];
+
 export async function setCheckAction(tripId: string, list: 'packing' | 'checklist' | 'preflight', itemId: string, checked: boolean): Promise<HubActionResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  setCheck(tripId, list, itemId, checked);
+  /*
+   * RELEASE PASS — `list` was a TypeScript type and nothing else, and the
+   * reader groups rows with `out[row.list]`: a row whose list is `__proto__`
+   * or `constructor` made every later load of the trip throw. A closed
+   * vocabulary is checked where the value arrives.
+   */
+  if (!CHECK_LISTS.includes(list) || typeof itemId !== 'string' || itemId.length < 1 || itemId.length > 200) return { ok: false, error: 'That item is no longer on the list.' };
+  setCheck(tripId, list, itemId, checked === true);
   revalidatePath(`/trips/${tripId}/itinerary`);
   return { ok: true };
 }
@@ -457,8 +470,9 @@ export async function fixDayAction(tripId: string, dayNumber: number): Promise<E
 export async function updateBookedItemAction(tripId: string, id: string, patch: unknown): Promise<HubActionResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  const parsed = bookedPlanItemInputSchema.partial().safeParse(patch);
+  const parsed = bookedPlanItemPatchSchema.safeParse(patch);
   if (!parsed.success) return { ok: false, error: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+  if (typeof id !== 'string' || id.length > 200) return { ok: false, error: 'That booking is no longer on the trip.' };
   const updated = updateBookedItem(tripId, id, parsed.data);
   if (!updated) return { ok: false, error: 'That booking is no longer on the trip.' };
   revalidatePath(`/trips/${tripId}/itinerary`);
@@ -527,19 +541,44 @@ function venueFitFor(tripId: string): VenueFit {
   };
 }
 
+/**
+ * RELEASE PASS — the two lookups below reach a places provider that bills per
+ * request, and they took no token: an owner of one trip (which is anybody)
+ * could loop them at arbitrary coordinates. `place_lookup` fences them, taken
+ * after ownership and after the arguments are known to be a real point — and
+ * only real numbers on the globe and a short string ever reach the provider.
+ */
+function discoveryPoint(near: unknown): { lat: number; lng: number } | null {
+  const point = near as { lat?: unknown; lng?: unknown } | null;
+  const lat = typeof point?.lat === 'number' ? point.lat : Number.NaN;
+  const lng = typeof point?.lng === 'number' ? point.lng : Number.NaN;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+function discoveryQuery(query: unknown): { query?: string } {
+  return typeof query === 'string' && query.trim().length > 0 ? { query: query.trim().slice(0, 60) } : {};
+}
+
 /** One bounded lookup for display; nothing is stored. Live prices and availability are never part of the answer. */
 export async function discoverStaysAction(tripId: string, near: { lat: number; lng: number }, query?: string): Promise<DiscoveryActionResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  if (!Number.isFinite(near?.lat) || !Number.isFinite(near?.lng)) return { ok: false, error: 'That base has no verified position to search around.' };
-  return forDisplay(await discoverStaysNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }), venueFitFor(tripId));
+  const place = discoveryPoint(near);
+  if (!place) return { ok: false, error: 'That base has no verified position to search around.' };
+  const limited = await guardAction('place_lookup');
+  if (limited) return { ok: false, error: limited };
+  return forDisplay(await discoverStaysNear({ near: place, ...discoveryQuery(query) }), venueFitFor(tripId));
 }
 
 export async function discoverFoodAction(tripId: string, near: { lat: number; lng: number }, query?: string): Promise<DiscoveryActionResult> {
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  if (!Number.isFinite(near?.lat) || !Number.isFinite(near?.lng)) return { ok: false, error: 'That stop has no verified position to search around.' };
-  return forDisplay(await discoverFoodNear({ near, ...(query ? { query: query.slice(0, 60) } : {}) }), venueFitFor(tripId));
+  const place = discoveryPoint(near);
+  if (!place) return { ok: false, error: 'That stop has no verified position to search around.' };
+  const limited = await guardAction('place_lookup');
+  if (limited) return { ok: false, error: limited };
+  return forDisplay(await discoverFoodNear({ near: place, ...discoveryQuery(query) }), venueFitFor(tripId));
 }
 
 /* ------------------------------------------------------------------ *
@@ -686,6 +725,9 @@ export async function importConfirmationAction(tripId: string, input: unknown): 
   if (refusal) return { ok: false, error: refusal };
   const parsed = importInputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: ISSUE_TEXT(parsed.error.issues) };
+  /* RELEASE PASS — parsing somebody else's e-mail or PDF is CPU on the server's one thread and a row per call; it took no token. */
+  const limited = await guardAction('import_prepare');
+  if (limited) return { ok: false, error: limited };
   const outcome = await prepareImport(parsed.data as ImportInput, tripWindow(tripId));
   if (!outcome.ok) return { ok: false, error: outcome.error };
   const { prepared } = outcome;
@@ -716,13 +758,25 @@ export async function readImportWithSidequestAction(tripId: string, importId: st
   const outcome = await prepareImport(parsed.data as ImportInput, window);
   if (!outcome.ok) return { ok: false, error: outcome.error };
   const { prepared } = outcome;
+  /*
+   * RELEASE PASS — this is one billed model call per press (up to sixty
+   * thousand characters or a photograph), and it was the one billed door with
+   * no fence and no caller: every reading was charged to the shared
+   * unattributed row, so one browser could spend that whole row and close the
+   * door for everybody, signed-in travellers included. It now passes the same
+   * two fences as a scan or a refinement, after the input is known to be
+   * readable, and is charged to whoever pressed.
+   */
+  const fence = await guardBilledAction('import_read');
+  if (fence) return { ok: false, error: fence };
+  const caller = await callerKey();
   const now = new Date();
   const reading = prepared.image
-    ? await readConfirmationPhotoWithModel({ image: prepared.image, tripWindow: window, caller: null, now })
+    ? await readConfirmationPhotoWithModel({ image: prepared.image, tripWindow: window, caller, now })
     : await readConfirmationWithModel({
         redactedText: prepared.redactedText,
         hints: { ...window, ...(prepared.senderDomain ? { senderDomain: prepared.senderDomain } : {}), ...(prepared.subject ? { subject: prepared.subject } : {}) },
-        caller: null,
+        caller,
         now,
       });
   if (!reading.ok) return { ok: false, error: reading.error };

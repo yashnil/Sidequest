@@ -298,12 +298,30 @@ export async function completeAndBuildAction(tripId: string, answers: Questionna
   if (!trip) return { ok: false, error: 'We could not find that trip any more.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
+  /*
+   * RELEASE PASS — THIS DOOR BUILDS, SO IT IS FENCED LIKE EVERY DOOR THAT BUILDS.
+   *
+   * `startBuildAction` beside it takes `build_start`, attaches to a run that
+   * is already live, charges `billed_hourly` when the build will bill a model,
+   * and spends from the caller's own row of the daily ledger. This one did
+   * none of that: no token, no attach, and every call charged to one constant
+   * key shared by everybody — so on a trip with no board each call was a
+   * billed composition a script could loop, and a second press ran a second
+   * generation over the first. Reachable from the questionnaire's own action
+   * with a client-chosen argument (`destination === 'build'`).
+   */
+  if (buildRunView(tripId).state === 'running') return { ok: false, error: 'This trip is already being built. Give it a moment, then open your plan.' };
+  const fence = await guardAction('build_start');
+  if (fence) return { ok: false, error: fence };
+  const caller = (await callerKey()) ?? 'interview_build_action';
   const saved = await persistProfileForBuild(trip, answers);
   if (!saved.ok) return saved;
-  const preflight = buildPreflight(tripId, { caller: 'interview_build_action' });
+  const preflight = buildPreflight(tripId, { caller });
   if (!preflight.ok) return refusedByPreflight(tripId, preflight, 'complete_and_build');
-  const generated = await generateSidequestPlanForTrip(tripId, { caller: 'interview_build_action', mode: 'full' });
-  if (!generated.ok) return { ok: false, error: failureForResult(generated, tripId, { caller: 'interview_build_action' }).message };
+  const billed = preflight.path === 'model_composer' ? await guardAction('billed_hourly') : null;
+  if (billed) return { ok: false, error: billed };
+  const generated = await generateSidequestPlanForTrip(tripId, { caller, mode: 'full' });
+  if (!generated.ok) return { ok: false, error: failureForResult(generated, tripId, { caller }).message };
   revalidatePath(`/trips/${tripId}/itinerary`);
   redirect(`/trips/${tripId}/itinerary`);
 }

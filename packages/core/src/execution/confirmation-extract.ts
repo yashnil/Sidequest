@@ -170,13 +170,32 @@ function labelledLine(text: string, labels: RegExp): string | null {
   return null;
 }
 
-/** Strip what must never leave the server or be stored: card numbers, phone numbers, e-mail addresses, IBANs. */
+/**
+ * Strip what must never leave the server or be stored: card numbers, phone numbers, e-mail addresses, IBANs.
+ *
+ * RELEASE PASS — LINEAR IN THE INPUT, WHICH IS SOMEBODY ELSE'S DOCUMENT.
+ *
+ * This runs on up to half a megabyte of pasted or uploaded text before
+ * anything else looks at it, on the server's one thread. Two of its patterns
+ * could be made to rescan the same characters from every position:
+ *
+ * - the e-mail pattern began with an unbounded `[…]+` that can start anywhere
+ *   in a run of ordinary letters, so a paste of 500,000 of them was half a
+ *   million attempts each walking to the end of the run — measured at 2.7 s
+ *   for 40 KB and four times that for every doubling, i.e. minutes at the cap;
+ * - the phone pattern could start at every `00` in a run of zeros.
+ *
+ * A match may now begin only where the character before it could not have
+ * been part of the same token (the lookbehinds), and the e-mail's two halves
+ * are bounded at the lengths RFC 5321 allows. Same matches on real text;
+ * `confirmation-redaction.test.ts` holds both the behaviour and the bound.
+ */
 export function redactSensitive(text: string): string {
   return text
     .replace(/\b(?:\d[ -]?){13,19}\b/g, '[card number removed]')
     .replace(/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){3,7}\b/g, '[account removed]')
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email removed]')
-    .replace(/(?:\+|00)\d{1,3}[\s.-]?(?:\(?\d{1,4}\)?[\s.-]?){2,5}\d{2,4}\b/g, '[phone removed]');
+    .replace(/(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}/g, '[email removed]')
+    .replace(/(?<![\d+])(?:\+|00)\d{1,3}[\s.-]?(?:\(?\d{1,4}\)?[\s.-]?){2,5}\d{2,4}\b/g, '[phone removed]');
 }
 
 export function extractConfirmation(rawText: string, hints: { tripStart?: string; tripEnd?: string; senderDomain?: string; subject?: string } = {}): ExtractedConfirmation {

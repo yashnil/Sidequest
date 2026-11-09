@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getItinerary } from '@/lib/db/repository';
+import { guardAction } from '@/lib/net/caller';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { mediaFacts } from '@/lib/providers/google-places';
 import { arePlacePhotosEnabled } from '@/lib/providers/switches';
@@ -42,6 +43,20 @@ export const dynamic = 'force-dynamic';
 
 const MAX_WIDTH = 1200;
 const REQUEST_TIMEOUT_MS = 10_000;
+const MAX_IMAGE_BYTES = 6_000_000;
+
+/** The redirect target, only when it is an https Google image host. */
+function imageHostUrl(location: string | null): string | null {
+  if (!location) return null;
+  try {
+    const url = new URL(location);
+    if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) return null;
+    const host = url.hostname.toLowerCase();
+    return host.endsWith('.googleusercontent.com') || host.endsWith('.ggpht.com') || host.endsWith('.googleapis.com') ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -52,6 +67,8 @@ export async function GET(request: Request): Promise<Response> {
 
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  /* RELEASE PASS — every uncached image is two billed provider requests, and a cache-busting query defeats the browser's hour. Fenced after ownership. */
+  if (await guardAction('place_photo')) return NextResponse.json({ error: 'busy' }, { status: 429, headers: { 'retry-after': '30' } });
 
   let itinerary;
   try {
@@ -72,19 +89,49 @@ export async function GET(request: Request): Promise<Response> {
 
     const key = process.env.GOOGLE_MAPS_API_KEY?.trim();
     if (!key) return NextResponse.json({ error: 'not configured' }, { status: 404 });
+    /*
+     * RELEASE PASS — THE KEY GOES TO ONE HOST, AND ONLY AN IMAGE COMES BACK.
+     *
+     * The media endpoint answers with a redirect to the image's own host, and
+     * `fetch` followed it carrying `x-goog-api-key`: a custom header is not
+     * one the platform strips across origins, so the credential travelled to
+     * wherever the redirect pointed. The redirect is now followed by hand —
+     * the key is sent to `places.googleapis.com` and nowhere else, and the
+     * second request goes, without it, only to an https Google image host.
+     * The path segment comes from the provider's response and must have the
+     * documented shape; the body must say it is an image and fit the cap.
+     */
+    if (!/^places\/[A-Za-z0-9_-]{1,300}\/photos\/[A-Za-z0-9_-]{1,600}$/.test(photo.name)) return NextResponse.json({ error: 'no photograph for this stop' }, { status: 404 });
     const media = `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=${MAX_WIDTH}&skipHttpRedirect=false`;
-    const response = await fetch(media, { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    if (!response.ok || !response.body) return NextResponse.json({ error: 'no photograph for this stop' }, { status: 404 });
+    let response = await fetch(media, { headers: { 'x-goog-api-key': key }, redirect: 'manual', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (response.status >= 300 && response.status < 400) {
+      const target = imageHostUrl(response.headers.get('location'));
+      await response.body?.cancel().catch(() => undefined);
+      if (!target) return NextResponse.json({ error: 'no photograph for this stop' }, { status: 404 });
+      response = await fetch(target, { redirect: 'error', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    }
+    const contentType = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+    const declared = Number(response.headers.get('content-length') ?? '0');
+    if (!response.ok || !response.body || !/^image\/(jpeg|png|webp|avif|gif)$/.test(contentType) || declared > MAX_IMAGE_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      return NextResponse.json({ error: 'no photograph for this stop' }, { status: 404 });
+    }
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength > MAX_IMAGE_BYTES) return NextResponse.json({ error: 'no photograph for this stop' }, { status: 404 });
 
-    return new Response(response.body, {
+    return new Response(bytes, {
       status: 200,
       headers: {
-        'content-type': response.headers.get('content-type') ?? 'image/jpeg',
+        'content-type': contentType,
         // Performance, not storage: nothing is written anywhere, and nothing is shared.
         'cache-control': 'private, max-age=3600',
-        // Rendered beside the picture. The obligation is to show these words.
-        'x-sidequest-attribution': photo.attribution,
-        ...(photo.attributionUri ? { 'x-sidequest-attribution-uri': photo.attributionUri } : {}),
+        /*
+         * Rendered beside the picture. A contributor's name is any Unicode and a
+         * header is Latin-1: a name outside it threw, and the photograph became
+         * a 404. Percent-encoded, so the words always travel.
+         */
+        'x-sidequest-attribution': encodeURIComponent(photo.attribution).slice(0, 600),
+        ...(photo.attributionUri && /^https:\/\//i.test(photo.attributionUri) ? { 'x-sidequest-attribution-uri': encodeURI(photo.attributionUri).slice(0, 600) } : {}),
       },
     });
   } catch {

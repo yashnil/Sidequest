@@ -299,5 +299,5 @@ export function isInterpretationModelConfigured(): boolean {
  * only shows up under load and looks like an outage when it does.
  */
 export function createInterpretationModel(): StructuredModel {
-  return new ResearchModel({ maxCalls: INTERPRETATION_MAX_CALLS });
+  return new ResearchModel({ maxCalls: INTERPRETATION_MAX_CALLS, /* RELEASE PASS — the SDK default is two silent retries; the ledger records one call and the rule is no automatic retries. */ maxRetries: 0 });
 }

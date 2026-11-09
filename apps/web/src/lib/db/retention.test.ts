@@ -150,6 +150,10 @@ describe('the retention sweep', () => {
       destinationImages: 0,
       decisionSessions: 0,
       orphanedDecisions: 0,
+      authStates: 0,
+      authSessions: 0,
+      callerSpendRows: 0,
+      rateBuckets: 0,
     });
   });
 
@@ -176,6 +180,54 @@ describe('the retention sweep', () => {
       'abandoned-recent',
       'resolved-old',
     ]);
+  });
+
+  /**
+   * RELEASE PASS — the four tables that hold a credential or an address. Both
+   * halves again: the dead row goes, the live one and every deployment-wide
+   * row stay.
+   */
+  it('sweeps dead sign-in attempts, expired sessions, old caller ledger rows and idle rate buckets', async () => {
+    const { db, retention } = await seeded();
+    const state = db.prepare(`INSERT INTO auth_states (state, provider, code_verifier, return_to, owner_token, created_at, expires_at) VALUES (?,'google','v',NULL,NULL,?,?)`);
+    state.run('dead', daysBefore(1), daysBefore(1));
+    state.run('live', NOW.toISOString(), daysAfter(1));
+    db.prepare(`INSERT INTO users (id, provider, provider_subject, created_at, last_seen_at) VALUES ('u1','google','s1',?,?)`).run(NOW.toISOString(), NOW.toISOString());
+    const session = db.prepare(`INSERT INTO auth_sessions (id, user_id, token_hash, created_at, expires_at, last_seen_at) VALUES (?,'u1',?,?,?,?)`);
+    session.run('expired', 'h1', daysBefore(100), daysBefore(10), daysBefore(10));
+    session.run('current', 'h2', daysBefore(1), daysAfter(80), NOW.toISOString());
+    db.exec('CREATE TABLE IF NOT EXISTS daily_provider_spend (day TEXT NOT NULL, counter TEXT NOT NULL, amount INTEGER NOT NULL, PRIMARY KEY (day, counter))');
+    const spend = db.prepare('INSERT INTO daily_provider_spend (day, counter, amount) VALUES (?,?,1)');
+    spend.run('2026-07-20', 'model_calls');
+    spend.run('2026-07-20', 'model_calls@ip:203.0.113.9');
+    spend.run('2026-08-02', 'model_calls@ip:203.0.113.9');
+    db.exec('CREATE TABLE IF NOT EXISTS rate_limit_buckets (bucket_key TEXT PRIMARY KEY, tokens REAL NOT NULL, refilled_at TEXT NOT NULL)');
+    const bucket = db.prepare('INSERT INTO rate_limit_buckets (bucket_key, tokens, refilled_at) VALUES (?,1,?)');
+    bucket.run('refine:session:idle', daysBefore(10));
+    bucket.run('refine:session:recent', NOW.toISOString());
+    bucket.run('refine:@deployment', daysBefore(10));
+
+    retention.runRetentionSweep(NOW);
+
+    expect(idsIn(db, 'SELECT state AS key FROM auth_states')).toEqual(['live']);
+    expect(idsIn(db, 'SELECT id AS key FROM auth_sessions')).toEqual(['current']);
+    expect(idsIn(db, `SELECT day || '/' || counter AS key FROM daily_provider_spend`)).toEqual(['2026-07-20/model_calls', '2026-08-02/model_calls@ip:203.0.113.9']);
+    expect(idsIn(db, 'SELECT bucket_key AS key FROM rate_limit_buckets')).toEqual(['refine:@deployment', 'refine:session:recent']);
+  });
+
+  it('runs on its own schedule, once however often it is started, and can be stopped', async () => {
+    const { retention } = await seeded();
+    vi.useFakeTimers({ now: new Date() });
+    try {
+      const stop = retention.startRetentionSchedule({ firstDelayMs: 1000, intervalMs: 5000 });
+      expect(retention.startRetentionSchedule()).toBe(stop);
+      expect(retention.retentionIsDue(new Date())).toBe(true);
+      vi.advanceTimersByTime(1000);
+      expect(retention.retentionIsDue(new Date())).toBe(false);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /** And the latch, which is what stops it running on every build. */

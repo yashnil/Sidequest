@@ -66,10 +66,11 @@ export default function PrivacyPage() {
           <ul>
             <li><strong>Anthropic</strong> (Claude API, United States) — your trip details, questionnaire answers including free-text notes and the needs of the people you travel with, refinement requests, and redacted booking text are sent so the model can propose places and interpret what you wrote.</li>
             <li><strong>Google</strong> — if sign-in is enabled, Google handles your sign-in. If Google Maps Platform is configured, place names and areas are sent to the Places API to locate them, and place photos are fetched through Sidequest’s server.</li>
-            <li><strong>OpenStreetMap services</strong> — place and area names go to Nominatim to find their coordinates, and map areas to Overpass to find nearby food and points of interest.</li>
-            <li><strong>Routing</strong> — coordinates of stops go to openrouteservice (HeiGIT) or a Valhalla router to measure travel times.</li>
-            <li><strong>Open-Meteo</strong> — coordinates and dates, for forecasts and climate normals. <strong>Frankfurter</strong> — currency codes, for exchange rates.</li>
-            <li><strong>Wikimedia and Wikidata</strong> — place names, to find openly licensed images and facts.</li>
+            <li><strong>OpenStreetMap services</strong> — place and area names go to Nominatim to find their coordinates, and map areas to Overpass (run by independent operators of OpenStreetMap data) to find nearby food and points of interest.</li>
+            <li><strong>Overture Maps</strong> — the server reads the public Overture place files, hosted on Amazon S3, for the map area of your trip. Only the area is revealed by those requests.</li>
+            <li><strong>Routing</strong> — coordinates of stops go to openrouteservice (HeiGIT), a Valhalla router (by default one run on OpenStreetMap infrastructure) or, if this deployment has opted in, Google Routes, to measure travel times.</li>
+            <li><strong>Open-Meteo</strong> — coordinates and dates, for forecasts, climate normals and time zones. <strong>Frankfurter</strong> — currency codes, for exchange rates.</li>
+            <li><strong>Wikimedia and Wikidata</strong> — place names and map areas (a centre and a radius), to find openly licensed images, places and facts.</li>
             <li><strong>Railway</strong> — hosts the server and its database.</li>
           </ul>
           <p>Your browser itself loads map tiles (OpenFreeMap, and terrain tiles from Amazon S3 where shown) and images from Wikimedia, so those services see your IP address and the area of the map you view, as with any map on the web.</p>
@@ -128,7 +129,7 @@ export default function PrivacyPage() {
     <LegalDocument
       eyebrow="Sidequest"
       title="Privacy notice"
-      updated="24 October 2026"
+      updated="9 November 2026"
       intro={<p>Sidequest plans trips from what you tell it. This notice says what it keeps, what it sends to other services to do that, and how to take it back.</p>}
       sections={sections}
     />

@@ -95,6 +95,22 @@ export const IMAGE_RECORD_GRACE_DAYS = 90;
  */
 export const ABANDONED_DECISION_DAYS = 60;
 
+/**
+ * Days a per-caller row of the daily spend ledger survives.
+ *
+ * Two, so that yesterday's row is still there on either side of the UTC day
+ * boundary; the ledger itself only ever reads today's.
+ */
+export const CALLER_LEDGER_DAYS = 2;
+
+/**
+ * Days an untouched rate bucket survives.
+ *
+ * Two. The slowest rule in `ACTION_RATE_RULES` refills completely in an hour,
+ * so a bucket idle for two days is indistinguishable from no bucket.
+ */
+export const IDLE_RATE_BUCKET_DAYS = 2;
+
 export interface RetentionResult {
   interpretations: number;
   weatherSnapshots: number;
@@ -102,6 +118,14 @@ export interface RetentionResult {
   decisionSessions: number;
   /** Sessions that resolved into a trip that no longer exists. */
   orphanedDecisions: number;
+  /** Sign-in attempts past their ten minutes. */
+  authStates: number;
+  /** Account sessions past their expiry that were never presented again. */
+  authSessions: number;
+  /** Per-caller rows of the daily spend ledger from before yesterday. */
+  callerSpendRows: number;
+  /** Per-caller rate buckets nobody has touched for two days. */
+  rateBuckets: number;
 }
 
 /**
@@ -185,6 +209,47 @@ export function runRetentionSweep(now: Date): RetentionResult {
         isoDaysBefore(now, ABANDONED_DECISION_DAYS),
       ),
     ),
+    /*
+     * RELEASE PASS — THE FOUR TABLES THAT HOLD A CREDENTIAL OR AN ADDRESS AND
+     * HAD NO CLOCK AT ALL.
+     *
+     * - `auth_states`: a sign-in attempt (PKCE verifier, the starting browser's
+     *   ownership token) is dead ten minutes after it was written, and was
+     *   deleted only by the *next* attempt. The last abandoned one stayed.
+     * - `auth_sessions`: an expired session is deleted when it is presented.
+     *   One that is never presented again — the ordinary fate of an expired
+     *   cookie — stayed for ever.
+     * - `daily_provider_spend`: the per-caller rows are keyed on a network
+     *   address or on the ownership cookie itself, and the ledger only ever
+     *   reads today's. The privacy notice says "for the current day"; nothing
+     *   made that true. The two global rows per day carry no identity and are
+     *   kept as the deployment's own spend history.
+     * - `rate_limit_buckets`: keyed the same way. A bucket untouched for two
+     *   days has refilled under every rule there is, so the row and its absence
+     *   mean the same thing — except that the row still names somebody. The
+     *   deployment-wide fences are exempt for the reason `rate-limit.ts` gives.
+     *
+     * The last two are created lazily by their own modules, so a database that
+     * has never rate-limited or spent has no table to sweep: absent is zero.
+     */
+    authStates: sweep('auth_states', () => deleteWhere('DELETE FROM auth_states WHERE expires_at <= ?', now.toISOString())),
+    authSessions: sweep('auth_sessions', () => deleteWhere('DELETE FROM auth_sessions WHERE expires_at <= ?', now.toISOString())),
+    callerSpendRows: sweep('daily_provider_spend', () =>
+      tableExists('daily_provider_spend')
+        ? deleteWhere(
+            `DELETE FROM daily_provider_spend WHERE counter LIKE '%@%' AND day < ?`,
+            isoDaysBefore(now, CALLER_LEDGER_DAYS).slice(0, 10),
+          )
+        : 0,
+    ),
+    rateBuckets: sweep('rate_limit_buckets', () =>
+      tableExists('rate_limit_buckets')
+        ? deleteWhere(
+            `DELETE FROM rate_limit_buckets WHERE refilled_at <= ? AND bucket_key NOT LIKE '%:@deployment'`,
+            isoDaysBefore(now, IDLE_RATE_BUCKET_DAYS),
+          )
+        : 0,
+    ),
   };
 }
 
@@ -194,6 +259,47 @@ function isoDaysBefore(now: Date, days: number): string {
 
 function deleteWhere(sql: string, cutoff: string): number {
   return Number(getDb().prepare(sql).run(cutoff).changes ?? 0);
+}
+
+function tableExists(name: string): boolean {
+  return getDb().prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name) !== undefined;
+}
+
+/**
+ * RELEASE PASS — THE SWEEP HAS A CLOCK OF ITS OWN.
+ *
+ * Its only caller was the end of a heavy region compilation
+ * (`compiler/runner.ts`). Since the planner-first convergence the normal flow
+ * is a Discovery scan and a deterministic build, and a compilation is the
+ * optional secondary path — so on a production deployment the sweep's trigger
+ * was a path travellers no longer take, and every rule above (the sixty-day
+ * decision sessions and thirty-day readings the privacy notice promises
+ * included) was a rule nothing applied.
+ *
+ * Started once per server process from `instrumentation.ts`. A first sweep a
+ * minute after start, then one per interval; both timers are unref'd so they
+ * never hold a process open, and the hourly latch still applies so a
+ * compilation that sweeps does not cause a second one. Idempotent across
+ * module re-evaluation, which is why the handle lives on `globalThis`.
+ */
+export function startRetentionSchedule(options: { firstDelayMs?: number; intervalMs?: number } = {}): () => void {
+  const holder = globalThis as unknown as { sidequestRetentionSchedule?: { stop: () => void } };
+  if (holder.sidequestRetentionSchedule) return holder.sidequestRetentionSchedule.stop;
+  const tick = (): void => {
+    const now = new Date();
+    if (retentionIsDue(now)) runRetentionSweep(now);
+  };
+  const first = setTimeout(tick, options.firstDelayMs ?? 60_000);
+  const every = setInterval(tick, options.intervalMs ?? RETENTION_INTERVAL_MS);
+  first.unref?.();
+  every.unref?.();
+  const stop = (): void => {
+    clearTimeout(first);
+    clearInterval(every);
+    delete holder.sidequestRetentionSchedule;
+  };
+  holder.sidequestRetentionSchedule = { stop };
+  return stop;
 }
 
 function sweep(table: string, run: () => number): number {

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { guardAction } from '@/lib/net/caller';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 import type { RefreshSummary } from '@/lib/trips/refresh-information';
 
@@ -22,6 +23,8 @@ export async function refreshTripInformationAction(tripId: string): Promise<Refr
   if (!tripIdSchema.safeParse(tripId).success) return { ok: false, error: 'We could not find that trip.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
+  const limited = await guardAction('trip_recheck');
+  if (limited) return { ok: false, error: limited };
   try {
     /* Loaded on press, not with the page: the providers it reaches have no business in the trip page's module graph. */
     const { refreshTripInformation } = await import('@/lib/trips/refresh-information');

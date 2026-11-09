@@ -210,3 +210,64 @@ describe('the matcher that decides whether the gate runs at all', () => {
     expect(response.headers.get('x-request-id')).not.toBe('attacker-chosen-id');
   });
 });
+
+describe('the ownership cookie slides with use', () => {
+  /**
+   * RELEASE PASS — a guest's trips are theirs for 180 days *after they last
+   * came back*, not for 180 days after the first thing they ever did. The
+   * cookie was written once, at mint; these state the renewal and, as
+   * importantly, everything the renewal must not do.
+   */
+  const TOKEN = '0b9e2a51-6f0c-4c58-9d0e-3c1f6f4f7a10.0123456789abcdef';
+  const savedNodeEnv = process.env.NODE_ENV;
+  const savedSecure = process.env.SIDEQUEST_SECURE_COOKIES;
+
+  afterEach(() => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = savedNodeEnv;
+    if (savedSecure === undefined) delete process.env.SIDEQUEST_SECURE_COOKIES;
+    else process.env.SIDEQUEST_SECURE_COOKIES = savedSecure;
+  });
+
+  function visit(path: string, init: { method?: string; cookie?: string } = {}): string | null {
+    const headers: Record<string, string> = {};
+    if (init.cookie !== undefined) headers.cookie = `sidequest_session=${init.cookie}`;
+    return proxy(new NextRequest(`http://localhost:4200${path}`, { method: init.method ?? 'GET', headers })).headers.get('set-cookie');
+  }
+
+  it('re-sends the same value with a fresh 180-day lifetime on the way to a trip', () => {
+    for (const path of ['/trips', '/trips/a-trip-id', '/trips/a-trip-id/itinerary']) {
+      const renewed = visit(path, { cookie: TOKEN });
+      expect(renewed, path).toContain(`sidequest_session=${TOKEN}`);
+      expect(renewed, path).toContain(`Max-Age=${60 * 60 * 24 * 180}`);
+      expect(renewed, path).toMatch(/HttpOnly/i);
+      expect(renewed, path).toMatch(/SameSite=lax/i);
+      expect(renewed, path).toContain('Path=/');
+    }
+  });
+
+  it('keeps Secure on a production deployment and drops it only for the pinned plaintext test server', () => {
+    (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+    delete process.env.SIDEQUEST_SECURE_COOKIES;
+    expect(visit('/trips', { cookie: TOKEN })).toMatch(/;\s*Secure/i);
+    process.env.SIDEQUEST_SECURE_COOKIES = 'off';
+    expect(visit('/trips', { cookie: TOKEN })).not.toMatch(/;\s*Secure/i);
+  });
+
+  it('never mints: a browser with no cookie leaves with none', () => {
+    expect(visit('/trips')).toBeNull();
+    expect(visit('/trips/a-trip-id/plan')).toBeNull();
+  });
+
+  it('renews only for a traveller reading their trips', () => {
+    for (const path of ['/', '/decide', '/share/some-token', '/api/health', '/api/trips/a-trip-id/progress', '/profile', '/tripsy']) {
+      expect(visit(path, { cookie: TOKEN }), path).toBeNull();
+    }
+    expect(visit('/trips/a-trip-id/plan', { cookie: TOKEN, method: 'POST' })).toBeNull();
+  });
+
+  it('does not write back a value this deployment could not have issued', () => {
+    for (const forged of ['short', 'x'.repeat(65), 'has space in it 0123456789', 'semi%3Bcolon-0123456789abcdef', '%0d%0aSet-Cookie:evil=1234567']) {
+      expect(visit('/trips', { cookie: forged }), forged).toBeNull();
+    }
+  });
+});

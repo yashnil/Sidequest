@@ -67,7 +67,8 @@ export interface ComposerResult {
 }
 
 const inputSchema = z.object({
-  destinationText: z.string().trim().min(2, 'Tell us where you are going'),
+  /* RELEASE PASS — bounded here as well: with a chosen index entry this text skipped the 200-character limit on the trip row and went to the geocoder and the model at any length. */
+  destinationText: z.string().trim().min(2, 'Tell us where you are going').max(200, 'That destination is too long'),
   destinationEntryId: z.string().nullable(),
   dateMode: z.enum(DATE_MODES),
   startDate: z.string(),

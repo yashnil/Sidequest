@@ -29,7 +29,8 @@ import {
   saveDecisionShortlist,
 } from '@/lib/db/decision-repository';
 import { createTrip } from '@/lib/db/repository';
-import { guardAction, sessionToken } from '@/lib/net/caller';
+import { getDb } from '@/lib/db/client';
+import { callerKey, guardAction, guardBilledAction, sessionToken } from '@/lib/net/caller';
 import { currentUserId } from '@/lib/auth/session';
 import { decisionAccessRefusal } from '@/lib/net/decision-access';
 import { saveComposerAnswers, saveDestinationQuery } from '@/lib/db/compiler-repository';
@@ -132,10 +133,23 @@ export async function widenAdvisorShortlistAction(id: string): Promise<AdvisorRe
   const session = getDecisionSession(id);
   if (!session?.advisor || session.resolvedTripId) return { ok: false };
   if (session.advisor.stats.research !== null || advisorResearchChoice() === 'off' || !needsResearch(session.answers, session.advisor)) return { ok: true };
-  const limited = await guardAction('decide_shortlist');
+  /*
+   * RELEASE PASS — THIS PRESS CAN BILL A MODEL, SO IT IS CHARGED LIKE ONE.
+   *
+   * The ledger key handed to the research was the *raw cookie*: a value the
+   * client writes. `daily-ceiling` reads a key's prefix to decide who is an
+   * account (`user:`) and who must be admitted as a newcomer (`session:`), so a
+   * cookie spelled `user:anything` spent from the part of the day reserved for
+   * signed-in travellers, a fresh random cookie opened a fresh personal
+   * allowance on every press, and nothing here drew on the hourly billed
+   * fence. `callerKey()` is the one identity the ledger may trust — the
+   * account, the trusted address, or a cookie this deployment signed — and
+   * `guardBilledAction` adds the fence every other billed door already takes.
+   */
+  const limited = await guardBilledAction('decide_shortlist');
   if (limited) return { ok: false };
   try {
-    const { shortlist, outcome } = await widenWithResearch(session.answers, session.advisor, new Date(), await sessionToken({ mint: false }).catch(() => null));
+    const { shortlist, outcome } = await widenWithResearch(session.answers, session.advisor, new Date(), await callerKey());
     console.warn('advisor research', { source: outcome.source, proposed: outcome.proposed, resolved: outcome.ids.length, modelCalls: outcome.modelCalls });
     if (shortlist !== session.advisor) saveDecisionShortlist(id, shortlist, new Date());
   } catch (error) {
@@ -314,18 +328,41 @@ export async function adoptAdvisorPickAction(id: string, pickId: string): Promis
   });
   if (!basics.success) return { ok: false, error: 'We could not turn that into a trip. Try adjusting your dates.' };
 
+  /*
+   * RELEASE PASS — ONE SESSION, ONE TRIP, AND THE SAME FENCE AS EVERY OTHER
+   * DOOR THAT WRITES A TRIP ROW.
+   *
+   * The trip was created first and the single-use claim on the session was
+   * checked afterwards, with awaits in between: two presses in flight each
+   * wrote a trip, and the loser returned "already chosen" with its row left
+   * behind. The identities are read first now, and the row, its answers and
+   * the claim are one transaction — a lost claim rolls the trip back. And it
+   * draws on `trip_create`, which it had skipped.
+   */
+  const fence = await guardAction('trip_create');
+  if (fence) return { ok: false, error: fence };
+  const ownerToken = await sessionToken({ mint: true });
+  const userId = await currentUserId();
   let tripId: string;
   try {
-    tripId = createTrip(basics.data, await sessionToken({ mint: true }), await currentUserId()).id;
-    saveComposerAnswers(tripId, answers);
-    saveDestinationQuery(tripId, 'known_destination', pick.resolveAs);
-    if (!resolveDecisionSession(id, tripId, now)) return { ok: false, error: 'You have already chosen for this one.' };
+    const adopted = getDb().transaction((): string | null => {
+      const created = createTrip(basics.data, ownerToken, userId).id;
+      saveComposerAnswers(created, answers);
+      saveDestinationQuery(created, 'known_destination', pick.resolveAs);
+      if (!resolveDecisionSession(id, created, now)) throw new AlreadyChosen();
+      return created;
+    });
+    tripId = adopted() as string;
   } catch (error) {
+    if (error instanceof AlreadyChosen) return { ok: false, error: 'You have already chosen for this one.' };
     console.error('Could not adopt an advisor pick', { id, pickId, error });
     return { ok: false, error: 'We could not save that. Nothing was lost — try again.' };
   }
   redirect(`/trips/${tripId}/plan`);
 }
+
+/** Thrown inside the adoption transaction so a lost claim rolls the new trip back. */
+class AlreadyChosen extends Error {}
 
 function minutesToTime(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;

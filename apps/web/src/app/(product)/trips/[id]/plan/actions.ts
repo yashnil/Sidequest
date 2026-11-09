@@ -1191,7 +1191,8 @@ export async function adoptDateWindowAction(
   if (!trip || !intent) return { ok: false, error: 'We could not find that trip.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  if (!Number.isInteger(month) || month < 1 || month > 12) {
+  /* RELEASE PASS — `year` is checked too: a five-digit year wrote a date no later read of the trip could parse. */
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2000 || year > 2100) {
     return { ok: false, error: 'That is not a month we offered.' };
   }
 

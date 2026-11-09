@@ -82,8 +82,7 @@ export function utcOffsetMinutesOn(date: string, timeZone: string): number {
    * be read by a fixed-width pattern, and Kathmandu and Eucla are exactly the
    * places where the minutes are the whole point.
    */
-  const formatter = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' });
-  const part = formatter.formatToParts(probe).find((entry) => entry.type === 'timeZoneName')?.value;
+  const part = offsetFormatterFor(timeZone).formatToParts(probe).find((entry) => entry.type === 'timeZoneName')?.value;
   /*
    * The seconds group is optional because pre-1900 local mean time has them —
    * Kolkata in 1850 formats as `GMT+05:53:28`. Nothing in a travel product dates
@@ -94,6 +93,50 @@ export function utcOffsetMinutesOn(date: string, timeZone: string): number {
   if (!match) return 0;
   const sign = match[1] === '-' ? -1 : 1;
   return sign * (Number(match[2]) * 60 + Number(match[3]));
+}
+
+/**
+ * RELEASE PASS — ONE FORMATTER PER ZONE, NOT ONE PER QUESTION.
+ *
+ * Constructing an `Intl.DateTimeFormat` is the expensive part of an offset
+ * probe (tens of microseconds; formatting with an existing one is a fraction of
+ * that), and the calendar builder asks about every day of every year a trip
+ * touches. Kept per zone identifier as written. Bounded, because the
+ * identifier can come from a stored booking: the runtime accepts any casing of
+ * a real zone, so an unbounded map keyed on the caller's spelling would be a
+ * map somebody else decides the size of.
+ */
+const OFFSET_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+const MAX_OFFSET_FORMATTERS = 128;
+
+function offsetFormatterFor(timeZone: string): Intl.DateTimeFormat {
+  const cached = OFFSET_FORMATTERS.get(timeZone);
+  if (cached) return cached;
+  /* Throws `RangeError` on a string that names no zone, exactly as it always did; nothing is cached for one. */
+  const formatter = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' });
+  if (OFFSET_FORMATTERS.size >= MAX_OFFSET_FORMATTERS) OFFSET_FORMATTERS.clear();
+  OFFSET_FORMATTERS.set(timeZone, formatter);
+  return formatter;
+}
+
+/**
+ * RELEASE PASS — WHETHER THE RUNTIME CAN REASON ABOUT THIS ZONE AT ALL.
+ *
+ * A zone identifier reaches the calendar from a traveller's typed booking and
+ * from a model's reading of a confirmation e-mail, and "Pacific time", "local time" and
+ * "GMT+2 (Lisbon)" are all things either one writes. Every offset function
+ * above throws on such a string. This is the question to ask first; the answer
+ * to "no" is to fall back to the zone of the day the thing happens on, never
+ * to fail the page or the calendar.
+ */
+export function isKnownTimeZone(zone: unknown): zone is string {
+  if (typeof zone !== 'string' || zone.length === 0 || zone.length > 64) return false;
+  try {
+    offsetFormatterFor(zone);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -20,7 +20,7 @@ import { describeContract, describeRefusal } from './describe';
 import { buildRefinementGraph, resumeWith, type RefinementInterpreter } from './graph';
 import { isStructuralRequest, modelRefinementInterpreter } from './interpreter';
 import { tripPatchSchema, type TripPatch } from './patch';
-import { RefinementBusyError, activeRun, beginRun, listRuns, updateRun, type RefinementRun } from './run-repository';
+import { RefinementBusyError, activeRun, beginRun, listRuns, releaseStaleRuns, updateRun, type RefinementRun } from './run-repository';
 import { applyTripPatch } from './patch';
 import { StaleTripVersionError, currentVersion, ensureBaselineVersion, getVersion, recordVersion, undoTarget } from './version-repository';
 import { refinementRunThreadId, refinementThreadId } from './threads';
@@ -181,7 +181,15 @@ export async function refineTripAction(input: { tripId: string; request: string;
   const trip = await ownedTrip(input.tripId);
   if (!trip) return { ok: false, error: FOREIGN_TRIP_REFUSAL };
 
-  const request = input.request.trim();
+  /*
+   * RELEASE PASS — a run left `running` by a crash or a deploy held the trip's
+   * lease for ever, and `releaseStaleRuns` had no caller: one interrupted
+   * refinement ended refinement for that trip. Ten minutes is several times
+   * the longest a run can legitimately take.
+   */
+  releaseStaleRuns({ olderThanMs: 10 * 60_000 });
+
+  const request = typeof input.request === 'string' ? input.request.trim() : '';
   if (request.length === 0) return { ok: false, error: 'Tell Sidequest what you would like changed.' };
   if (request.length > 600) return { ok: false, error: 'That is longer than Sidequest can act on. Try one change at a time.' };
 

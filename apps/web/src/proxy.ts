@@ -5,6 +5,13 @@ import {
   labsAccess,
 } from '@/lib/net/billable-surface';
 import { REQUEST_ID_HEADER, newRequestId } from '@/lib/net/request-id';
+import {
+  SESSION_COOKIE,
+  renewableSessionValue,
+  renewsSessionCookie,
+  secureCookiesEnabled,
+  sessionCookieOptions,
+} from '@/lib/net/session-cookie-attributes';
 
 /**
  * THE SPENDING GATE ON THE `/labs` **PAGES**.
@@ -77,6 +84,23 @@ export function proxy(request: NextRequest): NextResponse {
 
   const response = NextResponse.next({ request: { headers: forwarded } });
   response.headers.set(REQUEST_ID_HEADER, requestId);
+  /*
+   * RELEASE PASS — THE OWNERSHIP COOKIE'S LIFETIME SLIDES WITH USE.
+   *
+   * Written once at mint and never again, it expired a fixed 180 days after a
+   * browser's first action however often its owner came back — and for a
+   * traveller without an account that expiry is the loss of every trip. A
+   * traveller on their way to their trips gets the same value back with a
+   * fresh lifetime. Nothing is minted here and nothing is decided here: a
+   * request with no cookie gets none, and ownership is still judged by
+   * `lib/net/trip-access` against the stored token.
+   */
+  if (renewsSessionCookie(request.method, request.nextUrl.pathname)) {
+    const presented = request.cookies.get(SESSION_COOKIE)?.value;
+    if (renewableSessionValue(presented)) {
+      response.cookies.set(SESSION_COOKIE, presented, sessionCookieOptions({ secure: secureCookiesEnabled() }));
+    }
+  }
   return response;
 }
 
