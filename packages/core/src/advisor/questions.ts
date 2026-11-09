@@ -131,7 +131,8 @@ export const ADVISOR_QUESTIONS: readonly AdvisorQuestion[] = [
         one(key, FOCUS_LABELS[key], 1 / FOCUS_KEYS.length, (answers) => withDiscovery(answers, { focus: [key], focusRanked: false })),
       ),
     applies: () => true,
-    answered: (answers) => focusOf(answers).length > 0,
+    /* A request that named one precise thing ("hot springs") has said what the trip is about; a mood alone ("somewhere beautiful") has not. */
+    answered: (answers) => focusOf(answers).length > 0 || (discovery(answers).pursuits?.length ?? 0) > 0,
   },
   {
     id: 'lead',

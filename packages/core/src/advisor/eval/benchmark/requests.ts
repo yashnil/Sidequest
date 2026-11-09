@@ -60,6 +60,10 @@ export interface BenchChecks {
   carFree?: boolean;
   /** Every primary pick suits children (family ≥ 2 where known). */
   family?: boolean;
+  /** No primary pick is a whole country larger than a region somebody could cover in a trip (a specific destination was the useful answer). */
+  specific?: boolean;
+  /** Every primary pick's centre is at or beyond this absolute latitude (the aurora, the midnight sun). */
+  minAbsLat?: number;
 }
 
 export interface BenchRequest {
@@ -70,6 +74,8 @@ export interface BenchRequest {
   checks: BenchChecks;
   /** True when the request is deliberately vague, contradictory or hard. */
   hard?: boolean;
+  /** The pass that added the request, so a later benchmark can be compared on the original set alone. */
+  since?: 'rc';
 }
 
 const KARAKORAM: Box = [34.0, 72.5, 37.2, 78.5];
@@ -84,7 +90,7 @@ const BALKANS = ['AL', 'BA', 'BG', 'HR', 'XK', 'ME', 'MK', 'RO', 'RS', 'SI', 'GR
 const ANDES = ['PE', 'BO', 'EC', 'CO', 'CL', 'AR', 'VE'];
 const CARIBBEAN_BOX: Box = [9.5, -90, 27.5, -59];
 
-export const BENCH_REQUESTS: readonly BenchRequest[] = [
+export const GLOBAL_PASS_REQUESTS: readonly BenchRequest[] = [
   /* ── The brief's own examples, one or more phrasings each ──────────────── */
   { id: 'karakoram-budget-trek', category: 'trekking', text: 'Budget trekking in the Karakoram in July, two weeks, happy with basic guesthouses.', checks: { boxes: [KARAKORAM], months: [7], feasible: ['trek_high'], maxPriceLevel: 0.5 } },
   { id: 'karakoram-pakistan-mountains', category: 'trekking', text: 'I want big mountain scenery in northern Pakistan in August without spending much.', checks: { countries: ['PK'], months: [8], feasible: ['hike'], maxPriceLevel: 0.5 } },
@@ -250,3 +256,94 @@ export const BENCH_REQUESTS: readonly BenchRequest[] = [
   { id: 'long-trip-sabbatical', category: 'long', text: 'A three-month sabbatical starting in January, slow travel, hiking, culture and cheap living.', checks: { months: [1, 2, 3], maxPriceLevel: 0.6 }, hard: true },
   { id: 'two-nights', category: 'short', text: 'Two nights away next month from Paris, countryside and good food.', checks: { within: { origin: 'Paris', km: 1500 } }, hard: true },
 ];
+
+const ANY = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+void ANY;
+
+/**
+ * The release-candidate additions: the request types the first global pass
+ * answered worst. Vague wishes that name no activity; pursuits the estimators
+ * were weak on (dark skies, hot springs, birds, rail, scenic roads, safari);
+ * who is travelling rather than what for; and requests where the useful answer
+ * is a region, an island or a park rather than a whole country.
+ */
+export const RC_REQUESTS: readonly BenchRequest[] = [
+  /* ── Vague: a mood, not an activity ─────────────────────────────────────── */
+  { id: 'rc-vague-beautiful-relaxing', category: 'vague', text: 'Somewhere beautiful and relaxing.', checks: { specific: true, offers: ['coastal_scenery', 'beaches_swimming', 'lakes', 'high_mountains', 'hot_springs_wellness'] }, hard: true },
+  { id: 'rc-vague-unforgettable-friends', category: 'vague', text: 'An unforgettable trip with my friends.', checks: { specific: true }, hard: true },
+  { id: 'rc-vague-scenery-cheap', category: 'vague', text: 'Good scenery, not too expensive.', checks: { specific: true, maxPriceLevel: 0.85, offers: ['coastal_scenery', 'high_mountains', 'lakes', 'day_hiking', 'scenic_driving'] }, hard: true },
+  { id: 'rc-vague-adventurous-easy', category: 'vague', text: 'Somewhere adventurous but not too difficult.', checks: { specific: true, offers: ['day_hiking', 'paddling_boating', 'high_mountains', 'volcanoes_geothermal', 'wildlife_general', 'rainforest_biodiversity'] }, hard: true },
+  { id: 'rc-vague-romantic-june', category: 'vague', text: 'A romantic week away in June, somewhere special.', checks: { specific: true, months: [6] }, hard: true },
+  { id: 'rc-vague-recharge-february', category: 'vague', text: 'I am burnt out and need to switch off for ten days in February, somewhere warm and peaceful.', checks: { specific: true, months: [2], minHighC: 22 }, hard: true },
+  { id: 'rc-vague-family-summer', category: 'vague', text: 'A summer holiday that keeps two kids aged 6 and 9 happy, flying from London.', checks: { specific: true, family: true, months: [6, 7, 8] }, hard: true },
+  { id: 'rc-vague-wow-september', category: 'vague', text: 'We want to be wowed. Two weeks in September, comfortable budget.', checks: { specific: true, months: [9] }, hard: true },
+  { id: 'rc-vague-outdoorsy-couple', category: 'vague', text: 'We are an outdoorsy couple looking for a week of fresh air in May.', checks: { specific: true, months: [5], offers: ['day_hiking', 'high_mountains', 'lakes', 'coastal_scenery', 'paddling_boating'] }, hard: true },
+  /* ── Dark skies ─────────────────────────────────────────────────────────── */
+  { id: 'rc-stargazing-remote-march', category: 'stargazing', text: 'Stargazing somewhere remote in March, properly dark skies.', checks: { months: [3], offers: ['night_skies'], specific: true } },
+  { id: 'rc-stargazing-europe-august', category: 'stargazing', text: 'The best dark skies in Europe for the Perseid meteor shower in August.', checks: { countries: EUROPE, months: [8], offers: ['night_skies'], specific: true } },
+  { id: 'rc-astro-southern', category: 'stargazing', text: 'Astrophotography of the Milky Way in the southern hemisphere in June, deserts welcome.', checks: { months: [6], offers: ['night_skies'], boxes: [[-60, -180, 0, 180]], specific: true } },
+  { id: 'rc-aurora-february', category: 'stargazing', text: 'Northern lights in February with a decent chance of clear skies.', checks: { months: [2], minAbsLat: 60, specific: true } },
+  /* ── Hot springs ────────────────────────────────────────────────────────── */
+  { id: 'rc-hot-springs-winter', category: 'hot_springs', text: 'A week of hot springs in winter.', checks: { offers: ['hot_springs_wellness'], specific: true } },
+  { id: 'rc-onsen-japan', category: 'hot_springs', text: 'Onsen towns in Japan in January, traditional inns, snow outside.', checks: { countries: ['JP'], months: [1], offers: ['hot_springs_wellness'], specific: true } },
+  { id: 'rc-thermal-europe', category: 'hot_springs', text: 'Thermal baths and spa towns in central Europe in November, by train.', checks: { countries: EUROPE, months: [11], offers: ['hot_springs_wellness'], carFree: true, specific: true } },
+  /* ── Birds and wildlife ─────────────────────────────────────────────────── */
+  { id: 'rc-birding-south-america', category: 'birding', text: 'Serious birdwatching in South America in October, cloud forest and wetlands.', checks: { countries: ['CO', 'EC', 'PE', 'BR', 'BO', 'AR', 'CL', 'VE', 'GY', 'SR', 'PY', 'UY', 'GF'], months: [10], offers: ['birding'], specific: true } },
+  { id: 'rc-birding-europe-spring', category: 'birding', text: 'Spring bird migration in Europe, wetlands and hides, in late April.', checks: { countries: EUROPE, months: [4], offers: ['birding'], specific: true } },
+  { id: 'rc-safari-first-timer', category: 'safari', text: 'Our first safari: the classic big animals, in July, with children aged 8 and 11.', checks: { countries: SUB_SAHARAN_SAFARI, months: [7], feasible: ['safari'], offers: ['big_game_safari'], specific: true } },
+  { id: 'rc-safari-green-season', category: 'safari', text: 'A walking safari in Zambia or Zimbabwe in September, small camps.', checks: { countries: ['ZM', 'ZW'], months: [9], feasible: ['safari'], offers: ['big_game_safari'], specific: true } },
+  { id: 'rc-safari-india', category: 'safari', text: 'A wildlife safari in India in April, tigers if we are lucky.', checks: { countries: ['IN'], months: [4], offers: ['big_game_safari', 'wildlife_general'], specific: true } },
+  { id: 'rc-whales-august', category: 'wildlife', text: 'Whale watching in August, somewhere the sightings are reliable.', checks: { months: [8], offers: ['marine_wildlife'], specific: true } },
+  { id: 'rc-bears-autumn', category: 'wildlife', text: 'Watching bears in the wild in September.', checks: { months: [9], offers: ['wildlife_general'], specific: true } },
+  /* ── Rail and road ──────────────────────────────────────────────────────── */
+  { id: 'rc-rail-scenic-alps', category: 'rail', text: 'Scenic mountain railways in the Alps in July, no car.', checks: { boxes: [ALPS], months: [7], offers: ['rail_journeys'], carFree: true, specific: true } },
+  { id: 'rc-rail-asia', category: 'rail', text: 'A great rail journey in Asia in March, two weeks, sleeper trains welcome.', checks: { months: [3], offers: ['rail_journeys'] } },
+  { id: 'rc-rail-heritage-uk', category: 'rail', text: 'Steam trains and heritage railways in Britain in June.', checks: { countries: ['GB'], months: [6], offers: ['rail_journeys'], specific: true } },
+  { id: 'rc-drive-coast-autumn', category: 'road_trip', text: 'A scenic coastal road trip in October, ten days, good food on the way.', checks: { months: [10], feasible: ['road_trip'], offers: ['scenic_driving'], specific: true } },
+  { id: 'rc-drive-mountain-passes', category: 'road_trip', text: 'Driving high mountain passes in July, hairpins and viewpoints.', checks: { months: [7], feasible: ['road_trip'], offers: ['scenic_driving', 'high_mountains'], specific: true } },
+  { id: 'rc-drive-usa-parks', category: 'road_trip', text: 'A two-week national parks road trip in the American West in September.', checks: { countries: ['US'], months: [9], feasible: ['road_trip'], offers: ['scenic_driving'], specific: true } },
+  /* ── Sea and snow ───────────────────────────────────────────────────────── */
+  { id: 'rc-dive-liveaboard', category: 'diving', text: 'A liveaboard diving trip in February, sharks and big pelagics.', checks: { months: [2], feasible: ['dive'], offers: ['snorkel_dive'], specific: true } },
+  { id: 'rc-snorkel-family-easter', category: 'diving', text: 'Easy snorkelling straight off the beach for a family at Easter.', checks: { months: [3, 4], feasible: ['beach', 'dive'], offers: ['snorkel_dive'], family: true, specific: true } },
+  { id: 'rc-dive-red-sea-or-similar', category: 'diving', text: 'Wreck diving in warm water in November, within a five hour flight of London.', checks: { months: [11], feasible: ['dive'], offers: ['snorkel_dive'], within: { origin: 'London', km: 4500 }, specific: true } },
+  { id: 'rc-ski-powder-january', category: 'ski', text: 'Deep powder skiing in January, we are strong skiers.', checks: { months: [1], feasible: ['ski'], offers: ['winter_snow'], specific: true } },
+  { id: 'rc-ski-family-february', category: 'ski', text: 'A family ski week at February half term, gentle slopes and a village, from the UK.', checks: { months: [2], feasible: ['ski'], offers: ['winter_snow'], within: { origin: 'London', km: 3000 }, specific: true } },
+  { id: 'rc-ski-late-season', category: 'ski', text: 'Late season skiing in the second half of April, where is the snow still reliable?', checks: { months: [4], feasible: ['ski'], offers: ['winter_snow'], specific: true } },
+  { id: 'rc-ski-southern', category: 'ski', text: 'Skiing in July.', checks: { months: [7], feasible: ['ski'], offers: ['winter_snow'], specific: true }, hard: true },
+  { id: 'rc-beach-swim-october-europe', category: 'beach', text: 'Somewhere in Europe where the sea is still warm enough to swim in mid October.', checks: { countries: EUROPE, months: [10], feasible: ['beach'], specific: true } },
+  { id: 'rc-beach-calm-toddlers', category: 'beach', text: 'Calm shallow beaches for toddlers in June.', checks: { months: [6], feasible: ['beach'], family: true, specific: true } },
+  /* ── Mountains ──────────────────────────────────────────────────────────── */
+  { id: 'rc-mountaineering-first-6000', category: 'mountaineering', text: 'A first 6,000 metre peak, non-technical, in October.', checks: { months: [10], offers: ['high_mountains'], specific: true }, hard: true },
+  { id: 'rc-mountaineering-alpine-course', category: 'mountaineering', text: 'An introductory mountaineering week on glaciers in the Alps in July.', checks: { boxes: [ALPS], months: [7], offers: ['high_mountains', 'glaciers_ice'], specific: true } },
+  { id: 'rc-trek-huts-september', category: 'trekking', text: 'Hut to hut trekking for a week in September, no camping, not too crowded.', checks: { months: [9], feasible: ['trek_high', 'hike'], offers: ['multi_day_trekking'], specific: true } },
+  { id: 'rc-trek-shoulder-nepal-alternative', category: 'trekking', text: 'High altitude trekking in May, somewhere other than Nepal.', checks: { months: [5], feasible: ['trek_high'], offers: ['multi_day_trekking', 'high_mountains'], notNamed: ['Nepal'], specific: true } },
+  { id: 'rc-hike-winter-sun', category: 'hiking', text: 'Hiking in the sun in January without a long-haul flight from Berlin.', checks: { months: [1], feasible: ['hike'], within: { origin: 'Berlin', km: 4500 }, minHighC: 14, specific: true } },
+  /* ── Who is travelling ──────────────────────────────────────────────────── */
+  { id: 'rc-access-wheelchair-city', category: 'access', text: 'A city break in May for a wheelchair user, flat, good public transport, lots to see.', checks: { months: [5], feasible: ['city'], carFree: true, specific: true } },
+  { id: 'rc-access-low-mobility-nature', category: 'access', text: 'My mother cannot walk far but loves mountains and lakes. Somewhere in September with easy viewpoints.', checks: { months: [9], offers: ['high_mountains', 'lakes'], specific: true } },
+  { id: 'rc-access-seniors-warm', category: 'access', text: 'Winter sun for two people in their late seventies, easy walking, good healthcare, in January.', checks: { months: [1], minHighC: 18, specific: true } },
+  { id: 'rc-family-teens-adventure', category: 'family', text: 'Adventure for a family with teenagers in August: rafting, hiking, wild swimming.', checks: { months: [8], offers: ['paddling_boating', 'day_hiking'], specific: true } },
+  { id: 'rc-family-toddler-easy', category: 'family', text: 'An easy first trip abroad with a two year old in May, short flight from Amsterdam.', checks: { months: [5], family: true, within: { origin: 'Amsterdam', km: 2500 }, specific: true } },
+  { id: 'rc-family-wildlife-kids', category: 'family', text: 'Animals for the kids, aged 5 and 8, at Easter, without malaria tablets.', checks: { months: [3, 4], family: true, offers: ['wildlife_general', 'big_game_safari', 'marine_wildlife'], specific: true }, hard: true },
+  /* ── Food, culture, remote ──────────────────────────────────────────────── */
+  { id: 'rc-food-october', category: 'food', text: 'A food-focused trip in October: markets, regional cooking, wine.', checks: { months: [10], offers: ['food'], specific: true } },
+  { id: 'rc-food-asia-street', category: 'food', text: 'The best street food in Asia, a week in November.', checks: { months: [11], offers: ['food'], boxes: [[-11, 60, 55, 150]], specific: true } },
+  { id: 'rc-culture-ancient', category: 'culture', text: 'Ancient ruins and archaeology in March, somewhere less visited than Rome or Athens.', checks: { months: [3], offers: ['villages_culture'], notNamed: ['Rome', 'Athens'], specific: true } },
+  { id: 'rc-remote-expedition', category: 'remote', text: 'A properly remote adventure in August, days from the nearest road, we are experienced.', checks: { months: [8], specific: true } },
+  { id: 'rc-remote-islands', category: 'remote', text: 'Remote islands almost nobody visits, in December.', checks: { months: [12], kinds: ['island', 'island_group', 'archipelago'], littleKnown: 2 } },
+  /* ── A region, not a country ────────────────────────────────────────────── */
+  { id: 'rc-specific-italy', category: 'specific', text: 'Italy in September: beaches, old towns and food.', checks: { countries: ['IT'], months: [9], specific: true } },
+  { id: 'rc-specific-scotland', category: 'specific', text: 'Hiking and lochs in Scotland in June.', checks: { countries: ['GB'], months: [6], boxes: [[54.6, -8.7, 60.9, -0.7]], specific: true } },
+  { id: 'rc-specific-new-zealand', category: 'specific', text: 'Mountains and fjords in New Zealand in February, two weeks.', checks: { countries: ['NZ'], months: [2], specific: true } },
+  { id: 'rc-specific-morocco', category: 'specific', text: 'Morocco in March: desert, mountains and a souk.', checks: { countries: ['MA'], months: [3], specific: true } },
+  { id: 'rc-specific-vietnam', category: 'specific', text: 'Where in Vietnam in December for good weather and beaches?', checks: { countries: ['VN'], months: [12], feasible: ['beach'], specific: true } },
+  { id: 'rc-specific-usa-autumn', category: 'specific', text: 'Autumn colours in the United States in October.', checks: { countries: ['US'], months: [10], specific: true } },
+  /* ── Safety and seasons that bite ───────────────────────────────────────── */
+  { id: 'rc-season-monsoon-india', category: 'seasonality', text: 'India in July: where is the monsoon least of a problem?', checks: { countries: ['IN'], months: [7], specific: true }, hard: true },
+  { id: 'rc-season-caribbean-september', category: 'seasonality', text: 'A Caribbean beach in September without gambling on hurricanes.', checks: { months: [9], feasible: ['beach'], specific: true }, hard: true },
+  { id: 'rc-season-gorillas', category: 'seasonality', text: 'Gorilla trekking in the drier months, when should we go and where?', checks: { countries: ['RW', 'UG', 'CD', 'CG', 'GA', 'CM', 'CF'], specific: true }, hard: true },
+  { id: 'rc-safety-sahel', category: 'safety', text: 'Desert landscapes and old trading towns in the Sahara in January.', checks: { months: [1], offers: ['desert_landscapes'], specific: true }, hard: true },
+].map((request) => ({ ...request, since: 'rc' as const })) as BenchRequest[];
+
+/** Every request: the first global pass's 147 and the release-candidate additions. */
+export const BENCH_REQUESTS: readonly BenchRequest[] = [...GLOBAL_PASS_REQUESTS, ...RC_REQUESTS];

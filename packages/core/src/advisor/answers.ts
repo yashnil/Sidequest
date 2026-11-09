@@ -72,6 +72,68 @@ export const FOCUS_EXPERIENCES: Record<FocusKey, Partial<Record<Experience, numb
   rail: { rail_journeys: 0.7, villages_culture: 0.3 },
 };
 
+/**
+ * PURSUITS: one thing a traveller named that no broad focus says precisely.
+ *
+ * "Hot springs" is not "volcanoes", "stargazing" is not "desert" and a food
+ * trip is not half a culture trip. Each is read from the request's own words
+ * and scored on the experience it actually is.
+ */
+export const PURSUIT_KEYS = ['stargazing', 'hot_springs', 'wellness', 'paddling', 'food', 'culture'] as const;
+export type PursuitKey = (typeof PURSUIT_KEYS)[number];
+export const PURSUIT_LABELS: Record<PursuitKey, string> = {
+  stargazing: 'Dark skies and stargazing',
+  hot_springs: 'Hot springs',
+  wellness: 'Spa and wellness',
+  paddling: 'On the water',
+  food: 'Food and drink',
+  culture: 'History and culture',
+};
+export const PURSUIT_EXPERIENCES: Record<PursuitKey, Partial<Record<Experience, number>>> = {
+  stargazing: { night_skies: 0.85, desert_landscapes: 0.15 },
+  hot_springs: { hot_springs_wellness: 0.8, volcanoes_geothermal: 0.2 },
+  wellness: { hot_springs_wellness: 0.6, beaches_swimming: 0.2, lakes: 0.2 },
+  paddling: { paddling_boating: 0.75, lakes: 0.15, coastal_scenery: 0.1 },
+  food: { food: 0.8, villages_culture: 0.1, city_life: 0.1 },
+  culture: { villages_culture: 0.85, city_life: 0.15 },
+};
+
+/**
+ * MOODS: what a request says when it names no activity at all.
+ *
+ * "Somewhere beautiful and relaxing", "an unforgettable trip with friends",
+ * "adventurous but not too difficult". These are not interests and are never
+ * scored as if they were: each is a *leaning* across several experiences, any
+ * one of which satisfies it (a superb coast is beautiful without also being a
+ * mountain), used only while nothing more specific has been said, and stated
+ * back as an assumption so one answer to "what do you most want to do?" replaces
+ * it.
+ */
+export const MOOD_KEYS = ['scenic', 'relaxing', 'adventurous', 'social', 'memorable', 'romantic', 'family'] as const;
+export type MoodKey = (typeof MOOD_KEYS)[number];
+export const MOOD_LABELS: Record<MoodKey, string> = {
+  scenic: 'Beautiful scenery',
+  relaxing: 'Somewhere to relax',
+  adventurous: 'Adventure',
+  social: 'Fun with friends',
+  memorable: 'Something unforgettable',
+  romantic: 'Romantic',
+  family: 'Easy family time',
+};
+export const MOOD_EXPERIENCES: Record<MoodKey, Partial<Record<Experience, number>>> = {
+  scenic: { coastal_scenery: 0.25, high_mountains: 0.25, lakes: 0.2, day_hiking: 0.1, scenic_driving: 0.1, villages_culture: 0.1 },
+  relaxing: { beaches_swimming: 0.35, lakes: 0.2, hot_springs_wellness: 0.15, coastal_scenery: 0.15, villages_culture: 0.1, food: 0.05 },
+  adventurous: { day_hiking: 0.3, high_mountains: 0.2, paddling_boating: 0.15, volcanoes_geothermal: 0.1, wildlife_general: 0.1, rainforest_biodiversity: 0.1, desert_landscapes: 0.05 },
+  social: { city_life: 0.3, beaches_swimming: 0.25, food: 0.2, day_hiking: 0.1, paddling_boating: 0.1, coastal_scenery: 0.05 },
+  memorable: { high_mountains: 0.15, wildlife_general: 0.15, coastal_scenery: 0.15, villages_culture: 0.15, volcanoes_geothermal: 0.1, glaciers_ice: 0.1, desert_landscapes: 0.1, big_game_safari: 0.1 },
+  romantic: { coastal_scenery: 0.25, beaches_swimming: 0.25, villages_culture: 0.2, food: 0.2, lakes: 0.1 },
+  family: { beaches_swimming: 0.3, wildlife_general: 0.2, lakes: 0.15, day_hiking: 0.15, city_life: 0.1, villages_culture: 0.1 },
+};
+
+/** Anything an interest can be keyed by: a focus, a pursuit, or — while nothing else was said — a mood. */
+export type InterestKey = FocusKey | PursuitKey | MoodKey;
+export const ADVISOR_INTEREST_LABELS: Record<InterestKey, string> = { ...FOCUS_LABELS, ...PURSUIT_LABELS, ...MOOD_LABELS };
+
 export const ADVENTURE_LEVELS = ['comfortable', 'active', 'rugged', 'expedition'] as const;
 export type AdventureLevel = (typeof ADVENTURE_LEVELS)[number];
 export const ADVENTURE_LABELS: Record<AdventureLevel, string> = {
@@ -152,6 +214,10 @@ export const advisorAnswersSchema = z.object({
   aurora: z.boolean().optional(),
   /** `diving` and `snorkel` are read from the request ("world-class diving", "snorkelling off the beach"): the water is the point, not the sand. */
   swimStyle: z.enum(['warm_sea', 'lakes', 'either', 'diving', 'snorkel']).optional(),
+  /** Specific things the request named that no focus says precisely ("hot springs", "stargazing"). */
+  pursuits: z.array(z.enum(PURSUIT_KEYS)).max(PURSUIT_KEYS.length).optional(),
+  /** What a request with no activity in it leans towards ("beautiful and relaxing"). Used only while `focus` and `pursuits` are empty. */
+  moods: z.array(z.enum(MOOD_KEYS)).max(MOOD_KEYS.length).optional(),
   /** What the traveller typed, verbatim, so a reading can always be checked against it. */
   request: z.string().max(600).optional(),
   /** What Sidequest took as given without being told, in words, so it can be corrected. */

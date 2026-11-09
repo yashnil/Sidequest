@@ -179,6 +179,18 @@ export function experienceValue(input: CatalogDestination | Destination, experie
 
 export function interestValue(input: CatalogDestination | Destination, interest: AdvisorInterest, months: readonly number[]): number {
   const destination = asDestination(input);
+  if (interest.any) {
+    /*
+     * A leaning ("somewhere beautiful") is met by the best the place has among
+     * the things that could meet it, with a little for a second string. The
+     * shares only say which of those things the word most often means.
+     */
+    const top = Math.max(...Object.values(interest.mapping).map((share) => share ?? 0));
+    const values = (Object.entries(interest.mapping) as [Experience, number][])
+      .map(([experience, share]) => experienceValue(destination, experience, months) * (0.75 + 0.25 * (share / top)))
+      .sort((a, b) => b - a);
+    return clamp01((0.75 * (values[0] ?? 0) + 0.25 * (values[1] ?? 0)) * trust(destination));
+  }
   let total = 0;
   let shares = 0;
   for (const [experience, share] of Object.entries(interest.mapping) as [Experience, number][]) {

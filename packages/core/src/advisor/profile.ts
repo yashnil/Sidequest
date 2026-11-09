@@ -3,9 +3,12 @@ import { EXPERIENCES, type Experience, type WorldRegion } from './catalog/schema
 import {
   ADVENTURE_LEVELS,
   FOCUS_EXPERIENCES,
+  MOOD_EXPERIENCES,
   OPPOSITE_REFINEMENT,
+  PURSUIT_EXPERIENCES,
   type AdvisorAnswers,
   type FocusKey,
+  type InterestKey,
   type Refinement,
 } from './answers';
 import { originPointFromText, type OriginPoint } from './origin';
@@ -35,6 +38,8 @@ export interface AdvisorProfile {
   interests: AdvisorInterest[];
   /** True when the first interest is the stated lead (ranked, or the only one). */
   leadStated: boolean;
+  /** True when every interest is a mood read from a vague request: a leaning Sidequest assumed, not a wish the traveller stated. */
+  inferredInterests: boolean;
   /** 0 comfortable … 3 expedition. */
   adventure: number | null;
   /** 1 budget … 4 luxury. */
@@ -85,9 +90,15 @@ export interface AdvisorProfile {
 }
 
 export interface AdvisorInterest {
-  key: FocusKey;
+  key: InterestKey;
   weight: number;
   mapping: Partial<Record<Experience, number>>;
+  /**
+   * A leaning rather than a wish (a mood: "somewhere beautiful"): any one of
+   * its experiences satisfies it, so it is scored on the best the place has,
+   * never on having all of them.
+   */
+  any?: boolean;
 }
 
 export const FACTOR_IDS = [
@@ -210,6 +221,10 @@ function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAns
     if (key === 'lakes' && discovery?.swimStyle === 'lakes') mapping = { lakes: 1 };
     interests.push({ key, weight, mapping });
   }
+  /* A pursuit is something the traveller named outright, so it weighs as much as a lead interest. */
+  for (const key of discovery?.pursuits ?? []) interests.push({ key, weight: 1, mapping: PURSUIT_EXPERIENCES[key] });
+  /* A mood speaks only while nothing more specific has been said. */
+  if (interests.length === 0) for (const key of discovery?.moods ?? []) interests.push({ key, weight: 1, mapping: MOOD_EXPERIENCES[key], any: true });
   return interests;
 }
 
@@ -347,7 +362,8 @@ export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
     wants: wantsOf(interests),
     focus,
     interests,
-    leadStated: interests.length === 1 || (discovery?.focusRanked === true && interests.length > 1),
+    leadStated: (interests.length === 1 && !interests[0]!.any) || (discovery?.focusRanked === true && interests.length > 1 && focus.length > 0),
+    inferredInterests: interests.length > 0 && interests.every((interest) => interest.any === true),
     adventure,
     budget,
     lodging: answers.lodgingComfort === 'simple' ? 'simple' : answers.lodgingComfort === 'refined' ? 'luxury' : answers.lodgingComfort === 'comfortable' ? 'comfortable' : null,

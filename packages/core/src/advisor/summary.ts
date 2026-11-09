@@ -1,5 +1,5 @@
 import type { TripComposerAnswers } from '../schemas/composer';
-import { ADVENTURE_LABELS, FOCUS_LABELS, REFINEMENT_LABELS } from './answers';
+import { ADVENTURE_LABELS, FOCUS_LABELS, MOOD_LABELS, PURSUIT_LABELS, REFINEMENT_LABELS } from './answers';
 import { monthsLabel } from './advise';
 import { originPointFromText } from './origin';
 import { COUNTRY_GROUPS } from './parse';
@@ -29,6 +29,11 @@ export function profileChips(answers: TripComposerAnswers): ProfileChip[] {
   if (focus.length > 0) {
     chips.push({ question: 'focus', label: focus.map((key, index) => (index === 0 && discovery?.focusRanked && focus.length > 1 ? `${FOCUS_LABELS[key]} first` : FOCUS_LABELS[key])).join(' · ') });
   }
+  const pursuits = discovery?.pursuits ?? [];
+  if (pursuits.length > 0) chips.push({ question: 'focus', label: pursuits.map((key) => PURSUIT_LABELS[key]).join(' · ') });
+  /* A mood is shown only while it is what the list is built on. */
+  const moods = discovery?.moods ?? [];
+  if (focus.length === 0 && pursuits.length === 0 && moods.length > 0) chips.push({ question: 'focus', label: moods.map((key) => MOOD_LABELS[key]).join(' · ') });
   const dates = answers.dates;
   if (dates.mode === 'season' && dates.season) {
     chips.push({ question: 'when', label: `${dates.season[0]!.toUpperCase()}${dates.season.slice(1)} · ${monthsLabel(seasonMonthsForTraveller(dates.season, origin))}`, assumed: !origin });

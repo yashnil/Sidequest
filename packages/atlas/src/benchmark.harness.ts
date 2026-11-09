@@ -44,7 +44,7 @@ import { loadAtlas } from './load';
  */
 
 const NOW = new Date('2026-11-08T12:00:00Z');
-const OUT = new URL('../../../docs/global-destinations/benchmark/', import.meta.url).pathname;
+const OUT = process.env.BENCH_OUT ? `${process.env.BENCH_OUT.replace(/\/$/, '')}/` : new URL('../../../docs/global-destinations/benchmark/', import.meta.url).pathname;
 const BASELINE = new URL('../../../docs/global-destinations/baseline/baseline-234.json', import.meta.url).pathname;
 
 const ACTIVITY_OF: Record<BenchActivity, Activity> = { hike: 'hike_low', trek_high: 'hike_high', beach: 'beach', dive: 'dive', ski: 'ski', safari: 'safari', city: 'city', rainforest: 'wild', desert: 'desert', road_trip: 'drive', lakes: 'paddle' };
@@ -102,6 +102,9 @@ function evaluate(checks: BenchChecks, picks: Destination[], atlas: Atlas): Chec
   }
   if (checks.carFree) all('doable without a car', (pick) => pick.access.car !== 'essential');
   if (checks.family) all('suits children', (pick) => pick.family === null || pick.family >= 1.5);
+  /* A country somebody could not cover in one trip is a vague answer where a region, an island or a park was the useful one. */
+  if (checks.specific) all('a specific destination, not a whole country', (pick) => !(pick.kind === 'country' && pick.radiusKm > 150));
+  if (checks.minAbsLat !== undefined) all(`at latitude ≥ ${checks.minAbsLat}°`, (pick) => Math.abs(pick.center.lat) >= checks.minAbsLat!);
   return out;
 }
 
@@ -115,7 +118,7 @@ interface SystemRun {
   category: string;
   hard: boolean;
   text: string;
-  picks: { id: string; name: string; context: string; basis: string; score: number }[];
+  picks: { id: string; name: string; context: string; basis: string; kind?: string; score: number }[];
   alternates: string[];
   checks: CheckOutcome[];
   overlapping: number;
@@ -193,7 +196,7 @@ describe('global benchmark', () => {
         category: request.category,
         hard: request.hard === true,
         text: request.text,
-        picks: first.shortlist.picks.map((pick) => ({ id: pick.id, name: pick.name, context: pick.context, basis: pick.basis, score: pick.score })),
+        picks: first.shortlist.picks.map((pick) => ({ id: pick.id, name: pick.name, context: pick.context, basis: pick.basis, kind: pick.kind, score: pick.score })),
         alternates: first.shortlist.alternates.map((pick) => pick.name),
         checks: evaluate(request.checks, destinations, atlas),
         overlapping: overlapping(destinations),

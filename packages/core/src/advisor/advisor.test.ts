@@ -114,13 +114,50 @@ describe('reading what somebody typed', () => {
     const parsed = parseTravelRequest('Somewhere outdoors in August', base());
     expect(parsed.answers.discovery?.focus).toEqual([]);
     expect(parsed.vague).toContain('outdoors');
+    /* The word is a leaning, shown back as an assumption — never a stated interest. */
+    expect(parsed.answers.discovery?.moods).toEqual(['scenic']);
+    expect(parsed.answers.discovery?.pursuits).toBeUndefined();
+    expect(parsed.assumptions.join(' ')).toMatch(/didn’t name an activity/);
+  });
+
+  it('reads a request with no activity in it as leanings, not as arbitrary words to look up', () => {
+    const relaxing = parseTravelRequest('Somewhere beautiful and relaxing.', base());
+    expect(relaxing.answers.discovery?.moods).toEqual(['scenic', 'relaxing']);
+    expect(relaxing.answers.discovery?.terms).toBeUndefined();
+    const friends = parseTravelRequest('An unforgettable trip with my friends.', base());
+    expect(friends.answers.discovery?.moods).toEqual(['social', 'memorable']);
+    expect(friends.answers.discovery?.terms).toBeUndefined();
+    const cheap = parseTravelRequest('Good scenery, not too expensive.', base());
+    expect(cheap.answers.discovery?.moods).toEqual(['scenic']);
+    expect(cheap.answers.budget).toBe('mid_range');
+    const easy = parseTravelRequest('Somewhere adventurous but not too difficult.', base());
+    expect(easy.answers.discovery?.moods).toEqual(['adventurous']);
+    expect(easy.answers.discovery?.adventure).toBe('active');
+    /* Who is travelling is not a thing to search guides for. */
+    const access = parseTravelRequest('Good scenery that works for a wheelchair user', base());
+    expect(access.answers.travelerNeeds).toContain('mobility_limited');
+    expect(access.answers.discovery?.terms).toBeUndefined();
+  });
+
+  it('drops the mood the moment something specific is said', () => {
+    const parsed = parseTravelRequest('Somewhere beautiful for hiking', base());
+    expect(parsed.answers.discovery?.focus).toEqual(['hiking']);
+    expect(parsed.answers.discovery?.moods).toBeUndefined();
+  });
+
+  it('reads a precise pursuit as itself: hot springs are not volcanoes, a food trip is not half a culture trip', () => {
+    expect(parseTravelRequest('A week of hot springs in winter', base()).answers.discovery).toMatchObject({ focus: [], pursuits: ['hot_springs'] });
+    expect(parseTravelRequest('Stargazing somewhere remote in March', base()).answers.discovery?.pursuits).toEqual(['stargazing']);
+    expect(parseTravelRequest('A food-focused trip in October: markets, regional cooking, wine', base()).answers.discovery?.pursuits).toContain('food');
+    expect(parseTravelRequest('Temples and ruins in March', base()).answers.discovery).toMatchObject({ focus: [], pursuits: ['culture'] });
+    expect(parseTravelRequest('Food and culture in Japan', base()).answers.discovery?.focus).toEqual(['culture_food']);
   });
 
   it('does not read hike difficulty as a budget, or hot springs as hot weather', () => {
     const parsed = parseTravelRequest('Moderate hikes and hot springs in Iceland-style scenery', base());
     expect(parsed.answers.budget).toBeUndefined();
     expect(parsed.answers.climatePreference).toBeUndefined();
-    expect(parsed.answers.discovery?.focus).toContain('volcanoes');
+    expect(parsed.answers.discovery?.pursuits).toContain('hot_springs');
   });
 
   it('reads a named sub-region without widening it to its continent', () => {

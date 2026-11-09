@@ -1,6 +1,6 @@
 import type { TripComposerAnswers } from '../schemas/composer';
 import { EXPERIENCE_LABELS, type CatalogDestination, type Experience } from './catalog/schema';
-import { FOCUS_LABELS, type FocusKey } from './answers';
+import { ADVISOR_INTEREST_LABELS, type FocusKey, type InterestKey } from './answers';
 import { arrayWorld, type Destination, type DestinationWorld } from './destination';
 import { profileFrom, type AdvisorProfile, type FactorId } from './profile';
 import { GOOD_MONTH, compareScored, monthWord, scoreDestination, seasonModelFor, type AdvisorExclusion, type ScoredDestination } from './score';
@@ -95,7 +95,58 @@ export function rankCatalog(answers: TripComposerAnswers, source: DestinationSou
     (scored.exclusion ? excluded : ranked).push(scored);
   }
   ranked.sort(compareScored);
-  return { profile, ranked, excluded, worldSize: world.size, considered: candidates.length };
+  return { profile, ranked: withoutBroadStandIns(ranked, profile), excluded, worldSize: world.size, considered: candidates.length };
+}
+
+/** A country wider than this (as a radius) is more than one trip covers; below it — Costa Rica, Sri Lanka, Jamaica — the country is the trip. */
+export const TRIP_SIZED_KM = 150;
+/** A derived region wider than this is an area on a map, not somewhere to spend a week. */
+const VAST_KM = 300;
+/**
+ * How far below its whole a part may score and still be the better answer. Wide
+ * on purpose: a country's reading is the sum of everything inside it, so it
+ * nearly always outscores any one of its regions — and is still the less useful
+ * thing to be told.
+ */
+const PART_MARGIN = 0.2;
+/** When the traveller asked for a trip that spans a country, a part has to all but match it. */
+const SPANNING_MARGIN = 0.04;
+
+/**
+ * THE MOST SPECIFIC PLACE THAT CARRIES THE TRIP.
+ *
+ * "Italy" is true and useless when Sicily scores as well: somebody still has to
+ * decide where in Italy. A whole country, or a derived region too wide to be
+ * one trip, stands down whenever one of its own parts answers the request
+ * about as well. It stays when nothing inside it comes close — and it is held
+ * to a narrower margin when the traveller asked for the kind of trip that
+ * spans a country (a long road trip, a rail journey), because then the whole
+ * may honestly be the destination.
+ */
+function withoutBroadStandIns(ranked: readonly ScoredDestination[], profile: AdvisorProfile): ScoredDestination[] {
+  const nights = profile.nights?.max ?? 0;
+  const spanning = ((profile.focus.includes('road_trips') || profile.focus.includes('rail')) && nights >= 10) || nights >= 18;
+  const margin = spanning ? SPANNING_MARGIN : PART_MARGIN;
+  const byCountry = new Map<string, ScoredDestination[]>();
+  for (const entry of ranked) {
+    const { destination } = entry;
+    if (destination.kind === 'country' || destination.countries.length !== 1) continue;
+    const list = byCountry.get(destination.countries[0]!);
+    if (list) list.push(entry);
+    else byCountry.set(destination.countries[0]!, [entry]);
+  }
+  const stoodDown = new Set<string>();
+  for (const entry of ranked) {
+    const { destination } = entry;
+    const country = destination.kind === 'country' && destination.countries.length === 1 && destination.radiusKm > TRIP_SIZED_KM;
+    const vast = destination.kind !== 'country' && destination.origin !== 'editorial' && destination.radiusKm > VAST_KM;
+    if (!country && !vast) continue;
+    const parts = country ? (byCountry.get(destination.countries[0]!) ?? []) : ranked.filter((other) => other.destination.parents.includes(destination.id));
+    /* `ranked` is in score order, so the first part is the best one. */
+    const best = parts.find((other) => other.destination.radiusKm < destination.radiusKm && !stoodDown.has(other.destination.id));
+    if (best && best.score >= entry.score - margin) stoodDown.add(destination.id);
+  }
+  return stoodDown.size === 0 ? [...ranked] : ranked.filter((entry) => !stoodDown.has(entry.destination.id));
 }
 
 /** Contiguous month runs as words: [6,7,8] → "June–August". Wraps across December. */
@@ -170,8 +221,8 @@ function nightsFor(destination: Destination, profile: AdvisorProfile): AdvisorPi
   return { suggested: Math.min(suggested, Math.max(max, profile.nights.max)), min, max };
 }
 
-function interestLabel(key: FocusKey): string {
-  return FOCUS_LABELS[key].toLowerCase();
+function interestLabel(key: InterestKey): string {
+  return ADVISOR_INTEREST_LABELS[key].toLowerCase();
 }
 
 function joinWords(words: readonly string[]): string {
@@ -359,7 +410,7 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     pitch: d.pitch,
     why: whyFor(scored, profile, windowLabel),
     experiences: relevantHighlights(d, profile.focus),
-    strongFor: scored.interestFit.filter((fit) => fit.value >= 0.6).map((fit) => FOCUS_LABELS[fit.key]),
+    strongFor: scored.interestFit.filter((fit) => fit.value >= 0.6).map((fit) => ADVISOR_INTEREST_LABELS[fit.key]),
     window: { months: windowMonths.length > 0 ? windowMonths : scored.bestMonths, label: windowLabel },
     nights: nightsFor(d, profile),
     character: characterOf(d),

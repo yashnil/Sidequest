@@ -1,5 +1,5 @@
 import type { TripComposerAnswers } from '../schemas/composer';
-import { emptyAdvisorAnswers, FOCUS_LABELS, type AdvisorAnswers, type FocusKey } from './answers';
+import { emptyAdvisorAnswers, FOCUS_LABELS, MOOD_LABELS, PURSUIT_LABELS, type AdvisorAnswers, type FocusKey, type MoodKey, type PursuitKey } from './answers';
 import { WORLD_REGIONS, type WorldRegion } from './catalog/schema';
 import { originPointFromText } from './origin';
 import { REGION_GROUPS, REGION_GROUP_LABELS, type QuestionId } from './questions';
@@ -52,11 +52,36 @@ const FOCUS_PATTERNS: [RegExp, FocusKey[]][] = [
   [/\b(rain ?forest|jungle|cloud forest|tropical forest)\b/, ['rainforest']],
   [/\b(road ?trips?|scenic driv(e|es|ing)|driving (holiday|loop|route|tour)s?|self[- ]drive|empty highways?|open road)\b/, ['road_trips']],
   [/\b(desert|dunes?|canyons?)\b/, ['desert']],
-  [/\b(volcano(es)?|volcanic|hot springs?|geothermal|geysers?)\b/, ['volcanoes']],
+  [/\b(volcano(es)?|volcanic|geothermal(?! (bath|pool|lagoon|spa))|geysers?|lava|craters?|calderas?)\b/, ['volcanoes']],
   [/\b(ski(s|ing|ers?)?|snow(y|fall|board(s|ing|ers?)?|shoe(s|ing)?)?|northern lights|aurora|winter sports?|winter wonderland|white christmas|reindeer|husk(y|ies)|dog ?sledd?ing)\b/, ['snow']],
   [/\b(food|eat(ing)?|cuisine|culture|cultural|history|historic(al)?|museums?|villages?|architecture|wine|old towns?|temples?|ruins|archaeolog\w+|castles?|medinas?|monaster(y|ies)|palaces?|colonial|heritage|markets?|medieval|shrines?)\b/, ['culture_food']],
   [/\b(rail (journey|trip|holiday|adventure|tour)s?|train (journey|trip|ride|travel|tour)s?|scenic (trains?|railways?)|interrail(ing)?|eurail|sleeper trains?|railways?|by sleeper)\b/, ['rail']],
   [/\b(city|cities|urban|nightlife)\b/, ['cities']],
+];
+
+/** One precise thing a request can name that no broad focus says ("hot springs" is not "volcanoes"). */
+const PURSUIT_PATTERNS: [RegExp, PursuitKey][] = [
+  [/\b(stargaz\w+|star[- ]gaz\w+|dark sk(y|ies)|night sk(y|ies)|milky way|astro(nomy|photography|tourism)|meteor showers?|see the stars|starry (sk(y|ies)|nights?)|sleep(ing)? under the stars)\b/, 'stargazing'],
+  [/\b(hot springs?|onsens?|thermal (baths?|springs?|pools?|spas?|waters?)|geothermal (baths?|pools?|lagoons?|spas?)|hot pools?|natural hot tubs?)\b/, 'hot_springs'],
+  [/\b(spas?|wellness|yoga|retreats?|detox|pamper\w*|massages?)\b/, 'wellness'],
+  [/\b(kayak\w*|canoe\w*|paddl\w+|(white[- ]?water )?raft(ing)?|sail(ing)?|boat(ing| trips?| tours?)|packraft\w*|houseboats?)\b/, 'paddling'],
+];
+const FOOD_WORDS = /\b(food|foodie|eat(ing)?|cuisine|culinary|gastronom\w+|street food|restaurants?|wine|wineries|vineyards?|tapas|seafood|cooking|coffee|breweries|craft beer|whisky|tastings?)\b/;
+const CULTURE_WORDS = /\b(culture|cultural|history|historic(al)?|museums?|villages?|architecture|old towns?|temples?|ruins|archaeolog\w+|castles?|medinas?|monaster(y|ies)|palaces?|colonial|heritage|medieval|shrines?|galleries|art)\b/;
+
+/**
+ * What a request says when it names no activity. Read as a leaning, shown back
+ * as an assumption, and dropped the moment the traveller says something
+ * specific. The phrases are the ordinary ways people describe a trip they have
+ * not decided on.
+ */
+const MOOD_PATTERNS: [RegExp, MoodKey][] = [
+  [/\b(beautiful|scenery|scenic|stunning|picturesque|breath ?taking|gorgeous|spectacular|dramatic|views?|landscapes?|pretty|nature|natural beauty|outdoors?|photogenic|photograph\w+)\b/, 'scenic'],
+  [/\b(relax(ing|ed|ation)?|unwind(ing)?|chill(ed)?|laid[- ]back|restful|rest|peaceful|tranquil|recharge|switch off|slow(er)? pace|do nothing|low[- ]key|calm|lazy|take it easy|easy[- ]going|easygoing|leisurely)\b/, 'relaxing'],
+  [/\b(adventur(e|es|ous)|thrill(s|ing)?|adrenaline|exciting|excitement|active|explor(e|ing)|outdoorsy)\b/, 'adventurous'],
+  [/\b(with (my |our |some |a few |the )?(friends|mates|buddies|pals|lads|girls|guys)|group of friends|friends'? trip|girls'? trip|guys'? trip|bachelor(ette)?|stag|hen (do|party)|party|nightlife|lively|fun)\b/, 'social'],
+  [/\b(unforgettable|memorable|once[- ]in[- ]a[- ]lifetime|trip of a lifetime|bucket[- ]list|epic|special|blow (my|our) minds?|wow|extraordinary|life[- ]changing|incredible|amazing)\b/, 'memorable'],
+  [/\b(romantic|romance|honeymoon|anniversary|proposal|couples? (trip|getaway|retreat))\b/, 'romantic'],
 ];
 
 const REGION_PATTERNS: [RegExp, WorldRegion[], string][] = [
@@ -274,7 +299,7 @@ export interface RequestPlaces {
  * "fishing villages" — and those are looked for in the travel guides.
  */
 const REQUEST_FILLER = new Set(
-  'want wanna wanting looking look find finding somewhere anywhere someplace trip trips travel travelling traveling holiday holidays vacation vacations break getaway escape week weeks weekend weekends night nights month months day days people friend friends family families kid kids child children toddler teenager teenagers parent parents couple solo honeymoon budget cheap cheaper expensive inexpensive affordable money cost costs price flight flights flying fly drive driving car rent rental train trains happy fine okay basic love like enjoy prefer need plus maybe possible possibly really quite bit lot lots something anything everything thing things stuff good better great amazing beautiful incredible stunning spectacular nice cool fun interesting lovely pretty gorgeous dramatic less more fewer crowded crowd crowds touristy tourist tourists quiet quieter busy remote underrated hidden gem gems famous popular known unknown season weather warm hot cold cool sunny mild january february march april may june july august september october november december summer winter spring autumn fall early late mid year years time first next last far near close short long world place places destination destinations country region area stay staying hotel hotels lodge lodges guesthouse guesthouses hostel hostels resort resorts moderate comfortable luxury luxurious easy hard fit adventurous adventure adventures experience experiences sensible realistic worth still enough without with also rather instead other another usual type kind style big small little lively relaxed relaxing few many old new possible ideally prefer preferably mostly mainly including include especially particularly along away around about trying try tried done been seen visit visited visiting see seeing going go get getting take taking day-trips daytrips option options idea ideas recommend recommendation suggestions suggest help choose decide where when what which who how why this that these those there here from into onto over under between during after before again only just even ever never always often sometimes already yet soon now thanks thank please hello cheers regards sorry help then than too very much such both either neither each every all any some most least own same different similar alternative alternatives version equivalent unusual class world-class level minimum maximum total per person adults adult aged ages age using use used via within outside inside across through throughout north south east west northern southern eastern western central one two three four five six seven eight nine ten eleven twelve fourteen couple half quarter whole entire lively atmospheric cosy cozy reliable proper real true wild truly completely totally fully mostly partly kind sort mix mixed variety various several nothing anyone everyone someone nobody happy glad keen able unable'.split(
+  'want wanna wanting looking look find finding somewhere anywhere someplace trip trips travel travelling traveling holiday holidays vacation vacations break getaway escape week weeks weekend weekends night nights month months day days people friend friends family families kid kids child children toddler teenager teenagers parent parents couple solo honeymoon budget cheap cheaper expensive inexpensive affordable money cost costs price flight flights flying fly drive driving car rent rental train trains happy fine okay basic love like enjoy prefer need plus maybe possible possibly really quite bit lot lots something anything everything thing things stuff good better great amazing beautiful incredible stunning spectacular nice cool fun interesting lovely pretty gorgeous dramatic less more fewer crowded crowd crowds touristy tourist tourists quiet quieter busy remote underrated hidden gem gems famous popular known unknown season weather warm hot cold cool sunny mild january february march april may june july august september october november december summer winter spring autumn fall early late mid year years time first next last far near close short long world place places destination destinations country region area stay staying hotel hotels lodge lodges guesthouse guesthouses hostel hostels resort resorts moderate comfortable luxury luxurious easy hard fit adventurous adventure adventures experience experiences sensible realistic worth still enough without with also rather instead other another usual type kind style big small little lively relaxed relaxing few many old new possible ideally prefer preferably mostly mainly including include especially particularly along away around about trying try tried done been seen visit visited visiting see seeing going go get getting take taking day-trips daytrips option options idea ideas recommend recommendation suggestions suggest help choose decide where when what which who how why this that these those there here from into onto over under between during after before again only just even ever never always often sometimes already yet soon now thanks thank please hello cheers regards sorry help then than too very much such both either neither each every all any some most least own same different similar alternative alternatives version equivalent unusual class world-class level minimum maximum total per person adults adult aged ages age using use used via within outside inside across through throughout north south east west northern southern eastern western central one two three four five six seven eight nine ten eleven twelve fourteen couple half quarter whole entire lively atmospheric cosy cozy reliable proper real true wild truly completely totally fully mostly partly kind sort mix mixed variety various several nothing anyone everyone someone nobody happy glad keen able unable unforgettable memorable lifetime epic special extraordinary incredible wow relax unwind unwinding chill chilled restful rest peaceful tranquil recharge calm lazy leisurely scenery scenic picturesque breathtaking photogenic romantic romance anniversary proposal birthday graduation celebrate celebrating celebration retirement retired mates buddies pals lads girls guys bachelor bachelorette stag hen party wheelchair wheelchairs user users accessible accessibility disabled disability mobility pregnant elderly senior seniors grandparents grandma grandpa mum mom dad wife husband partner girlfriend boyfriend baby babies toddlers teen teens stroller pushchair difficult difficulty strenuous demanding challenging tough exciting excitement thrill thrilling adrenaline active explore exploring exploration outdoorsy memories focused focus centred centered themed weekender difficult works work suit suits suitable'.split(
     /\s+/,
   ),
 );
@@ -468,11 +493,50 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
       leadSaid = true;
     }
   }
+  /*
+   * Pursuits: the precise thing where the request named one. A food trip is
+   * not half a culture trip, and the reverse: when only one side of "culture
+   * and food" was said, that side is what is scored.
+   */
+  const pursuits: PursuitKey[] = [];
+  for (const [pattern, key] of PURSUIT_PATTERNS) if (saysYes(pattern, t) && !pursuits.includes(key)) pursuits.push(key);
+  if (focus.includes('culture_food')) {
+    const food = occurrences(FOOD_WORDS, t).positive;
+    const culture = occurrences(CULTURE_WORDS, t).positive;
+    const one: PursuitKey | null = food > 0 && culture === 0 ? 'food' : culture > 0 && food === 0 ? 'culture' : null;
+    if (one) {
+      focus.splice(focus.indexOf('culture_food'), 1);
+      pursuits.unshift(one);
+    }
+  }
+  /* "Spa" beside "hot springs" is the same wish said twice. */
+  if (pursuits.includes('hot_springs') && pursuits.includes('wellness')) pursuits.splice(pursuits.indexOf('wellness'), 1);
   if (focus.length > 0) {
-    patchDiscovery({ focus, focusRanked: focus.length === 1 || leadSaid });
+    patchDiscovery({ focus, focusRanked: (focus.length === 1 && pursuits.length === 0) || leadSaid });
     for (const key of focus) readings.push({ kind: 'focus', label: FOCUS_LABELS[key] });
-  } else if (/\b(outdoors?|outside|nature)\b/.test(t)) {
-    vague.push('outdoors');
+  }
+  if (pursuits.length > 0) {
+    patchDiscovery({ pursuits });
+    for (const key of pursuits) readings.push({ kind: 'focus', label: PURSUIT_LABELS[key] });
+  }
+  /*
+   * Nothing specific was named: read the mood. "Somewhere beautiful and
+   * relaxing" is a leaning towards scenery and rest, said back as an
+   * assumption. With children along and nothing else said, the leaning is an
+   * easy family trip.
+   */
+  if (focus.length === 0 && pursuits.length === 0) {
+    const moods: MoodKey[] = [];
+    for (const [pattern, key] of MOOD_PATTERNS) if (saysYes(pattern, t) && !moods.includes(key)) moods.push(key);
+    if (moods.length === 0 && /\b(kids?|children|child|toddlers?|family (trip|holiday|vacation))\b/.test(t)) moods.push('family');
+    if (moods.length > 0) {
+      const kept = moods.slice(0, 3);
+      patchDiscovery({ moods: kept });
+      for (const key of kept) readings.push({ kind: 'focus', label: MOOD_LABELS[key] });
+      assumptions.push(`You didn’t name an activity, so we looked for places that suit “${kept.map((key) => MOOD_LABELS[key].toLowerCase()).join('” and “')}”. Tell us what you most want to do and the list will follow it.`);
+      vague.push('interests');
+    }
+    if (/\b(outdoors?|outside|nature)\b/.test(t)) vague.push('outdoors');
   }
   if (saysYes(/\bsafari\b/, t)) patchDiscovery({ wildlifeKind: 'safari' });
   else if (saysYes(/\b(whales?|snorkel|reef|marine|dolphins?)\b/, t) && focus.includes('wildlife')) patchDiscovery({ wildlifeKind: 'marine' });
@@ -580,7 +644,13 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
           : saysYes(/\b(active|moderately active|moderate hik(es|ing)|fairly fit)\b/, t)
             ? 'active'
             : null;
-  if (adventure) {
+  /* "Adventurous but not too difficult" asks for both: something active, short of hard. */
+  const softenedAdventure = softened && saysYes(/\b(adventur(e|es|ous)|thrill\w*|adrenaline|exciting|active)\b/, t);
+  if (softenedAdventure) {
+    patchDiscovery({ adventure: 'active' });
+    answers = { ...answers, outdoorIntensity: 'moderate' };
+    readings.push({ kind: 'adventure', label: 'Active, nothing too hard' });
+  } else if (adventure) {
     patchDiscovery({ adventure });
     answers = { ...answers, outdoorIntensity: adventure === 'comfortable' ? 'gentle' : adventure === 'active' ? 'moderate' : 'strenuous' };
     readings.push({ kind: 'adventure', label: { comfortable: 'Comfortable', active: 'Active', rugged: 'Rugged', expedition: 'Expedition-style' }[adventure] });
