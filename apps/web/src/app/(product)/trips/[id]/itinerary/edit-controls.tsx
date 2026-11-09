@@ -1,5 +1,6 @@
 'use client';
 
+import { announceTripEdit } from '@/components/hub/EditToast';
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass } from '@/components/ui';
@@ -80,7 +81,7 @@ export function StopEditMenu({
     };
   }, [open]);
 
-  const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string }>) => {
+  const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string; undoable?: boolean; restoresPlaceId?: string }>) => {
     setStatus(null);
     startTransition(async () => {
       const result = await work();
@@ -90,6 +91,8 @@ export function StopEditMenu({
       }
       setOpen(false);
       setOffers(null);
+      /* The menu closes with the change, so the page says what happened and offers the way back. */
+      announceTripEdit(result);
       router.refresh();
     });
   };
@@ -244,6 +247,7 @@ export function EaseDayButton({ tripId, dayNumber }: { tripId: string; dayNumber
               setStatus(result.error ?? 'This day could not be made easier.');
               return;
             }
+            announceTripEdit(result, 'This day was made easier.');
             router.refresh();
           });
         }}

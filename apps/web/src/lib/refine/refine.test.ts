@@ -16,7 +16,7 @@ import { patchInvariantViolations } from './invariants';
 import { buildRefinementGraph, resumeWith, type RefinementInterpretation, type RefinementInterpreter } from './graph';
 import { SqliteRefinementCheckpointer } from './checkpointer';
 import { RefinementBusyError, activeRun, beginRun, listRuns, releaseStaleRuns, updateRun } from './run-repository';
-import { StaleTripVersionError, currentVersion, ensureBaselineVersion, listVersions, recordVersion, undoTarget } from './version-repository';
+import { StaleTripVersionError, currentVersion, ensureBaselineVersion, listVersions, recordEditVersion, recordVersion, undoTarget } from './version-repository';
 import { alternativeThreadId, refinementRunThreadId, refinementThreadId, tripIdOfThread } from './threads';
 import { MAX_REFINEMENT_MODEL_CALLS, type RefinementLock } from './state';
 import { REFINEMENT_MAX_TOKENS, REFINEMENT_TIMEOUT_MS } from './interpreter';
@@ -524,6 +524,38 @@ describe('§46 — versions and undo', () => {
     expect(target?.version).toBe(1);
     expect(target?.itinerary.summary).toBe('as Sidequest built it');
     expect(target?.summary.changed).toEqual([]);
+  });
+
+  /*
+   * RELEASE PASS — the head has to be the plan on the page, or Undo lies. A
+   * rebuild and every edit made by hand used to change the stored plan without
+   * touching this history, so the "version before the last change" was an older
+   * plan and restoring it threw the traveller's own edits away.
+   */
+  it('records the plan as it stands when it is no longer the head, so Undo restores what was on the page', async () => {
+    const trip = newTrip();
+    const built = await realItinerary('as Sidequest built it');
+    expect(ensureBaselineVersion({ tripId: trip.id, itinerary: built, draft: trekDraft() })).toBe(1);
+    await version(trip.id, 1, 'after the first Ask');
+    /* A change that never went through the history: a rebuild, or an older build's hand edit. */
+    const edited = await realItinerary('with the stop I added by hand');
+    expect(ensureBaselineVersion({ tripId: trip.id, itinerary: edited, draft: trekDraft() })).toBe(3);
+    await version(trip.id, 3, 'after the second Ask');
+    expect(undoTarget(trip.id)?.itinerary.summary).toBe('with the stop I added by hand');
+  });
+
+  it('makes an edit made by hand a version: Undo gives back exactly the plan before it', async () => {
+    const trip = newTrip();
+    const before = await realItinerary('before I moved the lake');
+    const after = await realItinerary('after I moved the lake');
+    /* Never refined: the edit records the plan before it and the plan after it. */
+    expect(recordEditVersion({ tripId: trip.id, before, after, draft: trekDraft(), changed: 'You moved Convict Lake from day 1 to day 2.' })).toBe(2);
+    expect(undoTarget(trip.id)?.itinerary.summary).toBe('before I moved the lake');
+    expect(listVersions(trip.id)[0]!.summary.changed).toEqual(['You moved Convict Lake from day 1 to day 2.']);
+    /* A second edit on top of it adds one row, not two: the head already is the plan before it. */
+    const later = await realItinerary('after I made it shorter');
+    expect(recordEditVersion({ tripId: trip.id, before: after, after: later, changed: 'Convict Lake is now 60 min.' })).toBe(3);
+    expect(undoTarget(trip.id)?.itinerary.summary).toBe('after I moved the lake');
   });
 
   it('keeps a branch out of the canonical lane', async () => {

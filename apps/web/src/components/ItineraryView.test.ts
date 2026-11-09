@@ -161,6 +161,40 @@ describe('the finished plan is a document about places, not a bare schedule', ()
     ).toBe(whys.length);
   });
 
+  /*
+   * RELEASE PASS — a row has two lines, and the fit sentence spent both of them
+   * restating the questionnaire. The row leads with the place; the stop's own
+   * sheet still carries the whole sentence.
+   */
+  it('leads a stop with what the place is, not with how it was scored', () => {
+    const stops = stopIdsOf(PLAN);
+    const rationale: Record<string, StopRationale> = Object.fromEntries(
+      stops.map((placeId, index) => [
+        placeId,
+        { why: `You marked lakes & rivers as "once or twice", and that is what this delivers: A deep blue lake number ${index} under the ridge.`, facets: [] },
+      ]),
+    );
+    const html = render({ rationale });
+    const whys = [...html.matchAll(/data-testid="stop-why"[^>]*>([^<]*)</g)].map((match) => match[1] ?? '');
+    expect(whys.length).toBe(stops.length);
+    for (const why of whys) {
+      expect(why).toMatch(/^A deep blue lake number \d+ under the ridge\.$/);
+      expect(why).not.toContain('You marked');
+    }
+  });
+
+  it('makes every numbered stop a real button that shows it on the map', () => {
+    const html = render();
+    const pins = [...html.matchAll(/<button[^>]*data-testid="stop-number"[^>]*>/g)].map((match) => match[0]);
+    expect(pins.length, 'no numbered stop is a button').toBeGreaterThan(0);
+    for (const pin of pins) {
+      expect(pin).toMatch(/aria-pressed="false"/);
+      expect(pin).toMatch(/aria-label="Show [^"]+ on the map \(stop \d+\)"/);
+    }
+    /* And the page carries the one live region that says what a selection did. */
+    expect(html).toContain('data-testid="trip-selection-status"');
+  });
+
   it('says the true thing about a blank mid-trip day', () => {
     /*
      * The empty-day sentence was unconditional, so a blank Saturday in the

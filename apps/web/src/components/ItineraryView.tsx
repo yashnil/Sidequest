@@ -59,7 +59,10 @@ import { BaseCards, CautionsCard, CONVENIENCE_LABELS, CONVENIENCE_TONE, STRESS_L
 import { fixNumberArticles, sameSentence } from './hub/article';
 import { clock, firstSentence, humanDate, span, timelineClock, travelSpan } from './hub/plan-format';
 import type { MapWorkspaceSheet } from './hub/MapWorkspace';
-import { DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, type DayFocusModel } from './hub/DayFocus';
+import { DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, StopPinButton, type DayFocusModel } from './hub/DayFocus';
+import { TripSelectionProvider } from './hub/TripSelection';
+import { EditToast } from './hub/EditToast';
+import type { SelectionDay } from './hub/trip-selection-model';
 import { journeyModel } from '@/lib/journey/model';
 import { TripConfidence, CONFIDENCE_WORD as VERIFICATION_CHIP_WORD } from './hub/TripConfidence';
 import { FreshnessBanner } from './hub/FreshnessBanner';
@@ -455,6 +458,27 @@ export function ItineraryView({
   const dayFocusModels: DayFocusModel[] = itinerary.days.map((day) => {
     const model = dayMapModel({ day, coordinates, nameOf: (placeId, fallback) => rationale[placeId]?.name ?? fallback });
     return { dayNumber: day.dayNumber, date: day.date, theme: day.theme, baseName: day.baseName, base: model.base, markers: model.markers, connectors: model.connectors, omitted: model.omitted };
+  });
+  /*
+   * RELEASE PASS — what can be selected, for the one selection the list, the
+   * day map, the phone's dock and the Map tab share (`hub/TripSelection.tsx`).
+   * Every stop of every day, with the number its pin wears and whether it has
+   * a position at all — so a stop nobody could place is named as absent
+   * instead of silently missing from the drawing.
+   */
+  const selectionDays: SelectionDay[] = itinerary.days.map((day, index) => {
+    const markers = dayFocusModels[index]?.markers ?? [];
+    const seen = new Set<string>();
+    const stops: SelectionDay['stops'][number][] = [];
+    for (const item of day.items) {
+      if (item.kind !== 'activity') continue;
+      const id = item.placeId ?? item.id;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const marker = item.placeId ? markers.find((entry) => entry.id === item.placeId) : undefined;
+      stops.push({ id, name: (item.placeId ? rationale[item.placeId]?.name : undefined) ?? item.title, placed: Boolean(marker), ...(marker?.order !== undefined ? { number: marker.order } : {}) });
+    }
+    return { dayNumber: day.dayNumber, stops };
   });
   /*
    * THE JOURNEY, FOR THE EXPLORER — the same items, coordinates and travel
@@ -1247,13 +1271,18 @@ export function ItineraryView({
       {/* Opens every disclosure marked for the packet before print, closes them after. */}
       <PrintExpand />
 
-      <HubShell
-        views={{ overview, days, map: mapView, plan, book, prepare }}
-        badges={{ ...(openRequired > 0 ? { book: openRequired } : {}) }}
-        printAppendix={printAppendix}
-        initialView={initialView}
-        askSlot={Boolean(tripId)}
-      />
+      {/* One selection — the day and the stop — above every view, so the list and the maps cannot disagree. */}
+      <TripSelectionProvider days={selectionDays} storageScope={tripId ?? null}>
+        <HubShell
+          views={{ overview, days, map: mapView, plan, book, prepare }}
+          badges={{ ...(openRequired > 0 ? { book: openRequired } : {}) }}
+          printAppendix={printAppendix}
+          initialView={initialView}
+          askSlot={Boolean(tripId)}
+        />
+      </TripSelectionProvider>
+      {/* Every edit made by hand says what it did, here, with the way back. Never on the shared copy. */}
+      {tripId ? <EditToast tripId={tripId} /> : null}
 
       {attributions.length > 0 ? (
         <p data-testid="itinerary-attribution" className="mt-10 rule-top pt-6 text-xs leading-relaxed text-ink-faint">
@@ -2298,7 +2327,7 @@ function DayCard({
     ) : undefined;
     return (
       <li key={item.id}>
-        <StopFocusHandle placeId={item.kind === 'activity' ? item.placeId : undefined}>
+        <StopFocusHandle placeId={item.kind === 'activity' ? item.placeId : undefined} dayNumber={day.dayNumber}>
           <TimelineRow
             item={item}
             window={day.window}
@@ -3370,12 +3399,11 @@ function TimelineRow({
   return (
     <div className={cx('flex gap-2.5 px-3 py-3.5 sm:gap-4 sm:px-5 sm:py-4', focusRing)} {...common} {...(optional ? { 'data-optional': 'true' } : {})}>
       {clockCell}
-      {stopNumber === null ? (
+      {stopNumber === null || !item.placeId ? (
         <span aria-hidden="true" className="stop-dot stop-dot-stop mt-1 shrink-0" />
       ) : (
-        <span aria-hidden="true" data-testid="stop-number" className={cx('stop-pin mt-0.5 shrink-0', optional && 'stop-pin-optional')}>
-          {stopNumber}
-        </span>
+        /* The number the pin wears, as a button: press it and the map shows where this is. */
+        <StopPinButton placeId={item.placeId} number={stopNumber} name={name} optional={optional} {...(dayNumber !== undefined ? { dayNumber } : {})} />
       )}
       <div className="min-w-0 flex-1">
         <h3 className="font-display text-[1.2rem] leading-[1.15] font-normal tracking-[-0.01em] text-ink sm:text-[1.35rem]">
@@ -3409,7 +3437,7 @@ function TimelineRow({
           </p>
         ) : null}
         {why ? (
-          <p className="mt-1 line-clamp-2 type-small text-ink-muted" data-testid={rationale?.why && why === firstSentence(rationale.why) ? 'stop-why' : 'stop-reason'}>
+          <p className="mt-1 line-clamp-2 type-small text-ink-muted" data-testid={rationale?.why && why === leadWithThePlace(firstSentence(rationale.why)) ? 'stop-why' : 'stop-reason'}>
             {why}
           </p>
         ) : null}
@@ -3457,11 +3485,28 @@ function stopWhy(why: string | undefined, reason: string | undefined): string | 
   const reach = /^\s*\d+\s*(?:hr|h|min)\b[^.]*\b(?:you were happy to travel|of your base|from your base)\b[^.]*\.?\s*$/i;
   /* Bookkeeping, not a reason: the open-data scan's own provenance and distance lines. */
   const filler = /^(What to look for and where|A \w+ slot in the day|On Wikidata as\b|Minutes from where you are staying|Listed on OpenStreetMap)/i;
-  const first = why ? firstSentence(why) : '';
+  const first = why ? leadWithThePlace(firstSentence(why)) : '';
   if (first && !reach.test(first) && !filler.test(first)) return first;
   const fallback = reason ? firstSentence(reason) : '';
   if (fallback && !filler.test(fallback) && !reach.test(fallback)) return fallback;
   return null;
+}
+
+/**
+ * RELEASE PASS — A ROW SAYS WHAT THE PLACE IS, NOT HOW IT WAS SCORED.
+ *
+ * The fit sentence opens by restating the questionnaire — "You marked lakes &
+ * rivers as "once or twice", and that is what this delivers: A deep blue lake
+ * pinned against Laurel Mountain…" — and a row has two lines. On a phone the
+ * whole of both went to the preamble, on every stop, and the thing the
+ * traveller would actually see was cut off. The row now leads with the place;
+ * the full sentence, preference and all, is still what the stop's own sheet
+ * says, one press away. Presentation only: the rationale is untouched.
+ */
+function leadWithThePlace(sentence: string): string {
+  const match = /^You marked .{1,80}? as [“"][^”"]{1,60}[”"],? and that is what this delivers:\s*(.+)$/i.exec(sentence);
+  const offer = match?.[1]?.trim();
+  return offer && offer.length > 12 ? offer : sentence;
 }
 
 /**

@@ -185,28 +185,41 @@ test('the whole-trip Journey view is the explorer at full size', async ({ page }
   await expect(first).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('on a phone the day map opens full screen, keeps focus inside, and closes with Escape', async ({ page }) => {
+test('on a phone the day map docks beside the list, and opens full screen with focus inside', async ({ page }) => {
   test.setTimeout(180_000);
-  test.skip(test.info().project.name !== 'mobile', 'the phone sheet');
+  test.skip(test.info().project.name !== 'mobile', 'the phone dock');
   await reachItinerary(page);
   await openHubView(page, 'days');
+  await page.locator('#hub-view-days [data-timeline-place]').first().scrollIntoViewIfNeeded();
   const open = page.getByTestId('day-map-sheet-open');
   await expect(open).toBeVisible();
   await open.click();
+  // The dock is the real map, beside the list.
+  const dock = page.getByTestId('day-map-dock');
+  await expect(dock).toBeVisible();
+  await waitForMap(page, 'day-map-dock-atlas');
+  await expect(dock.locator('.maplibregl-marker.atlas-pin[data-state="chosen"]').first()).toBeVisible();
+  // Touch: a pin in the dock marks its row and leaves the map open.
+  await dock.locator('.maplibregl-marker.atlas-pin[data-state="chosen"]').first().tap();
+  await expect(page.locator('#hub-view-days [data-selected="true"]').first()).toBeInViewport();
+  await expect(dock).toBeVisible();
+  // Full screen is the explorer, as a real modal.
+  await page.getByTestId('day-map-dock-expand').click();
   const sheet = page.getByTestId('day-map-sheet');
   await expect(sheet).toBeVisible();
   await waitForMap(page, 'day-map-sheet-journey-map');
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest('dialog')))).toBe(true);
   await expect(page.getByTestId('day-map-sheet-journey').locator('.maplibregl-marker.atlas-pin[data-state="chosen"]').first()).toBeVisible();
-  // Escape closes it and gives the page back.
+  // Escape closes it and gives the page back, with the dock still there.
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
-  // Touch: a tap on a ribbon stop closes the map and lands on that stop's row, selected.
-  await open.click();
+  await expect(dock).toBeVisible();
+  // Touch: a tap on a ribbon stop closes the full-screen map and lands on that stop's row, selected.
+  await page.getByTestId('day-map-dock-expand').click();
   await waitForMap(page, 'day-map-sheet-journey-map');
   await page.getByTestId('day-map-sheet-journey').getByTestId('journey-ribbon-stop').nth(1).tap();
   await expect(sheet).toBeHidden();
   await expect(page.locator('#hub-view-days [data-selected="true"]').first()).toBeInViewport();
-  // No horizontal overflow at a phone width with the map closed.
+  // No horizontal overflow at a phone width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(() => window.innerWidth));
 });

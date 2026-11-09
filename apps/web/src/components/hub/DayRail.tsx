@@ -50,7 +50,7 @@ function chapterLabel(role: NonNullable<TripPackage['chapters']>[number]['role']
  * toward the page's (972 px on a 390 px screen), which zoomed the layout out and
  * moved every fixed control. Clip — not hidden — keeps the nav sticky.
  */
-const NAV = 'sticky top-[calc(var(--chrome-height)+3.25rem)] z-10 overflow-x-clip -mx-5 mb-6 border-b border-rule bg-paper/95 px-5 py-2 backdrop-blur-[3px] print:hidden sm:-mx-6 sm:px-6 lg:mx-0 lg:rounded-b-[12px] lg:px-1';
+const NAV = 'sticky top-[calc(var(--chrome-height)+3.25rem)] max-sm:top-[var(--chrome-height)] z-10 overflow-x-clip -mx-5 mb-6 border-b border-rule bg-paper/95 px-5 py-2 backdrop-blur-[3px] print:hidden sm:-mx-6 sm:px-6 lg:mx-0 lg:rounded-b-[12px] lg:px-1';
 
 /**
  * HUB-4 — ONE COMPACT, STICKY ROW.

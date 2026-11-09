@@ -26,11 +26,14 @@ import { getIntent, getLatestJob } from '@/lib/db/compiler-repository';
 import { formatDateRange, formatMinutes } from '@/lib/format';
 import {
   getFoodSelections,
+  getItinerary,
+  getItineraryLocks,
   getProfile,
   getSelections,
   hasItinerary,
   getReadiness,
 } from '@/lib/db/repository';
+import { regenerationCopy, regenerationPreview } from '../itinerary/regenerate-summary';
 import { ownedTrip } from '@/lib/net/trip-access';
 import {
   getAcknowledgements,
@@ -151,6 +154,25 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   });
 
   const planned = hasItinerary(id);
+  /*
+   * RELEASE PASS — what "Rebuild my trip" would replace, said before it does.
+   *
+   * The itinerary's own Regenerate has always listed the edits a rebuild
+   * throws away; the board's button — the door most people rebuild from —
+   * said nothing and rebuilt at once. The same server-derived sentences are
+   * read here, so the two doors make the same promise. Empty when there is
+   * nothing of the traveller's on the plan to lose, and then the button
+   * builds straight away, as before.
+   */
+  let rebuildReplaces: string[] = [];
+  if (planned) {
+    try {
+      const stored = getItinerary(id);
+      if (stored) rebuildReplaces = regenerationCopy(regenerationPreview({ itinerary: stored, locks: getItineraryLocks(id), selections: getSelections(id), bookings: 0 })).replaced;
+    } catch {
+      /* A plan from an older version cannot be read; it has no edits this page could name. */
+    }
+  }
 
   /**
    * Derived rather than stored, and short by construction. A region with no food
@@ -482,6 +504,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               initialAutoPicks={autoPicks}
               autoPickNotes={suggestion.notes}
               hasItinerary={planned}
+              rebuildReplaces={rebuildReplaces}
               weatherBackups={boardWeatherBackups(board.candidates)}
               storedReadiness={getReadiness(id)}
             />

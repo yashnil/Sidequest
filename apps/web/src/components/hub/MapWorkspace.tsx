@@ -12,6 +12,7 @@ import { planToAtlas } from '../atlas/atlas-model';
 import { JourneyExplorer } from '../journey/JourneyExplorer';
 import type { JourneyModel } from '@/lib/journey/model';
 import type { DestinationImage as ImageRecord } from '@sidequest/core';
+import { revealTimelineRow, useTripSelection } from './TripSelection';
 
 /**
  * EXPERIENCE V2 — THE MAP VIEW IS A WORKSPACE, NOT A PICTURE.
@@ -89,10 +90,36 @@ export function MapWorkspace({
    *   explore   — everything, at full density, with filters. The only mode
    *               where density is what somebody came for.
    */
-  const [view, setView] = useState<{ mode: MapMode; day: number | null }>({ mode: 'overview', day: null });
+  /*
+   * RELEASE PASS — THE DAY AND THE STOP ARE THE PAGE'S, THE MODE IS THIS VIEW'S.
+   *
+   * Which day is drawn and which stop is marked come from the one selection the
+   * timeline shares (`TripSelection`), so a stop pressed in the list is what
+   * this tab opens on, and a day or a pin pressed here is what the list comes
+   * back to. Only the *mode* is local: "Overview" and "Explore" are ways of
+   * looking that belong to this map alone. `at` is the selection revision the
+   * local mode was chosen at — anything chosen since, anywhere, wins, which is
+   * how a choice made in another tab reaches a map that was showing the whole
+   * trip. Derived on render: no effect, no frame of the stale drawing.
+   */
+  const selection = useTripSelection();
+  const [local, setLocal] = useState<{ mode: MapMode; day: number | null; at: number }>({ mode: 'overview', day: null, at: 0 });
+  const follows = Boolean(selection && selection.chosen && selection.revision > local.at);
+  const view = useMemo<{ mode: MapMode; day: number | null }>(
+    () => (follows && selection ? { mode: 'day', day: selection.day } : { mode: local.mode, day: local.day }),
+    [follows, selection, local.mode, local.day],
+  );
+  const setView = (next: { mode: MapMode; day: number | null }) => {
+    if (next.mode === 'day' && next.day !== null && selection) {
+      selection.chooseDay(next.day, 'map');
+      return;
+    }
+    setLocal({ ...next, at: selection?.revision ?? 0 });
+  };
   const day = view.mode === 'day' && view.day !== null ? view.day : 'all';
   const [kindFilter, setKindFilter] = useState<'all' | 'signature' | 'base'>('all');
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [localFocused, setFocusedId] = useState<string | null>(null);
+  const focusedId = selection ? selection.stop : localFocused;
   const sheet = usePlaceSheet();
   const drawn = useMemo(() => {
     const tripConnectors = [
@@ -194,6 +221,11 @@ export function MapWorkspace({
     setFocusedId(id);
     const entry = sheets[id];
     const marker = markers.find((m) => m.id === id);
+    if (selection) {
+      /* The pin is the selection now — for the list too — without yanking a whole-trip view down to one day. */
+      if (view.mode !== 'day') setLocal((current) => ({ ...current, at: selection.revision + 1 }));
+      selection.chooseStop(id, { source: 'map', ...(marker ? { day: marker.dayNumber } : entry ? { day: entry.dayNumber } : {}) });
+    }
     if (entry && sheet) {
       sheet.open(
         entry.detail,
@@ -302,8 +334,12 @@ export function MapWorkspace({
             photos={photos}
             variant="full"
             styleId={tiles.styleUrl}
+            /* The same day and stop as the timeline: chosen there, shown here; chosen here, kept there. */
+            {...(selection ? { dayNumber: selection.day, onDayChange: (n: number) => selection.chooseDay(n, 'map'), selectedPlaceId: selection.stop, focusRevision: selection.chosen ? selection.revision : 0 } : {})}
             onSelectStop={(stop) => {
-              if (stop.placeId && sheets[stop.placeId]) open(stop.placeId);
+              if (!stop.placeId) return;
+              if (sheets[stop.placeId]) open(stop.placeId);
+              else selection?.chooseStop(stop.placeId, { source: 'map' });
             }}
             testId="trip-journey"
           />
@@ -405,15 +441,8 @@ function ShowInPlan({ dayNumber, placeId }: { dayNumber: number; placeId: string
         event.preventDefault();
         sheet?.dismiss();
         window.location.hash = `day-${dayNumber}`;
-        window.setTimeout(() => {
-          const row = document.querySelector<HTMLElement>(`#hub-view-days [data-timeline-place="${CSS.escape(placeId)}"]`);
-          if (!row) return;
-          const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          row.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
-          row.focus({ preventScroll: true });
-          row.classList.add('row-flash');
-          window.setTimeout(() => row.classList.remove('row-flash'), 1800);
-        }, 120);
+        /* After the tab has switched and the day has landed: the stop's own row, marked. */
+        window.setTimeout(() => revealTimelineRow(placeId, dayNumber), 120);
       }}
     >
       See it in day {dayNumber} <span aria-hidden="true">→</span>

@@ -1271,16 +1271,105 @@
     }
   }
 
-  /* The phone's day map: only while the Days view is the one showing, and never on a wide screen. */
+  /*
+   * The day map below `lg`: only while the itinerary is the tab showing, and
+   * never on a wide screen (which has the sticky column). The Itinerary tab is
+   * two views — the trip and its days — so both ids count: keyed to `days`
+   * alone, the button was missing on first arrival, before any tab was pressed.
+   */
   .day-map-sheet {
     display: none;
   }
-  body:has(#trip-hub[data-hub-view='days']) .day-map-sheet {
+  body:has(#trip-hub[data-hub-view='days']) .day-map-sheet,
+  body:has(#trip-hub[data-hub-view='overview']) .day-map-sheet {
     display: block;
   }
   @media (min-width: 1024px) {
-    body:has(#trip-hub[data-hub-view='days']) .day-map-sheet {
+    body:has(#trip-hub[data-hub-view='days']) .day-map-sheet,
+    body:has(#trip-hub[data-hub-view='overview']) .day-map-sheet {
       display: none;
+    }
+  }
+  /* The dock rises from the tab bar; a reduced-motion machine gets it in place. */
+  .day-map-dock:not([hidden]) {
+    animation: sq-dock-rise 240ms var(--ease-out) both;
+  }
+  @keyframes sq-dock-rise {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .day-map-dock:not([hidden]) {
+      animation: none;
+    }
+  }
+  /* The fallback figure, cut to the dock: no card frame, the drawing fills the space it has. */
+  .day-map-dock-figure > div,
+  .day-map-dock-figure figure,
+  .day-map-dock-figure figure > div {
+    height: 100%;
+  }
+  .day-map-dock-figure figure > div {
+    border: 0;
+    border-radius: 0;
+  }
+  .day-map-dock-figure svg {
+    width: 100%;
+    height: 100%;
+  }
+  @media (max-width: 1023px) {
+    /* While the dock is open the list keeps a dock's worth of room at its foot, so the last rows clear it. */
+    html[data-map-dock='open'] #hub-view-days {
+      padding-bottom: min(44dvh, 21rem);
+    }
+    /* A row the map sends you to lands under the sticky chrome, not behind it. */
+    #hub-view-days [data-timeline-place] {
+      scroll-margin-top: calc(var(--chrome-height) + 5rem);
+    }
+  }
+  /*
+   * The stop number as a button: the same pin, with a hand, a ring on focus,
+   * and a filled state while it is the selected stop. The hit area reaches a
+   * 44px square without the pin itself growing.
+   */
+  .stop-pin-button {
+    position: relative;
+    cursor: pointer;
+    padding: 0;
+    transition:
+      transform var(--motion-fast) var(--ease-out),
+      box-shadow var(--motion-fast) var(--ease-out);
+  }
+  .stop-pin-button::after {
+    content: '';
+    position: absolute;
+    inset: -0.5rem;
+  }
+  .stop-pin-button:hover {
+    transform: scale(1.08);
+  }
+  .stop-pin-button:focus-visible {
+    outline: 2px solid var(--color-pine);
+    outline-offset: 3px;
+  }
+  .stop-pin-button[aria-pressed='true'] {
+    background: var(--color-night);
+    color: var(--color-bone);
+    border-color: var(--color-flare);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-flare) 35%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stop-pin-button {
+      transition: none;
+    }
+    .stop-pin-button:hover {
+      transform: none;
     }
   }
 

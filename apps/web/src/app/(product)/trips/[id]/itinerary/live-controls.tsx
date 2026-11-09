@@ -1,5 +1,6 @@
 'use client';
 
+import { announceTripEdit } from '@/components/hub/EditToast';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass, cx } from '@/components/ui';
@@ -29,7 +30,7 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
   const [status, setStatus] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
-  const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string }>) => {
+  const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string; undoable?: boolean }>) => {
     setStatus(null);
     startTransition(async () => {
       const result = await work();
@@ -38,6 +39,8 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
         return;
       }
       setStatus(result.changed ?? null);
+      /* A moved stop takes this row — and this sentence — with it; the page-level toast stays, with Undo. */
+      announceTripEdit(result);
       router.refresh();
     });
   };
@@ -139,6 +142,7 @@ export function FixDayButton({ tripId, dayNumber }: { tripId: string; dayNumber:
               return;
             }
             setStatus(result.changed ?? 'Fixed.');
+            announceTripEdit(result, 'This day was fixed.');
             setSteps(result.steps ?? []);
             router.refresh();
           });
@@ -178,6 +182,7 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
                 setStatus(result.error ?? 'That stop could not be added.');
                 return;
               }
+              announceTripEdit(result, 'Your stop was added.');
               setOpen(false);
               router.refresh();
             });

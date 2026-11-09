@@ -77,4 +77,16 @@ describe('planToAtlas', () => {
     expect(points.filter((p) => p.state === 'base')).toHaveLength(1);
     expect(points.map((p) => p.id)).toEqual(['base', 's1']);
   });
+
+  it('never draws a measured leg with no route shape as a solid line', () => {
+    const { lines } = planToAtlas({
+      marks: [],
+      base: null,
+      connectors: [
+        { id: 'timed', from: { lat: 38.7, lng: -9.13 }, to: { lat: 38.69, lng: -9.21 }, style: 'measured_drive' },
+        { id: 'routed', from: { lat: 38.7, lng: -9.13 }, to: { lat: 38.69, lng: -9.21 }, style: 'measured_drive', path: [{ lat: 38.7, lng: -9.13 }, { lat: 38.69, lng: -9.21 }] },
+      ],
+    });
+    expect(lines.map((line) => [line.id, line.style])).toEqual([['timed', 'estimated'], ['routed', 'measured']]);
+  });
 });

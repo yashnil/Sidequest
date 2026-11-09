@@ -38,6 +38,7 @@ export function JourneyExplorer({
   onDayChange,
   selectedPlaceId,
   onSelectStop,
+  focusRevision = 0,
   className,
   footer,
   testId = 'journey-explorer',
@@ -53,6 +54,12 @@ export function JourneyExplorer({
   /** The stop the timeline has selected, by place id. */
   selectedPlaceId?: string | null;
   onSelectStop?: (stop: JourneyStop) => void;
+  /**
+   * Bumps when a day or a stop was chosen somewhere else on the page (the
+   * timeline, the other map). The explorer answers by coming down to that day,
+   * so a choice made in the list is what the Map tab opens on.
+   */
+  focusRevision?: number;
   className?: string;
   footer?: ReactNode;
   testId?: string;
@@ -61,6 +68,12 @@ export function JourneyExplorer({
   const [ownDay, setOwnDay] = useState(model.days[0]?.dayNumber ?? 1);
   const dayNumber = controlledDay ?? ownDay;
   const [scale, setScale] = useState<JourneyScale>(variant === 'full' ? 'trip' : 'day');
+  /* A choice made elsewhere: come down to the day it is on. Adjusted during render, so there is no frame at the old scale. */
+  const [followed, setFollowed] = useState(focusRevision);
+  if (focusRevision !== followed) {
+    setFollowed(focusRevision);
+    if (focusRevision > 0 && scale !== 'day') setScale('day');
+  }
   const [ownSelected, setOwnSelected] = useState<string | null>(null);
   const [selectedLeg, setSelectedLeg] = useState<string | null>(null);
   /* Which of the two was pressed last: a stop and a leg can both be "selected", the card shows the newer. */
@@ -186,7 +199,7 @@ export function JourneyExplorer({
           <span aria-hidden="true">›</span>
           <ScaleButton on={scale === 'day'} onClick={() => setScale('day')} testId="journey-scale-day">Day {String(day.dayNumber).padStart(2, '0')}</ScaleButton>
         </nav>
-        <p key={`${scale}-${day.dayNumber}`} className="mt-2 max-w-[30ch] font-display text-[1.55rem] leading-[1.08] font-light tracking-[-0.015em] text-bone fade-up">
+        <p key={`${scale}-${day.dayNumber}`} className={cx('mt-2 max-w-[30ch] font-display text-[1.55rem] leading-[1.08] font-light tracking-[-0.015em] text-bone fade-up', variant !== 'full' && 'max-sm:max-w-[calc(100%-7rem)] max-sm:text-[1.3rem]')}>
           {scale === 'trip' ? `${model.days.length} days · ${model.bases.length === 1 ? 'one base' : `${model.bases.length} bases`}` : scale === 'stay' && stay ? `${stay.name} · ${stay.dayNumbers.length === 1 ? 'one day' : `days ${stay.dayNumbers[0]}–${stay.dayNumbers[stay.dayNumbers.length - 1]}`}` : day.theme}
         </p>
         {scale === 'day' ? <DayFigures day={day} /> : null}
@@ -274,12 +287,13 @@ function DayFigures({ day }: { day: JourneyDay }) {
   const stops = day.stops.filter((s) => s.kind === 'stop').length;
   const routed = day.totals.routedLegs;
   return (
-    <p className="coordbar mt-2 flex flex-wrap gap-x-4 gap-y-1 text-bone/65" data-testid="journey-day-figures">
+    /* Kept clear of the controls stacked top-right, so a figure wraps rather than running under a button. */
+    <p className="coordbar mt-2 flex max-w-[calc(100%-10.5rem)] flex-wrap gap-x-4 gap-y-1 text-bone/65" data-testid="journey-day-figures">
       <span>{stops} {stops === 1 ? 'stop' : 'stops'}</span>
       <span>{day.totals.minutes === null ? 'moving time not all known' : `${formatMinutes(day.totals.minutes)} moving`}</span>
       <span>≈{Math.round(day.totals.km)} km</span>
-      <span>{routed === day.totals.legs && routed > 0 ? 'every leg on its route' : routed > 0 ? `${routed} of ${day.totals.legs} legs on their route` : 'no route shapes — straight lines'}</span>
-      {day.unplaced > 0 ? <span>{day.unplaced} not on the map</span> : null}
+      <span>{routed === day.totals.legs && routed > 0 ? 'lines follow the route' : routed > 0 ? `${routed} of ${day.totals.legs} lines follow the route` : 'straight lines, not the road'}</span>
+      {day.unplaced > 0 ? <span>{day.unplaced} not on the map — no confirmed position</span> : null}
     </p>
   );
 }

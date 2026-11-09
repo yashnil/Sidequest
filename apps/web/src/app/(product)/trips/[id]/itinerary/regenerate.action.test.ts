@@ -105,4 +105,20 @@ describe('Regenerate', () => {
     expect(calls.startBuildRun).toHaveBeenCalledWith(expect.objectContaining({ buildKey: 'press-key-67890' }));
     expect(calls.generate).not.toHaveBeenCalled();
   });
+
+  /*
+   * RELEASE PASS — the board's button is the door most people rebuild from, and
+   * it carried nothing: a stop marked must-keep on the itinerary was kept by
+   * "Regenerate" and silently forgotten by "Rebuild my trip".
+   */
+  it('"Rebuild my trip" carries a must-keep board place too, and writes nothing when it is refused', async () => {
+    const { buildItineraryAction } = await import('./actions');
+    await expect(buildItineraryAction('trip-1', 'press-key-67890')).rejects.toMatchObject({ digest: expect.stringContaining('/trips/trip-1/build') });
+    expect(calls.setSelection).toHaveBeenCalledWith('trip-1', 'board-fort', 'included', 'user');
+
+    calls.setSelection.mockReset();
+    preflightOk = false;
+    expect((await buildItineraryAction('trip-1', 'press-key-67891')).ok).toBe(false);
+    expect(calls.setSelection).not.toHaveBeenCalled();
+  });
 });

@@ -359,7 +359,14 @@ export function AskSidequest(props: AskSidequestProps) {
       ) : null}
 
       <AnimatePresence>
-        {wide && bandGone && !open ? (
+        {/*
+          RELEASE PASS — one trigger on screen, not two. The hub's own trigger
+          sits in its sticky tab row, which stays with the traveller for the
+          whole page; floating a second "Ask Sidequest" under it once the band
+          scrolled away put the same button on screen twice and over the day
+          map's controls. The float is for a page whose trigger can leave.
+        */}
+        {wide && bandGone && !open && hubTrigger === null ? (
           <motion.button
             key="ask-float"
             type="button"

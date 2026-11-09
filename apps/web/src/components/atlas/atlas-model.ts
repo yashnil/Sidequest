@@ -153,8 +153,15 @@ export function planToAtlas(input: {
   }
   const lines: AtlasLine[] = (input.connectors ?? []).map((connector) => {
     const style = CONNECTOR_STYLE[connector.style] ?? 'unmeasured';
-    const path = connector.path && connector.path.length >= 2 && style === 'measured' ? connector.path : [connector.from, connector.to];
-    return { id: connector.id, style, coords: path.map((p) => [p.lng, p.lat] as const) };
+    const routed = Boolean(connector.path && connector.path.length >= 2);
+    const path = routed && style === 'measured' ? connector.path! : [connector.from, connector.to];
+    /*
+     * A solid line says "this is the way". A leg whose time was measured but
+     * whose shape nobody returned is a straight join between two places, so it
+     * is dashed like every other line that is not the road — the same answer
+     * the journey map gives for the same leg.
+     */
+    return { id: connector.id, style: style === 'measured' && !routed ? 'estimated' : style, coords: path.map((p) => [p.lng, p.lat] as const) };
   });
   return { points, lines };
 }

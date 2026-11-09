@@ -26,6 +26,8 @@ import { buildPreflight } from '@/lib/planning/build-preflight';
 import { buildRunView, startBuildRun } from '@/lib/planning/build-runs';
 import { callerKey, guardAction, guardBilledAction } from '@/lib/net/caller';
 import { keepsToCarry, regenerationPreview } from './regenerate-summary';
+import { currentVersion, recordEditVersion, recordVersion, undoTarget } from '@/lib/refine/version-repository';
+import { getTripDraft, saveTripDraft } from '@/lib/db/draft-repository';
 import { addCustomStop, easeReconciledDay, isReconciledItinerary, moveStopToDay, removeStopFromReconciledItinerary, setStopDuration, setStopKeep, shiftStop } from '@/lib/planning/reconciled-edits';
 import { repairReconciledDay } from '@/lib/planning/day-repair';
 import { discoverFoodNear, discoverStaysNear } from '@/lib/providers/discovery';
@@ -113,7 +115,13 @@ export async function buildItineraryAction(tripId: string, buildKey?: string): P
   /* Asked here as well as inside the shared starter, so the guard is visible at the door (`ownership.architecture.test.ts`). */
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
-  const started = await startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_build_action');
+  /*
+   * RELEASE PASS — a rebuild from the board keeps what "Regenerate" keeps. The
+   * board's button reached this action, which carried nothing, so a stop marked
+   * must-keep or locked on the itinerary was honoured by one rebuild door and
+   * silently forgotten by the other. With no plan yet there is nothing to carry.
+   */
+  const started = await startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_build_action', () => carryKeepsToBoard(tripId));
   if (!started.ok) return { ok: false, error: started.error };
   // `redirect` throws, so nothing below it runs; the return satisfies the signature.
   redirect(`/trips/${tripId}/build`);
@@ -133,17 +141,20 @@ export async function regenerateItineraryAction(tripId: string, buildKey?: strin
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
   productEvent('regenerate_used', tripId);
-  return startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_regenerate_action', () => {
-    try {
-      const itinerary = getItinerary(tripId);
-      if (!itinerary) return;
-      const selections = getSelections(tripId);
-      const preview = regenerationPreview({ itinerary, locks: getItineraryLocks(tripId), selections, bookings: 0 });
-      for (const placeId of keepsToCarry(preview, selections)) setSelection(tripId, placeId, 'included', 'user');
-    } catch {
-      /* A stale stored plan has no keeps to read; the rebuild itself is what replaces it. */
-    }
-  });
+  return startWholeTripBuild(tripId, buildKey ?? serverBuildKey(), 'itinerary_regenerate_action', () => carryKeepsToBoard(tripId));
+}
+
+/** Must-keeps and locks on the stored plan become the traveller's own board includes, so the next build reads them. */
+function carryKeepsToBoard(tripId: string): void {
+  try {
+    const itinerary = getItinerary(tripId);
+    if (!itinerary) return;
+    const selections = getSelections(tripId);
+    const preview = regenerationPreview({ itinerary, locks: getItineraryLocks(tripId), selections, bookings: 0 });
+    for (const placeId of keepsToCarry(preview, selections)) setSelection(tripId, placeId, 'included', 'user');
+  } catch {
+    /* A stale stored plan has no keeps to read; the rebuild itself is what replaces it. */
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +173,10 @@ export interface EditActionResult {
   error?: string;
   /** One sentence describing what changed, for the toast. */
   changed?: string;
+  /** The plan as it was before this change was recorded, so the toast can offer Undo. */
+  undoable?: boolean;
+  /** A stop this change took off the plan (and skipped on the board): Undo puts both back. */
+  restoresPlaceId?: string;
 }
 
 export interface SwapOffer {
@@ -204,14 +219,73 @@ async function editContext(
 
 function persistEdit(tripId: string, result: ItineraryEditResult | { ok: true; itinerary: Itinerary; changed: string } | { ok: false; message: string }): EditActionResult {
   if (!result.ok) return { ok: false, error: result.message };
+  /* Read before the save: this is the plan Undo has to give back. */
+  let before: Itinerary | null;
+  try {
+    before = getItinerary(tripId);
+  } catch {
+    before = null;
+  }
   try {
     saveItinerary(result.itinerary);
   } catch (error) {
     console.error('Failed to save edited itinerary', error);
     return { ok: false, error: 'The change was valid but could not be saved. Nothing was lost.' };
   }
+  /*
+   * RELEASE PASS — every edit made by hand is reversible. The history is two
+   * rows of bookkeeping; if it cannot be written the edit still stands and the
+   * toast simply offers no Undo, rather than the change failing for the sake of
+   * its own safety net.
+   */
+  let undoable = false;
+  if (before) {
+    try {
+      recordEditVersion({ tripId, before, after: result.itinerary, draft: getTripDraft(tripId)?.draft ?? null, changed: result.changed });
+      undoable = true;
+    } catch (error) {
+      console.warn('Could not record the edit for undo', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+    }
+  }
   revalidatePath(`/trips/${tripId}/itinerary`);
-  return { ok: true, changed: result.changed };
+  return { ok: true, changed: result.changed, undoable };
+}
+
+/**
+ * UNDO THE LAST CHANGE MADE BY HAND.
+ *
+ * A persisted-state restore, the same one Ask Sidequest's Undo performs: the
+ * plan (and its draft) exactly as they stood before the last change, recorded
+ * as a version of its own so an undo can itself be undone. When that change
+ * was taking a stop off the plan, the board's skip is lifted too — otherwise
+ * the stop would be back on the page and still struck off the next rebuild.
+ * No model, no provider, no re-measure.
+ */
+export async function undoTripEditAction(tripId: string, restoresPlaceId?: string): Promise<EditActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  const target = undoTarget(tripId);
+  if (!target) return { ok: false, error: 'There is nothing to undo on this trip.' };
+  const head = currentVersion(tripId);
+  try {
+    saveItinerary(target.itinerary);
+    if (target.draft) saveTripDraft({ tripId, draft: target.draft });
+    recordVersion({
+      tripId,
+      previousVersion: head,
+      request: 'Undo the last change',
+      summary: { changed: ['Restored the trip as it was before your last change.'], kept: [], rechecking: [] },
+      itinerary: target.itinerary,
+      draft: target.draft,
+    });
+    /* Only a stop the restored plan actually holds: this value comes from the browser. */
+    if (restoresPlaceId && target.itinerary.days.some((day) => day.items.some((item) => item.placeId === restoresPlaceId))) setSelection(tripId, restoresPlaceId, 'included', 'user');
+  } catch (error) {
+    console.error('Failed to undo an edit', error);
+    return { ok: false, error: 'That could not be undone just then. Nothing else was changed.' };
+  }
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, changed: 'Undone — your trip is back as it was before that change.' };
 }
 
 export async function removeStopAction(
@@ -234,6 +308,7 @@ export async function removeStopAction(
      */
     setSelection(tripId, placeId, 'excluded', 'user');
     clearItineraryLock(tripId, placeId);
+    return { ...persisted, restoresPlaceId: placeId };
   }
   return persisted;
 }

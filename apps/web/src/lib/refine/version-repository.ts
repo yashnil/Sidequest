@@ -156,20 +156,84 @@ export function recordVersion(input: {
  * build time, because a trip that is never refined should not pay for a copy of
  * itself, and because that keeps generation and refinement independent.
  *
- * Idempotent: a trip that already has any version keeps the head it has.
+ * Idempotent: a trip whose head already *is* this plan keeps the head it has.
+ *
+ * RELEASE PASS — THE HEAD HAS TO BE THE PLAN ON THE PAGE, OR UNDO LIES.
+ *
+ * "Any version at all" used to be enough, and that was only true while every
+ * change to a plan went through this history. Two kinds did not: a rebuild,
+ * and every edit made by hand on a day (a move, a custom stop, a duration).
+ * So after "Ask → move a stop by hand → Ask again → Undo", Undo restored the
+ * head before the second Ask — a snapshot taken before the hand edit — and the
+ * traveller's own change vanished under a sentence that said the trip was
+ * "back as it was before your last change". It was not.
+ *
+ * The plan as it stands is now recorded whenever the head is not it, so the
+ * version before any change is always exactly what was on the page. A
+ * comparison that is wrong in the cautious direction (two equal plans read as
+ * different) costs one extra snapshot and restores the same thing.
  */
 export function ensureBaselineVersion(input: { tripId: string; itinerary: Itinerary; draft?: TripDraft | null; now?: Date }): number {
   const head = currentVersion(input.tripId);
-  if (head > 0) return head;
+  if (head > 0) {
+    const current = getVersion(input.tripId, head);
+    if (current && samePlan(current.itinerary, input.itinerary)) return head;
+  }
   const recorded = recordVersion({
     tripId: input.tripId,
-    previousVersion: 0,
+    previousVersion: head,
     summary: { changed: [], kept: [], rechecking: [] },
     itinerary: input.itinerary,
     draft: input.draft ?? null,
     now: input.now,
   });
   return recorded.version;
+}
+
+/**
+ * Whether two plans are the same plan.
+ *
+ * A stored version has been through JSON and the schema; the plan handed in
+ * may not have been, so the two can differ in key order and in defaults the
+ * schema fills while being the same trip. Both are read through the schema and
+ * compared with their keys in one order. A plan the schema will not read is
+ * "different" — the cautious answer, which costs a snapshot, never a restore.
+ */
+function samePlan(stored: Itinerary, candidate: Itinerary): boolean {
+  const parsed = itinerarySchema.safeParse(candidate);
+  if (!parsed.success) return false;
+  return canonicalJson(stored) === canonicalJson(parsed.data);
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, entry: unknown) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const record = entry as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, record[key]]));
+  });
+}
+
+/**
+ * A CHANGE MADE BY HAND IS A VERSION TOO.
+ *
+ * Moving a stop, adding one of your own, changing a duration, easing or fixing
+ * a day: each used to overwrite the stored plan with no way back. Each is now
+ * recorded exactly as an Ask Sidequest change is — the plan before it (if the
+ * history does not already end there) and the plan after it — so the one Undo
+ * the product has restores the state immediately before the traveller's last
+ * change, whichever kind of change it was. Nothing is planned, measured or
+ * called here: two rows.
+ */
+export function recordEditVersion(input: { tripId: string; before: Itinerary; after: Itinerary; draft?: TripDraft | null; changed: string; now?: Date }): number {
+  const head = ensureBaselineVersion({ tripId: input.tripId, itinerary: input.before, draft: input.draft ?? null, ...(input.now ? { now: input.now } : {}) });
+  return recordVersion({
+    tripId: input.tripId,
+    previousVersion: head,
+    summary: { changed: [input.changed], kept: [], rechecking: [] },
+    itinerary: input.after,
+    draft: input.draft ?? null,
+    ...(input.now ? { now: input.now } : {}),
+  }).version;
 }
 
 function parseRow(row: VersionRow): TripVersion {

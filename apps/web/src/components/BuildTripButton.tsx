@@ -24,6 +24,7 @@ export function BuildTripButton({
   hasItinerary,
   includedCount,
   onReadiness,
+  replaces = [],
   className,
 }: {
   /** Extra classes for the button itself, so the action bar can size it. */
@@ -31,6 +32,13 @@ export function BuildTripButton({
   tripId: string;
   hasItinerary: boolean;
   includedCount: number;
+  /**
+   * What rebuilding would replace on the plan that already exists — the
+   * traveller's own edits to its days — in sentences written on the server
+   * from the stored plan. When there are any, the first press shows them and
+   * asks; a rebuild never discards somebody's work without saying so first.
+   */
+  replaces?: readonly string[];
   /**
    * WHERE THE REFUSAL IS RENDERED IS THE CALLER'S PROBLEM, NOT THIS BUTTON'S.
    *
@@ -50,6 +58,8 @@ export function BuildTripButton({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+  const mustConfirm = hasItinerary && replaces.length > 0;
   /* One key per press, reused by a retry of the same press, so the server attaches instead of building twice. */
   const key = useRef<string | null>(null);
 
@@ -81,8 +91,9 @@ export function BuildTripButton({
     <div>
       <button
         type="button"
-        onClick={build}
-        disabled={pending}
+        onClick={() => (mustConfirm && !confirming ? setConfirming(true) : build())}
+        disabled={pending || (mustConfirm && confirming)}
+        {...(mustConfirm ? { 'aria-expanded': confirming } : {})}
         className={cx(buttonClass('accent'), 'whitespace-nowrap', className)}
         aria-describedby={includedCount === 0 ? 'build-hint' : undefined}
       >
@@ -107,6 +118,27 @@ export function BuildTripButton({
       <p role="status" aria-live="polite" className="sr-only">
         {pending ? 'Starting your build.' : ''}
       </p>
+      {mustConfirm && confirming ? (
+        <div role="group" aria-labelledby="rebuild-confirm-heading" className="mt-2 max-w-[24rem] rounded-[var(--radius-control)] border border-rule bg-paper p-3 text-sm" data-testid="board-rebuild-confirm">
+          <p id="rebuild-confirm-heading" className="font-medium text-ink">
+            Rebuild over the changes you made?
+          </p>
+          {replaces.map((line) => (
+            <p key={line} className="mt-1.5 leading-relaxed text-ink" data-testid="board-rebuild-replaced">
+              {line}
+            </p>
+          ))}
+          <p className="mt-1.5 leading-relaxed text-ink-muted">Kept: your choices on this board, anything you marked must-keep or locked that is on it, your bookings and who is travelling.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={pending} onClick={build} className={buttonClass('primary', 'sm')} data-testid="board-rebuild-go">
+              {pending ? 'Starting…' : 'Rebuild the trip'}
+            </button>
+            <button type="button" disabled={pending} onClick={() => setConfirming(false)} className={buttonClass('ghost', 'sm')} data-testid="board-rebuild-keep">
+              Keep my plan
+            </button>
+          </div>
+        </div>
+      ) : null}
       {includedCount === 0 ? (
         <p id="build-hint" className="mt-1.5 text-xs text-ink-muted max-sm:sr-only">
           Nothing picked yet? That’s fine — we’ll plan from your answers.

@@ -145,6 +145,7 @@ export function DiscoveryBoardView({
   initialAutoPicks = [],
   autoPickNotes,
   hasItinerary,
+  rebuildReplaces = [],
   weatherBackups,
   boardVersion: declaredVersion,
   weatherFreshness,
@@ -170,6 +171,8 @@ export function DiscoveryBoardView({
   initialAutoPicks?: readonly string[];
   autoPickNotes: string[];
   hasItinerary: boolean;
+  /** What a rebuild would replace on the existing plan, in the server's words; empty when nothing would be lost. */
+  rebuildReplaces?: readonly string[];
   /** A basemap tile source, resolved on the server from `SIDEQUEST_MAP_TILES`; null draws positions only. */
   tiles?: MapBasemap | null;
   /** Licensed photographs by place id, read from a table by the page. */
@@ -642,7 +645,7 @@ export function DiscoveryBoardView({
             {pending ? 'Choosing…' : 'Choose for me'}
           </button>
           <div className="shrink-0 max-sm:basis-full">
-            <BuildTripButton tripId={tripId} hasItinerary={hasItinerary} includedCount={includedCount} onReadiness={setReadiness} className="max-sm:w-full max-sm:min-h-12" />
+            <BuildTripButton tripId={tripId} hasItinerary={hasItinerary} includedCount={includedCount} onReadiness={setReadiness} replaces={rebuildReplaces} className="max-sm:w-full max-sm:min-h-12" />
           </div>
         </div>
 
