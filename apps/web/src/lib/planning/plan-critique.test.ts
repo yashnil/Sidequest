@@ -45,7 +45,7 @@ function planner(over: Partial<StructurePlannerInput> = {}): StructurePlannerInp
 
 const proposal = (ids: string[]): StructurePlan => ({
   days: [{ dayNumber: 1, date: '2026-11-01', baseId: 'base', relocation: false, stops: ids.map((id) => ({ candidate: candidate(id, id), slot: 'day' as const })), travelMinutes: 0, eveningTravelMinutes: 0, activityMinutes: 0, capacityMinutes: 0, weather: null, lunchNear: null, lunchFoodArea: null, backup: null, intensity: 'light' }],
-  dropped: [], weatherMoves: [], mustConflicts: [],
+  dropped: [], weatherMoves: [], mustConflicts: [], repairs: [], dayNotes: [],
 });
 
 describe('reading a plan as written', () => {

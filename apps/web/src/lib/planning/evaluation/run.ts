@@ -1,5 +1,6 @@
 import {
   assembleScanRegion,
+  stayTravellerFor,
   buildTravelerProfile,
   compileSpatialOrder,
   defaultAnswers,
@@ -119,6 +120,8 @@ export interface CaseMetrics {
     score: number;
     mustsAsked: number;
     mustsPlaced: number;
+    /** Days the repair pass changed before anyone saw the plan. */
+    repairs: number;
   };
   defects: {
     /** Days whose loop, evening run, sunrise run and transfer together pass the traveller's daily limit. */
@@ -140,6 +143,8 @@ export interface CaseMetrics {
     /** Of the overfull days: those holding the traveller's own include. */
     overfullOwnPick: number;
     emptyInteriorDays: number;
+    /** Of those, days whose transfer spent the traveller's travel limit: the journey is the day. */
+    emptyInteriorMovingDays: number;
     oneStopDays: number;
     /** One-stop days using under half their capacity while an unscheduled place within reach would pass the planner's own day rules. */
     oneStopDaysWithCompatibleNeighbour: number;
@@ -269,7 +274,10 @@ export function setupCase(fixture: BoardFixture, profileCase: ProfileCase): Case
     carAvailable: canonical.movement.carAvailable,
     maxBaseChanges,
     ...(fixture.gateway ? { edges: { arrival: fixture.gateway, departure: fixture.gateway, arrivalUsableMinutes: usable(windows[0]), departureUsableMinutes: usable(windows[windows.length - 1]) } } : {}),
-    ...stayInputFor({ trip, profile, carAvailable, maxDailyTravelMinutes: travelLimitOf(canonical, profile, carAvailable) }),
+    traveller: stayTravellerFor({ trip, profile, carAvailable, maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null }),
+    dayMinutes: windows.map((w) => usable(w)),
+    ...(fixture.namedParts ? { namedParts: fixture.namedParts } : {}),
+    mustSeeKeys: proposal.candidates.filter((c) => placeByName.get(`${c.name}|${c.locality}`)?.must).map((c) => c.key),
     proposal,
     positions,
     plan,
@@ -301,34 +309,6 @@ export function setupCase(fixture: BoardFixture, profileCase: ProfileCase): Case
     compiled: region,
   } as unknown as RegionContext;
   return { trip, profile, region, context: regionContext, carAvailable, maxBaseChanges };
-}
-
-type Canonical = ReturnType<typeof buildCanonicalTripBuildInput>;
-
-function travelLimitOf(canonical: Canonical, profile: TravelerProfile, carAvailable: boolean): number {
-  const travel = canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes;
-  const drive = canonical.movement.maxDailyDriveMinutes.value;
-  return carAvailable && drive ? Math.min(travel, drive) : travel;
-}
-
-/**
- * The traveller facts the base choice reads. Spread into the assembler's input
- * so the same harness measures the rule before and after it learned to read
- * them: an assembler that does not know the field ignores it.
- */
-function stayInputFor(input: { trip: Trip; profile: TravelerProfile; carAvailable: boolean; maxDailyTravelMinutes: number }): Record<string, unknown> {
-  return {
-    traveller: {
-      moveTolerance: input.profile.interview.baseMoveTolerance,
-      pace: input.profile.pace,
-      maxDailyTravelMinutes: input.maxDailyTravelMinutes,
-      stopsPerDay: Math.max(1, Math.round(input.profile.derived.activitySlotsPerDay)),
-      children: input.trip.basics.children,
-      youngChildren: input.trip.basics.travelerNeeds.includes('kids_under_12'),
-      reducedMobility: input.trip.basics.travelerNeeds.includes('mobility_limited') || input.trip.basics.travelerNeeds.includes('seniors_in_group') || input.profile.accessibility.mobilityLimited,
-      carAvailable: input.carAvailable,
-    },
-  };
 }
 
 export function composeCase(fixture: BoardFixture, setup: CaseSetup): { composition: PlannerComposition; mustIds: string[] } {
@@ -380,14 +360,16 @@ function dayTravel(input: StructurePlannerInput, day: PlannedDay, index: number,
 }
 
 /** When a day's stops, legs, transfer and lunch end, against its window. */
-function dayOverrun(input: StructurePlannerInput, day: PlannedDay, index: number, total: number): number {
+function dayOverrun(input: StructurePlannerInput, day: PlannedDay, index: number, total: number, previousBaseOf?: (index: number) => string | undefined): number {
   const window = input.windows.find((w) => w.date === day.date);
   if (!window) return 0;
   const daytime = day.stops.filter((s) => s.slot === 'day');
   if (daytime.length === 0) return 0;
   const base = input.bases.find((b) => b.id === day.baseId);
-  let clock = window.startMinute + (day.relocation ? base?.transferMinutesFromPrevious ?? 0 : 0) + (index === 0 ? input.edgeTransfers?.arrivalMinutes ?? 0 : 0);
-  let previous = day.baseId;
+  /* A moving day runs last night's base → stops → tonight's base, so the transfer is inside its legs (`detourMinutes`). */
+  const leftFrom = previousBaseOf?.(index);
+  let clock = window.startMinute + (index === 0 ? input.edgeTransfers?.arrivalMinutes ?? 0 : 0) + (day.relocation && !leftFrom ? base?.transferMinutesFromPrevious ?? 0 : 0);
+  let previous = leftFrom ?? day.baseId;
   let lunched = !(window.startMinute <= 13 * 60 && window.endMinute >= 13 * 60);
   for (const s of daytime) {
     clock += (input.minutes(previous, s.candidate.id) ?? UNKNOWN_LEG_MINUTES) + s.candidate.durationMinutes;
@@ -438,6 +420,7 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
   let overfullDays = 0;
   let overfullMinutes = 0;
   let emptyInterior = 0;
+  let emptyInteriorMoving = 0;
   let oneStop = 0;
   let oneStopWithNeighbour = 0;
   let backtrackingDays = 0;
@@ -473,14 +456,17 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
       defect = true;
     }
     if (t.loop + t.evening > limit) daysOverLimitPlannerRule += 1;
-    const overrun = dayOverrun(input, day, index, total);
+    const overrun = dayOverrun(input, day, index, total, (i) => kernel.days[i]?.previousBaseId);
     if (overrun > 0) {
       overfullDays += 1;
       overfullMinutes += overrun;
       if (ownPick) overfullOwnPick += 1;
       defect = true;
     }
-    if (interior && day.stops.length === 0 && day.capacityMinutes >= 60) emptyInterior += 1;
+    if (interior && day.stops.length === 0 && day.capacityMinutes >= 60) {
+      emptyInterior += 1;
+      if (day.relocation) emptyInteriorMoving += 1;
+    }
     if (interior && day.stops.length === 1 && !day.relocation) {
       oneStop += 1;
       const used = day.activityMinutes + day.travelMinutes;
@@ -615,7 +601,7 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
     },
     moves,
     stayPut,
-    plan: { poolSize: composition.poolSize, stops: scheduled.size, score: Math.round(objective.score), mustsAsked: mustIds.length, mustsPlaced },
+    plan: { poolSize: composition.poolSize, stops: scheduled.size, score: Math.round(objective.score), mustsAsked: mustIds.length, mustsPlaced, repairs: plan.repairs.length },
     defects: {
       daysOverTravelLimit: daysOverLimit,
       daysOverTravelLimitPlannerRule: daysOverLimitPlannerRule,
@@ -628,6 +614,7 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
       overfullMinutes,
       overfullOwnPick,
       emptyInteriorDays: emptyInterior,
+      emptyInteriorMovingDays: emptyInteriorMoving,
       oneStopDays: oneStop,
       oneStopDaysWithCompatibleNeighbour: oneStopWithNeighbour,
       backtrackingDays,
@@ -673,8 +660,8 @@ function failedCase(fixture: BoardFixture, profileCase: ProfileCase, error: stri
     travel: { limitMinutes: 0, totalMinutes: 0, sightseeingMinutes: 0, transferMinutes: 0, perDay: [], meanPerDay: 0, maxDay: 0, unknownLegs: 0, matrixBasis: 'none' },
     moves: [],
     stayPut: null,
-    plan: { poolSize: 0, stops: 0, score: 0, mustsAsked: 0, mustsPlaced: 0 },
-    defects: { daysOverTravelLimit: 0, daysOverTravelLimitPlannerRule: 0, overTravelMinutes: 0, overLimitTransferAlone: 0, overLimitMovingDay: 0, overLimitOwnPick: 0, overLimitOther: 0, overfullDays: 0, overfullMinutes: 0, overfullOwnPick: 0, emptyInteriorDays: 0, oneStopDays: 0, oneStopDaysWithCompatibleNeighbour: 0, backtrackingDays: 0, backtrackExcessKm: 0, strenuousBackToBack: 0, heavyArrivalDay: 0, heavyDepartureDay: 0, arrivalLoad: 0, departureLoad: 0, missingLunch: 0, missingDinner: 0, hoursConflicts: 0, stopsWithKnownHours: 0, stopsWithUnknownHours: 0, droppedMusts: 0, unstatedDefectDays: 0 },
+    plan: { poolSize: 0, stops: 0, score: 0, mustsAsked: 0, mustsPlaced: 0, repairs: 0 },
+    defects: { daysOverTravelLimit: 0, daysOverTravelLimitPlannerRule: 0, overTravelMinutes: 0, overLimitTransferAlone: 0, overLimitMovingDay: 0, overLimitOwnPick: 0, overLimitOther: 0, overfullDays: 0, overfullMinutes: 0, overfullOwnPick: 0, emptyInteriorDays: 0, emptyInteriorMovingDays: 0, oneStopDays: 0, oneStopDaysWithCompatibleNeighbour: 0, backtrackingDays: 0, backtrackExcessKm: 0, strenuousBackToBack: 0, heavyArrivalDay: 0, heavyDepartureDay: 0, arrivalLoad: 0, departureLoad: 0, missingLunch: 0, missingDinner: 0, hoursConflicts: 0, stopsWithKnownHours: 0, stopsWithUnknownHours: 0, droppedMusts: 0, unstatedDefectDays: 0 },
     notes: [],
   };
 }
@@ -706,7 +693,7 @@ export interface EvaluationSummary {
 
 export function summarise(cases: readonly CaseMetrics[]): EvaluationSummary {
   const ok = cases.filter((c) => c.ok);
-  const keys = ['daysOverTravelLimit', 'daysOverTravelLimitPlannerRule', 'overTravelMinutes', 'overLimitTransferAlone', 'overLimitMovingDay', 'overLimitOwnPick', 'overLimitOther', 'overfullDays', 'overfullMinutes', 'overfullOwnPick', 'emptyInteriorDays', 'oneStopDays', 'oneStopDaysWithCompatibleNeighbour', 'backtrackingDays', 'backtrackExcessKm', 'strenuousBackToBack', 'heavyArrivalDay', 'heavyDepartureDay', 'missingLunch', 'missingDinner', 'hoursConflicts', 'stopsWithKnownHours', 'stopsWithUnknownHours', 'droppedMusts', 'unstatedDefectDays'] as const;
+  const keys = ['daysOverTravelLimit', 'daysOverTravelLimitPlannerRule', 'overTravelMinutes', 'overLimitTransferAlone', 'overLimitMovingDay', 'overLimitOwnPick', 'overLimitOther', 'overfullDays', 'overfullMinutes', 'overfullOwnPick', 'emptyInteriorDays', 'emptyInteriorMovingDays', 'oneStopDays', 'oneStopDaysWithCompatibleNeighbour', 'backtrackingDays', 'backtrackExcessKm', 'strenuousBackToBack', 'heavyArrivalDay', 'heavyDepartureDay', 'missingLunch', 'missingDinner', 'hoursConflicts', 'stopsWithKnownHours', 'stopsWithUnknownHours', 'droppedMusts', 'unstatedDefectDays'] as const;
   const totals = Object.fromEntries(keys.map((k) => [k, ok.reduce((n, c) => n + c.defects[k], 0)])) as EvaluationSummary['totals'];
   const tripsAffected = Object.fromEntries(keys.map((k) => [k, ok.filter((c) => c.defects[k] > 0).length]));
   const moves = ok.flatMap((c) => c.moves);

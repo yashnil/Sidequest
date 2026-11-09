@@ -1,6 +1,7 @@
 import type { Interest, PhysicalIntensity, TimeOfDay } from '@sidequest/core';
 import type { AnchorCategory, DraftAnchor, DraftDay, DraftTransport, TripArchetype } from './trip-draft';
 import { evaluateObjective, improveStructure, type ImproveOptions, type StructureObjective } from './structure-improve';
+import { describeDays, repairDays, type DayNote, type DayRepair } from './structure-repair';
 
 /**
  * V1 CONVERGENCE — THE DETERMINISTIC STRUCTURE PLANNER.
@@ -167,6 +168,10 @@ export interface StructurePlan {
   weatherMoves: { candidateId: string; name: string; avoidedDate: string; chosenDate: string }[];
   /** Traveller must-includes that could not be placed: a stated conflict, never silent. */
   mustConflicts: { candidateId: string; name: string; reason: DropReason; detail: string }[];
+  /** What the repair pass changed before anyone saw the plan. */
+  repairs: DayRepair[];
+  /** What is still wrong with a day, in words, with its figures. Written on the day. */
+  dayNotes: DayNote[];
 }
 
 export const INTENSITY_RANK: Record<PhysicalIntensity, number> = { none: 0, easy: 1, moderate: 2, strenuous: 3 };
@@ -196,6 +201,8 @@ const COHERENT_HOP_MINUTES = 50;
  *    triggers the rule. Only a figure somebody produced can call a place far.
  */
 export const UNKNOWN_LEG_MINUTES = 60;
+/** A day whose transfer uses up the traveller's limit still gets this much of a loop near where it ends. */
+const MOVE_DAY_LOOP_MINUTES = 45;
 
 function dayWindowOf(input: StructurePlannerInput, date: string): PlannerDayWindow {
   return input.windows.find((w) => w.date === date) ?? { date, startMinute: 9 * 60, endMinute: 18 * 60 };
@@ -242,6 +249,45 @@ export function tourMinutes(baseId: string, ids: readonly string[], minutes: Str
     at = next!;
   }
   return refineTour(baseId, order, m);
+}
+
+/**
+ * A moving day is a journey, not a loop: last night's base, the stops, tonight's
+ * base (which is how the reconciler builds it). What the stops cost is the
+ * detour over going straight there, so a place on the way costs almost nothing
+ * and the same place behind you costs what it should.
+ */
+export function detourMinutes(fromId: string, toId: string, ids: readonly string[], minutes: StructurePlannerInput['minutes']): { order: string[]; total: number } {
+  const m = (a: string, b: string) => minutes(a, b) ?? UNKNOWN_LEG_MINUTES;
+  const direct = m(fromId, toId);
+  let best: { order: string[]; total: number } | null = null;
+  if (ids.length <= 6) {
+    const walk = (path: string[], rest: string[], at: string, cost: number) => {
+      if (rest.length === 0) {
+        const total = cost + m(at, toId);
+        if (!best || total < best.total) best = { order: path, total };
+        return;
+      }
+      for (const next of rest) walk([...path, next], rest.filter((r) => r !== next), next, cost + m(at, next));
+    };
+    walk([], [...ids], fromId, 0);
+  } else {
+    const order: string[] = [];
+    const rest = new Set(ids);
+    let at = fromId;
+    let cost = 0;
+    while (rest.size > 0) {
+      let next: string | null = null;
+      for (const id of rest) if (next === null || m(at, id) < m(at, next)) next = id;
+      order.push(next!);
+      cost += m(at, next!);
+      rest.delete(next!);
+      at = next!;
+    }
+    best = { order, total: cost + m(at, toId) };
+  }
+  const found = best as { order: string[]; total: number } | null;
+  return { order: found?.order ?? [], total: Math.max(0, (found?.total ?? direct) - direct) };
 }
 
 /** The length of a loop base → order → base. */
@@ -333,8 +379,16 @@ export interface DaySkeleton {
   dayNumber: number;
   date: string;
   baseId: string;
+  /** Where a moving day starts. */
+  previousBaseId?: string;
   relocation: boolean;
   capacityMinutes: number;
+  /** The day's whole window, before lunch, slack or any transfer. */
+  windowMinutes: number;
+  /** The move between stays and the arrival or departure leg that fall on this day. */
+  transferMinutes: number;
+  /** Minutes of loops and evening or sunrise runs this day may hold: the traveller's limit less the day's transfer. */
+  travelBudgetMinutes: number;
   weather: PlannerDayWeather | null;
   isFirst: boolean;
   isLast: boolean;
@@ -410,7 +464,9 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const raw = span - lunch - buffer - transfer - (isFirst || isLast ? 30 : 0);
     /* What is left of an edge day after a long transfer is not a sightseeing window: under ninety minutes, the day is the journey. */
     const capacity = Math.max(0, (isFirst || isLast) && edgeTransfer > 0 && raw < 90 ? 0 : raw);
-    return { index: i, dayNumber: i + 1, date, baseId: base.id, relocation, capacityMinutes: capacity, weather: weatherByDate.get(date) ?? null, isFirst, isLast };
+    /* A transfer is travel: it comes off the traveller's limit, and a day that spends it all still gets a short loop near where it ends. */
+    const travelBudget = transfer > 0 ? Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_LOOP_MINUTES) : input.maxDailyTravelMinutes;
+    return { index: i, dayNumber: i + 1, date, baseId: base.id, ...(relocation ? { previousBaseId: previousBase.id } : {}), relocation, capacityMinutes: capacity, windowMinutes: span, transferMinutes: transfer, travelBudgetMinutes: travelBudget, weather: weatherByDate.get(date) ?? null, isFirst, isLast };
   });
 
   // --- what may be planned at all -------------------------------------------------
@@ -461,15 +517,12 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
   }
   function dayMetrics(index: number, stops: readonly PlannerCandidate[]): DayMetrics {
     const day = days[index]!;
-    const key = setKey(day.baseId, stops);
+    const key = `${day.previousBaseId ?? ''}\u0000${setKey(day.baseId, stops)}`;
     const hit = metricsMemo.get(key);
     if (hit) return hit;
     const daytime = stops.filter((s) => slotOf(s) === 'day');
-    const tour = tourMinutes(
-      day.baseId,
-      daytime.map((s) => s.id).sort(),
-      input.minutes,
-    );
+    const ids = daytime.map((s) => s.id).sort();
+    const tour = day.previousBaseId ? detourMinutes(day.previousBaseId, day.baseId, ids, input.minutes) : tourMinutes(day.baseId, ids, input.minutes);
     let evening = 0;
     let sunrise = 0;
     for (const s of stops) {
@@ -527,7 +580,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
      * The evening run comes first for an evening stop, as it always has: its
      * refusal is about the drive, not the daytime shape.
      */
-    const travelOver = metrics.tourMinutes + metrics.eveningMinutes > input.maxDailyTravelMinutes && stops.some((s) => s.status !== 'must' && slotOf(s) !== 'sunrise');
+    const travelOver = metrics.tourMinutes + metrics.eveningMinutes + metrics.sunriseMinutes > day.travelBudgetMinutes && stops.some((s) => s.status !== 'must');
     const travelFailure = fail('too_far', `It would take the day's travel past the ${input.maxDailyTravelMinutes} minutes you set.`);
     if (focus && slotOf(focus) !== 'day' && slotOf(focus) !== 'sunrise' && travelOver) return travelFailure;
     /*
@@ -643,6 +696,7 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
   const dropped: StructurePlan['dropped'] = [...kernel.preDropped];
   const mustConflicts: StructurePlan['mustConflicts'] = [...kernel.preConflicts];
   let weatherMoves: StructurePlan['weatherMoves'] = [];
+  let repairs: DayRepair[] = [];
   const interestCount = new Map<Interest, number>();
 
   const candidatesOf = (day: PlannedDay) => day.stops.map((s) => s.candidate);
@@ -814,7 +868,10 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
      * so every reason describes the plan the traveller actually gets.
      */
     const seed: PlanState = days.map((d) => d.stops.map((s) => s.candidate));
-    const best = improveStructure(kernel, seed, improve === true ? {} : improve);
+    /* Then the days the search left defective: a traveller's include parked where it does not fit moves to where it does (`structure-repair.ts`). */
+    const repaired = repairDays(kernel, improveStructure(kernel, seed, improve === true ? {} : improve));
+    const best = repaired.state;
+    repairs = repaired.repairs;
     best.forEach((stops, index) => {
       days[index]!.stops = stops.map((candidate) => ({ candidate, slot: slotOf(candidate) }));
       refresh(index);
@@ -841,9 +898,10 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
   for (const day of days) {
     const window = dayWindowOf(input, day.date);
     const byId = new Map(day.stops.map((s) => [s.candidate.id, s]));
-    let tour = tourMinutes(day.baseId, daytimeIds(day), input.minutes);
-    // "Morning" is soft (V10): it leads the day when that costs under half an hour of extra travel.
-    const morning = daytimeIds(day).filter((id) => byId.get(id)!.candidate.bestTime === 'morning');
+    const startedAt = kernel.days[day.dayNumber - 1]!.previousBaseId;
+    let tour = startedAt ? detourMinutes(startedAt, day.baseId, daytimeIds(day), input.minutes) : tourMinutes(day.baseId, daytimeIds(day), input.minutes);
+    // "Morning" is soft (V10): it leads the day when that costs under half an hour of extra travel. A moving day's order is the road's.
+    const morning = startedAt ? [] : daytimeIds(day).filter((id) => byId.get(id)!.candidate.bestTime === 'morning');
     if (morning.length > 0 && !morning.every((id, i) => tour.order[i] === id)) {
       const rest = daytimeIds(day).filter((id) => !morning.includes(id));
       const head = tourMinutes(day.baseId, morning, input.minutes).order;
@@ -865,7 +923,7 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
     day.travelMinutes = tour.total;
     // Lunch falls after whichever daytime stop carries the clock past about 12:30.
     let clock = window.startMinute;
-    let previous = day.baseId;
+    let previous = startedAt ?? day.baseId;
     for (const id of tour.order) {
       const stop = byId.get(id)!;
       clock += (input.minutes(previous, id) ?? UNKNOWN_LEG_MINUTES) + stop.candidate.durationMinutes;
@@ -899,7 +957,7 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
     day.intensity = peak >= 3 || (!edge && load > 0.95) ? 'intense' : peak >= 2 || (!edge && load > 0.6) ? 'moderate' : 'light';
   }
 
-  return { days, dropped, weatherMoves, mustConflicts };
+  return { days, dropped, weatherMoves, mustConflicts, repairs, dayNotes: describeDays(kernel, days.map((d) => d.stops.map((s) => s.candidate))) };
 }
 
 /**

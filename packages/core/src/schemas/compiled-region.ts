@@ -13,6 +13,7 @@ import { destinationResearchReadinessSchema } from './research-readiness';
 import { dataLicenceSchema } from './licence';
 import { geographicScopeSchema } from './scope';
 import { retrievedPageSchema, sourceManifestSchema } from './source-fact';
+import { stayDecisionSchema } from './stay';
 import { weatherLocationSchema } from './weather';
 
 /**
@@ -123,6 +124,12 @@ export const basePortfolioSchema = z.object({
     .default([]),
   transferDays: z.number().nonnegative(),
   rationale: z.string().min(1),
+  /**
+   * Release candidate — why this many places to sleep, with the numbers
+   * (`schemas/stay.ts`). Absent on artifacts stored before the choice became
+   * an objective, and on compiled regions, whose portfolio is built elsewhere.
+   */
+  decision: stayDecisionSchema.optional(),
 });
 export type StoredBasePortfolio = z.infer<typeof basePortfolioSchema>;
 

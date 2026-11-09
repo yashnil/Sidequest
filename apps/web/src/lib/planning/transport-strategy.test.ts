@@ -11,7 +11,7 @@ function plan(days: { stops: ReturnType<typeof stop>[]; travel: number }[]): Str
     days: days.map((d, i) => ({ dayNumber: i + 1, date: `2026-09-0${i + 1}`, baseId: 'base', relocation: false, stops: d.stops, travelMinutes: d.travel, eveningTravelMinutes: 0, activityMinutes: 200, capacityMinutes: 400, weather: null, lunchNear: null, lunchFoodArea: null, backup: null, intensity: 'moderate' })),
     dropped: [],
     weatherMoves: [],
-    mustConflicts: [],
+    mustConflicts: [], repairs: [], dayNotes: [],
   };
 }
 

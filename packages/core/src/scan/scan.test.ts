@@ -198,18 +198,22 @@ describe('discovery scan — a compact region keeps one base', () => {
 
   it('does not move hotels for sights that are an easy day trip from the first base', () => {
     const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3), base('west', 2)], places, minutes, nights: 8, maxBaseChanges: 3 });
-    expect(choice.kept.map((k) => k.id)).toEqual(['north']);
+    /* One base, whichever the arithmetic puts in the middle: the old rule kept the first by value, but the west town is nearer to everything. */
+    expect(choice.kept).toHaveLength(1);
     expect(choice.kept[0]!.nights).toBe(8);
-    expect(choice.leftOut.map((l) => l.reason)).toEqual(expect.arrayContaining([expect.stringMatching(/easy day trip/)]));
+    expect(choice.leftOut.map((l) => l.reason)).toEqual(expect.arrayContaining([expect.stringMatching(/extra move|as easy to reach/)]));
   });
 
   it('still moves when half a day of sights is genuinely far', () => {
     const far = (a: string, b: string) => {
       const m = minutes(a, b);
-      return m !== null && a !== b && ((a === 'north' && (b === 's3' || b === 's4')) || (b === 'north' && (a === 's3' || a === 's4'))) ? 150 : m;
+      const across = (x: string, y: string) => (x === 'north' && (y === 's3' || y === 's4' || y === 's5' || y === 's6')) || (x === 'south' && (y === 's1' || y === 's2'));
+      return m !== null && a !== b && (across(a, b) || across(b, a)) ? 150 : m;
     };
-    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3), base('west', 2)], places, minutes: far, nights: 8, maxBaseChanges: 3 });
+    /* Without the central town, which reaches everything; with it there is nothing to move for. Each of the two then has sights only it can reach. */
+    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3)], places, minutes: far, nights: 8, maxBaseChanges: 3 });
     expect(choice.kept.map((k) => k.id).sort()).toEqual(['north', 'south']);
+    expect(choice.decision.chosen.moves).toBe(1);
   });
 
   /* A long way south sit two sights; four sit around the north town. */
@@ -225,21 +229,25 @@ describe('discovery scan — a compact region keeps one base', () => {
     const choice = chooseScanBases({ bases: [base('north', 3), base('south', 1)], places: thinPlaces, minutes: farSouth, nights: 4, maxBaseChanges: 3 });
     expect(choice.kept.map((k) => k.id)).toEqual(['north']);
     expect(choice.kept[0]!.nights).toBe(4);
-    expect(choice.leftOut).toEqual([expect.objectContaining({ id: 'south', reason: expect.stringMatching(/night’s worth/) })]);
+    expect(choice.leftOut).toEqual([expect.objectContaining({ id: 'south', reason: expect.stringMatching(/extra move|as easy to reach/) })]);
     expect(choice.nearestBase.get('t5')).toBe('north');
   });
 
-  it('does not move hotels for one far place, however long the visit', () => {
-    const one = ['t1', 't2', 't3', 't4', 't5'].map((id) => ({ id, proposal: { tier: 'classic', durationMinutes: id === 't5' ? 300 : 180 } }) as never);
+  /* Four hours, not the old test's five: five hours and a three-hour round trip do not fit in a day, so that one really is a reason to sleep nearer. */
+  it('does not move hotels for one far place a day trip can reach', () => {
+    const one = ['t1', 't2', 't3', 't4', 't5'].map((id) => ({ id, proposal: { tier: 'classic', durationMinutes: id === 't5' ? 240 : 180 } }) as never);
     const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3)], places: one, minutes: thinSouth, nights: 8, maxBaseChanges: 3 });
     expect(choice.kept.map((k) => k.id)).toEqual(['north']);
-    expect(choice.leftOut[0]!.reason).toMatch(/easy day trip/);
+    expect(choice.leftOut[0]!.reason).toMatch(/extra move|as easy to reach/);
   });
 
-  it('may still move for one night on a short trip', () => {
-    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 1)], places: thinPlaces, minutes: farSouth, nights: 3, maxBaseChanges: 3 });
-    expect(choice.kept.map((k) => k.id).sort()).toEqual(['north', 'south']);
-    expect(Math.min(...choice.kept.map((k) => k.nights))).toBe(1);
+  /* The rule this replaces moved for a night on any short trip; the evaluation found those moves costing more than they saved. Now it is the arithmetic's call. */
+  it('on a short trip a place the traveller named decides where they sleep', () => {
+    const stays = chooseScanBases({ bases: [base('north', 3), base('south', 1)], places: thinPlaces, minutes: farSouth, nights: 3, maxBaseChanges: 3 });
+    expect(stays.kept.map((k) => k.id)).toEqual(['north']);
+    const moves = chooseScanBases({ bases: [base('north', 3), base('south', 1)], places: thinPlaces, minutes: farSouth, nights: 3, maxBaseChanges: 3, mustSee: new Set(['t5']), traveller: { maxDailyTravelMinutes: 120 } });
+    /* One base still: the south reaches the named place without a move. */
+    expect(moves.kept.map((k) => k.id)).toEqual(['south']);
   });
 });
 

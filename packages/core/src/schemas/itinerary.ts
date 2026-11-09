@@ -13,6 +13,7 @@ import { gatewayPlanSchema } from '../gateway/plan';
 import { experienceGraphSchema } from '../experience/graph';
 import { accessConstraintSchema } from '../access/constraints';
 import { qualityCompilerReportSchema } from '../quality/compiler-report';
+import { stayDecisionSchema } from './stay';
 
 export { MINUTES_PER_DAY, TIMELINE_MINUTE_LIMIT, formatMinuteOfDay, formatTimelineMinute, minuteOfDaySchema, parseMinuteOfDay, timelineMinuteSchema } from './common';
 
@@ -1319,6 +1320,12 @@ export const tripPackageSchema = z.object({
       scheduled: z.object({ traveller: z.number().int().min(0), sidequest: z.number().int().min(0), maybe: z.number().int().min(0), filler: z.number().int().min(0) }).optional(),
       weatherMoves: z.array(z.object({ name: z.string().min(1), avoidedDate: z.string().min(1), chosenDate: z.string().min(1) })).default([]),
       mustConflicts: z.array(z.object({ name: z.string().min(1), detail: z.string().min(1) })).default([]),
+      /** Release candidate — why the trip sleeps where it does, with the numbers (`decision.sentence` is one line a screen can show). */
+      stay: stayDecisionSchema.optional(),
+      /** What the planner's repair pass changed before anyone saw the plan. */
+      dayRepairs: z.array(z.object({ dayNumber: z.number().int().positive(), code: z.string().min(1), note: z.string().min(1) })).optional(),
+      /** What is still wrong with a day after repair, as it is written on that day. */
+      dayNotes: z.array(z.object({ dayNumber: z.number().int().positive(), code: z.string().min(1), note: z.string().min(1) })).optional(),
     })
     .optional(),
   draftVersion: z.number().int().min(1),

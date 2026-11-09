@@ -70,6 +70,8 @@ export interface BoardFixture {
   nights: number;
   bases: BoardBase[];
   places: BoardPlace[];
+  /** Parts of the destination the traveller's own phrase named ("Tokyo and Kyoto"). */
+  namedParts?: { label: string; center: { lat: number; lng: number } }[];
   /** Where the traveller arrives and leaves, when the fixture says. Absent: unknown edges, exactly as a regional scan has them. */
   gateway?: { lat: number; lng: number };
   /**
@@ -129,6 +131,14 @@ function centroid(points: readonly { lat: number; lng: number }[]): { lat: numbe
   return { lat: points.reduce((n, p) => n + p.lat, 0) / points.length, lng: points.reduce((n, p) => n + p.lng, 0) / points.length };
 }
 
+/** What the live scan's own phrase joined: the recording kept the phrase, not the resolved parts. */
+const NAMED_PARTS: Record<string, { label: string; center: { lat: number; lng: number } }[]> = {
+  'tokyo-kyoto': [
+    { label: 'Tokyo', center: { lat: 35.68, lng: 139.76 } },
+    { label: 'Kyoto', center: { lat: 35.01, lng: 135.77 } },
+  ],
+};
+
 function recordedBoards(): BoardFixture[] {
   return recorded.scans.map((scan) => {
     const places: BoardPlace[] = scan.places.map((p, i) => {
@@ -159,6 +169,7 @@ function recordedBoards(): BoardFixture[] {
       nights: scan.nights,
       bases: scan.bases.map((b) => ({ name: b.name, coordinates: b.coordinates, nightsHint: b.nightsHint })),
       places,
+      ...(NAMED_PARTS[scan.label] ? { namedParts: NAMED_PARTS[scan.label] } : {}),
     };
   });
 }

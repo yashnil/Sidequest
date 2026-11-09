@@ -1,4 +1,4 @@
-import { estimateLegMinutes, haversineKm, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
+import { estimateLegMinutes, haversineKm, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -27,6 +27,8 @@ export interface PlannerComposition {
   poolSize: number;
   /** What the planner was asked, kept so a traveller's own plan can be checked against the same pool, clock and minutes. */
   plannerInput: StructurePlannerInput;
+  /** Why the trip sleeps where it does, when the region's bases were chosen by the stay objective. */
+  stay?: StayDecision;
 }
 
 const CATEGORY_FOR_PLACE: Record<string, AnchorCategory> = {
@@ -250,7 +252,8 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
 
   const seasonalNotes = new Map(compiled.places.filter((p) => p.seasonalAccess.closureRisk !== 'none' && p.seasonalAccess.note).map((p) => [p.id, p.seasonalAccess.note!] as const));
   const draft = draftFromPlan({ plan, bases, input, poolSize: pool.length, minutes, coordinates, seasonalNotes });
-  return { draft, plan, provenance: Object.fromEntries(provenanceOf), poolSize: pool.length, plannerInput };
+  const stay = region.basePortfolio?.decision;
+  return { draft, plan, provenance: Object.fromEntries(provenanceOf), poolSize: pool.length, plannerInput, ...(stay ? { stay } : {}) };
 }
 
 function themeFor(day: StructurePlan['days'][number], baseName: string, isFirst: boolean, isLast: boolean): string {
@@ -318,10 +321,12 @@ function draftFromPlan(args: {
           ? `Casual lunch in ${day.lunchNear.replace(/^near\s+/i, '')}, near the midday stop`
           : undefined;
     const weatherNote = (() => {
+      /* What could not be repaired is said on the day first: it is the part the traveller has to plan around. */
+      const stated = plan.dayNotes.filter((n) => n.dayNumber === day.dayNumber).map((n) => n.note);
       const moved = plan.weatherMoves.filter((m) => m.chosenDate === day.date);
-      if (moved.length > 0) return `Scheduled here for the better forecast: ${moved.map((m) => m.name).join(', ')}.`;
-      if (day.weather && day.weather.severity >= 2) return `The forecast says ${day.weather.label}; the backup below is close by.`;
-      return undefined;
+      const forecast = moved.length > 0 ? `Scheduled here for the better forecast: ${moved.map((m) => m.name).join(', ')}.` : day.weather && day.weather.severity >= 2 ? `The forecast says ${day.weather.label}; the backup below is close by.` : null;
+      const all = [...stated, ...(forecast ? [forecast] : [])];
+      return all.length > 0 ? all.join(' ') : undefined;
     })();
     const lead = day.stops.find((s) => s.slot === 'day') ?? day.stops[0];
     return {
@@ -424,6 +429,9 @@ export function planningRecordOf(composed: PlannerComposition): {
   scheduled: { traveller: number; sidequest: number; maybe: number; filler: number };
   weatherMoves: { name: string; avoidedDate: string; chosenDate: string }[];
   mustConflicts: { name: string; detail: string }[];
+  stay?: StayDecision;
+  dayRepairs: { dayNumber: number; code: string; note: string }[];
+  dayNotes: { dayNumber: number; code: string; note: string }[];
 } {
   const scheduled = { traveller: 0, sidequest: 0, maybe: 0, filler: 0 };
   for (const day of composed.plan.days) {
@@ -441,6 +449,9 @@ export function planningRecordOf(composed: PlannerComposition): {
     scheduled,
     weatherMoves: composed.plan.weatherMoves.map((m) => ({ name: m.name, avoidedDate: m.avoidedDate, chosenDate: m.chosenDate })),
     mustConflicts: composed.plan.mustConflicts.map((m) => ({ name: m.name, detail: m.detail })),
+    ...(composed.stay ? { stay: composed.stay } : {}),
+    dayRepairs: composed.plan.repairs.map((r) => ({ ...r })),
+    dayNotes: composed.plan.dayNotes.map((n) => ({ ...n })),
   };
 }
 
@@ -550,7 +561,7 @@ export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFa
    * stop list is the honest plan, and falling back to composition for it
    * replaced a working plan with a failed one whenever the model was away.
    */
-  const interior = composed.plan.days.slice(1, -1).filter((day) => day.capacityMinutes >= MIN_STOP_WINDOW_MINUTES);
+  const interior = composed.plan.days.slice(1, -1).filter((day) => day.capacityMinutes >= MIN_STOP_WINDOW_MINUTES && !day.relocation);
   if (!interior.some((day) => day.stops.length === 0)) return null;
   if (composed.poolSize === 0) return 'insufficient_placed_candidates';
   /* Everything plannable was either scheduled or left out for a reason other than the day being full: nothing remains to put on the empty day. */

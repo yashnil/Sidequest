@@ -22,6 +22,7 @@ export * from './schemas/interpretation';
 export * from './schemas/must-do';
 export * from './schemas/clarification';
 export * from './schemas/scope';
+export * from './schemas/stay';
 export * from './schemas/region-pack';
 export * from './schemas/portfolio';
 export * from './schemas/source-fact';

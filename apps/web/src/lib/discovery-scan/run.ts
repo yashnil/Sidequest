@@ -6,6 +6,7 @@ import { productEvent } from '../net/product-events';
 import { z } from 'zod';
 import {
   assembleScanRegion,
+  stayTravellerFor,
   haversineKm,
   estimatedScanMatrix,
   normalizeScanProposal,
@@ -594,6 +595,12 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       dates,
       carAvailable: canonical.movement.carAvailable,
       maxBaseChanges: canonical.movement.maxBaseChanges.value ?? 1,
+      /* Release candidate — who is travelling decides what a hotel change costs them (`scan/stay-objective.ts`). */
+      traveller: stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null }),
+      dayMinutes: buildDailyWindows(trip.basics, profile, resolveConfig()).map((w) => Math.max(0, w.window.endMinute - w.window.startMinute)),
+      mustSeeKeys: matchNamedMustDos(namedMustDos, proposal.candidates.map((c) => ({ id: c.key, name: c.name }))),
+      /* Only parts the traveller's own phrase joined ("Tokyo and Kyoto"); a model's or a geocoder's parts are not a request. */
+      ...(concept?.extent?.source === 'union_of_parts' ? { namedParts: concept.parts.map((part) => ({ label: part.label, center: part.center })) } : {}),
       ...((edges) => (edges ? { edges } : {}))(tripEdgesFor(trip, profile, envelope.center, conceptGateways, envelope.scale)),
       proposal,
       positions: placement.positions,
