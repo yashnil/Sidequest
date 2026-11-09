@@ -24,7 +24,7 @@ import { sourceElementSchema } from './licence';
  */
 export const placeSourceSchema = z.object({
   name: z.string().min(1),
-  kind: z.enum(['curated', 'osm', 'google_places', 'opentripmap', 'wikivoyage', 'official']),
+  kind: z.enum(['curated', 'osm', 'overture', 'google_places', 'opentripmap', 'wikivoyage', 'official']),
   url: httpUrlSchema.optional(),
   /** 0-1. Curated-and-checked rows sit high; scraped rows will sit lower. */
   confidence: z.number().min(0).max(1),

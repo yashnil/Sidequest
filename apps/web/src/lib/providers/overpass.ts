@@ -309,6 +309,12 @@ export interface OverpassOptions {
    * rather than late.
    */
   deadlineMs?: number;
+  /**
+   * Per-request timeout. Default 25 s. The scan's food supplement sets eight:
+   * a release pass measured every public instance hanging past 25 s on a
+   * 1.5 km restaurant query, and a supplement is not worth that wait.
+   */
+  requestTimeoutMs?: number;
   cache?: {
     read: (key: string) => OverpassResult | null;
     write: (key: string, value: OverpassResult) => void;
@@ -552,7 +558,7 @@ async function fetchTagged(
        * produced nothing anyway — and one poisoned value can now take down half
        * a group rather than all of it.
        */
-      if (group.elements.length === 0 && selector.values.length > 1) {
+      if (group.elements.length === 0 && selector.values.length > 1 && !(options.deadlineMs !== undefined && Date.now() > options.deadlineMs)) {
         const midpoint = Math.ceil(selector.values.length / 2);
         for (const half of [selector.values.slice(0, midpoint), selector.values.slice(midpoint)]) {
           try {
@@ -650,6 +656,8 @@ async function fetchGroup(
 
   let lastError: OverpassError | null = null;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    // Past the caller's deadline no further endpoint is tried: the release pass watched a 12 s food supplement take 35 s, rotating three hung endpoints.
+    if (options.deadlineMs !== undefined && Date.now() > options.deadlineMs) break;
     const endpoint = endpoints[attempt % endpoints.length]!;
     await nextSlot();
     try {
@@ -661,7 +669,7 @@ async function fetchGroup(
           accept: 'application/json',
         },
         body: new URLSearchParams({ data: query }).toString(),
-        signal: requestSignal(REQUEST_TIMEOUT_MS),
+        signal: requestSignal(Math.max(1_000, Math.min(options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS, options.deadlineMs !== undefined ? options.deadlineMs - Date.now() : Number.POSITIVE_INFINITY))),
       });
 
       /**

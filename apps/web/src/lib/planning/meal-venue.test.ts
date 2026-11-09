@@ -23,3 +23,33 @@ describe('meal venues: a new table before the same one again (V1)', () => {
     expect(pickMealVenue([v('used', 0.1), v('cafe', 0.3), v('vegan', 1.4)], new Map([['used', 1]]), supports)?.venue.id).toBe('vegan');
   });
 });
+
+describe('a named meal sits on the leg it interrupts (release pass, 2026-11)', () => {
+  // About 0.009° of latitude per kilometre.
+  const north = (km: number) => ({ lat: 28 + km * 0.009, lng: -16.5 });
+  it('by car: a venue 20 km back towards the hotel is not "on the way" between two stops 5 km apart', async () => {
+    const { mealVenueFit } = await import('./reconcile');
+    const origin = north(0);
+    const next = north(5);
+    expect(mealVenueFit({ origin, next, venue: north(-20), carFree: false, searchKm: 25 })).toBeNull();
+    expect(mealVenueFit({ origin, next, venue: north(3), carFree: false, searchKm: 25 })).not.toBeNull();
+    // A small step off the leg is fine; a long one is not.
+    expect(mealVenueFit({ origin, next, venue: { lat: north(2.5).lat, lng: -16.5 + 0.02 }, carFree: false, searchKm: 25 })).not.toBeNull();
+    expect(mealVenueFit({ origin, next, venue: { lat: north(2.5).lat, lng: -16.5 + 0.2 }, carFree: false, searchKm: 25 })).toBeNull();
+  });
+  it('dinner on the way back to the base counts; beside the stop before always counts', async () => {
+    const { mealVenueFit } = await import('./reconcile');
+    const lastStop = north(0);
+    const base = north(20);
+    expect(mealVenueFit({ origin: lastStop, next: base, venue: north(19.5), carFree: false, searchKm: 25 })).not.toBeNull();
+    expect(mealVenueFit({ origin: lastStop, next: north(-30), venue: north(1.5), carFree: false, searchKm: 25 })).not.toBeNull();
+  });
+  it('on foot: within a short walk of the stop before or the stop after, nothing further', async () => {
+    const { mealVenueFit } = await import('./reconcile');
+    const origin = north(0);
+    const next = north(6);
+    expect(mealVenueFit({ origin, next, venue: north(5.5), carFree: true, searchKm: 3 })?.km).toBeCloseTo(0.5, 1);
+    expect(mealVenueFit({ origin, next, venue: north(2.5), carFree: true, searchKm: 3 })).not.toBeNull();
+    expect(mealVenueFit({ origin, next, venue: north(-4), carFree: true, searchKm: 3 })).toBeNull();
+  });
+});

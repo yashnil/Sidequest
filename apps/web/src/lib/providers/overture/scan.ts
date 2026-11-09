@@ -308,6 +308,47 @@ export interface ScanResult<T> {
 }
 
 /**
+ * A process-wide cap on concurrent range requests (see `rangeBuffer`).
+ */
+const MAX_CONCURRENT_RANGES = 8;
+let rangesInFlight = 0;
+const rangeQueue: (() => void)[] = [];
+async function withRangeSlot<T>(work: () => Promise<T>): Promise<T> {
+  if (rangesInFlight >= MAX_CONCURRENT_RANGES) await new Promise<void>((resolve) => rangeQueue.push(resolve));
+  rangesInFlight += 1;
+  try {
+    return await work();
+  } finally {
+    rangesInFlight -= 1;
+    rangeQueue.shift()?.();
+  }
+}
+
+/**
+ * Footers already read this process, by file URL and size.
+ *
+ * A footer is ~1–3 MB of range requests and identical for every box that falls
+ * in the same part file — a trip's food boxes nearly always do. Bounded, and
+ * keyed by length too so a republished file under the same URL is re-read.
+ */
+const FOOTER_CACHE_LIMIT = 8;
+const footerCache = new Map<string, Promise<FileMetaData>>();
+function cachedFooter(url: string, buffer: AsyncBuffer): Promise<FileMetaData> {
+  const key = `${url}|${buffer.byteLength}`;
+  const hit = footerCache.get(key);
+  if (hit) {
+    footerCache.delete(key);
+    footerCache.set(key, hit);
+    return hit;
+  }
+  const read = parquetMetadataAsync(buffer);
+  footerCache.set(key, read);
+  read.catch(() => footerCache.delete(key));
+  while (footerCache.size > FOOTER_CACHE_LIMIT) footerCache.delete(footerCache.keys().next().value!);
+  return read;
+}
+
+/**
  * A byte source that counts, caps and refuses.
  *
  * Wrapping rather than using the library's own URL helper, for three reasons
@@ -359,36 +400,50 @@ export async function rangeBuffer(url: string, counters: ScanCounters, budget: S
        * a whole-body timeout is a throughput floor, and a measured live build
        * lost an entire ground layer to it on a slow link.
        */
-      const controller = new AbortController();
-      const headerTimer = setTimeout(() => controller.abort(), RANGE_TIMEOUT_MS);
-      let response: Response;
-      try {
-        response = await fetch(url, {
-          headers: {
-            'user-agent': USER_AGENT,
-            range: `bytes=${from}-${to - 1}`,
-          },
-          signal: controller.signal,
-          redirect: 'error',
-        });
-      } catch (error) {
-        if (error instanceof ScanError) throw error;
-        throw Date.now() > budget.deadlineMs
-          ? new ScanError('timeout', 'This region reached its time limit while reading place data.')
-          : new ScanError('unreachable', 'The place data files did not answer.');
-      } finally {
-        clearTimeout(headerTimer);
-      }
-      if (!response.ok && response.status !== 206) {
-        throw new ScanError('unreachable', 'The place data files did not answer.');
-      }
-      const bytes = response.body
-        ? await readBodyWithStallGuard(response.body, {
-            stallMs: RANGE_TIMEOUT_MS,
-            deadlineMs: budget.deadlineMs,
-            abort: () => controller.abort(),
-          })
-        : new Uint8Array(await response.arrayBuffer());
+      /*
+       * Release pass (2026-11) — at most `MAX_CONCURRENT_RANGES` ranges in
+       * flight across the process, and one retry for a connection that never
+       * opened or was reset. The reader asks for every column chunk at once and
+       * the footer is dozens of small ranges; three food boxes read together
+       * opened hundreds of sockets and a live pass watched them die as connect
+       * timeouts and ECONNRESET, every one a row group silently skipped.
+       */
+      const bytes = await withRangeSlot(async () => {
+        for (let attempt = 0; ; attempt += 1) {
+          const controller = new AbortController();
+          const headerTimer = setTimeout(() => controller.abort(), RANGE_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch(url, {
+              headers: {
+                'user-agent': USER_AGENT,
+                range: `bytes=${from}-${to - 1}`,
+              },
+              signal: controller.signal,
+              redirect: 'error',
+            });
+          } catch (error) {
+            if (error instanceof ScanError) throw error;
+            if (attempt === 0 && Date.now() + 1_000 < budget.deadlineMs) continue;
+            throw Date.now() > budget.deadlineMs
+              ? new ScanError('timeout', 'This region reached its time limit while reading place data.')
+              : new ScanError('unreachable', 'The place data files did not answer.');
+          } finally {
+            clearTimeout(headerTimer);
+          }
+          if (!response.ok && response.status !== 206) {
+            if (attempt === 0 && (response.status === 503 || response.status === 500) && Date.now() + 1_000 < budget.deadlineMs) continue;
+            throw new ScanError('unreachable', 'The place data files did not answer.');
+          }
+          return response.body
+            ? await readBodyWithStallGuard(response.body, {
+                stallMs: RANGE_TIMEOUT_MS,
+                deadlineMs: budget.deadlineMs,
+                abort: () => controller.abort(),
+              })
+            : new Uint8Array(await response.arrayBuffer());
+        }
+      });
       counters.bytesTransferred += bytes.byteLength;
       return bytes.byteLength === bytes.buffer.byteLength && bytes.byteOffset === 0
         ? (bytes.buffer as ArrayBuffer)
@@ -742,6 +797,8 @@ export interface ScanRequest<T> {
   /** Where accepted rows go. Omit and the scan holds them itself. See `RowSink`. */
   sink?: RowSink<T>;
   signal?: AbortSignal;
+  /** Reuse this file's footer if this process already read it (see `cachedFooter`). Opt-in: the scan food reader sets it. */
+  reuseFooter?: boolean;
 }
 
 /**
@@ -789,7 +846,7 @@ export async function scanFile<T>(request: ScanRequest<T>): Promise<ScanResult<T
 
   let metadata: FileMetaData;
   try {
-    metadata = await parquetMetadataAsync(buffer);
+    metadata = request.reuseFooter ? await cachedFooter(request.url, buffer) : await parquetMetadataAsync(buffer);
   } catch (error) {
     if (error instanceof ScanError) throw error;
     throw new ScanError('malformed', 'The place data file could not be read.');

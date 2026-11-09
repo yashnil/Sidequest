@@ -40,6 +40,7 @@ export const CONSUMERS = {
   'lodging.discovery': 'providers/discovery.ts#discoverStaysNear ← itinerary/actions.ts#discoverStaysAction (display only)',
   'lodging.live_price': null,
   'lodging.availability': null,
+  'food.scan': 'discovery-scan/food.ts#groundScanFood ← discovery-scan/run.ts#scanFoodFor',
   'food.discovery': 'providers/discovery.ts#discoverFoodNear ← itinerary/actions.ts#discoverFoodAction (display only)',
   'weather.forecast': 'weather/refresh.ts#ensureWeatherForPlanning → reconcile.ts day weather',
   'weather.climate': 'lib/capabilities.ts (climate_normals) → destinations/recommend.ts + composer date guidance',
@@ -242,6 +243,11 @@ export function capabilityRegistry(env = process.env) {
   add('lodging.availability', 'lodging', { configured: false, available: false, provider: null, costClass: 'none', freshness: 'very_volatile', limitations: ['No accommodation inventory provider; availability is never shown.'] });
 
   add('food.discovery', 'food', { configured: !eq(env, 'SIDEQUEST_FOOD_PROVIDER', 'off') && (fixtureCompiler || google || overpass || overture), provider: fixtureCompiler ? 'fixture' : google ? 'google-places' : overture ? 'overture' : overpass ? 'overpass' : null, costClass: google ? 'metered' : 'free', fixture: fixtureCompiler, freshness: 'medium', coverage: google ? 'One targeted lookup per meal that needs a named venue.' : 'Region food data.', limitations: [] });
+
+  /* Release pass — the Discovery Scan's own food step: Overture's open place files by default (keyless), OSM via Overpass for boxes it leaves thin. */
+  const scanFoodOverture = !eq(env, 'SIDEQUEST_FOOD_PROVIDER', 'off') && !eq(env, 'SIDEQUEST_FOOD_PROVIDER', 'overpass');
+  const scanFixture = fixtureCompiler || fixtureComposer;
+  add('food.scan', 'food', { configured: !eq(env, 'SIDEQUEST_FOOD_PROVIDER', 'off') && (scanFixture || scanFoodOverture || overpass), provider: scanFixture ? 'fixture' : scanFoodOverture ? (overpass ? 'overture+overpass' : 'overture') : overpass ? 'overpass' : null, costClass: 'free', fixture: scanFixture, freshness: 'medium', coverage: scanFixture ? 'Synthetic test venues.' : scanFoodOverture ? `Overture place files (Meta, Microsoft, Foursquare; confidence ≥ 0.7, open) around the bases and stops${overpass ? '; OpenStreetMap fills areas Overture leaves thin' : ''}.` : overpass ? 'OpenStreetMap via Overpass around the bases and stops.' : '', limitations: scanFoodOverture ? ['Hours and prices are not published by the source; meals say so.'] : overpass ? ['Public Overpass instances are slow and rate-limited; a hosted SIDEQUEST_POI_URL is recommended.'] : ['Meals are described rather than named.'] });
 
   add('weather.forecast', 'weather', { configured: weather !== 'off', provider: weather, costClass: 'free', fixture: weather === 'fixture', freshness: 'very_volatile', coverage: weather === 'openmeteo' ? 'Open-Meteo, 16-day horizon.' : weather === 'fixture' ? 'Fixture weather.' : '', limitations: [] });
   add('weather.climate', 'weather', { configured: climate && weather !== 'off', provider: climate ? weather : null, costClass: 'free', fixture: weather === 'fixture', freshness: 'stable', coverage: climate ? 'Historical normals for dates beyond the forecast.' : '', limitations: climate ? [] : ['Climate is switched off; far-future days show no weather.'] });

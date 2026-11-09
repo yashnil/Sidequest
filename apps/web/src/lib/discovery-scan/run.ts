@@ -6,6 +6,7 @@ import { productEvent } from '../net/product-events';
 import { z } from 'zod';
 import {
   assembleScanRegion,
+  haversineKm,
   estimatedScanMatrix,
   normalizeScanProposal,
   planScanPoints,
@@ -45,7 +46,7 @@ import { fixturePlacement, placeScanProposal } from './placement';
 import { linkWikidataIds } from '../providers/wikidata-link';
 import { providerUserAgent } from '../net/user-agent';
 import { fixtureScanProposal } from './fixture';
-import { fixtureScanFood, groundScanFood, type ScanFoodGrounding } from './food';
+import { fixtureScanFood, groundScanFood, overtureFoodEnabled, type ScanFoodGrounding } from './food';
 import { startAutoBuildAfterScan } from './auto-build';
 import { fixtureScan, openDataProposalAvailable, scanPreflight } from './preflight';
 import { fixtureOpenDataDeps, liveOpenDataDeps, proposeFromOpenData, type OpenDataDiagnostics } from './open-data-proposal';
@@ -71,6 +72,9 @@ const PLACEMENT_DEADLINE_MS = 120_000;
 const HEARTBEAT_MS = 10_000;
 /** How many placed points the scan screen's map is sent. */
 const SCAN_MAP_POINTS = 80;
+
+/** A first answer holding fewer than this share of the asked-for pool is treated as a failed answer, not a thin board. */
+const UNDERFILLED_SHARE = 0.4;
 
 export type ScanFailureKind = BuildFailureCause | 'destination_unplaced' | 'nothing_placed';
 
@@ -215,9 +219,10 @@ async function measureMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot',
 
 /**
  * The scan's food step. Food switched off (`SIDEQUEST_FOOD_PROVIDER=off`) → no
- * food data; fixture switches → a synthetic dataset; no POI provider
- * (`SIDEQUEST_POI_PROVIDER=overpass`, the same opt-in the compiler's food stage
- * reads) → no food data, said so; otherwise OSM venues near the scan's points.
+ * food data; fixture switches → a synthetic dataset; otherwise Overture's open
+ * place files first (keyless, on by default; `SIDEQUEST_FOOD_PROVIDER=overpass`
+ * opts out), with OSM venues (`SIDEQUEST_POI_PROVIDER=overpass`) filling boxes
+ * Overture left thin. Neither available → no food data, said so.
  * Never throws.
  */
 async function scanFoodFor(input: {
@@ -233,7 +238,7 @@ async function scanFoodFor(input: {
   try {
     if (foodProviderChoice() === 'off') return off('Food data is switched off on this deployment; meals are described rather than named.');
     if (fixtureScan()) return fixtureScanFood({ regionId: input.regionId, destinationName: input.destinationName, points: input.points, today });
-    if (!isPoiProviderEnabled()) return off('No map data source for food is configured; meals are described rather than named.');
+    if (!overtureFoodEnabled() && !isPoiProviderEnabled()) return off('No map data source for food is configured; meals are described rather than named.');
     const grounded = await groundScanFood(
       {
         regionId: input.regionId,
@@ -248,7 +253,7 @@ async function scanFoodFor(input: {
       },
       { geocodeArea: isGeocoderEnabled() ? undefined : null },
     );
-    console.warn(`Scan food: ${grounded.status}, ${grounded.dataset?.venues.length ?? 0} venues from ${grounded.boxes} boxes (${grounded.failedBoxes} failed, ${grounded.calls} calls, ${grounded.unroutable} beyond a door walk).`);
+    console.warn(`Scan food: ${grounded.status} (${grounded.source ?? 'none'}), ${grounded.dataset?.venues.length ?? 0} venues from ${grounded.boxes} boxes (${grounded.failedBoxes} failed, ${grounded.calls} Overpass calls, ${grounded.unroutable} beyond a door walk) ${JSON.stringify(grounded.timings ?? {})}.`);
     return grounded;
   } catch (error) {
     console.warn('Scan food step failed; the region has no food data', error instanceof Error ? error.message : error);
@@ -338,6 +343,9 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     /* The traveller's priority interests: personal fit for the open-data ranking and recovery now, sufficiency below. */
     const priorities = (Object.entries(profile.interests) as [Interest, string][]).filter(([, level]) => level === 'core' || level === 'frequent').map(([interest]) => interest);
     const reach = placementReachKm(envelope.scale, days - 1);
+    /* What the open-data proposer is asked — as the fallback for an unavailable model, or as the free top-up for a thin board. */
+    const openCenter = envelope.center;
+    const openDataInput = (): Parameters<typeof proposeFromOpenData>[0] => ({ envelope: { name: envelope.name, center: openCenter, ...(envelope.scale ? { scale: envelope.scale } : {}) }, days, priorities, carAvailable: canonical.movement.carAvailable, reachKm: reach, countries: conceptCountries, parts: (concept?.parts ?? []).flatMap((part) => (part.center ? [{ label: part.label, center: part.center }] : [])), ...(concept?.type === 'island' && (concept.parts ?? []).length < 2 && (concept.travelExtent?.bounds ?? (concept.extent?.source === 'published' ? concept.extent.bounds : undefined)) ? { island: (concept.travelExtent?.bounds ?? concept.extent!.bounds) } : {}) });
 
     let normalized: Extract<ReturnType<typeof normalizeScanProposal>, { ok: true }>;
     let rawCandidateCount: number;
@@ -352,10 +360,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       if (!openDataProposalAvailable()) return fail(fallback.cause, `${fallback.detail} | no open-data fallback on this deployment`);
       console.warn(`Discovery scan for ${tripId}: the proposal model is unavailable (${fallback.cause}); proposing from open data.`);
       const deps = fixtureScan() ? fixtureOpenDataDeps(envelope.name) : liveOpenDataDeps();
-      const open = await proposeFromOpenData(
-        { envelope: { name: envelope.name, center: envelope.center, ...(envelope.scale ? { scale: envelope.scale } : {}) }, days, priorities, carAvailable: canonical.movement.carAvailable, reachKm: reach, countries: conceptCountries, parts: (concept?.parts ?? []).map((part) => ({ label: part.label, center: part.center })), ...(concept?.type === 'island' && (concept.parts ?? []).length < 2 && (concept.travelExtent?.bounds ?? (concept.extent?.source === 'published' ? concept.extent.bounds : undefined)) ? { island: (concept.travelExtent?.bounds ?? concept.extent!.bounds) } : {}) },
-        deps,
-      );
+      const open = await proposeFromOpenData(openDataInput(), deps);
       if (!open.ok) return fail(fallback.cause, `${fallback.detail} | open-data fallback failed: ${open.reason} (${open.detail})`);
       normalized = open.normalized;
       rawCandidateCount = open.offered;
@@ -423,11 +428,17 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         priorities,
       });
     const firstSufficiency = sufficiencyOf();
-    const recovery: ScanDiagnostics['recovery'] = { attempted: false, reasons: firstSufficiency.reasons, before: { have: firstSufficiency.have, needed: firstSufficiency.needed, kinds: firstSufficiency.distinctKinds } };
+    /*
+     * Release pass (2026-11) — an answer that holds a fraction of what was asked
+     * is not a thin board, it is a failed answer: the supplement then asks for
+     * the whole pool again (still the one extra call a scan may make).
+     */
+    const underfilled = !openData && rawCandidateCount < Math.max(6, Math.ceil(requested * UNDERFILLED_SHARE));
+    const recovery: ScanDiagnostics['recovery'] = { attempted: false, reasons: firstSufficiency.reasons, before: { have: firstSufficiency.have, needed: firstSufficiency.needed, kinds: firstSufficiency.distinctKinds }, ...(underfilled ? { underfilled: true } : {}) };
     /* No supplement on the open-data path: the supplement is a second model call, and the model is what was unavailable. */
     if (openData) recovery.outcome = 'not_attempted_open_data';
     if (!firstSufficiency.sufficient && !openData) {
-      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count: Math.max(8, firstSufficiency.needed - firstSufficiency.have + 4), typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
+      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count: underfilled ? requested : Math.max(8, firstSufficiency.needed - firstSufficiency.have + 4), underfilled, typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
       recovery.attempted = true;
       recovery.outcome = supplement.outcome;
       if (supplement.proposal) {
@@ -450,7 +461,53 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       }
       const after = sufficiencyOf();
       recovery.after = { have: after.have, needed: after.needed, kinds: after.distinctKinds };
-      console.warn(`Discovery scan supplement for ${tripId}: ${recovery.outcome}; ${firstSufficiency.have} → ${after.have} placed (needed ${after.needed}).`);
+      console.warn(`Discovery scan supplement for ${tripId}: ${recovery.outcome}${underfilled ? ' (first answer underfilled)' : ''}; ${firstSufficiency.have} → ${after.have} placed (needed ${after.needed}).`);
+    }
+    /*
+     * Release pass (2026-11) — still thin after the supplement (or the supplement
+     * could not run: allowance spent, model failed)? Open map data fills the gap
+     * with no model call, where this deployment has it: notable, Wikidata-linked
+     * places around the destination, already placed, never a name already on
+     * the board or a point already there.
+     */
+    if (!openData && !sufficiencyOf().sufficient && openDataProposalAvailable()) {
+      const gap = sufficiencyOf();
+      try {
+        const deps = fixtureScan() ? fixtureOpenDataDeps(envelope.name) : liveOpenDataDeps();
+        const open = await proposeFromOpenData(openDataInput(), deps);
+        if (open.ok) {
+          const known = new Set(proposal.candidates.map((c) => c.name.toLowerCase()));
+          const offset = proposal.candidates.length;
+          const fresh = open.proposal.candidates
+            .filter((c) => !known.has(c.name.toLowerCase()))
+            .filter((c) => {
+              const at = open.positions.get(c.key);
+              return at ? !plan.points.some((p) => haversineKm(p.coordinates, at.coordinates) < 0.15) : false;
+            })
+            .slice(0, Math.max(4, gap.needed - gap.have + 4));
+          if (fresh.length > 0) {
+            const positions = new Map(placement.positions);
+            const rekeyed = fresh.map((c, i) => {
+              const key = `c${offset + i + 1}`;
+              positions.set(key, open.positions.get(c.key) ?? null);
+              return { ...c, key };
+            });
+            proposal = { ...proposal, candidates: [...proposal.candidates, ...rekeyed] };
+            placement = { ...placement, positions, providers: [...new Set([...placement.providers, 'openstreetmap'])] };
+            plan = planScanPoints(proposal, placement.positions);
+            recovery.openDataAdded = rekeyed.length;
+          }
+        }
+      } catch (error) {
+        console.warn(`Discovery scan open-data top-up failed for ${tripId}: ${error instanceof Error ? error.message : 'unknown'}`);
+      }
+      const after = sufficiencyOf();
+      recovery.after = { have: after.have, needed: after.needed, kinds: after.distinctKinds };
+      console.warn(`Discovery scan open-data top-up for ${tripId}: +${recovery.openDataAdded ?? 0}; ${gap.have} → ${after.have} placed (needed ${after.needed}).`);
+    }
+    if (!sufficiencyOf().sufficient) {
+      recovery.thin = true;
+      recovery.after ??= { have: sufficiencyOf().have, needed: sufficiencyOf().needed, kinds: sufficiencyOf().distinctKinds };
     }
 
     /* The scan's own account of itself: what was proposed, what could not be placed and why, and any recovery. Developer-facing; never on the traveller's screen. */
@@ -632,6 +689,7 @@ async function proposeSupplement(input: {
   proposal: ScanProposal;
   missingInterests: readonly string[];
   count: number;
+  underfilled?: boolean;
   typed: string;
   envelopeName: string;
   days: number;
@@ -651,7 +709,7 @@ async function proposeSupplement(input: {
       raw = await model.structured({
         promptVersion: SCAN_PROMPT_VERSION,
         instruction: SCAN_INSTRUCTION,
-        task: buildScanSupplementTask(input.promptInput, { already, count: input.count, missingInterests: input.missingInterests }),
+        task: buildScanSupplementTask(input.promptInput, { already, count: input.count, missingInterests: input.missingInterests, ...(input.underfilled ? { underfilled: true } : {}) }),
         untrusted: buildScanUntrusted(input.promptInput),
         schema: scanProposalWireSchema as unknown as z.ZodType<unknown>,
         validationSchema: z.unknown() as z.ZodType<unknown>,

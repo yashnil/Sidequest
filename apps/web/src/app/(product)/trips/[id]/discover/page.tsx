@@ -135,6 +135,13 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
   const scannedBoard = compiled !== null && scanView(id).compiledRegionId === compiled.id;
   /* Whether that board's places came from the open-data fallback because the research model was unavailable — said plainly in the header. */
   const openDataBoard = scannedBoard && getScanProposalExtras(id)?.diagnostics?.proposalSource === 'open_data';
+  /*
+   * Release pass (2026-11) — a board that stayed thin after every recovery (the
+   * one supplement, then open map data) says so at the top, with numbers,
+   * rather than letting a short list pass for a complete one.
+   */
+  const scanRecovery = scannedBoard ? getScanProposalExtras(id)?.diagnostics?.recovery : undefined;
+  const thinBoard = scanRecovery?.thin && scanRecovery.after ? scanRecovery.after : null;
   const attributions = compiled?.sourceManifest.attributions ?? [];
   const suggestion = autoSelect({
     candidates: board.candidates,
@@ -379,6 +386,16 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
               ? 'One of your choices hasn’t been checked against a finished build yet.'
               : `${awaitingReconciliation} of your choices haven’t been checked against a finished build yet.`}{' '}
             Nothing is lost — we’ll tell you what became of {awaitingReconciliation === 1 ? 'it' : 'them'} after the next build.
+          </p>
+        </Panel>
+      ) : null}
+
+      {thinBoard ? (
+        <Panel className="mb-6 border-amber bg-amber-soft p-4" as="section" testId="thin-board-notice">
+          <p className="eyebrow">Fewer places than usual</p>
+          <p className="measure mt-1.5 text-sm leading-relaxed text-ink">
+            We found {thinBoard.have} place{thinBoard.have === 1 ? '' : 's'} we could put on a map for this trip; {days} days usually has about {thinBoard.needed} to choose between.
+            You can still plan from these, add places you know, or search again.
           </p>
         </Panel>
       ) : null}

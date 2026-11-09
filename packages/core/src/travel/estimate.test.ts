@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COLOCATED_KM, dayPartFor, dayPrecisionOf, estimateLegMinutes, plausibleModeFor, timePrecisionOf, travelDurationStateOf, unknownLegAllowanceMinutes } from './estimate';
+import { COLOCATED_KM, MODE_MODELS, averageSpeedKmh, dayPartFor, dayPrecisionOf, estimateLegMinutes, plausibleModeFor, timePrecisionOf, travelDurationStateOf, unknownLegAllowanceMinutes } from './estimate';
 
 const CASHEL = { lat: 52.52, lng: -7.8906 };
 const CORK_MARKET = { lat: 51.8979, lng: -8.4748 };
@@ -116,5 +116,60 @@ describe('unknown allowances and day precision', () => {
     expect(dayPartFor(15 * 60)).toBe('Afternoon');
     expect(dayPartFor(18 * 60)).toBe('Early evening');
     expect(dayPartFor(20 * 60)).toBe('Evening');
+  });
+});
+
+describe('the estimate is continuous and never quicker for a longer leg (release pass, 2026-11)', () => {
+  /** A point `km` east of the start along the equator, which is ~111.2 km per degree. */
+  const at = (km: number) => ({ lat: 0, lng: km / 111.195 });
+  const origin = { lat: 0, lng: 0 };
+  const MODES = ['drive', 'rideshare', 'private_transfer', 'shuttle', 'walk', 'public_bus', 'rail', 'bicycle'] as const;
+
+  it('every model’s anchors keep the unrounded time non-decreasing between them', () => {
+    for (const model of Object.values(MODE_MODELS)) {
+      let previous = 0;
+      for (let km = 0.2; km <= 600; km += 0.05) {
+        const minutes = ((km * model.detour) / averageSpeedKmh(model, km)) * 60;
+        expect(minutes).toBeGreaterThanOrEqual(previous - 1e-9);
+        previous = minutes;
+      }
+    }
+  });
+
+  it('no 100 m changes the rounded estimate by more than one five-minute step, and a longer leg is never quicker', () => {
+    for (const mode of MODES) {
+      let previous: number | null = null;
+      for (let km = 0.2; km <= (mode === 'walk' ? 6 : mode === 'bicycle' ? 60 : 400); km += 0.1) {
+        const estimate = estimateLegMinutes({ from: origin, to: at(km), mode });
+        if (!estimate) continue;
+        if (previous !== null) {
+          expect(estimate.minutes, `${mode} at ${km.toFixed(1)} km`).toBeGreaterThanOrEqual(previous);
+          expect(estimate.minutes - previous, `${mode} at ${km.toFixed(1)} km`).toBeLessThanOrEqual(5);
+        }
+        previous = estimate.minutes;
+      }
+    }
+  });
+
+  it('the old band edges no longer jump: 25 km by bus, 30 km by car', () => {
+    const bus = (km: number) => estimateLegMinutes({ from: origin, to: at(km), mode: 'public_bus' })!.minutes;
+    const car = (km: number) => estimateLegMinutes({ from: origin, to: at(km), mode: 'drive' })!.minutes;
+    expect(Math.abs(bus(25.1) - bus(24.9))).toBeLessThanOrEqual(5);
+    expect(Math.abs(car(30.1) - car(29.9))).toBeLessThanOrEqual(5);
+    for (const edge of [3, 5, 10, 25, 80]) expect(car(edge + 0.2) - car(edge - 0.2)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('stays in a realistic range for ordinary legs', () => {
+    const t = (km: number, mode: (typeof MODES)[number]) => estimateLegMinutes({ from: origin, to: at(km), mode })!.minutes;
+    // A 15 km regional bus (≈20 km of road) is about an hour door to door; a 60 km coach about two.
+    expect(t(15, 'public_bus')).toBeGreaterThanOrEqual(50);
+    expect(t(15, 'public_bus')).toBeLessThanOrEqual(75);
+    expect(t(60, 'public_bus')).toBeGreaterThanOrEqual(100);
+    expect(t(60, 'public_bus')).toBeLessThanOrEqual(140);
+    // 30 km by car (≈40 km of road) is under an hour; 100 km under two and a half.
+    expect(t(30, 'drive')).toBeLessThanOrEqual(60);
+    expect(t(100, 'drive')).toBeLessThanOrEqual(150);
+    // Long-distance rail outruns a coach.
+    expect(t(300, 'rail')).toBeLessThan(t(300, 'public_bus'));
   });
 });

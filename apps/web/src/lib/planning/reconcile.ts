@@ -3656,6 +3656,42 @@ function formatClock(minute: number): string {
 const VENUE_SEARCH_KM = 25;
 /** On a car-free trip, how far a named meal may be from where the traveller is. */
 const CAR_FREE_VENUE_SEARCH_KM = 3;
+/**
+ * Release pass (2026-11) — how far out of the way a named meal may take a car.
+ *
+ * The 25 km radius alone named a lunch 18–21 km from both the stop before and
+ * the stop after it on four of seven Tenerife meals (a live trip, all labelled
+ * "near route"), because the only venues in the data were by the hotel. A venue
+ * is now judged by the detour it adds to the leg it sits on — last stop → venue
+ * → next stop (or the base, for dinner) — straight-line, so about a quarter of
+ * an hour on ordinary roads.
+ */
+const CAR_MEAL_DETOUR_KM = 8;
+
+/**
+ * Whether a venue suits a meal between `origin` (the stop before, or the base)
+ * and `next` (the stop after, or the base), and the distance to rank it by.
+ * On foot: within a short walk of either end. By car: within the search radius
+ * of the stop before, and either beside it or a small detour off the leg.
+ * Null when it does not suit. Pure, for the tests.
+ */
+export function mealVenueFit(input: {
+  origin: { lat: number; lng: number };
+  next: { lat: number; lng: number } | null;
+  venue: { lat: number; lng: number };
+  carFree: boolean;
+  searchKm: number;
+}): { km: number; nextKm: number; detour: number } | null {
+  const fromOrigin = kmBetween(input.origin, input.venue);
+  const nextKm = input.next ? kmBetween(input.next, input.venue) : Number.POSITIVE_INFINITY;
+  const detour = input.next ? fromOrigin + nextKm - kmBetween(input.origin, input.next) : fromOrigin;
+  if (input.carFree) {
+    const km = Math.min(fromOrigin, nextKm);
+    return km <= input.searchKm ? { km, nextKm, detour } : null;
+  }
+  if (fromOrigin > input.searchKm || (fromOrigin > 2 && detour > CAR_MEAL_DETOUR_KM)) return null;
+  return { km: Math.min(fromOrigin, detour), nextKm, detour };
+}
 const MAX_TIMES_ONE_VENUE_IS_NAMED = 2;
 
 function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
@@ -3752,6 +3788,16 @@ function nameVenuesForDay(
     const atBase = near === null;
     const origin = near ?? base;
     if (!origin) continue;
+    // Where the traveller goes after it: the next stop, or — at the end of the day — the base.
+    let after: { lat: number; lng: number } | null = null;
+    for (let i = index + 1; i < items.length; i += 1) {
+      const following = items[i]!;
+      if (following.kind === 'activity') {
+        after = anchorCoordinates.get(following.id) ?? null;
+        if (after) break;
+      }
+    }
+    const nextPoint = after ?? base;
     const declaredNeeds = profile.food.dietaryNeeds;
     /* V1 — on foot and by transit a meal is a walk or a short ride away; 25 km is a road-trip radius, and it named a Shibuya restaurant for dinner in Asakusa. */
     const venueSearchKm = carFree ? CAR_FREE_VENUE_SEARCH_KM : VENUE_SEARCH_KM;
@@ -3762,8 +3808,10 @@ function nameVenuesForDay(
       .filter((venue) => PRICE_BAND_ORDER[venue.priceBand] <= bandCeiling)
       .filter((venue) => (venueUse.get(venue.id) ?? 0) < MAX_TIMES_ONE_VENUE_IS_NAMED && !namedToday.has(venue.id))
       .filter((venue) => venue.hours.kind === 'unknown' || venue.hours.kind === 'always_open' || operatingOn(venue.hours, day.date).status !== 'closed')
-      .map((venue) => ({ venue, km: kmBetween(origin, venue.coordinates) }))
-      .filter((entry) => entry.km <= venueSearchKm)
+      .flatMap((venue) => {
+        const fit = mealVenueFit({ origin, next: nextPoint, venue: venue.coordinates, carFree, searchKm: venueSearchKm });
+        return fit ? [{ venue, ...fit }] : [];
+      })
       .sort((a, b) => a.km - b.km);
     /*
      * With a declared need, a venue whose record says it serves it wins over a
@@ -3790,7 +3838,9 @@ function nameVenuesForDay(
     const declared = profile.food.dietaryNeeds;
     const claims = venue.dietary.filter((claim) => declared.includes(claim.need) && claim.evidence !== 'venue_states_unsuitable');
     const unverified = declared.filter((need) => !claims.some((claim) => claim.need === need));
-    const routeContext = atBase ? 'at_base' : best.km <= 2 ? 'on_route' : 'near_route';
+    const besideLast = kmBetween(origin, venue.coordinates) <= 2;
+    const besideNext = !besideLast && best.nextKm <= 2;
+    const routeContext = atBase ? 'at_base' : besideLast || besideNext || best.detour <= 1 ? 'on_route' : 'near_route';
     /*
      * V11 §N — "11 km off the route, on the way" said both things at once.
      *
@@ -3799,11 +3849,19 @@ function nameVenuesForDay(
      * of that fact glued together, and together they say nothing. The distance
      * is now stated as what it was measured from.
      */
-    const where = atBase ? 'near your base' : best.km <= 2 ? 'beside your last stop' : `${Math.round(best.km)} km from your last stop`;
+    const where = atBase
+      ? 'near your base'
+      : besideLast
+        ? 'beside your last stop'
+        : besideNext
+          ? after
+            ? 'beside your next stop'
+            : 'near your base, at the end of the day'
+          : `${Math.round(kmBetween(origin, venue.coordinates))} km from your last stop, on the way to ${after ? 'your next stop' : 'your base'}`;
     items[index] = {
       ...item,
       title: `${slot === 'lunch' ? 'Lunch' : 'Dinner'} — ${venue.name}`,
-      reason: `${venue.name} is ${where}${venue.localSpecialty ? `; ${venue.localSpecialty.note}` : ''}. ${venue.source.kind === 'osm' ? 'Named from OpenStreetMap map data (© OpenStreetMap contributors), not a review or a booking site' : "Named from the region's own food data"}; we have not checked today that it is open, and nothing is booked.`,
+      reason: `${venue.name} is ${where}${venue.localSpecialty ? `; ${venue.localSpecialty.note}` : ''}. ${venue.source.kind === 'osm' ? 'Named from OpenStreetMap map data (© OpenStreetMap contributors), not a review or a booking site' : venue.source.kind === 'overture' ? 'Named from open place data (© Overture Maps Foundation), not a review or a booking site' : "Named from the region's own food data"}; we have not checked today that it is open, and nothing is booked.`,
       food: {
         slot,
         stopKind: 'venue',

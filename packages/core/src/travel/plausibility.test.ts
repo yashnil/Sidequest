@@ -133,3 +133,16 @@ describe('V11 §3 — the router profile decides which envelope screens the answ
     expect(screeningModeFor('transit')).toBe('public_bus');
   });
 });
+
+describe('the slowness limit is continuous across floor bands (release pass, 2026-11)', () => {
+  it('a 25.1 km drive may take as long as a 25 km one, and the limit never falls as the leg grows', async () => {
+    const { assessLegPlausibility } = await import('./plausibility');
+    const ok = (km: number, minutes: number) => assessLegPlausibility({ mode: 'drive', km, minutes }).ok;
+    expect(ok(25, 180)).toBe(true);
+    expect(ok(25.1, 180)).toBe(true);
+    expect(ok(60, 180)).toBe(true);
+    // Past the carried allowance the open-road floor rules again: the Bishkek→Karakol crawl stays refused.
+    expect(ok(434, 5209)).toBe(false);
+    expect(ok(100, 400)).toBe(false);
+  });
+});

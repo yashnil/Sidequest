@@ -62,25 +62,60 @@ export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; l
 export const COLOCATED_KM = 0.15;
 
 /**
- * Mode-dependent estimator. Speeds are deliberately conservative and banded by
- * straight-line distance because a 3 km hop is streets and a 90 km hop is
- * national road; the detour factor turns crow-flies into road-ish distance
- * without pretending to know the road. Overhead covers parking, finding the
- * entrance, waiting for a bus.
+ * Mode-dependent estimator. The detour factor turns crow-flies into road-ish
+ * distance without pretending to know the road; overhead covers parking,
+ * finding the entrance, waiting for a bus.
+ *
+ * **Average speed is a smooth function of distance** (release pass, 2026-11).
+ * It used to be a step table — `[[5, 14], [25, 24], [∞, 45]]` for transit — with
+ * the band's speed applied to the *whole* leg, so crossing a band edge made the
+ * entire journey faster at once: 24.9 km by bus was 96 minutes and 25.1 km was
+ * 57; a 30.0 km drive 55 minutes and 30.1 km 45. A no-car Tenerife scan put
+ * sights either side of that edge on opposite sides of the day-trip line and
+ * planned three bases on one island. The speed is now interpolated linearly
+ * between anchor points (`[straightKm, kmh]`, ascending; held flat before the
+ * first and after the last), which makes the time continuous, and every anchor
+ * pair is checked (`estimate.test.ts`) to keep it **non-decreasing**: a longer
+ * leg is never quicker. The anchors are typical door-to-door averages for a
+ * leg of that length — streets, then regional roads, then open road — and are
+ * meant to be realistic rather than padded: a router's figure always wins over
+ * this one, and this one is labelled an estimate wherever it is shown. They
+ * were checked against real legs (Puerto de la Cruz → Los Gigantes, ~40 km
+ * straight, ≈ 60 min by car; → Santa Cruz, ~30 km, ≈ 75 min by bus door to
+ * door) and sit at the old table's average level, so the release that removed
+ * the steps did not quietly make every trip faster or slower.
  */
 interface ModeModel {
   detour: number;
   overheadMinutes: number;
-  /** [uptoStraightKm, kmh] bands, ascending; the last applies beyond. */
-  speedBands: readonly [number, number][];
+  /** `[straightLineKm, average kmh]` anchors, ascending in both. */
+  speedAnchors: readonly (readonly [number, number])[];
 }
 
-const MODE_MODELS: Record<'drive' | 'walk' | 'transit' | 'bicycle', ModeModel> = {
-  drive: { detour: 1.3, overheadMinutes: 8, speedBands: [[3, 22], [10, 32], [30, 48], [80, 62], [Number.POSITIVE_INFINITY, 72]] },
-  walk: { detour: 1.25, overheadMinutes: 2, speedBands: [[Number.POSITIVE_INFINITY, 4.5]] },
-  transit: { detour: 1.35, overheadMinutes: 12, speedBands: [[5, 14], [25, 24], [Number.POSITIVE_INFINITY, 45]] },
-  bicycle: { detour: 1.25, overheadMinutes: 4, speedBands: [[Number.POSITIVE_INFINITY, 14]] },
+export const MODE_MODELS: Readonly<Record<'drive' | 'walk' | 'bus' | 'rail' | 'bicycle', ModeModel>> = {
+  drive: { detour: 1.3, overheadMinutes: 8, speedAnchors: [[2, 22], [5, 32], [15, 48], [35, 62], [90, 72]] },
+  walk: { detour: 1.25, overheadMinutes: 2, speedAnchors: [[0, 4.5]] },
+  /* Urban bus or metro, then suburban and regional lines, then intercity coaches. */
+  bus: { detour: 1.35, overheadMinutes: 12, speedAnchors: [[2, 12], [5, 16], [12, 24], [25, 36], [50, 45], [100, 55]] },
+  /* The same as a bus within a region; long-distance trains outrun coaches. */
+  rail: { detour: 1.35, overheadMinutes: 12, speedAnchors: [[2, 12], [5, 16], [12, 24], [25, 36], [50, 45], [100, 55], [250, 80]] },
+  bicycle: { detour: 1.25, overheadMinutes: 4, speedAnchors: [[0, 14]] },
 };
+
+/** Average speed for a leg of this straight-line length: linear between anchors, flat outside them. */
+export function averageSpeedKmh(model: ModeModel, straightLineKm: number): number {
+  const anchors = model.speedAnchors;
+  const first = anchors[0]!;
+  if (straightLineKm <= first[0]) return first[1];
+  for (let i = 1; i < anchors.length; i += 1) {
+    const [km, kmh] = anchors[i]!;
+    if (straightLineKm <= km) {
+      const [prevKm, prevKmh] = anchors[i - 1]!;
+      return prevKmh + ((straightLineKm - prevKm) / (km - prevKm)) * (kmh - prevKmh);
+    }
+  }
+  return anchors[anchors.length - 1]![1];
+}
 
 function modelFor(mode: TransportMode): ModeModel | null {
   switch (mode) {
@@ -92,8 +127,9 @@ function modelFor(mode: TransportMode): ModeModel | null {
     case 'walk':
       return MODE_MODELS.walk;
     case 'public_bus':
+      return MODE_MODELS.bus;
     case 'rail':
-      return MODE_MODELS.transit;
+      return MODE_MODELS.rail;
     case 'bicycle':
       return MODE_MODELS.bicycle;
     default:
@@ -126,11 +162,11 @@ export function estimateLegMinutes(input: { from: { lat: number; lng: number }; 
    * a road time across the sea.
    */
   if (model === MODE_MODELS.drive && straightLineKm > MAX_GEO_ESTIMATE_DRIVE_KM) return null;
-  const kmh = model.speedBands.find(([upto]) => straightLineKm <= upto)?.[1] ?? model.speedBands[model.speedBands.length - 1]![1];
+  const kmh = averageSpeedKmh(model, straightLineKm);
   const approxKm = straightLineKm * model.detour;
   const raw = (approxKm / kmh) * 60 + model.overheadMinutes;
   const minutes = Math.max(5, Math.round(raw / 5) * 5);
-  return { minutes, straightLineKm, approxKm: Math.round(approxKm), kmh };
+  return { minutes, straightLineKm, approxKm: Math.round(approxKm), kmh: Math.round(kmh * 10) / 10 };
 }
 
 /** Beyond this straight-line distance Sidequest will not estimate a road journey it has never seen measured. */

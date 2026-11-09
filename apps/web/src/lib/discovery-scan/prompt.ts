@@ -140,12 +140,27 @@ export function buildScanTask(input: ScanPromptInput): string {
  * missing. Called at most once per scan, only when `scanSufficiency` says the
  * placed pool cannot be planned from.
  */
-export function buildScanSupplementTask(input: ScanPromptInput, gap: { already: readonly string[]; count: number; missingInterests: readonly string[] }): string {
-  const task = [
-    `<task>The first pass proposed too few places that could be found on a map to plan ${input.days} days from. Propose ${gap.count} to ${gap.count + 8} MORE candidates — real, specific, findable places with their proper names and localities — that are NOT in this list: ${gap.already.slice(0, 60).join('; ')}.`,
-    gap.missingInterests.length > 0 ? ` Favour what the board does not yet cover: ${gap.missingInterests.map((i) => i.replace(/_/g, ' ')).join(', ')}.` : ' Favour kinds of place the list does not cover yet.',
-    ' Repeat the bases from before (at least one). Food areas, skipped classics and the package may be empty.</task>',
-  ].join('');
+export function buildScanSupplementTask(input: ScanPromptInput, gap: { already: readonly string[]; count: number; missingInterests: readonly string[]; underfilled?: boolean }): string {
+  /*
+   * Release pass (2026-11) — two shapes. A top-up after a pool that came back
+   * thin once placement dropped some of it; or, when the first answer itself
+   * held a fraction of what was asked (a live Tenerife scan returned one
+   * candidate in 867 tokens and stopped), the whole pool asked for again — the
+   * full count, across every kind of place, not a narrow "what is missing".
+   */
+  const already = gap.already.length > 0 ? ` that are NOT in this list: ${gap.already.slice(0, 60).join('; ')}` : '';
+  const task = gap.underfilled
+    ? [
+        `<task>The first pass returned only ${gap.already.length} candidate${gap.already.length === 1 ? '' : 's'} — far too few to plan ${input.days} days from. Propose the full candidate pool now: ${gap.count} to ${gap.count + 8} candidates — real, specific, findable places with their proper names and localities${already}.`,
+        ' Cover the whole destination and every kind of place this traveller would want: their priorities first, then classics, nature, culture, viewpoints, towns, rainy-day options and lesser-known places, spread across the region rather than clustered in one spot.',
+        gap.missingInterests.length > 0 ? ` Make sure these are covered: ${gap.missingInterests.map((i) => i.replace(/_/g, ' ')).join(', ')}.` : '',
+        ' Include the bases (at least one) and the food areas as before.</task>',
+      ].join('')
+    : [
+        `<task>The first pass proposed too few places that could be found on a map to plan ${input.days} days from. Propose ${gap.count} to ${gap.count + 8} MORE candidates — real, specific, findable places with their proper names and localities${already}.`,
+        gap.missingInterests.length > 0 ? ` Favour what the board does not yet cover: ${gap.missingInterests.map((i) => i.replace(/_/g, ' ')).join(', ')}.` : ' Favour kinds of place the list does not cover yet.',
+        ' Repeat the bases from before (at least one). Food areas, skipped classics and the package may be empty.</task>',
+      ].join('');
   return buildScanTask(input).replace(/<task>[\s\S]*<\/task>/, task);
 }
 

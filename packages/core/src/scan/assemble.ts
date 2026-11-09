@@ -233,11 +233,16 @@ export interface AssembleScanRegionInput {
   food?: ScanFoodInput;
 }
 
+export type ScanFoodSource = 'overture' | 'openstreetmap' | 'overture+openstreetmap' | 'fixture' | null;
+const foodFromOsm = (food: ScanFoodInput | undefined): boolean => Boolean(food?.dataset && food.source && food.source.includes('openstreetmap'));
+const foodFromOverture = (food: ScanFoodInput | undefined): boolean => Boolean(food?.dataset && food.source && food.source.includes('overture'));
+
 /** What the scan's food step found, and how it went — the coverage row is written from `status`. */
 export interface ScanFoodInput {
   dataset: FoodDataset | null;
   status: 'grounded' | 'partial' | 'empty' | 'unavailable' | 'disabled' | 'fixture';
-  source: 'openstreetmap' | 'fixture' | null;
+  /** Which open source(s) the venues came from. `overture+openstreetmap` when OSM filled in boxes Overture left thin. */
+  source: ScanFoodSource;
   /** The query service that answered, named by the caller for the source manifest; the engine never names one itself. */
   providerName?: string;
   /** One sentence in the product's voice, naming the numbers. */
@@ -966,10 +971,11 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     licences: [
       ...((osm) => (osm.length > 0 ? [licence('ODbL-1.0', osm)] : []))([
         ...(openData ? ['places'] : []),
-        ...(input.food?.source === 'openstreetmap' && food ? ['food'] : []),
+        ...(foodFromOsm(input.food) && food ? ['food'] : []),
         /* Production pass — a stop Nominatim placed carries OpenStreetMap coordinates. */
-        ...(!openData && input.providers.placement.includes('nominatim') ? ['placement'] : []),
+        ...(!openData && (input.providers.placement.includes('nominatim') || input.providers.placement.includes('openstreetmap')) ? ['placement'] : []),
       ]),
+      ...(foodFromOverture(input.food) && food ? [licence('CDLA-Permissive-2.0', ['food'])] : []),
       licence('sidequest-authored', openData ? ['access', 'hours'] : ['places', 'access', 'hours']),
     ],
     sourceManifest: {
@@ -979,13 +985,14 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
         { name: input.providers.proposal, version: '1', calls: 1, failures: 0 },
         ...input.providers.placement.map((name) => ({ name, version: '1', calls: 0, failures: 0 })),
         { name: input.providers.routing, version: '1', calls: 0, failures: 0 },
-        ...(food && input.food?.source === 'openstreetmap' ? [{ name: input.food.providerName ?? 'openstreetmap', version: '1', calls: 0, failures: 0 }] : []),
+        ...(food && input.food && (foodFromOsm(input.food) || foodFromOverture(input.food)) ? [{ name: input.food.providerName ?? String(input.food.source), version: '1', calls: 0, failures: 0 }] : []),
       ],
       attributions: scanAttributions({
         placement: input.providers.placement,
         routing: input.providers.routing,
         openData,
-        osmFood: Boolean(food && input.food?.source === 'openstreetmap'),
+        osmFood: Boolean(food && foodFromOsm(input.food)),
+        overtureFood: Boolean(food && foodFromOverture(input.food)),
       }),
     },
     coverage: {
@@ -1029,12 +1036,15 @@ export { monthsOf as scanMonthsOf };
  * paraphrased). Rendered by `ItineraryView` (itinerary, share, print) and the
  * Discovery Board footer, which already read `sourceManifest.attributions`.
  */
-export function scanAttributions(input: { placement: readonly string[]; routing: string | null; openData: boolean; osmFood: boolean }): string[] {
+export function scanAttributions(input: { placement: readonly string[]; routing: string | null; openData: boolean; osmFood: boolean; overtureFood?: boolean }): string[] {
   const out: string[] = [];
   const routing = (input.routing ?? '').toLowerCase();
   const osmRouting = /valhalla|openrouteservice|osrm|osm/.test(routing);
-  if (input.openData || input.osmFood || input.placement.includes('nominatim') || osmRouting) out.push(licence('ODbL-1.0').attribution);
-  if (input.openData) out.push('Wikidata (CC0)');
+  /* `openstreetmap` in placement: a thin model board topped up from open map data (release pass, 2026-11). */
+  const openTopUp = input.placement.includes('openstreetmap');
+  if (input.openData || input.osmFood || input.placement.includes('nominatim') || openTopUp || osmRouting) out.push(licence('ODbL-1.0').attribution);
+  if (input.openData || openTopUp) out.push('Wikidata (CC0)');
+  if (input.overtureFood) out.push(licence('CDLA-Permissive-2.0').attribution);
   if (input.placement.includes('google-places')) out.push('Place locations from Google');
   if (routing.includes('openrouteservice')) out.push('Routing © openrouteservice.org by HeiGIT');
   return out;

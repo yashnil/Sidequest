@@ -129,11 +129,31 @@ describe('a thin scan (live Tokyo finding)', () => {
     expect(diagnostics?.recovery.reasons).toContain('too_few_places');
     expect(diagnostics!.recovery.after!.have).toBeGreaterThan(diagnostics!.recovery.before.have);
     expect(scanView(tripId).counters.proposed).toBeGreaterThan(4);
+    // Four returned against a pool of 18+ asked for: a failed answer, so the supplement asked for the whole pool.
+    expect(diagnostics?.recovery.underfilled).toBe(true);
+    expect(diagnostics?.recovery.thin).toBeUndefined();
 
     const { generateSidequestPlanForTrip } = await import('@/lib/planning/production-plan');
     const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW });
     expect(result.ok, result.error).toBe(true);
     expect(result.result!.itinerary.package?.planning?.mode).toBe('planner');
+  }, 60_000);
+
+  it('a supplement that adds nothing is topped up from open map data, with no further model call', async () => {
+    const tripId = await dynamicTrip('thinscan stuck harbour');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 150 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(scanView(tripId).state).toBe('ready');
+    const recovery = getScanProposalExtras(tripId)!.diagnostics!.recovery;
+    expect(recovery.attempted).toBe(true);
+    expect(['none_new', 'invalid_response']).toContain(recovery.outcome);
+    expect(recovery.openDataAdded).toBeGreaterThan(0);
+    expect(recovery.after!.have).toBe(recovery.before.have + recovery.openDataAdded!);
+    // Filled from open data to what the trip needs, so the board is not marked thin.
+    expect(recovery.after!.have).toBeGreaterThanOrEqual(recovery.after!.needed);
+    expect(recovery.thin).toBeUndefined();
   }, 60_000);
 
   it('a sufficient scan never spends the supplement', async () => {

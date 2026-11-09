@@ -6,6 +6,8 @@
  * makes the scan fail, so the failure screen can be exercised. The token
  * `thinscan` makes the first pass propose only four places, so the bounded
  * supplement can be exercised; the supplement (`already` given) proposes the rest.
+ * `stuck` alongside it makes the supplement propose nothing new, so the open-data
+ * top-up and the thin-board notice can be exercised.
  */
 const KINDS = [
   ['Old Quarter', 'neighbourhood', 'classic', 120, 'easy', 'mixed', ['neighbourhoods_and_local_life', 'history_and_culture']],
@@ -53,7 +55,7 @@ export function fixtureScanProposal(destinationName: string, typed: string, days
       rainyDayOk: exposure === 'indoor',
       interests,
       why: `A fixture ${kind.replace(/_/g, ' ')} for testing.`,
-    })).filter((c) => !options.already?.includes(c.name)),
+    })).filter((c) => !options.already?.includes(c.name)).filter(() => !(options.already && /\bstuck\b/i.test(typed))),
     foodAreas: [{ name: `${name} Market Hall`, locality: name, specialty: 'local dishes', why: 'Fixture food area.' }],
     skipped: [{ name: `${name} Theme Park`, reason: 'Fixture: not a fit for this traveller.' }],
     package: {

@@ -12,17 +12,22 @@ import {
   type PriceBand,
   type ScanFoodArea,
   type ScanPoint,
+  type ScanFoodSource,
 } from '@sidequest/core';
 import { fetchMealPois, normalizeElement, type BoundingBox, type OverpassOptions, type OverpassResult } from '../providers/overpass';
 import { osmFoodVenue } from '../providers/osm-food';
 import { cacheFor, TTL } from '../providers/open-verification';
 import { geocode } from '../providers/nominatim';
+import { fetchOvertureFood, markRepeatedNamesAsChains, overtureFoodVenue, type OvertureFoodRow } from '../providers/overture-food';
+import { isPoiProviderEnabled } from '../providers/switches';
 
 /**
  * V1 CONVERGENCE — SOMEWHERE REAL TO EAT, FROM OPEN MAP DATA.
  *
  * The scan proposes places and food *areas*; it never had venues, so every
- * meal was intent prose. This step asks OpenStreetMap (Overpass) for the
+ * meal was intent prose. This step asks open place data — Overture's place
+ * files first, OpenStreetMap (Overpass) only for boxes Overture leaves thin
+ * (release pass, 2026-11; see `groundScanFood`) — for the
  * restaurants, cafés and takeaways in a few small boxes — around the bases,
  * the food areas the proposal named, and the densest clusters of things to
  * do — and keeps each one only when it is within a door walk of a point the
@@ -35,10 +40,11 @@ import { geocode } from '../providers/nominatim';
  * dietary support comes only from explicit `diet:*` tags (and a `diet:*=no`
  * tag is kept as a reason *not* to name it for that diet).
  *
- * Bounded and polite — the public Overpass policy is the reason for every
- * number here: sequential requests through the client's own spacing gate, one
- * selector group per box, ≤ 8 boxes of ~1.5 km, ≤ 60 venues, a stage deadline,
- * the provider cache, and a stop after two boxes in a row are refused. A
+ * Bounded and polite: ≤ 8 boxes of ~1.5 km, ≤ 60 venues, a stage deadline and
+ * the provider cache throughout; Overture boxes four at a time over ranged
+ * reads; Overpass sequential through the client's own spacing gate, one
+ * selector group per box, eight seconds a request, twelve in all, and a stop
+ * after two boxes in a row are refused (the public Overpass policy). A
  * failure is an absence: the region simply has no food data and every meal
  * stays an honest intent. The scan never fails for food.
  */
@@ -62,8 +68,10 @@ export interface ScanFoodGrounding {
   /** Null when nothing usable came back — the region then has no food data, which is unknown, never "no food". */
   dataset: FoodDataset | null;
   status: ScanFoodStatus;
-  source: 'openstreetmap' | 'fixture' | null;
+  source: ScanFoodSource;
   providerName?: string;
+  /** Where the time went, for the scan's diagnostics. */
+  timings?: { overtureMs: number; overtureBytes: number; overtureVenues: number; osmVenues: number; overpassBoxes: number; totalMs: number; farFromBox: number };
   boxes: number;
   failedBoxes: number;
   calls: number;
@@ -159,6 +167,10 @@ export interface GroundScanFoodDeps {
   geocodeArea?: ((query: string) => Promise<{ lat: number; lng: number; countryCode?: string } | null>) | null;
   now?: () => number;
   cache?: OverpassOptions['cache'];
+  /** Overture reader. Undefined → the live one when `overtureFoodEnabled()`; null → not asked. */
+  overture?: typeof fetchOvertureFood | null;
+  /** Whether Overpass may fill thin boxes. Defaults to: a reader was injected, or the POI provider is on. */
+  overpass?: boolean;
 }
 
 async function defaultGeocodeArea(query: string): Promise<{ lat: number; lng: number; countryCode?: string } | null> {
@@ -191,17 +203,68 @@ async function placeFoodAreas(input: GroundScanFoodInput, geocodeArea: NonNullab
   return placed;
 }
 
+/** Venues to aim for per box from the first source before a second is asked to fill in. */
+export const THIN_BOX_VENUES = 4;
+/** A hung Overpass instance costs this, not the client's default 25 s. */
+const OVERPASS_SUPPLEMENT_TIMEOUT_MS = 8_000;
+/** The whole supplement's allowance once Overture has answered: a filler is never worth the scan's patience. */
+const OVERPASS_SUPPLEMENT_BUDGET_MS = 12_000;
+
 /**
- * Ground the scan's meals in OSM venues. Never throws: every failure becomes a
+ * Which order to name venues in, within one box: independents over chains where
+ * there are a few independents, then the source's
+ * own confidence, nudged by a published website (somebody can check the menu).
+ * `mixByMeal` then interleaves meals and coffee.
+ */
+function rankOverture(rows: readonly OvertureFoodRow[]): OvertureFoodRow[] {
+  const locals = rows.filter((r) => !r.chain);
+  const pool = locals.length >= MIN_LOCAL_VENUES ? locals : [...rows];
+  return pool.sort((a, b) => b.confidence + (b.website ? 0.05 : 0) - (a.confidence + (a.website ? 0.05 : 0)) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Interleave sit-down meals and coffee so a box's share is not all cafés (or all
+ * restaurants): roughly two meals for every café.
+ */
+function mixByMeal(rows: readonly OvertureFoodRow[]): OvertureFoodRow[] {
+  const meals = rows.filter((r) => r.serviceType === 'restaurant' || r.serviceType === 'food_hall' || r.serviceType === 'takeaway');
+  const light = rows.filter((r) => !meals.includes(r));
+  const out: OvertureFoodRow[] = [];
+  while (meals.length > 0 || light.length > 0) {
+    for (let k = 0; k < 2 && meals.length > 0; k += 1) out.push(meals.shift()!);
+    if (light.length > 0) out.push(light.shift()!);
+  }
+  return out;
+}
+
+/** Overture first unless the deployment pins food to Overpass or turns it off. */
+export function overtureFoodEnabled(): boolean {
+  const choice = process.env.SIDEQUEST_FOOD_PROVIDER?.trim().toLowerCase();
+  return choice !== 'off' && choice !== 'overpass';
+}
+
+/**
+ * Ground the scan's meals in real venues. Never throws: every failure becomes a
  * status and a sentence for the coverage report.
+ *
+ * Release pass (2026-11) — two sources, in order. Overture's open place files
+ * answer every box in parallel in a few seconds (`providers/overture-food.ts`);
+ * the public Overpass instances, which used to be the only source, were measured
+ * timing out at 25–30 s per box and left three of five live scans with no food
+ * at all. Overpass is now a bounded supplement: asked only for boxes Overture
+ * left thin (fewer than `THIN_BOX_VENUES`), only when the POI provider is
+ * switched on, one request at a time, each capped at eight seconds.
  */
 export async function groundScanFood(input: GroundScanFoodInput, deps: GroundScanFoodDeps = {}): Promise<ScanFoodGrounding> {
   const now = deps.now ?? Date.now;
   const started = now();
-  const deadline = () => now() - started > FOOD_STAGE_BUDGET_MS;
+  const stageDeadline = started + FOOD_STAGE_BUDGET_MS;
+  const deadline = () => now() > stageDeadline;
   const fetchMeals = deps.fetchMeals ?? fetchMealPois;
   const cache = deps.cache ?? cacheFor<OverpassResult>('overpass-food', TTL.poi);
   const anchors = input.points.map((p) => ({ id: p.id, coordinates: p.coordinates }));
+  const useOverture = deps.overture === undefined ? overtureFoodEnabled() : deps.overture !== null;
+  const useOverpass = deps.overpass ?? (deps.fetchMeals !== undefined || isPoiProviderEnabled());
 
   let foodAreas: { name: string; coordinates: { lat: number; lng: number } }[] = [];
   const geocodeArea = deps.geocodeArea === undefined ? defaultGeocodeArea : deps.geocodeArea;
@@ -210,101 +273,145 @@ export async function groundScanFood(input: GroundScanFoodInput, deps: GroundSca
   const boxes = planFoodBoxes({ points: input.points, foodAreas });
   const perBox = Math.max(8, Math.ceil(MAX_FOOD_VENUES / Math.max(1, boxes.length)));
   const venues: FoodVenue[] = [];
+  const keptPerBox = boxes.map(() => 0);
   const seenIds = new Set<string>();
+  let unroutable = 0;
+  let farFromBox = 0;
+
+  /** Snap, dedupe and parse one built venue into box `index`. Returns whether it was kept. */
+  const admit = (index: number, built: FoodVenue | null, snap: { routingId: string; walkMinutesFromRouting: number }, extraDietary: DietaryClaim[] = []): boolean => {
+    if (!built || seenIds.has(built.id)) return false;
+    // The same venue twice (a node and its building, or one venue in both sources) — one name, a few metres apart.
+    if (venues.some((v) => normalName(v.name) === normalName(built.name) && haversineKm(v.coordinates, built.coordinates) <= 0.15)) return false;
+    const parsed = foodVenueSchema.safeParse({
+      ...built,
+      priceBand: SCAN_PRICE_BY_SERVICE[built.serviceType],
+      dietary: [...built.dietary, ...extraDietary],
+      routingId: snap.routingId,
+      walkMinutesFromRouting: snap.walkMinutesFromRouting,
+    });
+    if (!parsed.success) return false;
+    seenIds.add(built.id);
+    venues.push(parsed.data);
+    keptPerBox[index]! += 1;
+    return true;
+  };
+
+  /* ---- 1. Overture, every box at once ---- */
+  let overtureBoxesAnswered = 0;
+  let overtureVenues = 0;
+  let overtureBytes = 0;
+  let overtureMs = 0;
+  if (useOverture && boxes.length > 0) {
+    const results = await (deps.overture ?? fetchOvertureFood)(boxes.map((b) => foodBoxAround(b.center)), { deadlineMs: stageDeadline - 8_000 });
+    const marked = markRepeatedNamesAsChains(results.map((r) => r?.rows ?? []));
+    results.forEach((result, index) => {
+      if (!result) return;
+      overtureBoxesAnswered += 1;
+      overtureBytes += result.bytes;
+      overtureMs = Math.max(overtureMs, result.ms);
+      for (const row of mixByMeal(rankOverture(marked[index]!))) {
+        if (keptPerBox[index]! >= perBox || venues.length >= MAX_FOOD_VENUES) break;
+        if (haversineKm(row.coordinates, boxes[index]!.center) > FOOD_BOX_HALF_KM * 1.5) {
+          farFromBox += 1;
+          continue;
+        }
+        const snap = snapFoodRouting({ coordinates: row.coordinates, anchors, walkKmh: MODELLED_WALK_KMH });
+        if (!snap) {
+          unroutable += 1;
+          continue;
+        }
+        if (admit(index, overtureFoodVenue(row, { regionId: input.regionId, destinationName: input.destinationName, routingId: snap.routingId, today: input.today }), snap)) overtureVenues += 1;
+      }
+    });
+  }
+
+  /* ---- 2. Overpass, only where Overture left a box thin ---- */
   let calls = 0;
   let attempted = 0;
   let failedBoxes = 0;
   let consecutiveFailures = 0;
-  let unroutable = 0;
   let stoppedEarly = false;
-
-  for (const box of boxes) {
-    if (venues.length >= MAX_FOOD_VENUES) break;
-    if (deadline() || consecutiveFailures >= CONSECUTIVE_FAILURES_BEFORE_STOPPING) {
-      stoppedEarly = true;
-      break;
-    }
-    attempted += 1;
-    let result: OverpassResult;
-    try {
-      result = await fetchMeals(foodBoxAround(box.center), { limit: perBox * 3, retries: 0, deadlineMs: started + FOOD_STAGE_BUDGET_MS, cache });
-      calls += result.calls;
-      consecutiveFailures = 0;
-      if (result.failedGroups.length > 0) failedBoxes += 1;
-    } catch {
-      failedBoxes += 1;
-      consecutiveFailures += 1;
-      continue;
-    }
-    let kept = 0;
-    /*
-     * Local places over chains. A plan that sends somebody to a national chain
-     * for lunch in a city full of food has not done the one thing a food
-     * recommendation is for; where the box holds at least a few independent
-     * venues, branded chains (OSM `brand` / `brand:wikidata`) are left out. In a
-     * food desert a chain is better than nothing and stays.
-     */
-    const locals = result.elements.filter((element) => !isChain(element));
-    const candidates = locals.length >= MIN_LOCAL_VENUES ? locals : result.elements;
-    for (const element of candidates) {
-      if (kept >= perBox || venues.length >= MAX_FOOD_VENUES) break;
-      const normalized = normalizeElement(element);
-      if (!normalized) continue;
-      // A bar is somewhere to drink, not a meal the plan can promise.
-      if (normalized.primaryTag === 'amenity=bar') continue;
-      const snap = snapFoodRouting({ coordinates: normalized.coordinates, anchors, walkKmh: MODELLED_WALK_KMH });
-      if (!snap) {
-        unroutable += 1;
+  let osmVenues = 0;
+  const thin = boxes.map((_, index) => index).filter((index) => !useOverture || keptPerBox[index]! < THIN_BOX_VENUES);
+  const supplementDeadline = useOverture ? Math.min(stageDeadline, now() + OVERPASS_SUPPLEMENT_BUDGET_MS) : stageDeadline;
+  if (useOverpass) {
+    for (const index of thin) {
+      const box = boxes[index]!;
+      if (venues.length >= MAX_FOOD_VENUES) break;
+      if (now() > supplementDeadline || consecutiveFailures >= CONSECUTIVE_FAILURES_BEFORE_STOPPING) {
+        stoppedEarly = true;
+        break;
+      }
+      attempted += 1;
+      let result: OverpassResult;
+      try {
+        result = await fetchMeals(foodBoxAround(box.center), { limit: perBox * 3, retries: 0, deadlineMs: supplementDeadline, cache, requestTimeoutMs: Math.max(1_000, Math.min(OVERPASS_SUPPLEMENT_TIMEOUT_MS, supplementDeadline - now())) });
+        calls += result.calls;
+        consecutiveFailures = 0;
+        if (result.failedGroups.length > 0) failedBoxes += 1;
+      } catch {
+        failedBoxes += 1;
+        consecutiveFailures += 1;
         continue;
       }
-      const built = osmFoodVenue(normalized, { regionId: input.regionId, destinationName: input.destinationName, routingId: snap.routingId, today: input.today });
-      if (!built || seenIds.has(built.id)) continue;
-      // The same venue mapped twice (a node and its building) — one name, a few metres apart.
-      if (venues.some((v) => normalName(v.name) === normalName(built.name) && haversineKm(v.coordinates, built.coordinates) <= 0.15)) continue;
-      const unsuitable: DietaryClaim[] = DIET_TAG_NEEDS.filter(([tag]) => normalized.planningTags[tag] === 'no').map(([, need]) => ({
-        need,
-        evidence: 'venue_states_unsuitable',
-        note: 'Community map data records this as not offered here.',
-      }));
-      const parsed = foodVenueSchema.safeParse({
-        ...built,
-        priceBand: SCAN_PRICE_BY_SERVICE[built.serviceType],
-        dietary: [...built.dietary, ...unsuitable],
-        walkMinutesFromRouting: snap.walkMinutesFromRouting,
-      });
-      if (!parsed.success) continue;
-      seenIds.add(built.id);
-      venues.push(parsed.data);
-      kept += 1;
+      /*
+       * Local places over chains. A plan that sends somebody to a national chain
+       * for lunch in a city full of food has not done the one thing a food
+       * recommendation is for; where the box holds at least a few independent
+       * venues, branded chains (OSM `brand` / `brand:wikidata`) are left out. In a
+       * food desert a chain is better than nothing and stays.
+       */
+      const locals = result.elements.filter((element) => !isChain(element));
+      const candidates = locals.length >= MIN_LOCAL_VENUES ? locals : result.elements;
+      for (const element of candidates) {
+        if (keptPerBox[index]! >= perBox || venues.length >= MAX_FOOD_VENUES) break;
+        const normalized = normalizeElement(element);
+        if (!normalized) continue;
+        // A bar is somewhere to drink, not a meal the plan can promise.
+        if (normalized.primaryTag === 'amenity=bar') continue;
+        const snap = snapFoodRouting({ coordinates: normalized.coordinates, anchors, walkKmh: MODELLED_WALK_KMH });
+        if (!snap) {
+          unroutable += 1;
+          continue;
+        }
+        const unsuitable: DietaryClaim[] = DIET_TAG_NEEDS.filter(([tag]) => normalized.planningTags[tag] === 'no').map(([, need]) => ({
+          need,
+          evidence: 'venue_states_unsuitable',
+          note: 'Community map data records this as not offered here.',
+        }));
+        const built = osmFoodVenue(normalized, { regionId: input.regionId, destinationName: input.destinationName, routingId: snap.routingId, today: input.today });
+        if (admit(index, built, snap, unsuitable)) osmVenues += 1;
+      }
     }
+  } else if (!useOverture) {
+    stoppedEarly = boxes.length > 0;
   }
 
-  const status: ScanFoodStatus =
-    boxes.length === 0
-      ? 'empty'
-      : venues.length === 0
-        ? failedBoxes > 0 || stoppedEarly
-          ? 'unavailable'
-          : 'empty'
-        : failedBoxes > 0 || stoppedEarly
-          ? 'partial'
-          : 'grounded';
+  // A box nobody could answer: Overture failed it and Overpass was not asked or refused.
+  const unanswered = boxes.filter((_, index) => keptPerBox[index] === 0).length;
+  const overtureFailed = useOverture ? boxes.length - overtureBoxesAnswered : 0;
+  const anyFailure = failedBoxes > 0 || stoppedEarly || (overtureFailed > 0 && unanswered > 0);
+  const status: ScanFoodStatus = boxes.length === 0 ? 'empty' : venues.length === 0 ? (anyFailure ? 'unavailable' : 'empty') : anyFailure ? 'partial' : 'grounded';
+  const source: ScanFoodGrounding['source'] = venues.length === 0 ? null : overtureVenues > 0 && osmVenues > 0 ? 'overture+openstreetmap' : overtureVenues > 0 ? 'overture' : 'openstreetmap';
+  const from = source === 'overture+openstreetmap' ? 'Overture Maps and OpenStreetMap' : source === 'overture' ? 'Overture Maps' : 'OpenStreetMap';
   const detail =
     status === 'unavailable'
-      ? 'The map data service did not answer for food, so meals are described rather than named.'
+      ? 'The open place data did not answer for food, so meals are described rather than named.'
       : status === 'empty'
-        ? `OpenStreetMap records no restaurants or cafés within a short walk of the ${boxes.length} spot${boxes.length === 1 ? '' : 's'} we checked; meals are described rather than named.`
-        : `${venues.length} restaurants, cafés and takeaways from OpenStreetMap, within a short walk of the bases and stops${status === 'partial' ? ` (${failedBoxes + (boxes.length - attempted)} of ${boxes.length} areas could not be checked)` : ''}. Hours and prices are not confirmed.`;
+        ? `The open place data records no restaurants or cafés within a short walk of the ${boxes.length} spot${boxes.length === 1 ? '' : 's'} we checked; meals are described rather than named.`
+        : `${venues.length} restaurants, cafés and takeaways from ${from}, within a short walk of the bases and stops${status === 'partial' ? ` (${unanswered} of ${boxes.length} areas returned nothing)` : ''}. Hours and prices are not confirmed.`;
   return {
     dataset: venues.length > 0 ? { version: FOOD_DATASET_VERSION, regionId: input.regionId, venues, gaps: [] } : null,
     status,
-    source: venues.length > 0 ? 'openstreetmap' : null,
-    providerName: 'openstreetmap-overpass',
-    boxes: attempted,
-    failedBoxes,
+    source,
+    providerName: source === 'overture' ? 'overture-places' : source === 'openstreetmap' ? 'openstreetmap-overpass' : source ? 'overture-places+openstreetmap-overpass' : undefined,
+    boxes: boxes.length,
+    failedBoxes: failedBoxes + overtureFailed,
     calls,
     unroutable,
     detail,
+    timings: { overtureMs, overtureBytes, overtureVenues, osmVenues, overpassBoxes: attempted, totalMs: now() - started, farFromBox },
   };
 }
 

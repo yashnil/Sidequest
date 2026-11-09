@@ -83,7 +83,7 @@ export interface LegPlausibility {
  * blunter question: whatever the distance, no single leg of this kind runs
  * longer than this without being a different thing entirely.
  */
-interface ModeEnvelope {
+export interface ModeEnvelope {
   /** Above this implied average speed the measurement is not this mode. */
   maxKmh: number;
   /**
@@ -129,6 +129,29 @@ const MODE_ENVELOPES: Partial<Record<TransportMode, ModeEnvelope>> = {
 /** The speed floor that applies to a leg of this length. */
 function floorFor(envelope: ModeEnvelope, km: number): number {
   return envelope.floors.find(([upto]) => km <= upto)?.[1] ?? envelope.floors[envelope.floors.length - 1]![1];
+}
+
+/**
+ * The longest a leg of this length may take before it is too slow for the mode,
+ * or null where the length is exempt.
+ *
+ * Release pass (2026-11): the floor alone stepped — a 25 km drive could take
+ * 187 minutes and a 25.1 km one only 75 — so one router answer was trusted and
+ * a near-identical one refused and replaced with an estimate half its length.
+ * A leg just past a band edge now keeps at least the allowance the longest leg
+ * of the band before it had, so the limit is continuous and never falls as the
+ * leg grows; it only rises again once the new floor allows more. The first band
+ * that is judged at all still starts at its own floor: below it nothing is.
+ */
+export function maxPlausibleMinutes(envelope: ModeEnvelope, km: number): number | null {
+  const floor = floorFor(envelope, km);
+  if (floor <= 0) return null;
+  let carried = 0;
+  for (const [upto, previousFloor] of envelope.floors) {
+    if (upto >= km) break;
+    if (previousFloor > 0) carried = Math.max(carried, (upto / previousFloor) * 60);
+  }
+  return Math.max((km / floor) * 60, carried);
 }
 
 /**
@@ -225,7 +248,8 @@ export function assessLegPlausibility(input: {
   if (speedKm !== undefined && speedKm > 0 && minutes > 0) {
     const impliedKmh = speedKm / (minutes / 60);
     if (hasKm && impliedKmh > envelope.maxKmh) return { ...withSpeed, ok: false, reason: 'too_fast_for_mode' };
-    if (impliedKmh < floorFor(envelope, speedKm)) return { ...withSpeed, ok: false, reason: 'too_slow_for_mode' };
+    const allowed = maxPlausibleMinutes(envelope, speedKm);
+    if (allowed !== null && minutes > allowed) return { ...withSpeed, ok: false, reason: 'too_slow_for_mode' };
   }
 
   /*

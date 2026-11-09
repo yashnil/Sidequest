@@ -10,7 +10,8 @@ import {
   type ScanPoint,
 } from '@sidequest/core';
 import type { OverpassElement, OverpassResult } from '../providers/overpass';
-import { MAX_FOOD_BOXES, MAX_FOOD_VENUES, fixtureScanFood, foodBoxAround, groundScanFood, planFoodBoxes, type GroundScanFoodInput } from './food';
+import { chainKey, fetchOvertureFood, markChainsFromBox, markRepeatedNamesAsChains, overtureFoodRow, type OvertureFoodRow } from '../providers/overture-food';
+import { MAX_FOOD_BOXES, MAX_FOOD_VENUES, THIN_BOX_VENUES, fixtureScanFood, foodBoxAround, groundScanFood, planFoodBoxes, type GroundScanFoodInput } from './food';
 import { fixtureScanProposal } from './fixture';
 import { fixturePlacement } from './placement';
 
@@ -75,6 +76,7 @@ describe('grounding meals in OSM venues', () => {
   it('snaps each venue to the nearest scan point within a door walk, and only then', async () => {
     const result = await groundScanFood(input(), {
       cache: noCache,
+      overture: null,
       geocodeArea: null,
       fetchMeals: async (box) => {
         const lat = (box.north + box.south) / 2;
@@ -113,6 +115,7 @@ describe('grounding meals in OSM venues', () => {
     const shared = node(46.0005, 7.0005, { amenity: 'restaurant', name: 'The One' });
     const result = await groundScanFood(input({ points: [BASE, { ...PLACE, coordinates: { lat: 46.012, lng: 7 } }] }), {
       cache: noCache,
+      overture: null,
       geocodeArea: null,
       fetchMeals: async () => answer([shared, { ...shared, type: 'way', id: shared.id, lat: 46.0006, lon: 7.0006 }, node(46.0004, 7.0004, { amenity: 'restaurant', name: 'The One' })]),
     });
@@ -126,6 +129,7 @@ describe('grounding meals in OSM venues', () => {
     let calls = 0;
     const result = await groundScanFood(input({ points: [BASE, ...places] }), {
       cache: noCache,
+      overture: null,
       geocodeArea: null,
       fetchMeals: async (box) => {
         calls += 1;
@@ -147,6 +151,7 @@ describe('grounding meals in OSM venues', () => {
     let calls = 0;
     const result = await groundScanFood(input({ points: [BASE, PLACE, { ...PLACE, id: 'p3', coordinates: { lat: 46.3, lng: 7.3 } }] }), {
       cache: noCache,
+      overture: null,
       geocodeArea: null,
       fetchMeals: async () => {
         calls += 1;
@@ -171,6 +176,7 @@ describe('grounding meals in OSM venues', () => {
       }),
       {
         cache: noCache,
+        overture: null,
         geocodeArea: async (query) => (query.startsWith('Old Market') ? { lat: 46.115, lng: 7.1, countryCode: 'CH' } : { lat: 46.1, lng: 7.085, countryCode: 'FR' }),
         fetchMeals: async (box) => {
           seen.push({ lat: (box.north + box.south) / 2, lng: (box.east + box.west) / 2 });
@@ -180,6 +186,202 @@ describe('grounding meals in OSM venues', () => {
     );
     expect(seen.some((c) => Math.abs(c.lat - 46.115) < 1e-6 && Math.abs(c.lng - 7.1) < 1e-6)).toBe(true);
     expect(seen.some((c) => Math.abs(c.lng - 7.085) < 1e-6)).toBe(false);
+  });
+});
+
+function orow(id: string, lat: number, lng: number, over: Partial<OvertureFoodRow> = {}): OvertureFoodRow {
+  return { id, name: `Venue ${id}`, coordinates: { lat, lng }, serviceType: 'restaurant', confidence: 0.9, chain: false, licenceId: 'CDLA-Permissive-2.0', ...over };
+}
+
+describe('grounding meals in Overture venues first', () => {
+  it('reads every box from Overture at once and never asks Overpass when the boxes are full', async () => {
+    let overpassCalls = 0;
+    let overtureBoxes = 0;
+    const result = await groundScanFood(input(), {
+      cache: noCache,
+      geocodeArea: null,
+      overture: async (boxes) => {
+        overtureBoxes = boxes.length;
+        return boxes.map((box) => {
+          const lat = (box.north + box.south) / 2;
+          const lng = (box.east + box.west) / 2;
+          return {
+            rows: Array.from({ length: 10 }, (_, k) => orow(`${lat.toFixed(1)}-${k}`, lat + (k - 5) * 0.0005, lng, { serviceType: k % 3 === 2 ? 'cafe' : 'restaurant', ...(k === 0 ? { cuisine: 'ramen', website: 'https://example.org/menu' } : {}) })),
+            bytes: 3_000_000,
+            ms: 1500,
+            cacheHit: false,
+          };
+        });
+      },
+      fetchMeals: async () => {
+        overpassCalls += 1;
+        return answer([]);
+      },
+    });
+    expect(overtureBoxes).toBe(2);
+    expect(overpassCalls).toBe(0);
+    expect(result.status).toBe('grounded');
+    expect(result.source).toBe('overture');
+    expect(foodDatasetSchema.parse(result.dataset)).toBeTruthy();
+    const venues = result.dataset!.venues;
+    expect(venues.length).toBe(20); // every row of both boxes: each box may hold up to MAX_FOOD_VENUES / boxes
+    const ramen = venues.find((v) => v.cuisines.includes('ramen'))!;
+    expect(ramen.source.kind).toBe('overture');
+    expect(ramen.source.element?.licenceId).toBe('CDLA-Permissive-2.0');
+    expect(ramen.source.url).toBe('https://example.org/menu');
+    expect(ramen.hours.kind).toBe('unknown');
+    expect(ramen.dietary).toEqual([]);
+    // Meals and coffee are interleaved rather than all one kind.
+    expect(venues.filter((v) => v.serviceType === 'cafe').length).toBeGreaterThan(0);
+    expect(result.detail).toMatch(/from Overture Maps/);
+  });
+
+  it('asks Overpass only for a box Overture left thin, and collapses a venue both sources know', async () => {
+    const asked: number[] = [];
+    const result = await groundScanFood(input(), {
+      cache: noCache,
+      geocodeArea: null,
+      overture: async (boxes) =>
+        boxes.map((box) => {
+          const lat = (box.north + box.south) / 2;
+          // The place box (46.1) is thin: one venue.
+          const count = lat > 46.05 ? 1 : 10;
+          return { rows: Array.from({ length: count }, (_, k) => orow(`${lat.toFixed(1)}-${k}`, lat + k * 0.0005, (box.east + box.west) / 2, { name: k === 0 && count === 1 ? 'Shared Kitchen' : `Venue ${lat.toFixed(1)}-${k}` })), bytes: 1, ms: 1, cacheHit: false };
+        }),
+      fetchMeals: async (box) => {
+        const lat = (box.north + box.south) / 2;
+        asked.push(lat);
+        return answer([node(lat + 0.0001, 7.1, { amenity: 'restaurant', name: 'Shared Kitchen' }), node(lat - 0.002, 7.1, { amenity: 'cafe', name: 'Only On OSM' })]);
+      },
+    });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toBeCloseTo(46.1, 3);
+    expect(THIN_BOX_VENUES).toBeGreaterThan(1);
+    expect(result.source).toBe('overture+openstreetmap');
+    const names = result.dataset!.venues.map((v) => v.name);
+    expect(names.filter((n) => n === 'Shared Kitchen')).toHaveLength(1);
+    expect(names).toContain('Only On OSM');
+    expect(result.detail).toMatch(/Overture Maps and OpenStreetMap/);
+  });
+
+  it('a box Overture could not read falls to Overpass; both failing leaves no food data, said so', async () => {
+    let overpassCalls = 0;
+    const result = await groundScanFood(input(), {
+      cache: noCache,
+      geocodeArea: null,
+      overture: async (boxes) => boxes.map(() => null),
+      fetchMeals: async () => {
+        overpassCalls += 1;
+        throw new Error('busy');
+      },
+    });
+    expect(overpassCalls).toBe(2);
+    expect(result.dataset).toBeNull();
+    expect(result.status).toBe('unavailable');
+    expect(result.detail).toMatch(/described rather than named/);
+  });
+
+  it('prefers independents over chains where there are a few independents', async () => {
+    const result = await groundScanFood(input({ points: [BASE] }), {
+      cache: noCache,
+      geocodeArea: null,
+      overpass: false,
+      overture: async (boxes) => [
+        {
+          rows: [
+            ...Array.from({ length: 4 }, (_, k) => orow(`chain-${k}`, 46 + k * 0.0003, 7, { name: `Burger Chain ${k}`, chain: true, confidence: 0.99 })),
+            ...Array.from({ length: 4 }, (_, k) => orow(`local-${k}`, 46 - k * 0.0003, 7, { name: `Local ${k}`, confidence: 0.8 })),
+          ],
+          bytes: 1,
+          ms: 1,
+          cacheHit: false,
+        },
+        ...boxes.slice(1).map(() => null),
+      ],
+    });
+    expect(result.dataset!.venues.map((v) => v.name).every((n) => n.startsWith('Local'))).toBe(true);
+  });
+});
+
+describe('chains Overture did not label, and the reader itself', () => {
+  it('strips branch words and brackets to find what stays the same across branches', () => {
+    expect(chainKey('丸亀製麺 浅草rox店')).toBe(chainKey('丸亀製麺'));
+    expect(chainKey('デニーズ 上野谷中店')).toBe('デニーズ');
+    expect(chainKey('Bistro Roven (Shinjuku)')).toBe('bistro roven');
+    expect(chainKey('Casa Pepe')).toBe('casa pepe');
+  });
+  it('marks a name repeated three times across boxes, or twice in one, as a chain — and nothing else', () => {
+    const r = (name: string): OvertureFoodRow => orow(name, 0, 0, { name });
+    const marked = markRepeatedNamesAsChains([
+      [r('Saizeriya'), r('すき家'), r('すき家'), r('Casa Pepe')],
+      [r('Saizeriya'), r('Other Place')],
+      [r('Saizeriya 新宿店')],
+    ]);
+    expect(marked[0]!.map((x) => x.chain)).toEqual([true, true, true, false]);
+    expect(marked[1]!.map((x) => x.chain)).toEqual([true, false]);
+    expect(marked[2]![0]!.chain).toBe(true);
+  });
+  it('refuses a job advert listed as a restaurant', () => {
+    expect(overtureFoodRow({ id: 'j', names: { primary: 'Вакансии "Империя Пиццы"' }, confidence: 0.9, basic_category: 'restaurant', bbox: { xmin: 74.5, xmax: 74.5, ymin: 42.8, ymax: 42.8 } })).toBeNull();
+    expect(overtureFoodRow({ id: 'k', names: { primary: '"Барашек"' }, confidence: 0.9, basic_category: 'restaurant', bbox: { xmin: 74.5, xmax: 74.5, ymin: 42.8, ymax: 42.8 } })!.name).toBe('Барашек');
+  });
+  it('reads boxes a few at a time, caches only non-empty answers, and treats a failed box as an absence', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const written: string[] = [];
+    const box = (lat: number) => ({ south: lat, north: lat + 0.01, west: 7, east: 7.01 });
+    const results = await fetchOvertureFood([box(1), box(2), box(3), box(4), box(5), box(6)], { deadlineMs: Date.now() + 10_000 }, {
+      cache: { read: (key) => (key.includes('6.0000') ? [orow('cached', 6, 7)] : null), write: (key) => written.push(key) },
+      readBox: async (b) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+        if (b.south === 3) throw new Error('reset');
+        return { rows: b.south === 4 ? [] : [orow(`r${b.south}`, b.south, 7)], bytes: 10 };
+      },
+    });
+    expect(maxInFlight).toBeLessThanOrEqual(4);
+    expect(results[2]).toBeNull();
+    expect(results[3]!.rows).toEqual([]);
+    expect(results[5]!.cacheHit).toBe(true);
+    expect(written).toHaveLength(3); // boxes 1, 2, 5 — never the empty box 4, never the failed box 3
+  });
+});
+
+describe('what Overture files under the wrong heading (live Kyoto finding)', () => {
+  const at = { bbox: { xmin: 135.75, xmax: 135.75, ymin: 34.98, ymax: 34.98 } };
+  it('a donut, ice-cream or candy shop is not a meal, and a bakery stays a bakery', () => {
+    expect(overtureFoodRow({ id: 'd', names: { primary: 'Mister Donut' }, confidence: 0.9, basic_category: 'casual_eatery', taxonomy: { primary: 'donut_shop', hierarchy: ['food_and_drink', 'casual_eatery', 'dessert_shop', 'donut_shop'] }, ...at })).toBeNull();
+    expect(overtureFoodRow({ id: 'i', names: { primary: 'Gelato Uno' }, confidence: 0.9, basic_category: 'casual_eatery', taxonomy: { primary: 'ice_cream_shop' }, ...at })).toBeNull();
+    expect(overtureFoodRow({ id: 'b', names: { primary: 'Pain Ichi' }, confidence: 0.9, basic_category: 'casual_eatery', taxonomy: { primary: 'bakery' }, ...at })!.serviceType).toBe('bakery');
+  });
+  it('an unbranded "restaurant" is a chain when its box holds the same name with a brand, glued branch suffix or not', () => {
+    const r = (name: string): OvertureFoodRow => orow(name, 0, 0, { name });
+    const marked = markChainsFromBox([r('ファミリーマート 近鉄京都駅店'), r('丸亀製麺吉祥院店'), r('Casa Pepe')], new Set([chainKey('ファミリーマート'), chainKey('丸亀製麺')]), new Map());
+    expect(marked.map((x) => x.chain)).toEqual([true, true, false]);
+  });
+});
+
+describe('an Overture place row as a food venue', () => {
+  const base = { id: 'x1', names: { primary: 'Casa Pepe' }, confidence: 0.92, operating_status: 'open', basic_category: 'restaurant', taxonomy: { primary: 'spanish_restaurant' }, brand: null, websites: ['https://casapepe.example'], sources: [{ dataset: 'meta', license: 'CDLA-Permissive-2.0', update_time: '2026-10-12T00:00:00.000Z' }, { dataset: 'Overture', license: 'CDLA-Permissive-2.0', update_time: '2026-10-15T00:00:00Z' }], bbox: { xmin: -16.55, xmax: -16.55, ymin: 28.41, ymax: 28.41 } };
+  it('keeps an open, confident restaurant with its cuisine, website and the source record\'s own date', () => {
+    expect(overtureFoodRow(base)).toEqual({ id: 'x1', name: 'Casa Pepe', coordinates: { lat: 28.41, lng: -16.55 }, serviceType: 'restaurant', cuisine: 'spanish', confidence: 0.92, chain: false, website: 'https://casapepe.example/', licenceId: 'CDLA-Permissive-2.0', sourceTimestamp: '2026-10-12T00:00:00.000Z' });
+  });
+  it('refuses what it cannot stand behind: closed, unsure, a bar, a shop, nameless', () => {
+    expect(overtureFoodRow({ ...base, operating_status: 'permanently_closed' })).toBeNull();
+    expect(overtureFoodRow({ ...base, operating_status: 'temporarily_closed' })).toBeNull();
+    expect(overtureFoodRow({ ...base, confidence: 0.55 })).toBeNull();
+    expect(overtureFoodRow({ ...base, basic_category: 'bar' })).toBeNull();
+    expect(overtureFoodRow({ ...base, basic_category: 'food_and_beverage_store' })).toBeNull();
+    expect(overtureFoodRow({ ...base, names: { primary: '' } })).toBeNull();
+  });
+  it('maps cafés, coffee and fast food, marks a branded row a chain, and carries a Foursquare licence through', () => {
+    expect(overtureFoodRow({ ...base, basic_category: 'coffee_shop', taxonomy: { primary: 'coffee_shop' } })).toMatchObject({ serviceType: 'cafe' });
+    expect(overtureFoodRow({ ...base, basic_category: 'fast_food_restaurant', taxonomy: { primary: 'fast_food_restaurant' } })).toMatchObject({ serviceType: 'takeaway' });
+    expect(overtureFoodRow({ ...base, basic_category: 'fast_food_restaurant', taxonomy: { primary: 'fast_food_restaurant' } })!.cuisine).toBeUndefined();
+    expect(overtureFoodRow({ ...base, brand: { names: { primary: 'Starbucks' }, wikidata: 'Q37158' } })!.chain).toBe(true);
+    expect(overtureFoodRow({ ...base, sources: [{ dataset: 'foursquare', license: 'Apache-2.0' }] })!.licenceId).toBe('Apache-2.0');
   });
 });
 

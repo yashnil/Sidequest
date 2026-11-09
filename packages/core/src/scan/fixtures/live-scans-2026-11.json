@@ -1,0 +1,1840 @@
+{
+ "recordedFrom": "live release-pass scans, 2026-11-08 (Anthropic proposal + Nominatim placement); coordinates and durations only",
+ "scans": [
+  {
+   "label": "tenerife-no-car",
+   "destination": "Tenerife",
+   "mode": "foot",
+   "nights": 6,
+   "bases": [
+    {
+     "id": "scan-base-puerto-de-la-cruz",
+     "name": "Puerto de la Cruz",
+     "coordinates": {
+      "lat": 28.41339,
+      "lng": -16.55466
+     },
+     "nightsHint": 5
+    },
+    {
+     "id": "scan-base-costa-adeje",
+     "name": "Costa Adeje",
+     "coordinates": {
+      "lat": 28.0936,
+      "lng": -16.73608
+     },
+     "nightsHint": 1
+    }
+   ],
+   "places": [
+    {
+     "id": "scan-place-teide-national-park",
+     "name": "Teide National Park",
+     "coordinates": {
+      "lat": 28.25388,
+      "lng": -16.61827
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-teide-cable-car",
+     "name": "Teide Cable Car",
+     "coordinates": {
+      "lat": 28.25446,
+      "lng": -16.62581
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-roques-de-garcia",
+     "name": "Roques de García",
+     "coordinates": {
+      "lat": 28.22637,
+      "lng": -16.63465
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-chinamada",
+     "name": "Chinamada",
+     "coordinates": {
+      "lat": 28.56191,
+      "lng": -16.29081
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-los-gigantes-cliffs-boat-trip",
+     "name": "Los Gigantes Cliffs Boat Trip",
+     "coordinates": {
+      "lat": 28.24735,
+      "lng": -16.84119
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-playa-de-las-teresitas",
+     "name": "Playa de las Teresitas",
+     "coordinates": {
+      "lat": 28.50971,
+      "lng": -16.18474
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-playa-del-duque",
+     "name": "Playa del Duque",
+     "coordinates": {
+      "lat": 28.09144,
+      "lng": -16.74392
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-playa-de-la-arena",
+     "name": "Playa de la Arena",
+     "coordinates": {
+      "lat": 28.22972,
+      "lng": -16.84088
+     },
+     "popularity": 0.25,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-benijo-beach",
+     "name": "Benijo Beach",
+     "coordinates": {
+      "lat": 28.57621,
+      "lng": -16.1851
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-garachico-natural-pools",
+     "name": "Garachico Natural Pools",
+     "coordinates": {
+      "lat": 28.45822,
+      "lng": -16.46427
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-lago-martianez",
+     "name": "Lago Martiánez",
+     "coordinates": {
+      "lat": 28.41927,
+      "lng": -16.54359
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-la-orotava-old-town",
+     "name": "La Orotava Old Town",
+     "coordinates": {
+      "lat": 28.389,
+      "lng": -16.52388
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-garachico-town",
+     "name": "Garachico Town",
+     "coordinates": {
+      "lat": 28.37325,
+      "lng": -16.76401
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-san-cristobal-de-la-laguna",
+     "name": "San Cristóbal de La Laguna",
+     "coordinates": {
+      "lat": 28.4874,
+      "lng": -16.31591
+     },
+     "popularity": 0.25,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-santa-cruz-de-tenerife-waterfront",
+     "name": "Santa Cruz de Tenerife Waterfront",
+     "coordinates": {
+      "lat": 28.47234,
+      "lng": -16.24651
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-auditorio-de-tenerife",
+     "name": "Auditorio de Tenerife",
+     "coordinates": {
+      "lat": 28.4561,
+      "lng": -16.25135
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-mercado-nuestra-senora-de-africa",
+     "name": "Mercado Nuestra Señora de África",
+     "coordinates": {
+      "lat": 28.46335,
+      "lng": -16.25188
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-museo-de-la-naturaleza-y-el-hombre",
+     "name": "Museo de la Naturaleza y el Hombre",
+     "coordinates": {
+      "lat": 28.46387,
+      "lng": -16.24948
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-mirador-de-masca",
+     "name": "Mirador de Masca",
+     "coordinates": {
+      "lat": 28.30033,
+      "lng": -16.82678
+     },
+     "popularity": 0.8,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-punta-de-teno",
+     "name": "Punta de Teno",
+     "coordinates": {
+      "lat": 28.34349,
+      "lng": -16.87732
+     },
+     "popularity": 0.45,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-siam-park",
+     "name": "Siam Park",
+     "coordinates": {
+      "lat": 28.07209,
+      "lng": -16.72559
+     },
+     "popularity": 0.8,
+     "minutes": 300
+    },
+    {
+     "id": "scan-place-loro-parque",
+     "name": "Loro Parque",
+     "coordinates": {
+      "lat": 28.40846,
+      "lng": -16.56466
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-jardin-botanico-de-tenerife",
+     "name": "Jardín Botánico de Tenerife",
+     "coordinates": {
+      "lat": 28.41083,
+      "lng": -16.53528
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-drago-milenario",
+     "name": "Drago Milenario",
+     "coordinates": {
+      "lat": 28.36664,
+      "lng": -16.72219
+     },
+     "popularity": 0.8,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-mirador-de-humboldt",
+     "name": "Mirador de Humboldt",
+     "coordinates": {
+      "lat": 28.40789,
+      "lng": -16.50717
+     },
+     "popularity": 0.25,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-playa-jardin",
+     "name": "Playa Jardín",
+     "coordinates": {
+      "lat": 28.4126,
+      "lng": -16.55982
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-candelaria-basilica",
+     "name": "Candelaria Basilica",
+     "coordinates": {
+      "lat": 28.35126,
+      "lng": -16.36991
+     },
+     "popularity": 0.25,
+     "minutes": 45
+    }
+   ]
+  },
+  {
+   "label": "scotland-road-trip",
+   "destination": "Scottish Highlands and the Isle of Skye",
+   "mode": "car",
+   "nights": 8,
+   "bases": [
+    {
+     "id": "scan-base-fort-william",
+     "name": "Fort William",
+     "coordinates": {
+      "lat": 56.82056,
+      "lng": -5.10531
+     },
+     "nightsHint": 2
+    },
+    {
+     "id": "scan-base-portree",
+     "name": "Portree",
+     "coordinates": {
+      "lat": 57.41237,
+      "lng": -6.2028
+     },
+     "nightsHint": 4
+    },
+    {
+     "id": "scan-base-broadford-or-isleornsay",
+     "name": "Broadford or Isleornsay",
+     "coordinates": {
+      "lat": 53.48709,
+      "lng": -1.57934
+     },
+     "nightsHint": 1
+    },
+    {
+     "id": "scan-base-inverness",
+     "name": "Inverness",
+     "coordinates": {
+      "lat": 57.48023,
+      "lng": -4.22271
+     },
+     "nightsHint": 2
+    }
+   ],
+   "places": [
+    {
+     "id": "scan-place-glen-coe",
+     "name": "Glen Coe",
+     "coordinates": {
+      "lat": 56.66703,
+      "lng": -5.02066
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-steall-falls",
+     "name": "Steall Falls",
+     "coordinates": {
+      "lat": 56.77024,
+      "lng": -4.97983
+     },
+     "popularity": 0.25,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-glenfinnan-viaduct",
+     "name": "Glenfinnan Viaduct",
+     "coordinates": {
+      "lat": 56.87622,
+      "lng": -5.43176
+     },
+     "popularity": 0.8,
+     "minutes": 40
+    },
+    {
+     "id": "scan-place-glenfinnan-monument",
+     "name": "Glenfinnan Monument",
+     "coordinates": {
+      "lat": 56.86922,
+      "lng": -5.43705
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-ben-nevis-distillery",
+     "name": "Ben Nevis Distillery",
+     "coordinates": {
+      "lat": 56.83473,
+      "lng": -5.0742
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-neptune-s-staircase",
+     "name": "Neptune's Staircase",
+     "coordinates": {
+      "lat": 56.84508,
+      "lng": -5.09571
+     },
+     "popularity": 0.25,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-eilean-donan-castle",
+     "name": "Eilean Donan Castle",
+     "coordinates": {
+      "lat": 57.2739,
+      "lng": -5.51616
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-skye-bridge",
+     "name": "Skye Bridge",
+     "coordinates": {
+      "lat": 57.27843,
+      "lng": -5.7412
+     },
+     "popularity": 0.25,
+     "minutes": 15
+    },
+    {
+     "id": "scan-place-old-man-of-storr",
+     "name": "Old Man of Storr",
+     "coordinates": {
+      "lat": 57.49933,
+      "lng": -6.15839
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-dunvegan-castle-and-gardens",
+     "name": "Dunvegan Castle and Gardens",
+     "coordinates": {
+      "lat": 57.44844,
+      "lng": -6.59006
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-neist-point",
+     "name": "Neist Point",
+     "coordinates": {
+      "lat": 57.42219,
+      "lng": -6.78611
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-coral-beach",
+     "name": "Coral Beach",
+     "coordinates": {
+      "lat": 57.501,
+      "lng": -6.6372
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-fairy-pools",
+     "name": "Fairy Pools",
+     "coordinates": {
+      "lat": 57.25034,
+      "lng": -6.2583
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-talisker-distillery",
+     "name": "Talisker Distillery",
+     "coordinates": {
+      "lat": 57.30218,
+      "lng": -6.35579
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-elgol",
+     "name": "Elgol",
+     "coordinates": {
+      "lat": 57.14928,
+      "lng": -6.09889
+     },
+     "popularity": 0.45,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-boat-trip-to-loch-coruisk",
+     "name": "Boat trip to Loch Coruisk",
+     "coordinates": {
+      "lat": 57.14521,
+      "lng": -6.10778
+     },
+     "popularity": 0.45,
+     "minutes": 180
+    },
+    {
+     "id": "scan-place-isle-of-raasay",
+     "name": "Isle of Raasay",
+     "coordinates": {
+      "lat": 57.34649,
+      "lng": -6.06712
+     },
+     "popularity": 0.45,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-sligachan-old-bridge",
+     "name": "Sligachan Old Bridge",
+     "coordinates": {
+      "lat": 57.28982,
+      "lng": -6.17332
+     },
+     "popularity": 0.25,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-portree-town-walk",
+     "name": "Portree town walk",
+     "coordinates": {
+      "lat": 57.41335,
+      "lng": -6.19474
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-urquhart-castle",
+     "name": "Urquhart Castle",
+     "coordinates": {
+      "lat": 57.32414,
+      "lng": -4.442
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-loch-ness-shoreline-walk",
+     "name": "Loch Ness shoreline walk",
+     "coordinates": {
+      "lat": 57.33524,
+      "lng": -4.48036
+     },
+     "popularity": 0.25,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-culloden-battlefield",
+     "name": "Culloden Battlefield",
+     "coordinates": {
+      "lat": 57.47779,
+      "lng": -4.09571
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-clava-cairns",
+     "name": "Clava Cairns",
+     "coordinates": {
+      "lat": 57.4735,
+      "lng": -4.07317
+     },
+     "popularity": 0.25,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-inverness-old-town-and-river-ness-walk",
+     "name": "Inverness Old Town and River Ness walk",
+     "coordinates": {
+      "lat": 57.47901,
+      "lng": -4.22574
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-cairngorms-national-park-viewpoint-drive",
+     "name": "Cairngorms National Park viewpoint drive",
+     "coordinates": {
+      "lat": 57.04922,
+      "lng": -3.56157
+     },
+     "popularity": 0.45,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-rothiemurchus-forest-walk",
+     "name": "Rothiemurchus Forest walk",
+     "coordinates": {
+      "lat": 57.1763,
+      "lng": -3.81759
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-falls-of-foyers",
+     "name": "Falls of Foyers",
+     "coordinates": {
+      "lat": 57.24907,
+      "lng": -4.49162
+     },
+     "popularity": 0.25,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-plockton",
+     "name": "Plockton",
+     "coordinates": {
+      "lat": 57.34062,
+      "lng": -5.64909
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-applecross-pass-bealach-na-ba",
+     "name": "Applecross Pass (Bealach na Ba)",
+     "coordinates": {
+      "lat": 57.42174,
+      "lng": -5.71244
+     },
+     "popularity": 0.45,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-torridon",
+     "name": "Torridon",
+     "coordinates": {
+      "lat": 57.54688,
+      "lng": -5.51336
+     },
+     "popularity": 0.45,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-ben-nevis-visitor-centre-and-lower-path",
+     "name": "Ben Nevis Visitor Centre and lower path",
+     "coordinates": {
+      "lat": 56.80999,
+      "lng": -5.0768
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-west-highland-museum",
+     "name": "West Highland Museum",
+     "coordinates": {
+      "lat": 56.81763,
+      "lng": -5.11105
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-dunrobin-castle",
+     "name": "Dunrobin Castle",
+     "coordinates": {
+      "lat": 57.98578,
+      "lng": -3.94737
+     },
+     "popularity": 0.45,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-chanonry-point",
+     "name": "Chanonry Point",
+     "coordinates": {
+      "lat": 57.57414,
+      "lng": -4.09179
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-loch-lomond-viewpoint-tarbet",
+     "name": "Loch Lomond viewpoint (Tarbet)",
+     "coordinates": {
+      "lat": 56.21514,
+      "lng": -4.7217
+     },
+     "popularity": 0.25,
+     "minutes": 20
+    }
+   ]
+  },
+  {
+   "label": "tokyo-kyoto",
+   "destination": "Tokyo and Kyoto",
+   "mode": "car",
+   "nights": 6,
+   "bases": [
+    {
+     "id": "scan-base-shinjuku",
+     "name": "Shinjuku",
+     "coordinates": {
+      "lat": 35.69376,
+      "lng": 139.70363
+     },
+     "nightsHint": 4
+    },
+    {
+     "id": "scan-base-higashiyama",
+     "name": "Higashiyama",
+     "coordinates": {
+      "lat": 34.99709,
+      "lng": 135.77646
+     },
+     "nightsHint": 2
+    }
+   ],
+   "places": [
+    {
+     "id": "scan-place-senso-ji",
+     "name": "Senso-ji",
+     "coordinates": {
+      "lat": 35.71477,
+      "lng": 139.79666
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-meiji-jingu",
+     "name": "Meiji Jingu",
+     "coordinates": {
+      "lat": 35.6764,
+      "lng": 139.69933
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-shibuya-crossing",
+     "name": "Shibuya Crossing",
+     "coordinates": {
+      "lat": 35.65948,
+      "lng": 139.70056
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-yanaka",
+     "name": "Yanaka",
+     "coordinates": {
+      "lat": 35.72504,
+      "lng": 139.76904
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-tsukiji-outer-market",
+     "name": "Tsukiji Outer Market",
+     "coordinates": {
+      "lat": 35.66477,
+      "lng": 139.77025
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-teamlab-planets",
+     "name": "teamLab Planets",
+     "coordinates": {
+      "lat": 35.64912,
+      "lng": 139.78977
+     },
+     "popularity": 0.45,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-tokyo-national-museum",
+     "name": "Tokyo National Museum",
+     "coordinates": {
+      "lat": 35.71884,
+      "lng": 139.77652
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-nezu-shrine",
+     "name": "Nezu Shrine",
+     "coordinates": {
+      "lat": 35.72014,
+      "lng": 139.76077
+     },
+     "popularity": 0.25,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-golden-gai",
+     "name": "Golden Gai",
+     "coordinates": {
+      "lat": 35.69411,
+      "lng": 139.70476
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-hakone-open-air-museum",
+     "name": "Hakone Open-Air Museum",
+     "coordinates": {
+      "lat": 35.24516,
+      "lng": 139.05073
+     },
+     "popularity": 0.45,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-lake-ashi",
+     "name": "Lake Ashi",
+     "coordinates": {
+      "lat": 35.20957,
+      "lng": 139.00346
+     },
+     "popularity": 0.45,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-owakudani",
+     "name": "Owakudani",
+     "coordinates": {
+      "lat": 35.24345,
+      "lng": 139.01935
+     },
+     "popularity": 0.45,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-kamakura",
+     "name": "Kamakura",
+     "coordinates": {
+      "lat": 35.31921,
+      "lng": 139.54667
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-fushimi-inari-taisha",
+     "name": "Fushimi Inari Taisha",
+     "coordinates": {
+      "lat": 34.96769,
+      "lng": 135.77919
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-kiyomizu-dera",
+     "name": "Kiyomizu-dera",
+     "coordinates": {
+      "lat": 34.99467,
+      "lng": 135.78466
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-arashiyama-bamboo-grove",
+     "name": "Arashiyama Bamboo Grove",
+     "coordinates": {
+      "lat": 35.01682,
+      "lng": 135.6713
+     },
+     "popularity": 0.8,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-tenryu-ji",
+     "name": "Tenryu-ji",
+     "coordinates": {
+      "lat": 35.01584,
+      "lng": 135.67377
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-kinkaku-ji",
+     "name": "Kinkaku-ji",
+     "coordinates": {
+      "lat": 35.03937,
+      "lng": 135.72924
+     },
+     "popularity": 0.8,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-nishiki-market",
+     "name": "Nishiki Market",
+     "coordinates": {
+      "lat": 35.00503,
+      "lng": 135.76472
+     },
+     "popularity": 0.8,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-gion",
+     "name": "Gion",
+     "coordinates": {
+      "lat": 35.00378,
+      "lng": 135.77724
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-fushimi-sake-district",
+     "name": "Fushimi Sake District",
+     "coordinates": {
+      "lat": 34.9325,
+      "lng": 135.76056
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-nijo-castle",
+     "name": "Nijo Castle",
+     "coordinates": {
+      "lat": 35.01404,
+      "lng": 135.74843
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-kyoto-railway-museum",
+     "name": "Kyoto Railway Museum",
+     "coordinates": {
+      "lat": 34.9871,
+      "lng": 135.74227
+     },
+     "popularity": 0.45,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-arashiyama-monkey-park-iwatayama",
+     "name": "Arashiyama Monkey Park Iwatayama",
+     "coordinates": {
+      "lat": 35.01133,
+      "lng": 135.67669
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-shimokitazawa",
+     "name": "Shimokitazawa",
+     "coordinates": {
+      "lat": 35.66579,
+      "lng": 139.66986
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-ginza",
+     "name": "Ginza",
+     "coordinates": {
+      "lat": 35.67201,
+      "lng": 139.76472
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-imperial-palace-east-gardens",
+     "name": "Imperial Palace East Gardens",
+     "coordinates": {
+      "lat": 35.6867,
+      "lng": 139.7574
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-shinjuku-gyoen",
+     "name": "Shinjuku Gyoen",
+     "coordinates": {
+      "lat": 35.68507,
+      "lng": 139.70955
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    }
+   ]
+  },
+  {
+   "label": "tenerife-no-car-rebuilt",
+   "destination": "Tenerife",
+   "mode": "foot",
+   "nights": 6,
+   "bases": [
+    {
+     "id": "scan-base-puerto-de-la-cruz",
+     "name": "Puerto de la Cruz",
+     "coordinates": {
+      "lat": 28.41339,
+      "lng": -16.55466
+     },
+     "nightsHint": 2
+    },
+    {
+     "id": "scan-base-la-laguna-santa-cruz-area",
+     "name": "La Laguna / Santa Cruz area",
+     "coordinates": {
+      "lat": 28.48577,
+      "lng": -16.31594
+     },
+     "nightsHint": 2
+    },
+    {
+     "id": "scan-base-costa-adeje-los-cristianos",
+     "name": "Costa Adeje / Los Cristianos",
+     "coordinates": {
+      "lat": 28.08698,
+      "lng": -16.7358
+     },
+     "nightsHint": 2
+    }
+   ],
+   "places": [
+    {
+     "id": "scan-place-teide-national-park",
+     "name": "Teide National Park",
+     "coordinates": {
+      "lat": 28.25388,
+      "lng": -16.61827
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-mirador-de-chipeque",
+     "name": "Mirador de Chipeque",
+     "coordinates": {
+      "lat": 28.37395,
+      "lng": -16.46383
+     },
+     "popularity": 0.25,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-anaga-rural-park",
+     "name": "Anaga Rural Park",
+     "coordinates": {
+      "lat": 28.53087,
+      "lng": -16.27991
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-taganana",
+     "name": "Taganana",
+     "coordinates": {
+      "lat": 28.56059,
+      "lng": -16.21816
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-masca-village-and-gorge-viewpoint",
+     "name": "Masca Village and Gorge Viewpoint",
+     "coordinates": {
+      "lat": 28.30526,
+      "lng": -16.8405
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-garajonay-style-laurel-path-monte-del-agua",
+     "name": "Garajonay-style laurel path: Monte del Agua",
+     "coordinates": {
+      "lat": 28.33685,
+      "lng": -16.82329
+     },
+     "popularity": 0.45,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-playa-de-las-teresitas",
+     "name": "Playa de Las Teresitas",
+     "coordinates": {
+      "lat": 28.50971,
+      "lng": -16.18474
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-playa-de-benijo",
+     "name": "Playa de Benijo",
+     "coordinates": {
+      "lat": 28.57211,
+      "lng": -16.19252
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-playa-del-duque",
+     "name": "Playa del Duque",
+     "coordinates": {
+      "lat": 28.09144,
+      "lng": -16.74392
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-playa-de-la-arena",
+     "name": "Playa de la Arena",
+     "coordinates": {
+      "lat": 28.22972,
+      "lng": -16.84088
+     },
+     "popularity": 0.25,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-los-gigantes-cliffs-boat-trip",
+     "name": "Los Gigantes Cliffs Boat Trip",
+     "coordinates": {
+      "lat": 28.24735,
+      "lng": -16.84119
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-whale-and-dolphin-watching-costa-adeje",
+     "name": "Whale and Dolphin Watching, Costa Adeje",
+     "coordinates": {
+      "lat": 28.07917,
+      "lng": -16.73783
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-la-orotava-old-town",
+     "name": "La Orotava Old Town",
+     "coordinates": {
+      "lat": 28.389,
+      "lng": -16.52388
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-jardin-botanico-de-puerto-de-la-cruz",
+     "name": "Jardín Botánico de Puerto de la Cruz",
+     "coordinates": {
+      "lat": 28.41083,
+      "lng": -16.53528
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-la-laguna-historic-centre",
+     "name": "La Laguna Historic Centre",
+     "coordinates": {
+      "lat": 28.48787,
+      "lng": -16.31734
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-mercado-nuestra-senora-de-africa",
+     "name": "Mercado Nuestra Señora de África",
+     "coordinates": {
+      "lat": 28.46335,
+      "lng": -16.25188
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-garachico-historic-town-and-natural-pools",
+     "name": "Garachico Historic Town and Natural Pools",
+     "coordinates": {
+      "lat": 28.32662,
+      "lng": -16.75198
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-icod-de-los-vinos-drago-milenario",
+     "name": "Icod de los Vinos: Drago Milenario",
+     "coordinates": {
+      "lat": 28.36531,
+      "lng": -16.72059
+     },
+     "popularity": 0.25,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-mirador-de-la-tabaiba-humboldt",
+     "name": "Mirador de La Tabaiba / Humboldt",
+     "coordinates": {
+      "lat": 28.34972,
+      "lng": -16.52536
+     },
+     "popularity": 0.8,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-el-medano-town-and-waterfront",
+     "name": "El Médano town and waterfront",
+     "coordinates": {
+      "lat": 28.04598,
+      "lng": -16.53631
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-piramides-de-guimar",
+     "name": "Pirámides de Güímar",
+     "coordinates": {
+      "lat": 28.322,
+      "lng": -16.41282
+     },
+     "popularity": 0.45,
+     "minutes": 90
+    }
+   ]
+  },
+  {
+   "label": "tenerife-car-a",
+   "destination": "Tenerife",
+   "mode": "car",
+   "nights": 6,
+   "bases": [
+    {
+     "id": "scan-base-puerto-de-la-cruz",
+     "name": "Puerto de la Cruz",
+     "coordinates": {
+      "lat": 28.41339,
+      "lng": -16.55466
+     },
+     "nightsHint": 4
+    },
+    {
+     "id": "scan-base-costa-adeje-los-cristianos",
+     "name": "Costa Adeje / Los Cristianos",
+     "coordinates": {
+      "lat": 28.08698,
+      "lng": -16.7358
+     },
+     "nightsHint": 2
+    }
+   ],
+   "places": [
+    {
+     "id": "scan-place-teide-national-park",
+     "name": "Teide National Park",
+     "coordinates": {
+      "lat": 28.25388,
+      "lng": -16.61827
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-anaga-rural-park",
+     "name": "Anaga Rural Park",
+     "coordinates": {
+      "lat": 28.53087,
+      "lng": -16.27991
+     },
+     "popularity": 0.25,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-playa-de-benijo",
+     "name": "Playa de Benijo",
+     "coordinates": {
+      "lat": 28.57211,
+      "lng": -16.19252
+     },
+     "popularity": 0.25,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-playa-de-las-teresitas",
+     "name": "Playa de las Teresitas",
+     "coordinates": {
+      "lat": 28.50971,
+      "lng": -16.18474
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-masca-village",
+     "name": "Masca Village",
+     "coordinates": {
+      "lat": 28.30535,
+      "lng": -16.83991
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-parque-rural-de-teno",
+     "name": "Parque Rural de Teno",
+     "coordinates": {
+      "lat": 28.31829,
+      "lng": -16.83093
+     },
+     "popularity": 0.25,
+     "minutes": 180
+    },
+    {
+     "id": "scan-place-punta-de-teno-lighthouse",
+     "name": "Punta de Teno Lighthouse",
+     "coordinates": {
+      "lat": 28.34199,
+      "lng": -16.92299
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-icod-de-los-vinos-old-town",
+     "name": "Icod de los Vinos Old Town",
+     "coordinates": {
+      "lat": 28.37803,
+      "lng": -16.69366
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-playa-jardin",
+     "name": "Playa Jardín",
+     "coordinates": {
+      "lat": 28.41226,
+      "lng": -16.55877
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-jardin-botanico-de-puerto-de-la-cruz",
+     "name": "Jardín Botánico de Puerto de la Cruz",
+     "coordinates": {
+      "lat": 28.41083,
+      "lng": -16.53528
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-los-organos-de-la-fortaleza",
+     "name": "Los Órganos de La Fortaleza",
+     "coordinates": {
+      "lat": 28.35345,
+      "lng": -16.49078
+     },
+     "popularity": 0.45,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-playa-de-el-medano",
+     "name": "Playa de El Médano",
+     "coordinates": {
+      "lat": 28.04428,
+      "lng": -16.53842
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-playa-de-la-tejita",
+     "name": "Playa de la Tejita",
+     "coordinates": {
+      "lat": 28.03176,
+      "lng": -16.55657
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-los-gigantes-cliffs-viewpoint",
+     "name": "Los Gigantes Cliffs Viewpoint",
+     "coordinates": {
+      "lat": 28.24921,
+      "lng": -16.83813
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-playa-de-la-arena",
+     "name": "Playa de la Arena",
+     "coordinates": {
+      "lat": 28.22972,
+      "lng": -16.84088
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-mirador-de-la-corona",
+     "name": "Mirador de la Corona",
+     "coordinates": {
+      "lat": 28.37846,
+      "lng": -16.60043
+     },
+     "popularity": 0.45,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-casa-del-vino-la-baranda",
+     "name": "Casa del Vino La Baranda",
+     "coordinates": {
+      "lat": 28.47051,
+      "lng": -16.43462
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-la-laguna-old-town",
+     "name": "La Laguna Old Town",
+     "coordinates": {
+      "lat": 28.48889,
+      "lng": -16.31699
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-mirador-del-pico-del-ingles",
+     "name": "Mirador del Pico del Inglés",
+     "coordinates": {
+      "lat": 28.53301,
+      "lng": -16.264
+     },
+     "popularity": 0.25,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-charco-del-viento",
+     "name": "Charco del Viento",
+     "coordinates": {
+      "lat": 28.40074,
+      "lng": -16.67397
+     },
+     "popularity": 0.45,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-drago-milenario",
+     "name": "Drago Milenario",
+     "coordinates": {
+      "lat": 28.36664,
+      "lng": -16.72219
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-mirador-de-masca",
+     "name": "Mirador de Masca",
+     "coordinates": {
+      "lat": 28.29405,
+      "lng": -16.84237
+     },
+     "popularity": 0.8,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-siam-park",
+     "name": "Siam Park",
+     "coordinates": {
+      "lat": 28.07221,
+      "lng": -16.72567
+     },
+     "popularity": 0.8,
+     "minutes": 300
+    }
+   ]
+  },
+  {
+   "label": "tenerife-car-b",
+   "destination": "Tenerife",
+   "mode": "car",
+   "nights": 6,
+   "bases": [
+    {
+     "id": "scan-base-puerto-de-la-cruz",
+     "name": "Puerto de la Cruz",
+     "coordinates": {
+      "lat": 28.41339,
+      "lng": -16.55466
+     },
+     "nightsHint": 6
+    },
+    {
+     "id": "scan-base-costa-adeje",
+     "name": "Costa Adeje",
+     "coordinates": {
+      "lat": 28.0936,
+      "lng": -16.73608
+     },
+     "nightsHint": 3
+    }
+   ],
+   "places": [
+    {
+     "id": "scan-place-teide-national-park",
+     "name": "Teide National Park",
+     "coordinates": {
+      "lat": 28.25388,
+      "lng": -16.61827
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-roques-de-garcia",
+     "name": "Roques de Garcia",
+     "coordinates": {
+      "lat": 28.22421,
+      "lng": -16.63214
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-masca",
+     "name": "Masca",
+     "coordinates": {
+      "lat": 28.30535,
+      "lng": -16.83991
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-mirador-de-chipeque",
+     "name": "Mirador de Chipeque",
+     "coordinates": {
+      "lat": 28.37395,
+      "lng": -16.46383
+     },
+     "popularity": 0.25,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-garachico",
+     "name": "Garachico",
+     "coordinates": {
+      "lat": 28.37325,
+      "lng": -16.76401
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-piscinas-naturales-el-caleton",
+     "name": "Piscinas Naturales El Caletón",
+     "coordinates": {
+      "lat": 28.37351,
+      "lng": -16.76607
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-playa-de-benijo",
+     "name": "Playa de Benijo",
+     "coordinates": {
+      "lat": 28.57211,
+      "lng": -16.19252
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-loro-parque",
+     "name": "Loro Parque",
+     "coordinates": {
+      "lat": 28.40846,
+      "lng": -16.56466
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-jardin-botanico",
+     "name": "Jardín Botánico",
+     "coordinates": {
+      "lat": 28.41083,
+      "lng": -16.53528
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-charco-de-la-laja",
+     "name": "Charco de la Laja",
+     "coordinates": {
+      "lat": 28.54984,
+      "lng": -16.35625
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-la-laguna-old-town",
+     "name": "La Laguna Old Town",
+     "coordinates": {
+      "lat": 28.48889,
+      "lng": -16.31699
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-santa-cruz-de-tenerife",
+     "name": "Santa Cruz de Tenerife",
+     "coordinates": {
+      "lat": 28.46363,
+      "lng": -16.25185
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-mercado-nuestra-senora-de-africa",
+     "name": "Mercado Nuestra Señora de África",
+     "coordinates": {
+      "lat": 28.46335,
+      "lng": -16.25188
+     },
+     "popularity": 0.25,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-auditorio-de-tenerife",
+     "name": "Auditorio de Tenerife",
+     "coordinates": {
+      "lat": 28.4561,
+      "lng": -16.25135
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-playa-de-las-teresitas",
+     "name": "Playa de las Teresitas",
+     "coordinates": {
+      "lat": 28.50971,
+      "lng": -16.18474
+     },
+     "popularity": 0.8,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-playa-del-medano",
+     "name": "Playa del Médano",
+     "coordinates": {
+      "lat": 28.04039,
+      "lng": -16.54276
+     },
+     "popularity": 0.25,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-playa-de-la-tejita",
+     "name": "Playa de la Tejita",
+     "coordinates": {
+      "lat": 28.03176,
+      "lng": -16.55657
+     },
+     "popularity": 0.25,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-montana-roja",
+     "name": "Montaña Roja",
+     "coordinates": {
+      "lat": 28.02944,
+      "lng": -16.54778
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-los-gigantes-cliffs-boat-trip",
+     "name": "Los Gigantes Cliffs Boat Trip",
+     "coordinates": {
+      "lat": 28.24735,
+      "lng": -16.84119
+     },
+     "popularity": 0.8,
+     "minutes": 150
+    },
+    {
+     "id": "scan-place-acantilados-de-los-gigantes-viewpoint",
+     "name": "Acantilados de los Gigantes Viewpoint",
+     "coordinates": {
+      "lat": 28.24884,
+      "lng": -16.83826
+     },
+     "popularity": 0.8,
+     "minutes": 30
+    },
+    {
+     "id": "scan-place-punta-de-teno",
+     "name": "Punta de Teno",
+     "coordinates": {
+      "lat": 28.34199,
+      "lng": -16.92299
+     },
+     "popularity": 0.45,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-pico-del-teide-cable-car-summit-trail",
+     "name": "Pico del Teide Cable Car Summit Trail",
+     "coordinates": {
+      "lat": 28.25446,
+      "lng": -16.62581
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-vilaflor",
+     "name": "Vilaflor",
+     "coordinates": {
+      "lat": 28.15782,
+      "lng": -16.63724
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-siam-park",
+     "name": "Siam Park",
+     "coordinates": {
+      "lat": 28.07209,
+      "lng": -16.72559
+     },
+     "popularity": 0.8,
+     "minutes": 240
+    },
+    {
+     "id": "scan-place-playa-jardin",
+     "name": "Playa Jardín",
+     "coordinates": {
+      "lat": 28.41226,
+      "lng": -16.55877
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    },
+    {
+     "id": "scan-place-casa-del-vino-la-baranda",
+     "name": "Casa del Vino La Baranda",
+     "coordinates": {
+      "lat": 28.47051,
+      "lng": -16.43462
+     },
+     "popularity": 0.25,
+     "minutes": 60
+    },
+    {
+     "id": "scan-place-icod-de-los-vinos-drago-milenario",
+     "name": "Icod de los Vinos Drago Milenario",
+     "coordinates": {
+      "lat": 28.36531,
+      "lng": -16.72059
+     },
+     "popularity": 0.8,
+     "minutes": 45
+    },
+    {
+     "id": "scan-place-barranco-de-las-angustias-stargazing",
+     "name": "Barranco de las Angustias Stargazing",
+     "coordinates": {
+      "lat": 28.23839,
+      "lng": -16.69825
+     },
+     "popularity": 0.45,
+     "minutes": 120
+    },
+    {
+     "id": "scan-place-mirador-de-humboldt",
+     "name": "Mirador de Humboldt",
+     "coordinates": {
+      "lat": 28.40789,
+      "lng": -16.50717
+     },
+     "popularity": 0.25,
+     "minutes": 20
+    },
+    {
+     "id": "scan-place-playa-de-las-vistas",
+     "name": "Playa de Las Vistas",
+     "coordinates": {
+      "lat": 28.05098,
+      "lng": -16.72217
+     },
+     "popularity": 0.8,
+     "minutes": 90
+    }
+   ]
+  }
+ ]
+}

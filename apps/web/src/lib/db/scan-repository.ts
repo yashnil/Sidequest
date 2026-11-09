@@ -217,6 +217,12 @@ export interface ScanDiagnostics {
     /** `added` | `none_new` | `model_unavailable` | `allowance_used` | `model_failed` | `invalid_response`. */
     outcome?: string;
     added?: number;
+    /** The first answer held far fewer candidates than asked, so the supplement asked for a whole pool, not a top-up. */
+    underfilled?: boolean;
+    /** Candidates added from open map data (no model call) when the board was still thin after the supplement. */
+    openDataAdded?: number;
+    /** Still too few to choose between after every recovery; the board says so to the traveller. */
+    thin?: boolean;
   };
 }
 
