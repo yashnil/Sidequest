@@ -68,7 +68,7 @@ export function TripRefreshControl({ tripId, upgrade }: { tripId: string; upgrad
         confirming ? (
           <div className="rounded-[var(--radius-control)] border border-rule p-2" role="group" aria-labelledby="rebuild-improved-text" data-testid="rebuild-improved-confirm">
             <p id="rebuild-improved-text" className="text-xs leading-relaxed text-ink">
-              This searches your destination again and plans the trip from scratch, so your days, stops and where you sleep may change. Your bookings are kept. Today’s planning would use {upgrade.currentBaseCount === 1 ? 'one place to sleep' : `${upgrade.currentBaseCount} places to sleep`} instead of {upgrade.storedBaseCount}.
+              This searches your destination again and plans the trip from scratch, so your days, stops and where you sleep may change. Your bookings are kept. On the places this trip already found, today’s planning would use {upgrade.currentBaseCount === 1 ? 'one place to sleep' : `${upgrade.currentBaseCount} places to sleep`} instead of {upgrade.storedBaseCount}; a fresh search can turn up different places, so the new plan may differ.
             </p>
             <div className="mt-2 flex flex-wrap gap-1">
               <button type="button" className={buttonClass('primary', 'sm')} onClick={rebuild} disabled={rebuilding} data-testid="rebuild-improved-go">

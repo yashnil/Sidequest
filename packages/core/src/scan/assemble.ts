@@ -276,6 +276,8 @@ const CAR_FREE_WALK_KM = 1.6;
 const MIN_BASE_CONTENT_MINUTES = 180;
 /** One way, in the trip's mode: beyond this a day trip costs enough of the day that sleeping nearer is worth a move. */
 const DAY_TRIP_REACH_MINUTES = 60;
+/** Distinct far places it takes to justify a move; one is a day trip. */
+const MIN_FAR_PLACES_FOR_A_MOVE = 2;
 
 /**
  * Which bases, in what order, for how many nights. Deterministic, read off the
@@ -292,7 +294,43 @@ const DAY_TRIP_REACH_MINUTES = 60;
  *    gateway known that is the only orientation evidence there is).
  * 5. Nights in proportion to value, largest remainder, at least one each.
  */
-export function chooseScanBases(input: {
+type ChooseScanBasesInput = Parameters<typeof chooseScanBasesOnce>[0];
+type ChooseScanBasesResult = ReturnType<typeof chooseScanBasesOnce>;
+
+/** A trip at least this long never moves hotels for a single night. */
+const MIN_NIGHTS_FOR_TWO_NIGHT_STAYS = 4;
+
+/**
+ * The base choice, without one-night moves on a trip long enough to avoid them.
+ *
+ * Nights follow value, so a base that earned its place can still come out of
+ * the proportions with a single night — a live car-free Tenerife trip spent
+ * five nights on the north coast and then moved 85 minutes south for one. On a
+ * trip of four nights or more a stay is at least two nights (the rule the cap
+ * above already assumes): the thinnest one-night base is left out, its places
+ * fall to the nearest base that stays, and the choice is made again. A split
+ * stay's one arrival night is deliberate and never counts as thin; a short trip
+ * may still move for a night.
+ */
+export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesResult {
+  let bases = input.bases;
+  const dropped: { id: string; reason: string }[] = [];
+  for (;;) {
+    const choice = chooseScanBasesOnce({ ...input, bases });
+    if (Math.max(1, input.nights) < MIN_NIGHTS_FOR_TWO_NIGHT_STAYS || new Set(choice.kept.map((k) => k.id)).size < 2) {
+      return { ...choice, leftOut: [...dropped, ...choice.leftOut] };
+    }
+    const most = Math.max(...choice.kept.map((k) => k.nights));
+    const thin = choice.kept
+      .filter((k) => k.nights < 2 && k.nights < most && choice.kept.filter((o) => o.id === k.id).length === 1)
+      .sort((a, b) => a.nights - b.nights || choice.kept.indexOf(b) - choice.kept.indexOf(a))[0];
+    if (!thin) return { ...choice, leftOut: [...dropped, ...choice.leftOut] };
+    dropped.push({ id: thin.id, reason: 'Only a night’s worth of things near it — not worth packing up and moving hotels for; its places are day trips from where you stay.' });
+    bases = bases.filter((b) => b.id !== thin.id);
+  }
+}
+
+function chooseScanBasesOnce(input: {
   bases: readonly { id: string; proposal: ScanBaseProposal }[];
   places: readonly { id: string; proposal: ScanCandidateProposal }[];
   minutes: (fromId: string, toId: string) => number | null;
@@ -350,13 +388,22 @@ export function chooseScanBases(input: {
       unearned.set(base.id, 'near');
       continue;
     }
+    /*
+     * One far place is a day trip, whatever its length: a live Tenerife trip
+     * moved hotels for a single water park 73 minutes out. A move needs half a
+     * day of far things, from at least two places.
+     */
     let beyondReach = 0;
+    let beyondPlaces = 0;
     for (const place of places) {
       if (nearestBase.get(place.id) !== base.id) continue;
       const fromKept = [...keptIds].map((id) => minutes(id, place.id)).filter((m): m is number => m !== null);
-      if (fromKept.length > 0 && Math.min(...fromKept) > DAY_TRIP_REACH_MINUTES) beyondReach += place.proposal.durationMinutes;
+      if (fromKept.length > 0 && Math.min(...fromKept) > DAY_TRIP_REACH_MINUTES) {
+        beyondReach += place.proposal.durationMinutes;
+        beyondPlaces += 1;
+      }
     }
-    if (beyondReach >= MIN_BASE_CONTENT_MINUTES) keptIds.add(base.id);
+    if (beyondReach >= MIN_BASE_CONTENT_MINUTES && beyondPlaces >= MIN_FAR_PLACES_FOR_A_MOVE) keptIds.add(base.id);
     else unearned.set(base.id, 'reach');
   }
   const leftOut = ranked

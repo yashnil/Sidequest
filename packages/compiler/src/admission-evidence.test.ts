@@ -361,3 +361,146 @@ describe('genuinely open ground', () => {
     expect(banded.calendars[0]!.kind).toBe('always_open');
   });
 });
+
+/**
+ * A STALE OR FALLBACK CALENDAR NEVER DOWNGRADES A CONFIRMED BOOKING RULE.
+ *
+ * The production shape: an operator's published hours pass their ninety-day
+ * shelf life, `buildCalendar` (rightly) refuses to enforce them, and the
+ * subject falls to the next calendar in the precedence list — a map-derived
+ * one whose admission booleans are the walk-in default. `buildHours` returned
+ * that calendar verbatim, so a booking requirement the same run had confirmed
+ * was silently replaced by "walk in". Stale ≠ current, and a fallback's
+ * default booleans are not evidence about admission: at most the stale hours
+ * lower confidence.
+ */
+describe('a confirmed booking requirement over stale hours and a fallback calendar', () => {
+  const gatedPlace = (): Place => ({
+    ...riverPlace(),
+    id: 'branch-ticketed-gallery',
+    name: 'Branchford Gallery',
+    category: 'museum',
+    hoursExpectation: 'gated',
+  });
+
+  /** A mapper's transcription: scheduled hours, the walk-in admission default. */
+  const fallbackCalendar = (placeId: string): OperatingCalendar => ({
+    kind: 'scheduled',
+    placeId,
+    admission: {
+      reservationRequired: false,
+      timedEntry: false,
+      permitRequired: false,
+      walkInAllowed: true,
+      capacityLimited: false,
+    },
+    daylightOnly: false,
+    periods: [
+      {
+        label: 'All year',
+        months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        windows: [{ openMinute: 9 * 60, closeMinute: 17 * 60 }],
+      },
+    ],
+    closedAnnualDates: [],
+    provenance: {
+      kind: 'authored',
+      sourceName: 'Map data',
+      confidence: 0.9,
+      volatility: 'seasonal_recurring',
+    },
+  });
+
+  const evidenceWith = (
+    placeId: string,
+    reservationRequired: 'yes' | 'no' | 'unknown',
+    hoursState: 'stale' | 'verified',
+  ) => ({
+    version: 1 as const,
+    places: [
+      {
+        subjectId: placeId,
+        aliases: [],
+        costs: [],
+        closures: [],
+        safety: [],
+        resolved: [
+          {
+            subjectId: placeId,
+            factPath: 'hours.weekly' as const,
+            state: hoursState,
+            acceptedFactId: 'fact-hours',
+            factIds: ['fact-hours'],
+            independentSources: 1,
+            rationale: 'Published hours read a while ago.',
+          },
+        ],
+        booking: {
+          reservationRequired,
+          timedEntry: 'unknown' as const,
+          permitRequired: 'unknown' as const,
+          guideRequired: 'unknown' as const,
+          bookingUrl: 'https://example.org/gallery/tickets',
+          claim: BRANCH_CLAIM,
+        },
+      },
+    ],
+    regionSafety: [],
+  });
+
+  it('keeps the booking requirement and marks the fallback hours as lower confidence', () => {
+    const place = gatedPlace();
+    const fallback = fallbackCalendar(place.id);
+    const built = buildHours(BRANCH_SCOPE, [place], [fallback], evidenceWith(place.id, 'yes', 'stale'));
+    const calendar = built.calendars[0]!;
+
+    expect(calendar.admission.reservationRequired).toBe(true);
+    expect(calendar.admission.walkInAllowed).toBe(false);
+    expect(calendar.admission.bookingUrl).toBe('https://example.org/gallery/tickets');
+    expect(assessOperatingHours({ calendar, dates: DATES }).cautions).toContain(
+      'There is no walk-up entry — this has to be arranged in advance.',
+    );
+
+    /* The fallback's hours are still the best we hold — kept, but not trusted as current. */
+    expect(calendar.kind).toBe('scheduled');
+    expect(calendar.provenance.confidence).toBeLessThan(fallback.provenance.confidence);
+    expect(calendar.provenance.recheckNote).toMatch(/freshness window/);
+  });
+
+  it('leaves the fallback alone when no current source says booking is required', () => {
+    const place = gatedPlace();
+    const fallback = fallbackCalendar(place.id);
+    /*
+     * A current source answering "no booking" is affirmative evidence, and it
+     * may still say walk-in; so may silence. Neither is overlaid with a rule.
+     */
+    for (const answer of ['no', 'unknown'] as const) {
+      const built = buildHours(BRANCH_SCOPE, [place], [fallback], evidenceWith(place.id, answer, 'verified'));
+      expect(built.calendars[0]).toEqual(fallback);
+    }
+  });
+
+  it('does not touch a calendar that already carries the requirement', () => {
+    const place = gatedPlace();
+    const sourced: OperatingCalendar = {
+      ...fallbackCalendar(place.id),
+      admission: {
+        reservationRequired: true,
+        timedEntry: true,
+        permitRequired: false,
+        walkInAllowed: false,
+        capacityLimited: true,
+        bookingUrl: 'https://example.org/gallery/slots',
+      },
+      provenance: {
+        kind: 'official',
+        sourceName: 'Branchford Gallery',
+        lastVerified: '2026-08-05',
+        confidence: 0.9,
+        volatility: 'seasonal_recurring',
+      },
+    };
+    const built = buildHours(BRANCH_SCOPE, [place], [sourced], evidenceWith(place.id, 'yes', 'verified'));
+    expect(built.calendars[0]).toEqual(sourced);
+  });
+});

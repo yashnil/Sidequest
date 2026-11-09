@@ -211,6 +211,36 @@ describe('discovery scan — a compact region keeps one base', () => {
     const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3), base('west', 2)], places, minutes: far, nights: 8, maxBaseChanges: 3 });
     expect(choice.kept.map((k) => k.id).sort()).toEqual(['north', 'south']);
   });
+
+  /* A long way south sit two sights; four sit around the north town. */
+  const thinSouth = (a: string, b: string) => {
+    if (a === b) return 0;
+    const pair = [a, b].sort().join('|');
+    const table: Record<string, number> = { 'north|south': 90, 'north|t1': 15, 'north|t2': 20, 'north|t3': 25, 'north|t4': 30, 'north|t5': 90, 'south|t5': 10, 'north|t6': 90, 'south|t6': 15, 'south|t1': 95, 'south|t2': 95, 'south|t3': 95, 'south|t4': 95 };
+    return table[pair] ?? null;
+  };
+  const thinPlaces = ['t1', 't2', 't3', 't4', 't5', 't6'].map((id) => ({ id, proposal: { tier: 'classic', durationMinutes: id === 't5' ? 120 : id === 't6' ? 90 : 180 } }) as never);
+  const farSouth = thinSouth;
+  it('never moves hotels for one night on a trip of four nights or more', () => {
+    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 1)], places: thinPlaces, minutes: farSouth, nights: 4, maxBaseChanges: 3 });
+    expect(choice.kept.map((k) => k.id)).toEqual(['north']);
+    expect(choice.kept[0]!.nights).toBe(4);
+    expect(choice.leftOut).toEqual([expect.objectContaining({ id: 'south', reason: expect.stringMatching(/night’s worth/) })]);
+    expect(choice.nearestBase.get('t5')).toBe('north');
+  });
+
+  it('does not move hotels for one far place, however long the visit', () => {
+    const one = ['t1', 't2', 't3', 't4', 't5'].map((id) => ({ id, proposal: { tier: 'classic', durationMinutes: id === 't5' ? 300 : 180 } }) as never);
+    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 3)], places: one, minutes: thinSouth, nights: 8, maxBaseChanges: 3 });
+    expect(choice.kept.map((k) => k.id)).toEqual(['north']);
+    expect(choice.leftOut[0]!.reason).toMatch(/easy day trip/);
+  });
+
+  it('may still move for one night on a short trip', () => {
+    const choice = chooseScanBases({ bases: [base('north', 3), base('south', 1)], places: thinPlaces, minutes: farSouth, nights: 3, maxBaseChanges: 3 });
+    expect(choice.kept.map((k) => k.id).sort()).toEqual(['north', 'south']);
+    expect(Math.min(...choice.kept.map((k) => k.nights))).toBe(1);
+  });
 });
 
 describe('discovery scan — car-free geography', () => {

@@ -14,6 +14,22 @@ import { JURISDICTIONS } from './jurisdictions';
 const CAPS = { roadRouting: true, transit: false };
 
 describe('buildTravelReality', () => {
+  it('a single small island is off its country\'s rail network: no rail default, a hire car where the row allows one', () => {
+    const reality = buildTravelReality({ label: 'An island', countries: ['ES'], crossBorder: false, entityType: 'island', traits: ['island', 'weather_exposed'], tripDays: 7, capabilities: CAPS });
+    expect(modeStatusFor(reality, 'high_speed_rail', 'regional')).toBe('unknown');
+    expect(reality.facts.map((f) => f.id)).toContain('derived-island-off-rail-network');
+    expect(reality.recommendation!.regional).not.toContain('high_speed_rail');
+    expect(movementFromReality(reality)).toBe('car');
+  });
+
+  it('keeps the rail answer for an island too big for one trip, and for an island that is the country', () => {
+    const large = buildTravelReality({ label: 'A large island', countries: ['JP'], crossBorder: false, entityType: 'island', traits: ['island', 'broad_geography'], tripDays: 7, capabilities: CAPS });
+    expect(modeStatusFor(large, 'high_speed_rail', 'regional')).toBe('recommended');
+    expect(movementFromReality(large)).toBe('rail_transfers');
+    const country = buildTravelReality({ label: 'An island country', countries: ['ES'], crossBorder: false, entityType: 'country', traits: ['island', 'compact_country'], tripDays: 7, capabilities: CAPS });
+    expect(modeStatusFor(country, 'high_speed_rail', 'regional')).toBe('recommended');
+  });
+
   it('a city-region in China: metro, walking and ride-hailing in the city; rail and a driver between regions; never a hire car', () => {
     const reality = buildTravelReality({ label: 'Chongqing', countries: ['CN'], crossBorder: false, entityType: 'municipality', traits: ['dense_urban', 'city_region', 'broad_geography', 'multi_base_likely', 'food_dense'], tripDays: 10, party: { size: 4, drivers: null }, capabilities: CAPS });
     expect(reality.destination.urbanity).toBe('urban_plus_region');

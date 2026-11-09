@@ -156,6 +156,38 @@ export function buildTravelReality(input: TravelRealityInput): TravelReality {
     if (traits.has('guide_transfer_likely') || traits.has('wilderness')) derived('guided_transfer', 'viable', 'Remote and protected ground is usually reached with a guide or an arranged transfer.');
     if (traits.has('transit_rich')) derived('metro', 'viable', 'A city this size usually runs usable public transport (a prior, not a fact about this city).', 'urban');
   }
+  /*
+   * A country's rail network is a fact about its mainland. A single island
+   * smaller than a trip's breadth — not itself the country, with no
+   * island-specific row — is not on that network: Spain's AVE facts made a
+   * Canary island default to "rail and transfers", so the trip was planned
+   * car-free on bus-pace estimates and the base rule saw most of the island as
+   * out of reach. The country's national rail modes become unknown there (never
+   * unavailable: the row did not say so), and the recommendation falls to what
+   * else the row says.
+   */
+  const smallIsland = traits.has('island') && !traits.has('broad_geography') && input.entityType !== 'country' && rows.every((r) => !r.code.includes('-'));
+  if (smallIsland) {
+    const islandFact: RealityFact = {
+      id: 'derived-island-off-rail-network',
+      topic: 'transit',
+      statement: 'A national rail network rarely reaches a single island this size; buses, hire cars and boats are how it is usually crossed.',
+      authority: 'sidequest_derived',
+      freshness: 'stable',
+      confidence: 'medium',
+      countries: [...input.countries],
+      scope: 'regional',
+    };
+    let touched = false;
+    for (const mode of ['high_speed_rail', 'intercity_train'] as const) {
+      const current = byMode.get(mode);
+      if (current && STATUS_CAUTION_RANK[current.status] < STATUS_CAUTION_RANK.unknown) {
+        byMode.set(mode, { ...current, status: 'unknown', reason: `${current.reason} ${islandFact.statement}`, factIds: [...current.factIds, islandFact.id] });
+        touched = true;
+      }
+    }
+    if (touched) facts.push(islandFact);
+  }
   const modes = [...byMode.values()].sort((a, b) => STATUS_CAUTION_RANK[a.status] - STATUS_CAUTION_RANK[b.status] || a.mode.localeCompare(b.mode));
 
   // --- recommendation: only with country knowledge and a known ground shape -----------------------

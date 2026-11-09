@@ -4975,8 +4975,13 @@ export function buildHours(
     if (!byPlace.has(calendar.placeId)) byPlace.set(calendar.placeId, calendar);
   }
   const bookingByPlace = new Map<string, BookingEvidence>();
+  /** Subjects whose published weekly hours resolved past their freshness window. */
+  const staleHours = new Set<string>();
   for (const entry of evidence?.places ?? []) {
     if (entry.booking) bookingByPlace.set(entry.subjectId, entry.booking);
+    if (entry.resolved.some((fact) => fact.factPath === 'hours.weekly' && fact.state === 'stale')) {
+      staleHours.add(entry.subjectId);
+    }
   }
 
   /** No gate to be wrong about. A claim, and one the category supports. */
@@ -5022,13 +5027,69 @@ export function buildHours(
     };
   };
 
+  /**
+   * A calendar from the precedence list, with any confirmed admission rule kept.
+   *
+   * When an operator's published hours go stale, `buildCalendar` refuses to
+   * enforce them and the subject falls to the next calendar in the list — often
+   * a map-derived one whose admission booleans are the walk-in default. Those
+   * booleans are not evidence about admission, so they may not replace a
+   * booking requirement this compilation confirmed: the requirement is laid
+   * over the calendar's hours. Only a requirement the calendar lacks is added;
+   * nothing is ever relaxed here — a current source answering "no" reaches this
+   * function as no published admission at all, and the calendar stands.
+   *
+   * Stale published hours lower the fallback's confidence and say why; they
+   * remove nothing.
+   */
+  const withConfirmedAdmission = (
+    calendar: OperatingCalendar,
+    confirmed: (typeof noGate & { note?: string; bookingUrl?: string }) | undefined,
+    hoursStale: boolean,
+  ): OperatingCalendar => {
+    let result = calendar;
+    const own = calendar.admission;
+    if (
+      confirmed &&
+      ((confirmed.reservationRequired && !own.reservationRequired) ||
+        (confirmed.timedEntry && !own.timedEntry) ||
+        (confirmed.permitRequired && !own.permitRequired))
+    ) {
+      const bookingUrl = own.bookingUrl ?? confirmed.bookingUrl;
+      result = {
+        ...result,
+        admission: {
+          reservationRequired: own.reservationRequired || confirmed.reservationRequired,
+          timedEntry: own.timedEntry || confirmed.timedEntry,
+          permitRequired: own.permitRequired || confirmed.permitRequired,
+          walkInAllowed: own.walkInAllowed && confirmed.walkInAllowed,
+          capacityLimited: own.capacityLimited || confirmed.capacityLimited,
+          ...(bookingUrl ? { bookingUrl } : {}),
+          ...(confirmed.note ? { note: confirmed.note } : own.note ? { note: own.note } : {}),
+        },
+      };
+    }
+    if (hoursStale && calendar.kind !== 'unknown' && calendar.provenance.kind !== 'official') {
+      result = {
+        ...result,
+        provenance: {
+          ...result.provenance,
+          confidence: Math.min(result.provenance.confidence, 0.5),
+          recheckNote:
+            'The operator’s published hours are past their freshness window, so these hours come from a secondary source. Check before you go.',
+        },
+      };
+    }
+    return result;
+  };
+
   return {
     version: OPERATING_HOURS_DATASET_VERSION,
     regionId: regionIdFor(scope),
     calendars: places.map((place) => {
       const found = byPlace.get(place.id);
-      if (found) return found;
       const published = admissionFromEvidence(place.id);
+      if (found) return withConfirmedAdmission(found, published?.admission, staleHours.has(place.id));
       /**
        * A published admission requirement outranks the category's own reading of
        * the ground, in both directions. A record classified as open ground that

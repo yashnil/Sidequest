@@ -18,9 +18,20 @@ import './globals.css';
  * Google Fonts fetched by next/font at build time: no runtime request, no
  * layout shift. Exposed as CSS variables the theme reads.
  */
-const displayFont = Fraunces({ subsets: ['latin', 'latin-ext'], axes: ['opsz', 'SOFT', 'WONK'], style: ['normal', 'italic'], variable: '--font-fraunces', display: 'swap' });
-const uiFont = Bricolage_Grotesque({ subsets: ['latin', 'latin-ext'], axes: ['opsz'], variable: '--font-bricolage', display: 'swap' });
-const monoFont = JetBrains_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-jetbrains', display: 'swap' });
+/*
+ * WHAT IS PRELOADED, AND WHY SO LITTLE (release pass, 2026-11).
+ *
+ * `subsets` decides only which files are preloaded; the latin-ext faces are
+ * still declared (by unicode-range) and fetched the moment a page draws one of
+ * their glyphs. Preloading latin + latin-ext of all three families was eight
+ * High-priority files, 663 KB, ahead of everything else on a phone — Lighthouse
+ * charged the trip page's LCP for all of them. WONK is never on (the stylesheet
+ * pins it to 0, its default), so its axis is not requested. The mono face sets
+ * figures below the fold and is not preloaded at all.
+ */
+const displayFont = Fraunces({ subsets: ['latin'], axes: ['opsz', 'SOFT'], style: ['normal', 'italic'], variable: '--font-fraunces', display: 'swap' });
+const uiFont = Bricolage_Grotesque({ subsets: ['latin'], axes: ['opsz'], variable: '--font-bricolage', display: 'swap' });
+const monoFont = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap', preload: false });
 
 /**
  * THE DOCUMENT, AND NOTHING ELSE.
