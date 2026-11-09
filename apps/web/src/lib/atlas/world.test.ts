@@ -24,6 +24,8 @@ describe('advisorWorld', () => {
 
   it('falls back to the curated catalog, and says why, when the file cannot be found', async () => {
     vi.stubEnv('SIDEQUEST_ATLAS_PATH', '/nonexistent/atlas.json.gz');
+    /* The loaded atlas is process-wide (the start-up hook and the pages are separate bundles), so resetting modules does not forget it. */
+    (await import('@sidequest/atlas')).resetAtlasForTests();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { advisorWorld } = await import('./world');
     const { destinationCatalog } = await import('@sidequest/core');
