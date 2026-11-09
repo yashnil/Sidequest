@@ -13,6 +13,7 @@
  * Measurement only. It adds two `performance.now()` calls per statement; do not
  * read its absolute times as production figures.
  */
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- a CommonJS preload script, which is the point of it.
 const Module = require('node:module');
 
 const tally = { prepares: 0, prepareMs: 0, statements: 0, statementMs: 0, execs: 0, execMs: 0, bySql: new Map() };

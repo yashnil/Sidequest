@@ -583,7 +583,7 @@ export function normalisePriceText(raw) {
   s = decodeHtmlEntities(s);
   s = s
     .replace(FULLWIDTH, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
-    .replace(/[  -​  　]/g, ' ')
+    .replace(/[\u00a0\u2000-\u200b\u202f\u205f\u3000]/g, ' ')
     .replace(/[‐‑‒–—―−﹣－〜～]/g, '-')
     .replace(/[（]/g, '(')
     .replace(/[）]/g, ')')

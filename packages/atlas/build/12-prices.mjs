@@ -136,7 +136,7 @@ async function buildFx(cache, { force }) {
 
   /* One series per currency, from the first country that uses it and has data. "XC" is the World Bank's euro-area aggregate. */
   const homes = new Map();
-  for (const [iso, code] of COUNTRY_CURRENCY) if (!homes.has(code)) homes.set(code, []);
+  for (const [, code] of COUNTRY_CURRENCY) if (!homes.has(code)) homes.set(code, []);
   for (const [iso, code] of COUNTRY_CURRENCY) homes.get(code).push(iso);
   homes.set('EUR', ['XC']);
   for (const [code, [iso]] of Object.entries(LEGACY_SERIES)) homes.set(code, [iso]);
@@ -941,7 +941,6 @@ async function validate(cache) {
   };
   const ownSleep = own('sleep');
   const ownEat = own('eat');
-  const ownEntry = own('entry');
   const descendantPool = (bucket) => {
     const m = new Map();
     for (const o of byBucket[bucket]) {

@@ -26,6 +26,8 @@ vi.mock('next/headers', () => ({
  */
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined }), usePathname: () => '/' }));
 vi.mock('../../app/(product)/actions', () => ({ deleteTripAction: async () => ({ ok: true }) }));
+/* The real page server-renders this through `next/dynamic`, which a bare static render leaves suspended. */
+vi.mock('../../app/(product)/LazyTripList', async () => ({ LazyTripList: (await import('../../app/(product)/TripList')).TripList }));
 
 /**
  * TWO ROWS ANSWER "DOES THIS TRIP HAVE A BOARD", AND THE LIST READ THE WRONG ONE.

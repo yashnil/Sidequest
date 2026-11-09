@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as Wikimedia from '@/lib/providers/wikimedia';
 import type * as AdvisorActions from './advisor-actions';
+import type * as SidequestCore from '@sidequest/core';
 
 /**
  * WHOSE DECISION THIS IS, AND HOW FAST ANYONE MAY MAKE ONE.
@@ -63,7 +64,7 @@ vi.mock('@/lib/destinations/advisor', () => ({
 
 /** A stored list is always "weak enough to research", so only the guards decide whether research is reached. */
 /* Whether a list is weak enough to widen is a pure question answered in core; here it is always yes, so the guards in front of the widening are what is under test. */
-vi.mock('@sidequest/core', async (original) => ({ ...(await original<typeof import('@sidequest/core')>()), needsResearch: () => true }));
+vi.mock('@sidequest/core', async (original) => ({ ...(await original<typeof SidequestCore>()), needsResearch: () => true }));
 
 /**
  * The curated catalog alone — the advisor's own documented fallback when the
