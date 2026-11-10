@@ -533,7 +533,7 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
       const kept = moods.slice(0, 3);
       patchDiscovery({ moods: kept });
       for (const key of kept) readings.push({ kind: 'focus', label: MOOD_LABELS[key] });
-      assumptions.push(`You didn’t name an activity, so we looked for places that suit “${kept.map((key) => MOOD_LABELS[key].toLowerCase()).join('” and “')}”. Tell us what you most want to do and the list will follow it.`);
+      assumptions.push(`No activity named, so we looked for ${kept.map((key) => MOOD_LABELS[key].toLowerCase()).join(' and ')}. Tell us what you’d like to do.`.slice(0, 160));
       vague.push('interests');
     }
     if (/\b(outdoors?|outside|nature)\b/.test(t)) vague.push('outdoors');

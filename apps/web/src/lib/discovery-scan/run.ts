@@ -171,6 +171,21 @@ export function placementReachKm(scale: string | undefined, nights: number): num
   return Math.max(base, Math.min(base * 2, 60 * Math.max(1, nights)));
 }
 
+/** How long the timing stage may wait on a router or a lookup. A live Tanzania scan spent 280 s here and left the food stage no time at all. */
+const TIMING_STAGE_BUDGET_MS = 45_000;
+
+/** Waits at most `ms`; on expiry answers `fallback` and leaves the slower promise to finish unheard. A slow provider is an absence, not a failure. */
+function withinBudget<T>(work: Promise<T>, ms: number, fallback: T, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(`Scan ${label}: no answer within ${Math.round(ms / 1000)} s; going on without it.`);
+      resolve(fallback);
+    }, ms);
+  });
+  return Promise.race([work.catch(() => fallback), expiry]).finally(() => clearTimeout(timer));
+}
+
 async function measureMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot', deadline: () => boolean): Promise<{ matrix: TravelTimeMatrixData; source: string; measuredPairs: number; totalPairs: number }> {
   const estimate = estimatedScanMatrix(points, mode);
   const totalPairs = points.length * (points.length - 1);
@@ -565,12 +580,17 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const linking = fixtureScan() || openData ? Promise.resolve(new Map<string, string>()) : linkScanIdentities(proposal, placement.positions);
     const timed = fixtureScan()
       ? { matrix: estimatedScanMatrix(plan.points, mode), source: 'distance estimates', measuredPairs: 0, totalPairs: plan.points.length * (plan.points.length - 1) }
-      : await measureMatrix(plan.points, mode, () => false);
+      : await withinBudget(
+          measureMatrix(plan.points, mode, () => false),
+          TIMING_STAGE_BUDGET_MS,
+          { matrix: estimatedScanMatrix(plan.points, mode), source: 'distance estimates', measuredPairs: 0, totalPairs: plan.points.length * (plan.points.length - 1) },
+          'matrix',
+        );
     noteScanCounters(tripId, scanId, { timed: timed.measuredPairs, measured: timed.matrix.provenance.kind === 'measured' }, new Date());
 
     // --- 3b. somewhere to eat (open map data; never fails the scan) -------------------
     const regionId = `scan-${tripId.slice(0, 8)}-${scanId}`;
-    const linked = await linking;
+    const linked = await withinBudget(linking, TIMING_STAGE_BUDGET_MS, new Map<string, string>(), 'identity links');
     if (linked.size > 0) {
       const positions = new Map(placement.positions);
       for (const [key, wikidataId] of linked) {

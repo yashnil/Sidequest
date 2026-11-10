@@ -4,6 +4,7 @@ import { catalogDestinationSchema, type CatalogDestination } from './catalog/sch
 import { buildAdvisorShortlist, monthsLabel, rankCatalog } from './advise';
 import { advisorShortlistSchema } from './shortlist-schema';
 import { parseTravelRequest } from './parse';
+import { advisorAnswersSchema } from './answers';
 import { effectiveRefinements, profileFrom, seasonMonthsForTraveller } from './profile';
 import { ADVISOR_QUESTIONS, answerAdvisorQuestion, skipAdvisorQuestion } from './questions';
 import { nextQuestion, shortlistDistance } from './interview-policy';
@@ -117,7 +118,7 @@ describe('reading what somebody typed', () => {
     /* The word is a leaning, shown back as an assumption — never a stated interest. */
     expect(parsed.answers.discovery?.moods).toEqual(['scenic']);
     expect(parsed.answers.discovery?.pursuits).toBeUndefined();
-    expect(parsed.assumptions.join(' ')).toMatch(/didn’t name an activity/);
+    expect(parsed.assumptions.join(' ')).toMatch(/No activity named/);
   });
 
   it('reads a request with no activity in it as leanings, not as arbitrary words to look up', () => {
@@ -137,6 +138,13 @@ describe('reading what somebody typed', () => {
     const access = parseTravelRequest('Good scenery that works for a wheelchair user', base());
     expect(access.answers.travelerNeeds).toContain('mobility_limited');
     expect(access.answers.discovery?.terms).toBeUndefined();
+  });
+
+  it('stores every reading of a vague request in a form the answers schema accepts', () => {
+    /* A session that fails this parse is a 404 for the person who wrote it. */
+    for (const text of ['Somewhere beautiful and relaxing.', 'An unforgettable trip with my friends for a romantic adventure.', 'Good scenery, not too expensive.']) {
+      expect(advisorAnswersSchema.safeParse(parseTravelRequest(text, base()).answers.discovery).success, text).toBe(true);
+    }
   });
 
   it('drops the mood the moment something specific is said', () => {
