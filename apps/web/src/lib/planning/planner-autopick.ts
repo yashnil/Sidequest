@@ -39,12 +39,18 @@ export function plannerAutoPick(input: {
 }): PlannerAutoPick {
   const travellerRows = input.selections.filter((s) => s.source === 'user');
   const canonical = buildCanonicalTripBuildInput({ trip: input.trip, composer: input.composer ?? null, profile: input.profile, now: input.now ?? new Date() });
-  const composed = composeWithPlanner({
+  /*
+   * Sidequest would rather not pick what its own board advises skipping. It
+   * plans without those first, and uses them only when that leaves days with
+   * nothing on them — a board that is mostly weak fits still gets a plan.
+   */
+  const ownInclude = (candidate: DiscoveryCandidate) => travellerRows.some((row) => row.placeId === candidate.place.id && row.status === 'included');
+  const preferred = input.candidates.filter((candidate) => candidate.group !== 'weak_fit' || ownInclude(candidate));
+  const compose = (candidates: readonly DiscoveryCandidate[]) => composeWithPlanner({
     trip: input.trip,
     profile: input.profile,
     region: input.region,
-    /* Sidequest does not pick what its own board tells the traveller to skip. Their own includes stay. */
-    candidates: input.candidates.filter((candidate) => candidate.group !== 'weak_fit' || travellerRows.some((row) => row.placeId === candidate.place.id && row.status === 'included')),
+    candidates,
     selections: travellerRows,
     extras: input.extras,
     destinationName: input.region.region.name,
@@ -52,6 +58,10 @@ export function plannerAutoPick(input: {
     maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? input.profile.transport.maxDailyTransportMinutes,
     ...(canonical.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value } : {}),
   });
+  const first = preferred.length < input.candidates.length ? compose(preferred) : null;
+  const emptyDays = (plan: ReturnType<typeof compose>['plan']) => plan.days.filter((day) => day.stops.length === 0).length;
+  const everything = first && emptyDays(first.plan) === 0 ? null : compose(input.candidates);
+  const composed = first && (!everything || emptyDays(first.plan) <= emptyDays(everything.plan)) ? first : everything!;
   const userIncluded = new Set(travellerRows.filter((s) => s.status === 'included').map((s) => s.placeId));
   const scheduled = composed.plan.days.flatMap((d) => d.stops.map((s) => s.candidate));
   const selectedIds = scheduled.filter((c) => !userIncluded.has(c.id)).map((c) => c.id);

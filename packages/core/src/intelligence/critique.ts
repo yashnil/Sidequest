@@ -91,6 +91,8 @@ export function buildPlanCritique(input: { itinerary: Itinerary; pkg: TripPackag
     const unscheduled = itinerary.unscheduled.find((u) => normalise(u.name) === key || normalise(u.name).includes(key));
     if (anchor && (anchor.disposition === 'preserved' || anchor.disposition === 'preserved_with_verified_facts' || anchor.disposition === 'retained_unverified')) return { name, outcome: 'kept' as const, detail: `On day ${anchor.scheduledDayNumber ?? anchor.dayNumber}${anchor.verification === 'verified' ? ', confirmed on the map' : ''}.` };
     if (anchor && (anchor.disposition === 'moved_same_day' || anchor.disposition === 'moved_other_day' || anchor.disposition === 'substituted')) return { name, outcome: 'moved' as const, detail: anchor.note ?? `Moved to day ${anchor.scheduledDayNumber ?? anchor.dayNumber} to make the route work.` };
+    /* A typed name nothing on the board matched is listed under "Could not be scheduled" so it is not lost; it was still never found. */
+    if (!anchor && unscheduled?.reasonCode === 'selection_not_on_board' && unscheduled.placeId.startsWith('must-do:')) return { name, outcome: 'not_found' as const, detail: unscheduled.reason };
     if (anchor || unscheduled) return { name, outcome: 'dropped' as const, detail: unscheduled?.reason ?? anchor?.note ?? 'Could not be scheduled as things stand.' };
     return { name, outcome: 'not_found' as const, detail: 'Sidequest could not match this name to anything on the plan.' };
   });

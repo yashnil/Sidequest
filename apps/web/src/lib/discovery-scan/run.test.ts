@@ -93,6 +93,17 @@ describe('discovery scan', () => {
     expect(picks.every((p) => p.source === 'auto')).toBe(true);
   });
 
+  it('a multi-base scan passes the region integrity gate', async () => {
+    /* The fixture token "multibase" proposes several bases; the gate once failed on one with no travel-time row. */
+    const tripId = await dynamicTrip('Multibase Testmouth');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 150 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    const view = scanView(tripId);
+    expect(view.state, JSON.stringify(view)).toBe('ready');
+  });
+
   it('records a typed failure instead of a board when the proposer refuses', async () => {
     const tripId = await dynamicTrip('unscannable bay');
     const { startDiscoveryScan } = await import('./run');

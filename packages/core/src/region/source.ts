@@ -78,7 +78,7 @@ export class RegionIntegrityError extends Error {
   readonly issues: RegionIntegrityIssue[];
 
   constructor(issues: RegionIntegrityIssue[]) {
-    super(`Compiled region failed ${issues.length} integrity check(s).`);
+    super(`Compiled region failed ${issues.length} integrity check(s): ${issues.map((issue) => `${issue.code} [${issue.subjectIds.slice(0, 4).join(', ')}]`).join('; ')}.`);
     this.name = 'RegionIntegrityError';
     this.issues = issues;
   }

@@ -738,7 +738,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
   } as AccessDataset;
 
   // Each place is claimed by the forecast point of the base it belongs to.
-  const weatherLocations: WeatherLocation[] = keptIds
+  /* A route may sleep in one base twice (out and back); it is still one forecast point. */
+  const weatherLocations: WeatherLocation[] = [...new Set(keptIds)]
     .map((baseId) => {
       const base = baseById.get(baseId)!;
       const claimed = places.filter((p) => (keptIds.includes(choice.nearestBase.get(p.id) ?? '') ? choice.nearestBase.get(p.id) : primaryBaseId) === baseId).map((p) => p.id);
