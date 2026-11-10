@@ -105,6 +105,7 @@ import {
 } from '@/app/(product)/trips/[id]/itinerary/edit-controls';
 import { ShareControl } from '@/app/(product)/trips/[id]/itinerary/share-controls';
 import { TripRefreshControl, type PlanningUpgrade } from './hub/TripRefreshControl';
+import { VersionHistory } from './hub/VersionHistory';
 import { isMachineWeatherLabel, travellerVoice } from './plan-language';
 
 /**
@@ -227,6 +228,7 @@ export function ItineraryView({
   lockedPlaceIds = [],
   regeneration,
   planningUpgrade,
+  hasEarlierVersions = false,
   worthSkipping = [],
   lodgingAreas = [],
   images = {},
@@ -390,6 +392,8 @@ export function ItineraryView({
   regeneration?: { kept: string; replaced: readonly string[] };
   /** Owner page only: set when today's planning would give this stored scan fewer bases (`scanBaseUpgrade`). Offers the explicit rebuild. */
   planningUpgrade?: PlanningUpgrade | null;
+  /** Owner page only: this plan has an earlier version to go back to. */
+  hasEarlierVersions?: boolean;
   /**
    * Board supply the fit model marked "probably skip", from the same compiled
    * region this plan drew on. Empty when the board holds none, and the
@@ -734,6 +738,9 @@ export function ItineraryView({
   const transportDecision = decisions.find((d) => d.key === 'transport') ?? null;
   const timingDecision = decisions.find((d) => d.key === 'timing') ?? null;
   const planningLine = planningLineFor(itinerary.package?.planning);
+  /* The structure's own reasoning, shown only while it still describes these stays: a refinement can change them. */
+  const stayRecord = itinerary.package?.planning?.stay;
+  const staySentence = stayRecord && new Set(stayRecord.chosen.stays.map((stay) => stay.baseId)).size === baseSequence.length ? stayRecord.sentence : null;
   /*
    * 2026-11 — THE TRIP, IN ONE SCREEN, ABOVE ITS DAYS.
    *
@@ -768,6 +775,7 @@ export function ItineraryView({
               <div className="mt-3" data-testid="route-bases">
                 <BaseCards bases={baseSequence} />
               </div>
+              {staySentence ? <p className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="stay-decision">{staySentence}</p> : null}
             </section>
           ) : null}
           {signatureExperiences.length > 0 ? (
@@ -830,6 +838,7 @@ export function ItineraryView({
           </div>
         </div>
       </details>
+      {hasEarlierVersions && tripId ? <div className="mt-2"><VersionHistory tripId={tripId} /></div> : null}
     </div>
   );
 

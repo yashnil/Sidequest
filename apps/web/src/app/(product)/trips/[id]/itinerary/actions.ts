@@ -26,8 +26,9 @@ import { buildPreflight } from '@/lib/planning/build-preflight';
 import { buildRunView, startBuildRun } from '@/lib/planning/build-runs';
 import { callerKey, guardAction, guardBilledAction } from '@/lib/net/caller';
 import { keepsToCarry, regenerationPreview } from './regenerate-summary';
-import { currentVersion, recordEditVersion, recordVersion, undoTarget } from '@/lib/refine/version-repository';
-import { getTripDraft, saveTripDraft } from '@/lib/db/draft-repository';
+import { recordEditVersion, setVersionSaved, undoTarget, type RestorePoint } from '@/lib/refine/version-repository';
+import { restorePlanVersion, restorePointsFor } from '@/lib/refine/restore';
+import { getTripDraft } from '@/lib/db/draft-repository';
 import { addCustomStop, easeReconciledDay, isReconciledItinerary, moveStopToDay, removeStopFromReconciledItinerary, setStopDuration, setStopKeep, shiftStop } from '@/lib/planning/reconciled-edits';
 import { repairReconciledDay } from '@/lib/planning/day-repair';
 import { discoverFoodNear, discoverStaysNear } from '@/lib/providers/discovery';
@@ -39,6 +40,7 @@ import {
   getProfile,
   getSelections,
   getTrip,
+  preservePlan,
   saveItinerary,
   setItineraryLock,
   setSelection,
@@ -100,6 +102,13 @@ async function startWholeTripBuild(tripId: string, buildKey: string, caller: str
   /* Production pass — only a model-composed build bills; a planner build is free and is never charged here. */
   const billed = preflight.path === 'model_composer' ? await guardAction('billed_hourly') : null;
   if (billed) return { ok: false, error: billed };
+  /* Before the carried keeps below change the board: this is the state a restore has to give back. */
+  try {
+    preservePlan(tripId, { changed: 'Your plan before it was rebuilt' });
+  } catch (error) {
+    console.error('Could not record the plan before a rebuild', error);
+    return { ok: false, error: 'We could not start that rebuild. Your plan is unchanged.' };
+  }
   before?.();
   startBuildRun({ tripId, buildKey, caller, mode: 'full' });
   revalidatePath(`/trips/${tripId}/itinerary`);
@@ -217,7 +226,7 @@ async function editContext(
   return { ok: true, input: assembled.input, itinerary };
 }
 
-function persistEdit(tripId: string, result: ItineraryEditResult | { ok: true; itinerary: Itinerary; changed: string } | { ok: false; message: string }): EditActionResult {
+function persistEdit(tripId: string, result: ItineraryEditResult | { ok: true; itinerary: Itinerary; changed: string } | { ok: false; message: string }, withEdit?: () => void): EditActionResult {
   if (!result.ok) return { ok: false, error: result.message };
   /* Read before the save: this is the plan Undo has to give back. */
   let before: Itinerary | null;
@@ -227,7 +236,10 @@ function persistEdit(tripId: string, result: ItineraryEditResult | { ok: true; i
     before = null;
   }
   try {
+    /* Everything the traveller has pinned or skipped, recorded with the plan before this edit touches either. */
+    preservePlan(tripId);
     saveItinerary(result.itinerary);
+    withEdit?.();
   } catch (error) {
     console.error('Failed to save edited itinerary', error);
     return { ok: false, error: 'The change was valid but could not be saved. Nothing was lost.' };
@@ -266,26 +278,47 @@ export async function undoTripEditAction(tripId: string, restoresPlaceId?: strin
   if (refusal) return { ok: false, error: refusal };
   const target = undoTarget(tripId);
   if (!target) return { ok: false, error: 'There is nothing to undo on this trip.' };
-  const head = currentVersion(tripId);
   try {
-    saveItinerary(target.itinerary);
-    if (target.draft) saveTripDraft({ tripId, draft: target.draft });
-    recordVersion({
-      tripId,
-      previousVersion: head,
-      request: 'Undo the last change',
-      summary: { changed: ['Restored the trip as it was before your last change.'], kept: [], rechecking: [] },
-      itinerary: target.itinerary,
-      draft: target.draft,
-    });
-    /* Only a stop the restored plan actually holds: this value comes from the browser. */
-    if (restoresPlaceId && target.itinerary.days.some((day) => day.items.some((item) => item.placeId === restoresPlaceId))) setSelection(tripId, restoresPlaceId, 'included', 'user');
+    const restored = restorePlanVersion({ tripId, version: target.version, request: 'Undo the last change', changed: 'Restored the trip as it was before your last change.' });
+    if (!restored.ok) return { ok: false, error: restored.error };
+    /* A version older than this record has no decisions to restore; the toast still names the one stop it took off. Only a stop the restored plan holds: this value comes from the browser. */
+    if (!target.decisions && restoresPlaceId && target.itinerary.days.some((day) => day.items.some((item) => item.placeId === restoresPlaceId))) setSelection(tripId, restoresPlaceId, 'included', 'user');
   } catch (error) {
     console.error('Failed to undo an edit', error);
     return { ok: false, error: 'That could not be undone just then. Nothing else was changed.' };
   }
   revalidatePath(`/trips/${tripId}/itinerary`);
   return { ok: true, changed: 'Undone — your trip is back as it was before that change.' };
+}
+
+/** Every version of this plan the traveller can go back to. Read when the list is opened, so the page never pays for it. */
+export async function listRestorePointsAction(tripId: string): Promise<{ ok: true; points: RestorePoint[] } | { ok: false; error: string }> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  return { ok: true, points: restorePointsFor(tripId) };
+}
+
+/** Puts an earlier version back, exactly, and records that as a version so it can be undone in turn. */
+export async function restoreVersionAction(tripId: string, version: number): Promise<EditActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  if (!Number.isInteger(version) || version < 1) return { ok: false, error: 'That version is no longer here.' };
+  try {
+    const restored = restorePlanVersion({ tripId, version, request: `Restore version ${version}`, changed: 'Restored an earlier version of your trip' });
+    if (!restored.ok) return { ok: false, error: restored.error };
+  } catch (error) {
+    console.error('Failed to restore a version', error);
+    return { ok: false, error: 'That could not be restored just then. Your plan is unchanged.' };
+  }
+  revalidatePath(`/trips/${tripId}/itinerary`);
+  return { ok: true, undoable: true, changed: 'Restored. Your trip is back as it was in that version.' };
+}
+
+export async function keepVersionAction(tripId: string, version: number, keep: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  if (!Number.isInteger(version) || version < 1) return { ok: false, error: 'That version is no longer here.' };
+  return setVersionSaved(tripId, version, keep);
 }
 
 export async function removeStopAction(
@@ -298,19 +331,18 @@ export async function removeStopAction(
   const result = context.input
     ? removeStopFromDay(context.input, context.itinerary, dayNumber, placeId)
     : removeStopFromReconciledItinerary(context.itinerary, dayNumber, placeId);
-  const persisted = persistEdit(tripId, result);
-  if (persisted.ok) {
-    /*
-     * The board reflects the decision: a removed stop is an excluded one, so
-     * the next full rebuild does not resurrect what the traveller took off.
-     * The lock, if any, goes with it — a pin on an excluded place is a
-     * contradiction in storage.
-     */
+  /*
+   * The board reflects the decision: a removed stop is an excluded one, so
+   * the next full rebuild does not resurrect what the traveller took off.
+   * The lock, if any, goes with it — a pin on an excluded place is a
+   * contradiction in storage. Both are written inside the edit, so the version
+   * before it holds them and Undo gives them back.
+   */
+  const persisted = persistEdit(tripId, result, () => {
     setSelection(tripId, placeId, 'excluded', 'user');
     clearItineraryLock(tripId, placeId);
-    return { ...persisted, restoresPlaceId: placeId };
-  }
-  return persisted;
+  });
+  return persisted.ok ? { ...persisted, restoresPlaceId: placeId } : persisted;
 }
 
 export async function swapAlternativesAction(
@@ -343,13 +375,11 @@ export async function swapStopAction(
   if (!context.ok) return { ok: false, error: context.error };
   if (!context.input) return { ok: false, error: 'Swaps come from the Discovery Board, which this plan was not built from. Remove the stop instead, or regenerate.' };
   const result = swapStopOnDay(context.input, context.itinerary, dayNumber, placeId, replacementId);
-  const persisted = persistEdit(tripId, result);
-  if (persisted.ok) {
+  return persistEdit(tripId, result, () => {
     setSelection(tripId, placeId, 'excluded', 'user');
     setSelection(tripId, replacementId, 'included', 'user');
     clearItineraryLock(tripId, placeId);
-  }
-  return persisted;
+  });
 }
 
 export async function easeDayAction(tripId: string, dayNumber: number): Promise<EditActionResult> {

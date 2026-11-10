@@ -143,6 +143,16 @@ describe('refreshTripInformation', () => {
     expect(asked.every((s) => s.kind === 'candidate')).toBe(true);
   });
 
+  it('changes evidence only: the same days, stops, order, times and bases, and no new version', async () => {
+    const { itinerary } = seed();
+    const structureOf = (plan: Itinerary) => plan.days.map((day) => ({ date: day.date, baseId: day.baseId, items: day.items.map((item) => [item.kind, item.placeId ?? null, item.title, item.startMinute, item.endMinute]) }));
+    const before = structureOf(itinerary);
+    const result = await refreshTripInformation(TRIP, deps());
+    expect(result.ok).toBe(true);
+    expect(structureOf(getItinerary(TRIP)!)).toEqual(before);
+    expect(getDb().prepare('SELECT COUNT(*) AS count FROM refinement_versions WHERE trip_id = ?').get(TRIP)).toEqual({ count: 0 });
+  });
+
   it('never replaces an identity a place already holds, and never gives two places one item', async () => {
     const base = tenerifeStoredScan();
     const region = { ...base, places: base.places.map((p) => (p.name === 'Lago Martianez' ? { ...p, wikidataId: 'Q777' } : p)) };

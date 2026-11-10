@@ -35,7 +35,8 @@ import { verificationProviders } from './verification-providers';
 import { getIntent, saveComposerAnswers } from '../db/compiler-repository';
 import { getTripDraft, listCompositionAttempts, recordCompositionParse, saveCompositionAttempt, saveTripDraft } from '../db/draft-repository';
 import { randomUUID } from 'node:crypto';
-import { getAnswers, getItineraryLocks, getProfile, getSelections, getTrip, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
+import { getAnswers, getItineraryLocks, getProfile, getSelections, getTrip, preservePlan, getItinerary, saveItinerary, saveReadiness, updateTripDates } from '../db/repository';
+import { recordBuiltVersion } from '../refine/version-repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-repository';
@@ -76,7 +77,7 @@ import { getScanProposalExtras } from '../db/scan-repository';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
-import { beginGeneration, finishGeneration, markGenerationDraftSaved, markGenerationModelInvoked, markGenerationStage, noteGenerationCounters, noteGenerationPlaced, type GenerationCounters } from '../db/generation-progress-repository';
+import { beginGeneration, clearGenerationDraftSaved, finishGeneration, markGenerationDraftSaved, markGenerationModelInvoked, markGenerationStage, noteGenerationCounters, noteGenerationPlaced, type GenerationCounters } from '../db/generation-progress-repository';
 import { fetchReferenceRates } from '../providers/fx';
 import { buildFailure, classifyCompositionFailure, encodeBuildFailure, type BuildFailure } from './build-failure';
 import { saveFxRates } from '@/lib/db/intelligence-repository';
@@ -269,7 +270,46 @@ export function draftFirstBudget(mode: GenerationMode, elapsedMs: number): Draft
   return { verify: true, deadlineMs, remainingMs, reason: 'verification ran inside the remaining budget' };
 }
 
-export async function generateSidequestPlanForTrip(
+export const generateSidequestPlanForTrip: typeof generatePlan = (tripId, options = {}) => keepingDraftOnFailure(tripId, () => generatePlan(tripId, options));
+
+/**
+ * A failed rebuild leaves the previous plan, so it must leave the draft that
+ * goes with that plan too, or Ask Sidequest would edit one plan against
+ * another's draft. A draft the model paid for stays: a retry reuses it.
+ */
+export async function keepingDraftOnFailure<T extends { ok: boolean }>(tripId: string, build: () => Promise<T>): Promise<T> {
+  const priorDraft = hasItinerarySafely(tripId) ? getTripDraft(tripId) : null;
+  const revert = (): void => {
+    if (!priorDraft) return;
+    try {
+      const stored = getTripDraft(tripId);
+      if (stored && stored.modelCall === null && JSON.stringify(stored.draft) !== JSON.stringify(priorDraft.draft)) {
+        saveTripDraft({ tripId, draft: priorDraft.draft, ...(priorDraft.modelCall === null ? {} : { modelCall: priorDraft.modelCall }) });
+        clearGenerationDraftSaved(tripId);
+      }
+    } catch (error) {
+      console.warn('Could not put the previous draft back after a failed build', { tripId, message: error instanceof Error ? error.message : 'unknown' });
+    }
+  };
+  try {
+    const result = await build();
+    if (!result.ok) revert();
+    return result;
+  } catch (error) {
+    revert();
+    throw error;
+  }
+}
+
+function hasItinerarySafely(tripId: string): boolean {
+  try {
+    return getItinerary(tripId) !== null;
+  } catch {
+    return false;
+  }
+}
+
+async function generatePlan(
   tripId: string,
   options: {
     caller?: string | null;
@@ -732,6 +772,8 @@ export async function generateSidequestPlanForTrip(
       /* the draft row itself is the record of success */
     }
   }
+  /* The draft row is the first thing a build overwrites, so the plan and the draft that made it are recorded together, here. */
+  if (!options.useDraft) preservePlan(tripId, { changed: 'Your plan before it was rebuilt', refreshDecisions: false });
   if (!options.reuseStoredDraft) saveTripDraft({ tripId, draft, modelCall: modelCalls[0] ?? null, now });
   /* V8 — the draft is on disk: a failure from here is retried on it, with no model call. */
   try {
@@ -1232,6 +1274,8 @@ export async function generateSidequestPlanForTrip(
     : itinerary;
   const reconciled = { ...reconciledRaw, itinerary: disclosed };
   saveItinerary(reconciled.itinerary);
+  /* A refinement records its own version, with what it applied. */
+  if (!options.useDraft) recordBuiltVersion({ tripId, itinerary: reconciled.itinerary, draft });
   saveReadiness(tripId, reconciled.readiness, now);
   const persistenceMs = since(persistenceStartedMs);
 

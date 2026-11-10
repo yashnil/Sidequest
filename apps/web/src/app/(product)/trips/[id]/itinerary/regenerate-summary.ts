@@ -141,5 +141,7 @@ export function regenerationCopy(preview: RegenerationPreview): { kept: string; 
   if (preview.uncarriedKeeps.length > 0) {
     replaced.push(`${nameList(preview.uncarriedKeeps)} ${preview.uncarriedKeeps.length === 1 ? 'is' : 'are'} not on your Discovery Board, so the new plan may leave ${preview.uncarriedKeeps.length === 1 ? 'it' : 'them'} out even though you marked ${preview.uncarriedKeeps.length === 1 ? 'it' : 'them'} to keep.`);
   }
+  /* Only worth saying when there is something of the traveller's to get back. */
+  if (replaced.length > 0) replaced.push('Your current plan stays under Earlier versions, so you can go back to it.');
   return { kept, replaced };
 }

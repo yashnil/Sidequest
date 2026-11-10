@@ -16,6 +16,7 @@ import {
   saveReadiness,
 } from '@/lib/db/repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather } from '@/lib/region';
+import { recordBuiltVersion } from '@/lib/refine/version-repository';
 import {
   attributableWorkMs,
   journeySpanOf,
@@ -267,6 +268,7 @@ export async function buildItinerary(tripId: string): Promise<BuildResult> {
     }
 
     saveItinerary(result.itinerary);
+    recordBuiltVersion({ tripId, itinerary: result.itinerary });
     saveReadiness(tripId, result.readiness, new Date());
 
     /**

@@ -301,6 +301,11 @@ export function markGenerationDraftSaved(tripId: string, now: Date): void {
   getDb().prepare('UPDATE generation_progress SET draft_saved = 1, heartbeat_at = ? WHERE trip_id = ?').run(now.toISOString(), tripId);
 }
 
+/** The draft that was saved is gone again, so a retry must compose rather than reuse. */
+export function clearGenerationDraftSaved(tripId: string): void {
+  getDb().prepare('UPDATE generation_progress SET draft_saved = 0 WHERE trip_id = ?').run(tripId);
+}
+
 /** Eight url-safe characters: enough to find one log line, too few to mean anything. */
 export function newFailureRef(): string {
   return randomBytes(6).toString('base64url').slice(0, 8);

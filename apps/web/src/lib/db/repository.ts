@@ -29,6 +29,8 @@ import {
 } from '@sidequest/core';
 import { getDb } from './client';
 import { deleteTripCompletely } from './data-rights-repository';
+import { getTripDraft } from './draft-repository';
+import { ensureBaselineVersion } from '../refine/version-repository';
 
 /**
  * Every read parses through the schema rather than casting. A row written by an
@@ -707,6 +709,7 @@ export function travellerDecisions(tripId: string): Record<string, StoredSelecti
 export function clearItinerary(tripId: string): void {
   const db = getDb();
   const apply = db.transaction(() => {
+    preservePlan(tripId, { changed: 'Your plan before your answers changed' });
     db.prepare('DELETE FROM itinerary_items WHERE trip_id = ?').run(tripId);
     db.prepare('DELETE FROM itinerary_days WHERE trip_id = ?').run(tripId);
     db.prepare('DELETE FROM itineraries WHERE trip_id = ?').run(tripId);
@@ -857,6 +860,38 @@ interface ItineraryItemRow {
 }
 
 /**
+ * THE PLAN ON THE PAGE GOES INTO THE HISTORY BEFORE ANYTHING REPLACES IT.
+ *
+ * `saveItinerary` and `clearItinerary` call this themselves, so no rebuild, edit
+ * or restore can overwrite a plan the history does not hold. A plan written by
+ * an earlier build cannot be read into a version; it is left as it is, and a
+ * rebuild of it replaces only a read-only copy the traveller was told to rebuild.
+ * Anything else that goes wrong here fails the write, which leaves the plan where
+ * it was: the safe side of losing a safety net.
+ *
+ * `refreshDecisions: false` is for a write that has already changed the pins or
+ * the board on purpose (a carried must-keep), and must not record that onto the
+ * plan from before it.
+ */
+export function preservePlan(tripId: string, options: { changed?: string; refreshDecisions?: boolean } = {}): void {
+  let current: Itinerary | null;
+  try {
+    current = getItinerary(tripId);
+  } catch (error) {
+    console.warn('A stored plan could not be read into its history', { tripId, reason: error instanceof Error ? error.name : 'unknown' });
+    return;
+  }
+  if (!current) return;
+  ensureBaselineVersion({
+    tripId,
+    itinerary: current,
+    draft: getTripDraft(tripId)?.draft ?? null,
+    ...(options.changed ? { changed: options.changed } : {}),
+    ...(options.refreshDecisions === false ? { refreshDecisions: false } : {}),
+  });
+}
+
+/**
  * Replaces a trip's itinerary in one transaction.
  *
  * All-or-nothing on purpose: a half-written plan that the reader then rejects
@@ -869,6 +904,8 @@ export function saveItinerary(itinerary: Itinerary): void {
   const now = new Date().toISOString();
 
   const apply = db.transaction((value: Itinerary) => {
+    /* Inside the transaction and below every caller: a plan is never replaced without first being in the history. */
+    preservePlan(value.tripId, { refreshDecisions: false });
     db.prepare('DELETE FROM itinerary_items WHERE trip_id = ?').run(value.tripId);
     db.prepare('DELETE FROM itinerary_days WHERE trip_id = ?').run(value.tripId);
     db.prepare('DELETE FROM itineraries WHERE trip_id = ?').run(value.tripId);

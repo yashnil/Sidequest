@@ -381,7 +381,7 @@ function draftFromPlan(args: {
     purpose: clip(`${plan.days.length} days in ${input.destinationName}${topInterests.length > 0 ? ` built around ${topInterests.join(', ')}` : ''} — ${scheduled.length} places chosen from the ${args.poolSize} on your board.`, DRAFT_SOFT_PROSE_CAPS.purpose),
     routeRationale: clip(
       bases.length > 1
-        ? `${bases.map((b) => `${b.name} (${b.nights} night${b.nights === 1 ? '' : 's'})`).join(', then ')} — in the order that keeps the drive between them shortest, with each day's stops grouped around where you sleep.`
+        ? `${bases.map((b) => `${b.name} (${b.nights} night${b.nights === 1 ? '' : 's'})`).join(', then ')}, with each day's stops grouped around where you sleep.`
         : `One base in ${bases[0]?.name ?? input.destinationName}; each day's stops are grouped so you are not crossing back and forth.`,
       DRAFT_SOFT_PROSE_CAPS.routeRationale,
     ),

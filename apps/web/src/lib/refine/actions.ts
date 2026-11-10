@@ -23,6 +23,7 @@ import { tripPatchSchema, type TripPatch } from './patch';
 import { RefinementBusyError, activeRun, beginRun, listRuns, releaseStaleRuns, updateRun, type RefinementRun } from './run-repository';
 import { applyTripPatch } from './patch';
 import { StaleTripVersionError, currentVersion, ensureBaselineVersion, getVersion, recordVersion, undoTarget } from './version-repository';
+import { restorePlanVersion } from './restore';
 import { refinementRunThreadId, refinementThreadId } from './threads';
 import { MAX_REFINEMENT_MODEL_CALLS, type ClarifyingQuestion, type RefinementLock } from './state';
 
@@ -506,30 +507,19 @@ export async function undoRefinementAction(input: { tripId: string }): Promise<R
   if (refusal) return { ok: false, error: refusal };
   const target = undoTarget(input.tripId);
   if (!target) return { ok: false, error: 'There is nothing to undo on this trip.' };
-  const head = currentVersion(input.tripId);
-  const { saveItinerary } = await import('../db/repository');
-  const { saveTripDraft } = await import('../db/draft-repository');
-  saveItinerary(target.itinerary);
-  if (target.draft) saveTripDraft({ tripId: input.tripId, draft: target.draft });
   /*
    * The restore is itself a version, so the history stays append-only and a
    * traveller can undo an undo. Overwriting the head would make "restore" the
    * one operation with no record of having happened.
    */
-  recordVersion({
-    tripId: input.tripId,
-    previousVersion: head,
-    request: `Undo back to version ${target.version}`,
-    summary: { changed: [`Restored the trip as it was before your last change.`], kept: [], rechecking: [] },
-    itinerary: target.itinerary,
-    draft: target.draft,
-  });
+  const restored = restorePlanVersion({ tripId: input.tripId, version: target.version, request: `Undo back to version ${target.version}`, changed: 'Restored the trip as it was before your last change.' });
+  if (!restored.ok) return { ok: false, error: restored.error };
   revalidatePath(`/trips/${input.tripId}/itinerary`);
   /*
    * §11 — "Restored version 1" is the system's own bookkeeping read aloud. The
    * traveller asked for their trip back; that is what the sentence says.
    */
-  return { ok: true, version: head + 1, summary: { changed: ['Your trip is back as it was before your last change.'], kept: [], rechecking: [], refused: [] } };
+  return { ok: true, version: restored.version, summary: { changed: ['Your trip is back as it was before your last change.'], kept: [], rechecking: [], refused: [] } };
 }
 
 /** The conversation so far, for the Ask Sidequest panel. Owner only. */

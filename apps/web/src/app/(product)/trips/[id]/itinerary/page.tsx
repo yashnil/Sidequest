@@ -179,6 +179,7 @@ export default async function ItineraryPage({ params }: { params: Promise<{ id: 
       lockedPlaceIds={locks.map((lock) => lock.placeId)}
       regeneration={regeneration}
       planningUpgrade={planningUpgradeFor(id)}
+      hasEarlierVersions={undoTarget(id) !== null}
       dateLabel={formatDateRange(trip.basics.startDate, trip.basics.endDate)}
       // Read once, on the server, so every day on the page judges the same
       // forecast against the same instant. See `lib/clock` for why this is a

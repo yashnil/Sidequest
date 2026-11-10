@@ -2205,6 +2205,9 @@ export const COLUMN_MIGRATIONS: readonly {
    * nobody could attribute, has nothing to give back to.
    */
   { table: 'compilation_jobs', column: 'caller_key', definition: 'TEXT' },
+  /** Release pass — a version carries the pins and board decisions that went with its plan, and may be kept by the traveller. */
+  { table: 'refinement_versions', column: 'decisions_json', definition: 'TEXT' },
+  { table: 'refinement_versions', column: 'saved_at', definition: 'TEXT' },
   { table: 'itinerary_days', column: 'transport_json', definition: "TEXT NOT NULL DEFAULT '{}'" },
   {
     table: 'itinerary_days',
