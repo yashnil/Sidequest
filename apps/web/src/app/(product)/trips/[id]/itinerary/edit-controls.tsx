@@ -361,6 +361,7 @@ export function RegenerateButton({ tripId, copy }: { tripId: string; copy?: { ke
               ))}
             </>
           ) : null}
+          <p className="mt-1.5 leading-relaxed text-ink" data-testid="regenerate-restorable">Your current plan stays under Earlier versions, so you can go back to it.</p>
           <p className="mt-1.5 leading-relaxed text-ink-muted">It takes a minute or two. You will watch it build, then come back to the new plan.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" disabled={pending} onClick={start} className={buttonClass('primary', 'sm')} data-testid="regenerate-confirm-start">
