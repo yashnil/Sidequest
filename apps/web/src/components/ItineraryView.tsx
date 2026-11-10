@@ -108,6 +108,7 @@ import { TripRefreshControl, type PlanningUpgrade } from './hub/TripRefreshContr
 import { VersionHistory } from './hub/VersionHistory';
 import { isMachineWeatherLabel, travellerVoice } from './plan-language';
 import { leadWithThePlaceOf } from '@/lib/journey/lead-with-the-place';
+import { DismissableDetails } from './hub/DismissableDetails';
 
 /**
  * WHY THESE ARE NOT IN THE PLAN, SAID BY WHAT ACTUALLY STOPPED THEM.
@@ -1246,9 +1247,9 @@ export function ItineraryView({
               </Link>
             ) : null}
             {tripId ? (
-              <details className="relative">
+              <DismissableDetails className="relative">
                 <summary className={cx(atlasButtonClass(), 'list-none cursor-pointer [&::-webkit-details-marker]:hidden')}>More</summary>
-                <div className="absolute right-0 z-10 mt-1 flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] sm:left-0 sm:right-auto">
+                <div className="z-10 mt-1 flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] max-sm:fixed max-sm:inset-x-4 max-sm:w-auto sm:absolute sm:left-0">
                   {today?.active ? (
                     <Link href={`/trips/${tripId}/pack`} className={buttonClass('ghost', 'sm')} data-testid="open-pack">
                       Take it with you
@@ -1273,7 +1274,7 @@ export function ItineraryView({
                     Print with evidence appendix
                   </a>
                 </div>
-              </details>
+              </DismissableDetails>
             ) : (
               <PrintButton />
             )}

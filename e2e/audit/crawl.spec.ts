@@ -301,7 +301,12 @@ function write(report: Report, suffix: string): void {
 
 /** Open every disclosure, so what is inside one can be enumerated too. */
 const openDetails = async (page: Page): Promise<void> => {
-  await page.evaluate(() => document.querySelectorAll('details').forEach((node) => node.setAttribute('open', '')));
+  /* Not the band's "More": open, it sits over the tabs and every press on one would land on the menu instead. */
+  await page.evaluate(() =>
+    document.querySelectorAll('details').forEach((node) => {
+      if (node.querySelector(':scope > summary')?.textContent?.trim() !== 'More') node.setAttribute('open', '');
+    }),
+  );
 };
 
 const widths = (process.env.AUDIT_WIDTHS ?? '1440,834,390').split(',').map(Number);
