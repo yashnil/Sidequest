@@ -1,0 +1,4 @@
+{"at":"2026-11-09T23:17:07.166Z","kind":"trip","label":"utah-road-trip","destination":"Moab, Arches and Canyonlands, Utah","start":"2027-04-12","end":"2027-04-17","tripId":"962b84c9-693c-44c7-b3fe-a0429bc8c37d","seconds":172}
+{"at":"2026-11-09T23:20:11.185Z","kind":"trip","label":"kyoto-city","destination":"Kyoto and Nara, Japan","start":"2027-04-05","end":"2027-04-11","tripId":"8f6820ed-84ec-446a-a946-b1ce0dc60a6e","seconds":181}
+{"at":"2026-11-09T23:23:32.676Z","kind":"trip","label":"tenerife-island","destination":"Tenerife, Canary Islands","start":"2027-02-08","end":"2027-02-13","tripId":"37054cfb-6490-4ffe-a814-7dda901b00b6","seconds":197}
+{"at":"2026-11-10T01:09:22.266Z","kind":"decide","request":"Remote monasteries and high passes in October.","url":"http://127.0.0.1:4320/decide/7c13480f-b004-4218-8fcf-4c85b60bb278","seconds":46}
