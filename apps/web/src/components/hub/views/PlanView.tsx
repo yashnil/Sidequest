@@ -88,7 +88,7 @@ export function PlanView({ intel, tripId, itinerary, coordinates, booked, honore
                 {/* V9 — arranging the trip lives on Book; this panel keeps the by-kind reading and points there. */}
                 <p className="mt-10 type-small text-ink-muted">
                   Everything to arrange, with what is booked and what it cost, is on{' '}
-                  <a href="#book" className="text-accent-strong underline underline-offset-4" data-testid="plan-bookings-to-book">
+                  <a href="#book-first" className="text-accent-strong underline underline-offset-4" data-testid="plan-bookings-to-book">
                     Book
                   </a>
                   .

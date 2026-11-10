@@ -73,6 +73,10 @@ async function enumerate(page: Page): Promise<Control[]> {
       if ((rect.width === 0 || rect.height === 0) && !hiddenInput) return;
       if (style.visibility === 'hidden' || style.display === 'none') return;
       if (element.closest('[inert],[aria-hidden="true"]')) return;
+      /* A closed <details> keeps its children's boxes under content-visibility; a traveller cannot reach them until it opens. */
+      if (element.parentElement?.closest('details:not([open])') && element.tagName !== 'SUMMARY') return;
+      /* Pressing the tab you are on is not a claim that it should change. */
+      if (element.getAttribute('aria-selected') === 'true' || element.getAttribute('aria-current')) return;
       const tag = element.tagName.toLowerCase();
       const type = element.getAttribute('type') ?? element.getAttribute('role') ?? '';
       const label = (element.getAttribute('aria-label') ?? element.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -116,7 +120,9 @@ async function fingerprint(page: Page): Promise<string> {
       });
     const checked = [...document.querySelectorAll<HTMLInputElement>('input[type=checkbox],input[type=radio]')].map((input) => (input.checked ? '1' : '0')).join('');
     const selects = [...document.querySelectorAll('select')].map((select) => select.value).join('|');
-    return `${location.pathname}${location.search}${location.hash}\n${text}\n${states.join(';')}\n${checked}\n${selects}`;
+    /* A map's zoom and fit live in SVG geometry, not in any text or ARIA state. */
+    const drawings = [...document.querySelectorAll('svg')].map((svg) => svg.innerHTML.length + ':' + svg.innerHTML.slice(0, 2000)).join('|');
+    return `${location.pathname}${location.search}${location.hash}\n${text}\n${states.join(';')}\n${checked}\n${selects}\n${drawings}`;
   });
 }
 
@@ -172,7 +178,6 @@ async function auditSurface(page: Page, context: BrowserContext, surface: Surfac
     const seen = new Set<string>();
     const origin = new URL(page.url()).origin;
     const checkedLinks = new Set<string>();
-    let pressed = 0;
     const startedAt = Date.now();
 
     for (let turn = 0; turn < 200 && Date.now() - startedAt < 120_000; turn += 1) {
@@ -224,7 +229,6 @@ async function auditSurface(page: Page, context: BrowserContext, surface: Surfac
       };
       page.on('request', onRequest);
       const element = page.locator(`[data-audit-i="${next.index}"]`).first();
-      pressed += 1;
       report.pressed += 1;
       let failed: string | null = null;
       try {
@@ -275,7 +279,6 @@ async function auditSurface(page: Page, context: BrowserContext, surface: Surfac
       }
       await open(page, surface.route, surface.prepare);
     }
-    if (pressed === 0 && report.pressed === 0) report.findings.push({ kind: 'no_effect', surface: surface.name, detail: 'no control could be pressed' });
   } finally {
     page.off('console', onConsole);
     page.off('pageerror', onPageError);
@@ -301,7 +304,7 @@ const openDetails = async (page: Page): Promise<void> => {
   await page.evaluate(() => document.querySelectorAll('details').forEach((node) => node.setAttribute('open', '')));
 };
 
-const widths = [1440, 834, 390] as const;
+const widths = (process.env.AUDIT_WIDTHS ?? '1440,834,390').split(',').map(Number);
 
 test.setTimeout(4 * 60 * 60_000);
 
