@@ -151,6 +151,7 @@ export function ScanMap({ center, scale, points }: { center: { lat: number; lng:
     const seen = new Set<string>();
     let fresh = 0;
     points.forEach((p, i) => {
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return;
       const key = keyOf(p);
       seen.add(key);
       const existing = markers.current.get(key);
@@ -183,12 +184,23 @@ export function ScanMap({ center, scale, points }: { center: { lat: number; lng:
       }
     }
     const duration = reduce.current ? 0 : 2200;
-    if (points.length >= 2) {
-      const lngs = points.map((p) => p.lng);
-      const lats = points.map((p) => p.lat);
-      instance.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: { top: 64, right: 56, bottom: 84, left: 56 }, maxZoom: 12.5, duration });
-    } else {
-      instance.flyTo({ center: [center.lng, center.lat], zoom: ZOOM_BY_SCALE[scale ?? 'city'] ?? 9, duration, essential: false });
+    /*
+     * Framing is decoration on a progress screen. A live Tanzania scan threw
+     * "Invalid LngLat (NaN, NaN)" from here, the page's error boundary took the
+     * whole screen, and the finished trip was never reached. A camera that
+     * cannot move stays where it is.
+     */
+    const placed = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    try {
+      if (placed.length >= 2) {
+        const lngs = placed.map((p) => p.lng);
+        const lats = placed.map((p) => p.lat);
+        instance.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: { top: 64, right: 56, bottom: 84, left: 56 }, maxZoom: 12.5, duration });
+      } else if (Number.isFinite(center.lat) && Number.isFinite(center.lng)) {
+        instance.flyTo({ center: [center.lng, center.lat], zoom: ZOOM_BY_SCALE[scale ?? 'city'] ?? 9, duration, essential: false });
+      }
+    } catch (error) {
+      console.warn('Scan map could not frame these points', error instanceof Error ? error.message : error);
     }
   }, [live, points, center.lat, center.lng, scale]);
 
