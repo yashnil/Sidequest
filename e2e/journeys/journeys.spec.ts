@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { expectNoHorizontalOverflow } from '../support/viewports';
 import { openHubView } from '../support/hub';
 import { waitUntilInteractive } from '../support/trip';
@@ -51,9 +51,15 @@ import {
 } from './journey';
 
 /** "Could not be scheduled", which sits under the days rather than on Prepare. */
-async function unscheduledText(page: import('@playwright/test').Page): Promise<string> {
+async function unscheduledText(page: Page): Promise<string> {
   await openHubView(page, 'days');
   return page.locator('#hub-view-days').innerText();
+}
+
+/** A place the traveller named themselves (a must-do, or a stop in the plan they brought): the journey never un-ticks or skips it. */
+function isTheirs(arch: Archetype, name: string): boolean {
+  if (arch.mustDoStem && name.includes(arch.mustDoStem)) return true;
+  return arch.entry === 'have_plan' && [`${arch.destination} Old Quarter`, `${arch.destination} River Walk`].some((named) => name.includes(named));
 }
 
 const CUSTOM_STOP = 'Journey coffee stop';
@@ -72,7 +78,10 @@ for (const arch of ARCHETYPES) {
     const width = page.viewportSize()!.width;
     const journey = new Journey(arch.id, width);
     watchNetwork(page);
-    const photo = arch.id === 'tenerife-island' ? (name: string) => shoot(page, name, testInfo) : async () => undefined;
+    const photo = async (name: string): Promise<void> => {
+      /* One journey per width takes the set; a slow screenshot never fails a step about the product. */
+      if (REPRESENTATIVE[0] === arch.id) await shoot(page, name, testInfo).catch(() => undefined);
+    };
     let tripId = '';
     let destinationName = arch.destination;
     let cards: BoardCard[] = [];
@@ -88,6 +97,8 @@ for (const arch of ARCHETYPES) {
 
     // ---------- Input ----------
     await journey.step('entry', async () => {
+      await page.goto('/');
+      await photo('00-landing');
       if (arch.entry === 'advisor') {
         const { tripId: id, chosen } = await adviseToTrip(page, arch);
         tripId = id;
@@ -113,6 +124,7 @@ for (const arch of ARCHETYPES) {
       }
       expect(facts, 'the review states the nights').toContain(`${nightsOf(arch.dates)} night`);
       if (arch.party === 'family') expect(facts, 'the review states the children').toMatch(/2 child/i);
+      if (arch.needs?.includes('mobility_limited')) expect((await page.getByTestId('interview-review').innerText()).toLowerCase(), 'the review states the mobility need').toMatch(/mobility|step-free|low-effort/);
       await page.reload();
       await expect(page.getByTestId('interview-review')).toBeVisible({ timeout: 30_000 });
       return `questions: ${seen.join(',')}; ${transportEvidence}; review: ${facts.replace(/\s+/g, ' ').slice(0, 200)}; survives reload`;
@@ -144,7 +156,7 @@ for (const arch of ARCHETYPES) {
       /* Un-tick three of Sidequest's picks (never the traveller's must-do), so "Choose for me" has something real to do. */
       await revealBoard(page);
       const before = await readBoard(page);
-      const unticked = before.filter((c) => c.status === 'included' && !(arch.mustDoStem && c.name.includes(arch.mustDoStem))).slice(0, 3);
+      const unticked = before.filter((c) => c.status === 'included' && !isTheirs(arch, c.name)).slice(0, 3);
       expect(unticked.length, 'picks to un-tick').toBeGreaterThan(0);
       for (const card of unticked) {
         const include = page.locator(`[data-place-card="${card.id}"]`).getByRole('button', { name: 'Include', exact: true }).first();
@@ -173,7 +185,7 @@ for (const arch of ARCHETYPES) {
       await revealBoard(page);
       cards = await readBoard(page);
       manual = cards.find((c) => c.status !== 'included' && !c.blocked);
-      rejected = cards.find((c) => c.status === 'included' && c.id !== manual?.id && !(arch.mustDoStem && c.name.includes(arch.mustDoStem)));
+      rejected = cards.find((c) => c.status === 'included' && c.id !== manual?.id && !isTheirs(arch, c.name));
       expect(manual, 'a place not yet chosen').toBeTruthy();
       expect(rejected, 'a chosen place to turn down').toBeTruthy();
       await choose(page, manual!.id, 'Include');
@@ -235,7 +247,9 @@ for (const arch of ARCHETYPES) {
       plan = await readPlan(page);
       await photo('05-days');
       if (arch.entry === 'advisor') {
-        expect(plan.length).toBeGreaterThanOrEqual(2);
+        const expected = arch.advisorExpect!;
+        expect(plan[0]!.header.toUpperCase(), 'the month asked for reaches the plan').toContain(expected.month);
+        expect(Math.abs(plan.length - 1 - expected.nights), `about ${expected.nights} nights were asked for, the plan has ${plan.length - 1}`).toBeLessThanOrEqual(1);
         return `${plan.length} days, ${plan[0]!.header} … ${plan.at(-1)!.header}`;
       }
       assertPlanMatchesDates(plan, arch.dates);
@@ -247,6 +261,8 @@ for (const arch of ARCHETYPES) {
     await journey.step('picks-present-or-explained', async () => {
       const onPlan = new Set(plan.flatMap((d) => d.activities.map((a) => a.place)));
       const notes = `${await prepareText(page)}\n${await unscheduledText(page)}`;
+      await openHubView(page, 'prepare');
+      await photo('11-prepare');
       const included = cards.filter((c) => c.status === 'included');
       const missing = included.filter((c) => !onPlan.has(c.id));
       const unexplained = missing.filter((c) => !notes.includes(c.name));
@@ -278,7 +294,7 @@ for (const arch of ARCHETYPES) {
       await journey.step('existing-plan-checked-not-replaced', async () => {
         await openHubView(page, 'prepare');
         const prepare = await prepareText(page);
-        expect(prepare, 'the critique reaches the finished plan').toMatch(/Your plan, checked/);
+        expect(prepare, 'the critique reaches the finished plan').toMatch(/your plan, checked/i);
         const titles = plan.flatMap((d) => d.activities.map((a) => a.title)).join('|');
         for (const named of [`${arch.destination} Old Quarter`, `${arch.destination} River Walk`]) expect(titles, `"${named}", named in the plan the traveller brought, is scheduled`).toContain(named);
         expect(prepare, 'a place the board could not check is called out').toContain('Somewhere Nobody Has Heard Of');
@@ -351,6 +367,7 @@ for (const arch of ARCHETYPES) {
 
     await journey.step('book-a-fact', async () => {
       await openHubView(page, 'plan');
+      await photo('10-stays');
       await page.getByTestId('booked-add').first().click();
       const form = page.getByTestId('booked-form');
       await form.getByTestId('booked-title').fill('Journey booked hotel');
@@ -528,6 +545,7 @@ for (const arch of ARCHETYPES) {
       await page.emulateMedia({ media: 'print' });
       for (const day of plan) await expect(page.getByTestId(`day-card-${day.dayNumber}`), `day ${day.dayNumber} prints`).toBeVisible();
       await expect(page.getByTestId('stop-menu').first(), 'edit controls do not print').toBeHidden();
+      await photo('12-print');
       const pdf = await page.pdf({ printBackground: true });
       expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
       const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
@@ -606,6 +624,9 @@ for (const arch of ARCHETYPES) {
 
     // ---------- Reopen ----------
     await journey.step('reopen-with-saved-cookie', async () => {
+      await page.goto('/trips');
+      await expect(page.getByTestId('trip-card').first()).toBeVisible({ timeout: 20_000 });
+      await photo('13-dashboard');
       await page.goto(`/trips/${tripId}/itinerary`);
       const owner = signature(await readPlan(page));
       const state = await page.context().storageState();

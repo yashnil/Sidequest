@@ -1,6 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { itineraryStructureFingerprint, type BookedPlanItem, type BookingResolution, type Itinerary, type TravelIntelligence, type TravelReadinessProfile, type TravelerProfile, type Trip } from '@sidequest/core';
+import { existingPlanPlaceNames } from '../planning/plan-critique';
 import { getProfile } from '@/lib/db/repository';
 import { profileWithPartyDiet } from '@/lib/db/party-repository';
 import { getIntent } from '@/lib/db/compiler-repository';
@@ -128,7 +129,8 @@ export function loadTripIntelligence(input: {
   const readinessProfile = isPublic ? null : getReadinessProfile(trip.id);
   const draft = getDraftHints(trip.id);
   const candidate = intent?.resolution?.candidates.find((c) => c.id === (intent.selectedCandidateId ?? intent.resolution?.unambiguousCandidateId)) ?? intent?.resolution?.candidates[0] ?? null;
-  const userPlaces = [...(composer?.mustDo ? composer.mustDo.split(/\n|,|;/).map((s) => s.trim()).filter((s) => s.length > 1) : []), ...profile.interview.mustInclude];
+  /* The plan brought through "I already have a plan" is the traveller's own list too: without it that door's finished trip had no critique at all. */
+  const userPlaces = [...new Set([...(composer?.mustDo ? composer.mustDo.split(/\n|,|;/).map((s) => s.trim()).filter((s) => s.length > 1) : []), ...existingPlanPlaceNames(composer?.existingPlan), ...profile.interview.mustInclude])];
 
   const inputsHash = createHash('sha256')
     /*

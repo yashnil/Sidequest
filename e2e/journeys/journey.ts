@@ -39,6 +39,8 @@ export interface Archetype {
   diet?: readonly string[];
   /** The advisor's request carries dates; it lands on the plan step and asks nothing more. */
   advisorRequest?: string;
+  /** What the advisor request said about when and how long, to be found on the finished plan. */
+  advisorExpect?: { month: string; nights: number };
 }
 
 /* Dates are computed, never written: each stays a plan ahead of the clock, in its own season. */
@@ -47,12 +49,12 @@ export const ARCHETYPES: readonly Archetype[] = [
   { id: 'iceland-road-trip', label: 'Iceland road trip', entry: 'known', destination: 'Iceland', mustDoStem: 'Iceland Hot Springs', dates: seasonalTrip({ month: 6, day: 15, days: 9 }), party: 'friends', car: true, priorities: ['Scenic viewpoints', 'Hot springs'], pace: 'two_three', effort: 'moderate', budget: 'premium' },
   { id: 'tokyo-kyoto-transit', label: 'Tokyo and Kyoto by public transit', entry: 'known', destination: 'Tokyo and Kyoto', dates: seasonalTrip({ month: 4, day: 3, days: 10 }), party: 'couple', car: false, priorities: ['History & culture', 'Markets & street food'], pace: 'two_three', effort: 'easy', budget: 'midrange', diet: ['Vegetarian'] },
   { id: 'kyrgyzstan-remote', label: 'Kyrgyzstan remote adventure', entry: 'known', destination: 'Kyrgyzstan', dates: seasonalTrip({ month: 7, day: 8, days: 12 }), party: 'solo', car: false, priorities: ['Hiking', 'Lakes & rivers'], pace: 'one_big', effort: 'hard', budget: 'budget' },
-  { id: 'safari', label: 'A safari', entry: 'advisor', destination: 'safari', advisorRequest: 'A safari to see big animals in August, about 8 nights, midrange budget.', dates: seasonalTrip({ month: 8, day: 10, days: 9 }), party: 'couple', car: false, priorities: ['Wildlife', 'Scenic viewpoints'], pace: 'two_three', effort: 'moderate', budget: 'premium' },
-  { id: 'european-city-break', label: 'A European city break', entry: 'have_plan', destination: 'Lisbon', mustDoStem: 'Lisbon Old Quarter', dates: seasonalTrip({ month: 10, day: 8, days: 4 }), party: 'couple', car: false, priorities: ['History & culture', 'Markets & street food'], pace: 'two_three', effort: 'easy', budget: 'midrange' },
+  { id: 'safari', label: 'A safari', entry: 'advisor', destination: 'safari', advisorRequest: 'A safari to see big animals in August, about 8 nights, midrange budget.', advisorExpect: { month: 'AUG', nights: 8 }, dates: seasonalTrip({ month: 8, day: 10, days: 9 }), party: 'couple', car: false, priorities: ['Wildlife', 'Scenic viewpoints'], pace: 'two_three', effort: 'moderate', budget: 'premium' },
+  { id: 'european-city-break', label: 'A European city break', entry: 'have_plan', destination: 'Lisbon', dates: seasonalTrip({ month: 10, day: 8, days: 4 }), party: 'couple', car: false, priorities: ['History & culture', 'Markets & street food'], pace: 'two_three', effort: 'easy', budget: 'midrange' },
   { id: 'us-national-park', label: 'A US national park', entry: 'known', destination: 'Yosemite National Park', dates: seasonalTrip({ month: 6, day: 20, days: 6 }), party: 'friends', car: true, priorities: ['Hiking', 'Scenic viewpoints'], pace: 'two_three', effort: 'hard', budget: 'midrange' },
-  { id: 'family-young-children', label: 'A family with young children', entry: 'known', destination: 'Costa Rica', dates: seasonalTrip({ month: 2, day: 12, days: 8 }), party: 'family', children: 2, needs: ['young_children'], car: true, priorities: ['Wildlife', 'Beaches'], pace: 'one_two', effort: 'easy', budget: 'midrange', diet: ['Vegetarian'] },
+  { id: 'family-young-children', label: 'A family with young children', entry: 'known', destination: 'Costa Rica', dates: seasonalTrip({ month: 2, day: 12, days: 8 }), party: 'family', children: 2, needs: ['kids_under_12'], car: true, priorities: ['Wildlife', 'Beaches'], pace: 'one_two', effort: 'easy', budget: 'midrange', diet: ['Vegetarian'] },
   { id: 'accessible-low-intensity', label: 'Accessible, low-intensity travel', entry: 'known', destination: 'Vienna', mustDoStem: 'Vienna City Museum', dates: seasonalTrip({ month: 9, day: 12, days: 5 }), party: 'couple', needs: ['mobility_limited'], car: false, priorities: ['Museums', 'History & culture'], pace: 'one_two', effort: 'easy', budget: 'premium' },
-  { id: 'winter-sports', label: 'Winter sports', entry: 'advisor', destination: 'winter sports', advisorRequest: 'Skiing in the Alps in late January for a week, midrange budget.', dates: seasonalTrip({ month: 1, day: 23, days: 7 }), party: 'friends', car: false, priorities: ['Skiing', 'Scenic viewpoints'], pace: 'two_three', effort: 'hard', budget: 'midrange' },
+  { id: 'winter-sports', label: 'Winter sports', entry: 'advisor', destination: 'winter sports', advisorRequest: 'Skiing in the Alps in late January for a week, midrange budget.', advisorExpect: { month: 'JAN', nights: 7 }, dates: seasonalTrip({ month: 1, day: 23, days: 7 }), party: 'friends', car: false, priorities: ['Skiing', 'Scenic viewpoints'], pace: 'two_three', effort: 'hard', budget: 'midrange' },
 ];
 
 export const REPRESENTATIVE = ['tenerife-island', 'tokyo-kyoto-transit', 'family-young-children'];
@@ -121,7 +123,7 @@ export class Journey {
       const evidence = await work();
       recordEvidence({ journey: this.id, step, width: this.width, result: 'pass', evidence: evidence ?? 'ok' });
     } catch (error) {
-      const message = error instanceof Error ? error.message.replace(/\u001b\[[0-9;]*m/g, '').slice(0, 1200) : String(error);
+      const message = error instanceof Error ? error.message.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '').slice(0, 1200) : String(error);
       this.failures.push(`${step}: ${message}`);
       recordEvidence({ journey: this.id, step, width: this.width, result: 'fail', evidence: message });
       if (critical) this.blocked = true;
@@ -200,12 +202,15 @@ export async function setUpTrip(page: Page, arch: Archetype): Promise<string> {
     const shown = page.getByTestId('count-children');
     for (let guard = 0; guard < 8 && Number(await shown.innerText()) !== arch.children; guard += 1) {
       const fewer = Number(await shown.innerText()) > arch.children;
-      await page.getByRole('button', { name: fewer ? 'One fewer children'.replace('children', 'child') : 'One more child' }).first().click();
+      await page.getByRole('button', { name: fewer ? 'One fewer children' : 'One more children' }).first().click();
     }
     await expect(shown).toHaveText(String(arch.children));
   }
   for (const need of arch.needs ?? []) {
-    await page.locator('label.ob-tag', { hasText: NEED_LABEL[need] ?? need }).first().click();
+    const tag = page.locator('label.ob-tag', { hasText: NEED_LABEL[need] ?? need }).first();
+    /* A party shape can pre-tick a need; pressing it again would take it away. */
+    if (!(await tag.locator('input').isChecked())) await tag.click();
+    await expect(tag.locator('input')).toBeChecked();
   }
   await continueButton(page).click();
   await expect(page.getByTestId('setup-flow')).toHaveAttribute('data-step', 'fixed');
@@ -237,8 +242,8 @@ export async function adviseToTrip(page: Page, arch: Archetype): Promise<{ tripI
 }
 
 const NEED_LABEL: Record<string, RegExp> = {
-  mobility_limited: /mobility|walking/i,
-  young_children: /young children|toddler|small children/i,
+  mobility_limited: /limited mobility/i,
+  kids_under_12: /Kids under 12/i,
 };
 
 /** Which transport option a no-car traveller should take, in preference order. */
@@ -480,10 +485,6 @@ export async function prepareText(page: Page): Promise<string> {
 // ---------------------------------------------------------------------------
 // Editing
 // ---------------------------------------------------------------------------
-
-function rowsOf(page: Page, dayNumber: number): Locator {
-  return page.locator(`#hub-view-days [data-timeline-place][data-day="${dayNumber}"][data-row-kind="activity"]`);
-}
 
 async function rowFor(page: Page, dayNumber: number, placeId: string): Promise<Locator> {
   const row = page.locator(`#hub-view-days [data-timeline-place="${placeId}"][data-day="${dayNumber}"]`);

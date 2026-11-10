@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   DESTINATION_TRAIT_LABELS,
   FUNCTIONAL_NEED_LABELS,
+  TRAVELER_NEED_LABELS,
   INTERVIEW_MODULE_LABELS,
   answerQuestion,
   chipLabel,
@@ -1304,6 +1305,7 @@ function ReviewScreen({
             </h3>
             <div className="min-w-0">
               <p className="type-figure type-body text-ink">{partyLine(context.traveller)}</p>
+              {context.traveller.travelerNeeds.length > 0 ? <p className="type-small mt-1 text-ink" data-testid="review-party-needs">{context.traveller.travelerNeeds.map((need) => TRAVELER_NEED_LABELS[need]).join(' · ')}</p> : null}
               {party ? (
                 <p className="type-small mt-1 text-ink-muted">
                   {party.members} {party.members === 1 ? 'person' : 'people'} described
