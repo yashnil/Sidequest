@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FullConfig } from '@playwright/test';
@@ -102,7 +103,49 @@ async function assertAssetsAreServable(baseURL: string): Promise<void> {
   }
 }
 
+/**
+ * A WALL-CLOCK TIMEOUT ALSO COUNTS THE TIME THE MACHINE WAS ASLEEP.
+ *
+ * Measured on 2026-11-10: a laptop on battery entered macOS Maintenance Sleep
+ * mid-run for 333 s, the server's own five-second timer showed the same 332 s
+ * hole, and every test in flight "timed out" while RSS sat flat and event-loop
+ * p99 stayed at 27 ms. On the day of the two failing full runs the same machine
+ * was asleep for up to 53 minutes of an hour. So the run keeps the machine from
+ * idling where it can, and says so at the end when it could not.
+ *
+ * `caffeinate -i` only stops idle sleep, so a machine put to sleep is still put
+ * to sleep; that is what the watch below is for. It runs in the runner, on a
+ * timer unrelated to any test, and a gap is the machine not running at all.
+ */
+const HOST_STALLS_ENV = 'SIDEQUEST_E2E_HOST_STALLS';
+const STALL_MS = 20_000;
+
+function watchTheHost(): void {
+  if (process.platform === 'darwin') {
+    spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore', detached: true }).on('error', () => undefined).unref();
+  }
+  let last = Date.now();
+  setInterval(() => {
+    const now = Date.now();
+    if (now - last > STALL_MS) {
+      const seen = hostStalls();
+      process.env[HOST_STALLS_ENV] = JSON.stringify({ count: seen.count + 1, seconds: seen.seconds + Math.round((now - last) / 1000) });
+    }
+    last = now;
+  }, 2_000).unref();
+}
+
+/** How often, and for how long, the machine stopped running during this suite. */
+export function hostStalls(): { count: number; seconds: number } {
+  try {
+    return JSON.parse(process.env[HOST_STALLS_ENV] ?? '') as { count: number; seconds: number };
+  } catch {
+    return { count: 0, seconds: 0 };
+  }
+}
+
 export default async function globalSetup(config: FullConfig): Promise<void> {
+  watchTheHost();
   const id = buildId();
   if (id) process.env[BUILD_ID_ENV] = id;
   await assertAssetsAreServable(baseURLOf(config));

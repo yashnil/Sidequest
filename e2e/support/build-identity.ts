@@ -1,4 +1,4 @@
-import { buildId, recordedBuildId } from './readiness';
+import { buildId, hostStalls, recordedBuildId } from './readiness';
 
 /**
  * Did the build change while the suite was running?
@@ -13,6 +13,17 @@ import { buildId, recordedBuildId } from './readiness';
  * which is exactly the wrong turn this check exists to stop somebody taking.
  */
 export default async function globalTeardown(): Promise<void> {
+  const stalls = hostStalls();
+  if (stalls.count > 0) {
+    console.error(
+      [
+        '',
+        `  The machine stopped running ${stalls.count} time(s) during this suite, ${stalls.seconds} s in all.`,
+        '  It slept or stalled; a test timeout spanning one of those gaps says nothing about the product.',
+        '',
+      ].join('\n'),
+    );
+  }
   const before = recordedBuildId();
   const after = buildId();
   if (!before || !after || before === after) return;
