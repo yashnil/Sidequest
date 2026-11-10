@@ -222,7 +222,7 @@ describe('the finished plan is a document about places, not a bare schedule', ()
         coordinates: COORDINATES,
       }),
     );
-    expect(html).toContain('Everything you picked fitted better on another day');
+    expect(html).toContain('Nothing scheduled, so the hours are yours.');
     expect(html, 'a mid-trip blank is not an arrival or departure day').not.toContain('on an arrival or departure day that is usually right');
   });
 

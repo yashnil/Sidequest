@@ -43,7 +43,8 @@ export function plannerAutoPick(input: {
     trip: input.trip,
     profile: input.profile,
     region: input.region,
-    candidates: input.candidates,
+    /* Sidequest does not pick what its own board tells the traveller to skip. Their own includes stay. */
+    candidates: input.candidates.filter((candidate) => candidate.group !== 'weak_fit' || travellerRows.some((row) => row.placeId === candidate.place.id && row.status === 'included')),
     selections: travellerRows,
     extras: input.extras,
     destinationName: input.region.region.name,
