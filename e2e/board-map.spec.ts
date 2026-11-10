@@ -98,7 +98,7 @@ test('the board draws its places, and every pin says what it is and how far', as
 
   const unplaced = page.getByTestId('board-map-unplaced');
   if ((await unplaced.count()) > 0) {
-    await expect(unplaced).toContainText(/Not on the map, because nobody publishes where/);
+    await expect(unplaced).toContainText(/Not on the map, no confirmed position yet/);
   }
 });
 

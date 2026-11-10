@@ -96,7 +96,7 @@ export function BoardMap({
         )}
         {unplaced.length > 0 ? (
           <p className="mt-1 text-[11px] leading-snug text-ink-faint" data-testid="board-map-unplaced">
-            Not on the map, because nobody publishes where {unplaced.length === 1 ? 'it is' : 'they are'}:{' '}
+            Not on the map, no confirmed position yet:{' '}
             {unplaced
               .slice(0, 4)
               .map((place) => place.name)

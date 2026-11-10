@@ -399,7 +399,7 @@ function unresolvedNotes(readiness: PlannerReadiness): string[] {
     notes.push(`${unresolved.routePairs} with no measured travel time.`);
   }
   if (unresolved.criticalHours > 0) {
-    notes.push(`${unresolved.criticalHours} where nobody publishes opening hours.`);
+    notes.push(`${unresolved.criticalHours} with no confirmed opening hours.`);
   }
   if (unresolved.accessRequirements > 0) {
     notes.push(`${unresolved.accessRequirements} with no established way in.`);

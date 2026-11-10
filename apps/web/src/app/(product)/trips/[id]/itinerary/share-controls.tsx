@@ -1,9 +1,13 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import { buttonClass } from '@/components/ui';
 import { createShareLinkAction } from './actions';
 import { revokeShareLinkAction, rotateShareLinkAction } from './share-actions';
+
+const subscribeNever = () => () => {};
+const readOrigin = () => window.location.origin;
+const readNoOrigin = () => '';
 
 /**
  * THE SHARE AFFORDANCE: ONE BUTTON, THEN THE LINK ITSELF.
@@ -26,7 +30,16 @@ import { revokeShareLinkAction, rotateShareLinkAction } from './share-actions';
  * token in one statement, so the old copy dies the instant the new one lives.
  */
 export function ShareControl({ tripId, initialPath }: { tripId: string; initialPath?: string | null }) {
-  const [url, setUrl] = useState<string | null>(() => (initialPath && typeof window !== 'undefined' ? `${window.location.origin}${initialPath}` : null));
+  /*
+   * THE ORIGIN ARRIVES AFTER HYDRATION; THE PATH IS THERE FROM THE FIRST PAINT.
+   *
+   * This read `window` inside a useState initialiser, so a trip that already had
+   * a link rendered a button on the server and a field in the browser: React
+   * #418, on the Pack page of every trip whose link had been made.
+   */
+  const origin = useSyncExternalStore(subscribeNever, readOrigin, readNoOrigin);
+  const [path, setPath] = useState<string | null>(initialPath ?? null);
+  const url = path === null ? null : `${origin}${path}`;
   const [status, setStatus] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -51,7 +64,7 @@ export function ShareControl({ tripId, initialPath }: { tripId: string; initialP
                 setStatus(result.error);
                 return;
               }
-              setUrl(`${window.location.origin}${result.path}`);
+              setPath(result.path);
               setCopied(false);
               setRevoked(false);
             });
@@ -82,7 +95,7 @@ export function ShareControl({ tripId, initialPath }: { tripId: string; initialP
                 setStatus(result.error ?? 'We could not make a link just then. Try again.');
                 return;
               }
-              setUrl(`${window.location.origin}${result.path}`);
+              setPath(result.path);
             });
           }}
           className={buttonClass('secondary', 'sm')}
@@ -106,7 +119,7 @@ export function ShareControl({ tripId, initialPath }: { tripId: string; initialP
         aria-label="Share link"
         value={url}
         onFocus={(event) => event.currentTarget.select()}
-        className="min-h-11 min-w-0 flex-1 rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
+        className="min-h-11 w-full min-w-0 flex-1 basis-full rounded-[var(--radius-control)] border border-rule bg-paper-raised px-3 py-2 text-sm text-ink"
       />
       <button
         type="button"
@@ -145,7 +158,7 @@ export function ShareControl({ tripId, initialPath }: { tripId: string; initialP
               setStatus(result.error);
               return;
             }
-            setUrl(null);
+            setPath(null);
             setCopied(false);
             setRevoked(true);
           });

@@ -81,6 +81,9 @@ export function JourneyExplorer({
   const [terrain, setTerrain] = useState<{ on: boolean; busy: boolean; report: TerrainReport | null }>({ on: false, busy: false, report: null });
   const [keyOpen, setKeyOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  /* The card over the map can be put away; choosing the same stop again brings it back. */
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const frame = useRef<HTMLDivElement | null>(null);
 
   const day = model.days.find((d) => d.dayNumber === dayNumber) ?? model.days[0] ?? null;
   const stay = useMemo(() => model.bases.find((b) => b.dayNumbers.includes(dayNumber)) ?? null, [model.bases, dayNumber]);
@@ -116,11 +119,12 @@ export function JourneyExplorer({
     if (!ready || !handle.current || !selectedId || selectedId === lastSelected.current) return;
     lastSelected.current = selectedId;
     const pin = pins.find((p) => p.id === selectedId);
-    if (pin) handle.current.flyTo(pin, { zoom: 15, ...(terrain.on ? { pitch: 60 } : {}) });
+    if (pin) handle.current.flyTo(pin, { zoom: 15, padding: clearOfCard(frame.current), ...(terrain.on ? { pitch: 60 } : {}) });
   }, [ready, selectedId, pins, terrain.on]);
 
   const selectStop = (id: string) => {
     if (id.startsWith('ctx:')) return;
+    setDismissed(null);
     const stop = day?.stops.find((s) => pinIdOf(s) === id) ?? null;
     setOwnSelected(id);
     setSelectedLeg(null);
@@ -152,7 +156,7 @@ export function JourneyExplorer({
 
   const selectedStop = day?.stops.find((s) => pinIdOf(s) === selectedId) ?? null;
   const pickedLeg = selectedLeg ? (day?.legs.find((l) => l.id === selectedLeg) ?? null) : null;
-  const shownStop = replay.active ? replayStop : scale === 'day' && !(pickedLeg && detailFocus === 'leg') ? selectedStop : null;
+  const shownStop = replay.active ? replayStop : scale === 'day' && !(pickedLeg && detailFocus === 'leg') && selectedId !== dismissed ? selectedStop : null;
   /* A leg belongs to its day: at the trip or stay scale its card would describe a day no longer on screen. */
   const shownLeg = replay.active ? replayLeg : scale === 'day' && pickedLeg && (detailFocus === 'leg' || !selectedStop) ? pickedLeg : null;
   const modesHere = [...new Set((day?.legs ?? []).map((l) => l.mode))];
@@ -165,7 +169,7 @@ export function JourneyExplorer({
   );
 
   return (
-    <div className={cx('relative h-full w-full overflow-hidden bg-night text-bone', className)} data-testid={testId} data-scale={scale} data-day={day.dayNumber} data-terrain={terrain.on ? '3d' : '2d'} data-replay={replay.active ? (replay.playing ? 'playing' : 'paused') : 'off'}>
+    <div ref={frame} className={cx('relative h-full w-full overflow-hidden bg-night text-bone', className)} data-testid={testId} data-scale={scale} data-day={day.dayNumber} data-terrain={terrain.on ? '3d' : '2d'} data-replay={replay.active ? (replay.playing ? 'playing' : 'paused') : 'off'}>
       <JourneyMap
         ref={handle}
         className="absolute inset-0"
@@ -235,6 +239,20 @@ export function JourneyExplorer({
         <div className={cx('absolute z-20 w-[min(21rem,calc(100%-2rem))]', variant === 'full' ? 'bottom-[9.5rem] left-4' : variant === 'sheet' ? 'bottom-[12.5rem] left-4' : 'bottom-24 left-4')} aria-live="polite" data-testid="journey-detail">
           {shownStop ? <StopCard stop={shownStop} image={shownStop.placeId ? photos[shownStop.placeId] ?? null : null} /> : null}
           {!shownStop && shownLeg ? <LegCard leg={shownLeg} day={day} /> : null}
+          {!replay.active ? (
+            <button
+              type="button"
+              aria-label="Close this card"
+              data-testid="journey-detail-close"
+              className="absolute right-0 top-0 inline-flex min-h-11 min-w-11 items-center justify-center text-lg text-bone/70 hover:text-bone"
+              onClick={() => {
+                setDismissed(selectedId);
+                setSelectedLeg(null);
+              }}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -298,6 +316,13 @@ function DayFigures({ day }: { day: JourneyDay }) {
   );
 }
 
+/** Room for the card, so the selected stop lands beside it rather than under it. */
+function clearOfCard(element: HTMLElement | null): { top: number; right: number; bottom: number; left: number } {
+  const width = element?.clientWidth ?? 0;
+  if (width >= 720) return { top: 72, right: 96, bottom: 96, left: 384 };
+  return { top: 56, right: 24, bottom: 280, left: 24 };
+}
+
 function StopCard({ stop, image }: { stop: JourneyStop; image: ImageRecord | null }) {
   return (
     <div className="fade-up">
@@ -316,9 +341,6 @@ function StopCard({ stop, image }: { stop: JourneyStop; image: ImageRecord | nul
         </p>
         <p className="mt-1 font-display text-[1.45rem] leading-[1.08] tracking-[-0.015em]">{stop.title}</p>
         {stop.why ? <p className="mt-1.5 text-sm leading-relaxed text-bone/80">{stop.why}</p> : null}
-        <p className="coordbar mt-2 text-bone/45">
-          {Math.abs(stop.point.lat).toFixed(4)}° {stop.point.lat >= 0 ? 'N' : 'S'} · {Math.abs(stop.point.lng).toFixed(4)}° {stop.point.lng >= 0 ? 'E' : 'W'}
-        </p>
       </div>
     </div>
   );

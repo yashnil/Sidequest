@@ -519,6 +519,19 @@ export async function setCheckAction(tripId: string, list: 'packing' | 'checklis
   return { ok: true };
 }
 
+/**
+ * The Preflight tick for "a copy is saved offline". Not `setCheckAction`,
+ * because that revalidates the route: this one runs on its own after a page
+ * has loaded, nothing on screen needs the answer, and a revalidation here
+ * re-fetched the whole page from the server under a traveller's first press.
+ */
+export async function recordOfflineCopyAction(tripId: string): Promise<HubActionResult> {
+  const refusal = await tripAccessRefusal(tripId);
+  if (refusal) return { ok: false, error: refusal };
+  setCheck(tripId, 'preflight', 'offline', true);
+  return { ok: true };
+}
+
 /* ------------------------------------------------------------------ *
  * LIVE WORLD V1 — day editing, day repair, booking edits, discovery
  * ------------------------------------------------------------------ */

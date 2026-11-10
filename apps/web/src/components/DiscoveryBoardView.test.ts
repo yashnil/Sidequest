@@ -404,7 +404,7 @@ describe('the board is not twenty-four copies of one card', () => {
     const html = render();
     const banner = chunks(html, 'board-weather-note', 'details');
     if (banner.length > 0) {
-      expect(html).toMatch(/things we could not check across this board|One thing we could not check/);
+      expect(html).toMatch(/limits on what this board can tell you|One limit on what this board/);
       expect(html).toContain('see what they are');
     }
     /* And the places come before the map in the document, not after it. */

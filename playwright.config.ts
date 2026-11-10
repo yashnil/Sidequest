@@ -31,6 +31,9 @@ const RESPONSIVE_SPEC = ['**/viewports.spec.ts', '**/benchmark-viewports.spec.ts
 /** Today mode needs the fixture clock; `playwright.today.config.ts` runs it and clears this ignore. */
 /** The interactive-map suite needs the real map provider and a controlled tile source; `playwright.maps.config.ts` runs it. */
 const MAPS_SPEC = ['**/maps/**', '**/journeys/**'];
+=======
+const MAPS_SPEC = ['**/maps/**', '**/audit/**'];
+>>>>>>> bc3d7fc (fix: hydration mismatch on the Pack, honest hours and map card, cheaper trip opens (WIP))
 const TODAY_SPEC = ['**/live-world-today.spec.ts', '**/v9-today.spec.ts'];
 /**
  * V6 — needs the fixture climate; `playwright.timing.config.ts` runs it on its own server.

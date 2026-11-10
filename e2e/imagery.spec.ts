@@ -122,14 +122,14 @@ test('NO EXTERNAL REQUEST DURING RENDER', async ({ page }) => {
   expect(wikis, `a wiki API was called during render: ${wikis.join(', ')}`).toEqual([]);
 });
 
-test('a destination without a photograph says so on a real map, never an empty or invented frame', async ({ page }) => {
+test('a destination without a photograph shows a real map, never an empty or invented frame', async ({ page }) => {
   await sealOff(page);
   await rankedShortlist(page);
 
   /*
    * The advisor's rule: a card shows a credited photograph of the destination's
    * own Wikidata item, or a locator — the place's real coordinate on a world
-   * map, captioned "No photograph yet". Never an empty frame, and never an
+   * map, named as a world map for a screen reader. Never an empty frame, and never an
    * abstract graphic dressed as a picture of the place.
    */
   const picks = page.getByTestId('advisor-pick');
@@ -138,7 +138,7 @@ test('a destination without a photograph says so on a real map, never an empty o
   for (let index = 0; index < total; index += 1) {
     const pick = picks.nth(index);
     const photographs = await pick.locator('figure').count();
-    const locators = await pick.getByText('No photograph yet').count();
+    const locators = await pick.getByRole('img', { name: /on a world map/ }).count();
     expect(photographs + locators, `pick ${index} drew no image slot`).toBeGreaterThan(0);
     if (locators > 0) {
       await expect(pick.getByRole('img', { name: /on a world map/ })).toBeVisible();

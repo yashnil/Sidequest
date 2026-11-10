@@ -83,10 +83,10 @@ export function AtlasBand({
 }) {
   if (stage) {
     return (
-      <header className={cx('topo relative isolate -mx-5 overflow-hidden bg-night text-bone [--topo-opacity:0.07] sm:-mx-6', className)} data-testid="atlas-band" data-cover="stage">
+      <header className={cx('topo relative isolate -mx-5 bg-night text-bone has-[details[open]]:z-30 [--topo-opacity:0.07] sm:-mx-6', className)} data-testid="atlas-band" data-cover="stage">
         {/* The map: a band above the type on a phone, the whole ground on a wide screen. */}
         {/* The contour sheet sits under the map, so the cover is never a black slab while the tiles arrive. */}
-        <div className="relative h-[38vh] min-h-[240px] lg:absolute lg:inset-0 lg:h-auto print:hidden">{stage}</div>
+        <div className="relative h-[38vh] min-h-[240px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto print:hidden">{stage}</div>
         {/*
           The scrim is only as dark as the type needs. It used to hold 82% night
           to a third of the width, which put the cover's left half — and most of
@@ -209,9 +209,9 @@ export function AtlasBand({
     );
   }
   return (
-    <header className={cx('atlas topo relative overflow-hidden rounded-[var(--radius-plate)] [--topo-opacity:0.07]', className)} data-testid="atlas-band">
+    <header className={cx('atlas topo relative rounded-[var(--radius-plate)] before:rounded-[inherit] has-[details[open]]:z-30 [--topo-opacity:0.07]', className)} data-testid="atlas-band">
       {figure ? (
-        <div aria-hidden="true" className="atlas-figure pointer-events-none absolute inset-y-0 right-0 hidden w-[46%] lg:block print:hidden">
+        <div aria-hidden="true" className="atlas-figure pointer-events-none absolute inset-y-0 right-0 hidden w-[46%] overflow-hidden rounded-r-[var(--radius-plate)] lg:block print:hidden">
           {figure}
         </div>
       ) : null}

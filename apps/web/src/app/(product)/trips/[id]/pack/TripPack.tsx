@@ -31,7 +31,8 @@ function when(iso: string | null): string {
   if (!iso) return 'never';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return 'unknown';
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  /* In one named zone on purpose: `undefined` meant the server's locale and zone on the first render and the traveller's on the second. */
+  return `${date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })} UTC`;
 }
 
 export function CalendarSubscription({ tripId, feed }: { tripId: string; feed: ActiveFeed | null }) {

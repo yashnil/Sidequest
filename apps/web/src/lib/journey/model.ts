@@ -1,5 +1,7 @@
 import { decodePolyline, haversineKm, journeyFromSegment, journeyLineKind, TRANSPORT_MODE_LABELS, type Itinerary, type ItineraryDay, type ItineraryItem, type TravelSegment } from '@sidequest/core';
 
+import { leadWithThePlaceOf } from './lead-with-the-place';
+
 /**
  * THE JOURNEY, AS SOMETHING TO EXPLORE — derived, never planned.
  *
@@ -211,7 +213,7 @@ export function journeyDay(input: {
     const isStop = item.kind === 'activity';
     if (isStop) number += 1;
     const title = item.placeId && input.nameOf ? input.nameOf(item.placeId, item.title) : item.title;
-    const why = firstSentence((item.placeId && input.whyOf?.(item.placeId)) || item.reason);
+    const why = firstSentence(leadWithThePlaceOf((item.placeId && input.whyOf?.(item.placeId)) || item.reason));
     const stop: JourneyStop = {
       id: item.id,
       ...(item.placeId ? { placeId: item.placeId } : {}),

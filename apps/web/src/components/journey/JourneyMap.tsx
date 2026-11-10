@@ -39,7 +39,7 @@ export interface JourneyPin {
 
 export interface JourneyMapHandle {
   fit: (points: readonly { lat: number; lng: number }[], options?: { duration?: number; padding?: Padding; pitch?: number; bearing?: number }) => void;
-  flyTo: (point: { lat: number; lng: number }, options?: { zoom?: number; duration?: number; pitch?: number; bearing?: number }) => void;
+  flyTo: (point: { lat: number; lng: number }, options?: { zoom?: number; duration?: number; padding?: Padding; pitch?: number; bearing?: number }) => void;
   follow: (point: { lat: number; lng: number }) => void;
   /** Replay: show the first `fraction` of one leg as the drawing head. Null clears it. */
   drawLeg: (leg: JourneyLeg | null, fraction: number) => void;
@@ -292,7 +292,7 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
       const camera = { center: [point.lng, point.lat] as [number, number], zoom: options.zoom ?? Math.max(instance.getZoom(), 14), ...(options.pitch !== undefined ? { pitch: options.pitch } : {}), ...(options.bearing !== undefined ? { bearing: options.bearing } : {}) };
       lastFit.current = null;
       if (reduced.current || options.duration === 0) instance.jumpTo(camera);
-      else instance.flyTo({ ...camera, duration: options.duration ?? 1400, curve: 1.3, essential: true, padding: latest.current.padding });
+      else instance.flyTo({ ...camera, duration: options.duration ?? 1400, curve: 1.3, essential: true, padding: options.padding ?? latest.current.padding });
     },
     follow(point) {
       map.current?.jumpTo({ center: [point.lng, point.lat] });

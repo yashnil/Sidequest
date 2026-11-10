@@ -38,7 +38,7 @@ const MATCH_WORDS: Record<AdvisorPick['match'], string> = {
 
 function coverageWords(pick: AdvisorPick): string {
   const asked = pick.factors.filter((factor) => factor.value !== null).length;
-  return `judged on ${asked} of ${pick.factors.length} things`;
+  return `${asked} of ${pick.factors.length} checks could be made`;
 }
 
 function kindWords(pick: AdvisorPick): string | null {
@@ -102,7 +102,6 @@ function Locator({ pick }: { pick: AdvisorPick }) {
     <div className="survey-night relative flex aspect-[16/9] flex-col justify-between p-4 text-bone">
       <WorldDots highlighted={[mark(pick)]} tone="night" className="absolute inset-0 m-auto h-full w-full p-3 opacity-90" label={`${pick.name} on a world map`} />
       <p className="sheet-label relative text-bone/60">{WORLD_REGION_LABELS[pick.worldRegion]}</p>
-      <p className="sheet-label relative text-bone/45">No photograph yet</p>
     </div>
   );
 }

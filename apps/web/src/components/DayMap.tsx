@@ -51,7 +51,7 @@ export function DayMap({
       width={320}
       height={220}
       summary={summary}
-      caption={omitted > 0 ? <span>{omitted} {omitted === 1 ? 'stop is' : 'stops are'} not drawn, because nobody publishes where {omitted === 1 ? 'it is' : 'they are'}.</span> : null}
+      caption={omitted > 0 ? <span>{omitted} {omitted === 1 ? 'stop is' : 'stops are'} not drawn: no confirmed position yet.</span> : null}
     />
   );
 }

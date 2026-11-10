@@ -42,6 +42,8 @@ function storable(response) {
   return true;
 }
 
+let snapshots = Promise.resolve();
+
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'snapshot' && typeof data.url === 'string') {
@@ -52,13 +54,15 @@ self.addEventListener('message', (event) => {
       return;
     }
     if (!cacheable(url)) return;
-    event.waitUntil(
+    /* One at a time: a trip page asks for three, and three renders at once is a stall for whoever is using the server. */
+    snapshots = snapshots.then(() =>
       caches.open(CACHE).then((cache) =>
         fetch(url.toString(), { credentials: 'same-origin' })
           .then((response) => (storable(response) ? cache.put(url.toString(), response.clone()) : null))
           .catch(() => null),
       ),
     );
+    event.waitUntil(snapshots);
   }
   if (data.type === 'clear') {
     event.waitUntil(caches.keys().then((names) => Promise.all(names.filter((name) => name.startsWith('sidequest-trip-')).map((name) => caches.delete(name)))));

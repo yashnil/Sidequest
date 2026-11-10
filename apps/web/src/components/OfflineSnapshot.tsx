@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { setCheckAction } from '@/app/(product)/trips/[id]/itinerary/actions';
+import { recordOfflineCopyAction } from '@/app/(product)/trips/[id]/itinerary/actions';
 import { TRIP_SERVICE_WORKER_URL } from './ServiceWorkerRegistrar';
 
 /**
@@ -17,6 +17,16 @@ import { TRIP_SERVICE_WORKER_URL } from './ServiceWorkerRegistrar';
 type SnapshotState = 'unsupported' | 'saving' | 'saved' | 'failed';
 
 const STORAGE_PREFIX = 'sidequest-offline:';
+/** A save this recent is not worth another three renders of the same pages. */
+const SNAPSHOT_FRESH_MS = 5 * 60_000;
+
+/** After the page has settled, so a background save never competes with hydration or the first press. */
+function browserIdle(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => resolve(), { timeout: 3_000 });
+    else window.setTimeout(resolve, 1_500);
+  });
+}
 
 function relative(savedAt: number, now: number): string {
   const minutes = Math.max(0, Math.round((now - savedAt) / 60_000));
@@ -112,9 +122,28 @@ export function OfflineSnapshot({
       .register(TRIP_SERVICE_WORKER_URL, { scope: '/', updateViaCache: 'none' })
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
+        /*
+         * WHAT OPENING A TRIP COST THE SERVER, AND THE PAGE.
+         *
+         * Every open used to post three more page renders here, all at once, and
+         * then record the Preflight tick through an action that revalidates the
+         * route, so the page was refetched from the server while it was still
+         * being used: five renders for one load. The copy is kept fresh by the
+         * worker's own network-first fetch whenever a page is opened, so a recent
+         * save needs no work; a due save waits for the browser to be idle.
+         */
+        const last = readSavedAt(list[0]!);
+        if (last !== null && Date.now() - last < SNAPSHOT_FRESH_MS) {
+          if (cancelled) return;
+          setSavedAt(last);
+          setNow(Date.now());
+          setState('saved');
+          return;
+        }
+        await browserIdle();
+        if (cancelled) return;
         const worker = registration.active ?? registration.waiting ?? registration.installing;
         for (const url of list) worker?.postMessage({ type: 'snapshot', url });
-        if (cancelled) return;
         const at = Date.now();
         writeSavedAt(list[0]!, at);
         setSavedAt(at);
@@ -122,7 +151,7 @@ export function OfflineSnapshot({
         setState('saved');
         if (tripId) {
           try {
-            await setCheckAction(tripId, 'preflight', 'offline', true);
+            await recordOfflineCopyAction(tripId);
           } catch {
             /* The tick is a convenience; the copy is saved either way. */
           }

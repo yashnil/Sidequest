@@ -128,7 +128,7 @@ describe('the finished plan is a document about places, not a bare schedule', ()
       marks.map((_, index) => index + 1),
     );
     // And the drawing says how many it could not place, rather than implying it is whole.
-    expect(html).toContain('not drawn, because nobody publishes where');
+    expect(html).toContain('not drawn: no confirmed position yet');
   });
 
   it('never claims a mark for a stop the region cannot place', () => {

@@ -676,7 +676,7 @@ export function DiscoveryBoardView({
             <summary className={cx(MIN_TARGET_SUMMARY, 'flex cursor-pointer list-none items-center gap-2 text-[13px] leading-snug text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden')}>
               <InfoIcon className="h-3.5 w-3.5 shrink-0" />
               <span>
-                {shared.notes.length === 1 ? 'One thing we could not check across this board' : `${shared.notes.length} things we could not check across this board`}
+                {shared.notes.length === 1 ? 'One limit on what this board can tell you' : `${shared.notes.length} limits on what this board can tell you`}
                 <span className="ml-1 text-ink-faint">— see what they are</span>
               </span>
               <ChevronIcon className="ml-auto h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180" />

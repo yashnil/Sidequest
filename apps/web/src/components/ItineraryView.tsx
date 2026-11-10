@@ -107,6 +107,7 @@ import { ShareControl } from '@/app/(product)/trips/[id]/itinerary/share-control
 import { TripRefreshControl, type PlanningUpgrade } from './hub/TripRefreshControl';
 import { VersionHistory } from './hub/VersionHistory';
 import { isMachineWeatherLabel, travellerVoice } from './plan-language';
+import { leadWithThePlaceOf } from '@/lib/journey/lead-with-the-place';
 
 /**
  * WHY THESE ARE NOT IN THE PLAN, SAID BY WHAT ACTUALLY STOPPED THEM.
@@ -1247,7 +1248,7 @@ export function ItineraryView({
             {tripId ? (
               <details className="relative">
                 <summary className={cx(atlasButtonClass(), 'list-none cursor-pointer [&::-webkit-details-marker]:hidden')}>More</summary>
-                <div className="absolute right-0 z-10 mt-1 flex min-w-60 flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] sm:left-0 sm:right-auto">
+                <div className="absolute right-0 z-10 mt-1 flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] sm:left-0 sm:right-auto">
                   {today?.active ? (
                     <Link href={`/trips/${tripId}/pack`} className={buttonClass('ghost', 'sm')} data-testid="open-pack">
                       Take it with you
@@ -3165,8 +3166,8 @@ function buildPlaceSheet({
   }
   if (hours) {
     facts.push({
-      label: 'Hours',
-      value: `${clock(hours.openMinute, 'later')}–${clock(hours.closeMinute, 'earlier')}${hours.lastAdmissionMinute !== undefined ? ` · last entry ${clock(hours.lastAdmissionMinute, 'earlier')}` : ''}`,
+      label: hours.sourceKind === 'official' ? 'Hours' : 'Listed hours',
+      value: `${clock(hours.openMinute, 'later')}–${clock(hours.closeMinute, 'earlier')}${hours.lastAdmissionMinute !== undefined ? ` · last entry ${clock(hours.lastAdmissionMinute, 'earlier')}` : ''}${hours.sourceKind === 'official' ? '' : ' · not confirmed'}`,
     });
   }
 
@@ -3183,7 +3184,7 @@ function buildPlaceSheet({
         : 'Signed for daylight use only, and sunrise and sunset could not be worked out for this one. Check the light yourself.',
     });
   }
-  if (item.food?.hoursUnknown) notes.push({ body: 'Nobody publishes hours for this that we could read. Check before you go.' });
+  if (item.food?.hoursUnknown) notes.push({ body: 'Hours not confirmed. Check before you go.' });
   if (item.food) {
     for (const claim of item.food.dietary.filter((entry) => entry.evidence !== 'unknown')) {
       // A community map tag is not the venue's menu: say only what the map records.
@@ -3451,13 +3452,14 @@ function TimelineRow({
           </p>
         ) : null}
         {why ? (
-          <p className="mt-1 line-clamp-2 type-small text-ink-muted" data-testid={rationale?.why && why === leadWithThePlace(firstSentence(rationale.why)) ? 'stop-why' : 'stop-reason'}>
+          <p className="mt-1 line-clamp-2 type-small text-ink-muted" data-testid={rationale?.why && why === leadWithThePlaceOf(firstSentence(rationale.why)) ? 'stop-why' : 'stop-reason'}>
             {why}
           </p>
         ) : null}
         {hours ? (
           <p className="type-figure mt-1 text-xs text-ink-faint">
-            Open {clock(hours.openMinute, 'later')}–{clock(hours.closeMinute, 'earlier')}
+            {hours.sourceKind === 'official' ? 'Open ' : 'Listed '}{clock(hours.openMinute, 'later')}–{clock(hours.closeMinute, 'earlier')}
+            {hours.sourceKind === 'official' ? '' : ' · not confirmed'}
             {hours.lastAdmissionMinute !== undefined ? ` · arrive before ${clock(hours.lastAdmissionMinute, 'earlier')}` : ''}
             {hours.periodLabel ? ` · ${hours.periodLabel}` : ''}
           </p>
@@ -3499,28 +3501,11 @@ function stopWhy(why: string | undefined, reason: string | undefined): string | 
   const reach = /^\s*\d+\s*(?:hr|h|min)\b[^.]*\b(?:you were happy to travel|of your base|from your base)\b[^.]*\.?\s*$/i;
   /* Bookkeeping, not a reason: the open-data scan's own provenance and distance lines. */
   const filler = /^(What to look for and where|A \w+ slot in the day|On Wikidata as\b|Minutes from where you are staying|Listed on OpenStreetMap)/i;
-  const first = why ? leadWithThePlace(firstSentence(why)) : '';
+  const first = why ? leadWithThePlaceOf(firstSentence(why)) : '';
   if (first && !reach.test(first) && !filler.test(first)) return first;
   const fallback = reason ? firstSentence(reason) : '';
   if (fallback && !filler.test(fallback) && !reach.test(fallback)) return fallback;
   return null;
-}
-
-/**
- * RELEASE PASS — A ROW SAYS WHAT THE PLACE IS, NOT HOW IT WAS SCORED.
- *
- * The fit sentence opens by restating the questionnaire — "You marked lakes &
- * rivers as "once or twice", and that is what this delivers: A deep blue lake
- * pinned against Laurel Mountain…" — and a row has two lines. On a phone the
- * whole of both went to the preamble, on every stop, and the thing the
- * traveller would actually see was cut off. The row now leads with the place;
- * the full sentence, preference and all, is still what the stop's own sheet
- * says, one press away. Presentation only: the rationale is untouched.
- */
-function leadWithThePlace(sentence: string): string {
-  const match = /^You marked .{1,80}? as [“"][^”"]{1,60}[”"],? and that is what this delivers:\s*(.+)$/i.exec(sentence);
-  const offer = match?.[1]?.trim();
-  return offer && offer.length > 12 ? offer : sentence;
 }
 
 /**
