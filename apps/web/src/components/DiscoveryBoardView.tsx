@@ -1349,7 +1349,7 @@ function TravelPhrase({
    */
   return (
     <>
-      {provenance === 'modelled' ? 'about ' : ''}
+      {provenance === 'measured' || provenance === 'official' ? '' : 'about '}
       {formatMinutes(travelMinutes)} {REACH_MODE_PHRASE[mode]} from base
     </>
   );

@@ -1057,7 +1057,7 @@ export function describeReachFromBase(
      * read. A modelled duration must never print with a measurement's
      * confidence — the same rule the board applies to its own travel phrase.
      */
-    return reach.provenance === 'modelled' ? `about ${figure}` : figure;
+    return reach.provenance === 'measured' || reach.provenance === 'official' ? figure : `about ${figure}`;
   }
   return reach.status === 'conflict' ? 'No usable route from your base' : 'Journey not verified';
 }

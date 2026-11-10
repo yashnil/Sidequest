@@ -93,7 +93,8 @@ interface ModeModel {
 }
 
 export const MODE_MODELS: Readonly<Record<'drive' | 'walk' | 'bus' | 'rail' | 'bicycle', ModeModel>> = {
-  drive: { detour: 1.3, overheadMinutes: 8, speedAnchors: [[2, 22], [5, 32], [15, 48], [35, 62], [90, 72]] },
+  /* Calibrated against 792 measured road pairs across eight regions (2026-11, docs/release-candidate/final/routing-calibration.json). Mountain roads stay too fast: two coordinates cannot see a pass. */
+  drive: { detour: 1.3, overheadMinutes: 8, speedAnchors: [[2, 22], [5, 32], [15, 46], [35, 56], [90, 64], [200, 74]] },
   walk: { detour: 1.25, overheadMinutes: 2, speedAnchors: [[0, 4.5]] },
   /* Urban bus or metro, then suburban and regional lines, then intercity coaches. */
   bus: { detour: 1.35, overheadMinutes: 12, speedAnchors: [[2, 12], [5, 16], [12, 24], [25, 36], [50, 45], [100, 55]] },
