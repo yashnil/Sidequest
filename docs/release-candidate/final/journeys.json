@@ -1,17 +1,2572 @@
 [
   {
+    "journey": "family-young-children",
+    "step": "entry",
+    "width": 390,
+    "result": "pass",
+    "evidence": "door \"known\", trip aa5275d0-5456-4a10-a7de-1ca9267eb0dd, url http://127.0.0.1:4510/trips/aa5275d0-5456-4a10-a7de-1ca9267eb0dd/plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "interview",
+    "width": 390,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,everyone_every_day,hard_constraints; transport answered \"rent_car\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 7 nights · 8 days WHO 2 adults, 2 children WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Wildlife (the heart of the trip); survives reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "board-opens",
+    "width": 390,
+    "result": "pass",
+    "evidence": "25 places, 17 chosen by Sidequest"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "auto-pick-changes-selections",
+    "width": 390,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 14 to 15 included, and survives a reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 390,
+    "result": "pass",
+    "evidence": "included \"Costa Rica Riverside Park\", skipped \"Costa Rica Castle\"; 25 statuses identical after reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "auto-pick-respects-traveller",
+    "width": 390,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "family-young-children",
+    "step": "failure-injected-mid-build",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 25 picks"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "build",
+    "width": 390,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/aa5275d0-5456-4a10-a7de-1ca9267eb0dd/itinerary"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-dates-and-days",
+    "width": 390,
+    "result": "pass",
+    "evidence": "8 days, DAY 1 · FRI 12 FEB … DAY 8 · FRI 19 FEB"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-edges-lighter",
+    "width": 390,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 330 min / 3 stops"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "picks-present-or-explained",
+    "width": 390,
+    "result": "pass",
+    "evidence": "15/15 on the plan, 0 explained"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 390,
+    "result": "pass",
+    "evidence": "15 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "constraints-reach-the-plan",
+    "width": 390,
+    "result": "pass",
+    "evidence": "car trip; diet on food plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "booking-links",
+    "width": 390,
+    "result": "pass",
+    "evidence": "5 links over 1 stays, 2027-02-12 → 2027-02-19, adults 2, children 2, 2 car searches"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "book-a-fact",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-move-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Costa Rica Cathedral\" day 2→3: \"You moved Costa Rica Cathedral to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-remove-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Costa Rica Ridge Lookout\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-add-custom-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-duration-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Costa Rica Valley Village\" 180→90 min: \"Costa Rica Valley Village now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "failure-injected-mid-edit",
+    "width": 390,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "map-pins-match-day-stops",
+    "width": 390,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 4, day 4: 3, day 5: 1"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "ics-download",
+    "width": 390,
+    "result": "pass",
+    "evidence": "29 events, TZ America/Costa_Rica"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "calendar-feed",
+    "width": 390,
+    "result": "pass",
+    "evidence": "feed served 29 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "print-packet",
+    "width": 390,
+    "result": "pass",
+    "evidence": "8 days visible in print media, a 17-page PDF, window.print called"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "map-links",
+    "width": 390,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:4, d4:3, d6:3"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "share-link",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 8 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "share-revoked-dies",
+    "width": 390,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "reopen-with-saved-cookie",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 390,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "second-user-cannot-open",
+    "width": 390,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "entry",
+    "width": 390,
+    "result": "pass",
+    "evidence": "door \"known\", trip ea7ae782-6f36-46a4-a70b-f3d6254008c3, url http://127.0.0.1:4510/trips/ea7ae782-6f36-46a4-a70b-f3d6254008c3/plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "interview",
+    "width": 390,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,hike_appetite,scenic_reach,hard_constraints; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 6 nights · 7 days WHO 2 adults WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Hiking (the heart of the trip), Scenic viewpoints (a few tim; survives reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "board-opens",
+    "width": 390,
+    "result": "pass",
+    "evidence": "24 places, 15 chosen by Sidequest"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "auto-pick-changes-selections",
+    "width": 390,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 12 to 13 included, and survives a reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 390,
+    "result": "pass",
+    "evidence": "included \"Tenerife Riverside Park\", skipped \"Tenerife River Walk\"; 24 statuses identical after reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "auto-pick-respects-traveller",
+    "width": 390,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "failure-injected-mid-build",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 24 picks"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "build",
+    "width": 390,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/ea7ae782-6f36-46a4-a70b-f3d6254008c3/itinerary"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-dates-and-days",
+    "width": 390,
+    "result": "pass",
+    "evidence": "7 days, DAY 1 · MON 10 MAY … DAY 7 · SUN 16 MAY"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-edges-lighter",
+    "width": 390,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 315 min / 3 stops"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "picks-present-or-explained",
+    "width": 390,
+    "result": "pass",
+    "evidence": "13/13 on the plan, 0 explained"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 390,
+    "result": "pass",
+    "evidence": "13 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "must-dos-reach-the-plan",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tenerife Castle\" scheduled; the unplaceable one is explained"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "constraints-reach-the-plan",
+    "width": 390,
+    "result": "pass",
+    "evidence": "no driving legs"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "booking-links",
+    "width": 390,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-05-10 → 2027-05-16, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "book-a-fact",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-move-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tenerife Ridge Viewpoint\" day 2→3: \"You moved Tenerife Ridge Viewpoint to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-remove-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tenerife Ridge Lookout\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-add-custom-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-duration-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tenerife Harbour Boat Trip\" 120→90 min: \"Tenerife Harbour Boat Trip now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "failure-injected-mid-edit",
+    "width": 390,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "map-pins-match-day-stops",
+    "width": 390,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 2, day 4: 3, day 5: 2"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "ics-download",
+    "width": 390,
+    "result": "pass",
+    "evidence": "25 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "calendar-feed",
+    "width": 390,
+    "result": "pass",
+    "evidence": "feed served 25 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "print-packet",
+    "width": 390,
+    "result": "pass",
+    "evidence": "7 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "map-links",
+    "width": 390,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:2, d4:3, d5:2, d6:3"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "share-link",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 7 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "share-revoked-dies",
+    "width": 390,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "reopen-with-saved-cookie",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 390,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "second-user-cannot-open",
+    "width": 390,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "entry",
+    "width": 390,
+    "result": "pass",
+    "evidence": "door \"known\", trip 2af57e2f-e4e5-430c-9220-8ee0fecc80b3, url http://127.0.0.1:4510/trips/2af57e2f-e4e5-430c-9220-8ee0fecc80b3/plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "interview",
+    "width": 390,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,hard_constraints; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 9 nights · 10 days WHO 2 adults WHEN Your dates SHAPE A moving route (Sidequest’s read) PACE Two or three meaningful stops GOING FOR History & culture (the heart of the trip), Markets & street ; survives reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "board-opens",
+    "width": 390,
+    "result": "pass",
+    "evidence": "28 places, 21 chosen by Sidequest"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "auto-pick-changes-selections",
+    "width": 390,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 18 to 19 included, and survives a reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 390,
+    "result": "pass",
+    "evidence": "included \"Tokyo and Kyoto Castle\", skipped \"Tokyo and Kyoto Riverside Park\"; 28 statuses identical after reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "auto-pick-respects-traveller",
+    "width": 390,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "failure-injected-mid-build",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 28 picks"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "build",
+    "width": 390,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/2af57e2f-e4e5-430c-9220-8ee0fecc80b3/itinerary"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-dates-and-days",
+    "width": 390,
+    "result": "pass",
+    "evidence": "10 days, DAY 1 · SAT 3 APR … DAY 10 · MON 12 APR"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-edges-lighter",
+    "width": 390,
+    "result": "pass",
+    "evidence": "arrival 30 min / 1 stops, departure 0 min / 0 stops, busiest 315 min / 3 stops"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "picks-present-or-explained",
+    "width": 390,
+    "result": "pass",
+    "evidence": "19/19 on the plan, 0 explained"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 390,
+    "result": "pass",
+    "evidence": "19 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "constraints-reach-the-plan",
+    "width": 390,
+    "result": "pass",
+    "evidence": "no driving legs; diet on food plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "booking-links",
+    "width": 390,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-04-03 → 2027-04-12, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "book-a-fact",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-move-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto Ridge Lookout\" day 2→3: \"You moved Tokyo and Kyoto Ridge Lookout to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-remove-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto Founders Monument\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-add-custom-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-duration-undo-reload",
+    "width": 390,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto City Museum\" 120→90 min: \"Tokyo and Kyoto City Museum now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "failure-injected-mid-edit",
+    "width": 390,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "map-pins-match-day-stops",
+    "width": 390,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 3, day 4: 3, day 5: 3"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "ics-download",
+    "width": 390,
+    "result": "pass",
+    "evidence": "37 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "calendar-feed",
+    "width": 390,
+    "result": "pass",
+    "evidence": "feed served 37 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "print-packet",
+    "width": 390,
+    "result": "pass",
+    "evidence": "10 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "map-links",
+    "width": 390,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:3, d4:3, d5:3, d6:3, d9:2"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "share-link",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 10 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "share-revoked-dies",
+    "width": 390,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "reopen-with-saved-cookie",
+    "width": 390,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 390,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "second-user-cannot-open",
+    "width": 390,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "family-young-children",
+    "step": "entry",
+    "width": 834,
+    "result": "pass",
+    "evidence": "door \"known\", trip 08782aa0-031b-4051-bf93-00c0222e7a6a, url http://127.0.0.1:4510/trips/08782aa0-031b-4051-bf93-00c0222e7a6a/plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "interview",
+    "width": 834,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,everyone_every_day,hard_constraints; transport answered \"rent_car\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 7 nights · 8 days WHO 2 adults, 2 children WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Wildlife (the heart of the trip); survives reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "board-opens",
+    "width": 834,
+    "result": "pass",
+    "evidence": "25 places, 17 chosen by Sidequest"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "auto-pick-changes-selections",
+    "width": 834,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 14 to 15 included, and survives a reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 834,
+    "result": "pass",
+    "evidence": "included \"Costa Rica Riverside Park\", skipped \"Costa Rica Castle\"; 25 statuses identical after reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "auto-pick-respects-traveller",
+    "width": 834,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "family-young-children",
+    "step": "failure-injected-mid-build",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 25 picks"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "build",
+    "width": 834,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/08782aa0-031b-4051-bf93-00c0222e7a6a/itinerary"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-dates-and-days",
+    "width": 834,
+    "result": "pass",
+    "evidence": "8 days, DAY 1 · FRI 12 FEB … DAY 8 · FRI 19 FEB"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-edges-lighter",
+    "width": 834,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 330 min / 3 stops"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "picks-present-or-explained",
+    "width": 834,
+    "result": "pass",
+    "evidence": "15/15 on the plan, 0 explained"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 834,
+    "result": "pass",
+    "evidence": "15 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "constraints-reach-the-plan",
+    "width": 834,
+    "result": "pass",
+    "evidence": "car trip; diet on food plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "booking-links",
+    "width": 834,
+    "result": "pass",
+    "evidence": "5 links over 1 stays, 2027-02-12 → 2027-02-19, adults 2, children 2, 2 car searches"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "book-a-fact",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-move-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Costa Rica Cathedral\" day 2→3: \"You moved Costa Rica Cathedral to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-remove-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Costa Rica Ridge Lookout\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-add-custom-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-duration-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Costa Rica Valley Village\" 180→90 min: \"Costa Rica Valley Village now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "failure-injected-mid-edit",
+    "width": 834,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "map-pins-match-day-stops",
+    "width": 834,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 4, day 4: 3, day 5: 1"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "ics-download",
+    "width": 834,
+    "result": "pass",
+    "evidence": "29 events, TZ America/Costa_Rica"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "calendar-feed",
+    "width": 834,
+    "result": "pass",
+    "evidence": "feed served 29 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "print-packet",
+    "width": 834,
+    "result": "pass",
+    "evidence": "8 days visible in print media, a 17-page PDF, window.print called"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "map-links",
+    "width": 834,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:4, d4:3, d6:3"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "share-link",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 8 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "share-revoked-dies",
+    "width": 834,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "reopen-with-saved-cookie",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 834,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "second-user-cannot-open",
+    "width": 834,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "entry",
+    "width": 834,
+    "result": "pass",
+    "evidence": "door \"known\", trip b39271ab-5eaf-4de5-9a39-8a87946cb8b2, url http://127.0.0.1:4510/trips/b39271ab-5eaf-4de5-9a39-8a87946cb8b2/plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "interview",
+    "width": 834,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,day_trips,hike_appetite,walking_tolerance,transit_comfort,hard_constraints; transport answered \"transit_walk\" of [transit_walk, taxis, rent_car]; review: LENGTH 6 nights · 7 days WHO 2 adults WHEN Your dates SHAPE One base, the city on foot (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Hiking (the heart of the trip), Scenic viewpoints; survives reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "board-opens",
+    "width": 834,
+    "result": "pass",
+    "evidence": "24 places, 15 chosen by Sidequest"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "auto-pick-changes-selections",
+    "width": 834,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 12 to 13 included, and survives a reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 834,
+    "result": "pass",
+    "evidence": "included \"Tenerife Riverside Park\", skipped \"Tenerife River Walk\"; 24 statuses identical after reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "auto-pick-respects-traveller",
+    "width": 834,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "failure-injected-mid-build",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 24 picks"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "build",
+    "width": 834,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/b39271ab-5eaf-4de5-9a39-8a87946cb8b2/itinerary"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-dates-and-days",
+    "width": 834,
+    "result": "pass",
+    "evidence": "7 days, DAY 1 · MON 10 MAY … DAY 7 · SUN 16 MAY"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-edges-lighter",
+    "width": 834,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 315 min / 3 stops"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "picks-present-or-explained",
+    "width": 834,
+    "result": "pass",
+    "evidence": "13/13 on the plan, 0 explained"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 834,
+    "result": "pass",
+    "evidence": "13 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "must-dos-reach-the-plan",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tenerife Castle\" scheduled; the unplaceable one is explained"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "constraints-reach-the-plan",
+    "width": 834,
+    "result": "pass",
+    "evidence": "no driving legs"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "booking-links",
+    "width": 834,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-05-10 → 2027-05-16, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "book-a-fact",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-move-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tenerife Ridge Viewpoint\" day 2→3: \"You moved Tenerife Ridge Viewpoint to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-remove-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tenerife Ridge Lookout\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-add-custom-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-duration-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tenerife Harbour Boat Trip\" 120→90 min: \"Tenerife Harbour Boat Trip now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "failure-injected-mid-edit",
+    "width": 834,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "map-pins-match-day-stops",
+    "width": 834,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 2, day 4: 3, day 5: 2"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "ics-download",
+    "width": 834,
+    "result": "pass",
+    "evidence": "25 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "calendar-feed",
+    "width": 834,
+    "result": "pass",
+    "evidence": "feed served 25 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "print-packet",
+    "width": 834,
+    "result": "pass",
+    "evidence": "7 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "map-links",
+    "width": 834,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:2, d4:3, d5:2, d6:3"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "share-link",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 7 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "share-revoked-dies",
+    "width": 834,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "reopen-with-saved-cookie",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 834,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "second-user-cannot-open",
+    "width": 834,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "entry",
+    "width": 834,
+    "result": "pass",
+    "evidence": "door \"known\", trip 2f49830a-26ba-4538-8c70-45de334dfdb2, url http://127.0.0.1:4510/trips/2f49830a-26ba-4538-8c70-45de334dfdb2/plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "interview",
+    "width": 834,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,hard_constraints; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 9 nights · 10 days WHO 2 adults WHEN Your dates SHAPE A moving route (Sidequest’s read) PACE Two or three meaningful stops GOING FOR History & culture (the heart of the trip), Markets & street ; survives reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "board-opens",
+    "width": 834,
+    "result": "pass",
+    "evidence": "28 places, 21 chosen by Sidequest"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "auto-pick-changes-selections",
+    "width": 834,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 18 to 19 included, and survives a reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 834,
+    "result": "pass",
+    "evidence": "included \"Tokyo and Kyoto Castle\", skipped \"Tokyo and Kyoto Riverside Park\"; 28 statuses identical after reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "auto-pick-respects-traveller",
+    "width": 834,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "failure-injected-mid-build",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 28 picks"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "build",
+    "width": 834,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/2f49830a-26ba-4538-8c70-45de334dfdb2/itinerary"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-dates-and-days",
+    "width": 834,
+    "result": "pass",
+    "evidence": "10 days, DAY 1 · SAT 3 APR … DAY 10 · MON 12 APR"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-edges-lighter",
+    "width": 834,
+    "result": "pass",
+    "evidence": "arrival 30 min / 1 stops, departure 0 min / 0 stops, busiest 315 min / 3 stops"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "picks-present-or-explained",
+    "width": 834,
+    "result": "pass",
+    "evidence": "19/19 on the plan, 0 explained"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 834,
+    "result": "pass",
+    "evidence": "19 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "constraints-reach-the-plan",
+    "width": 834,
+    "result": "pass",
+    "evidence": "no driving legs; diet on food plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "booking-links",
+    "width": 834,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-04-03 → 2027-04-12, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "book-a-fact",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-move-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto Ridge Lookout\" day 2→3: \"You moved Tokyo and Kyoto Ridge Lookout to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-remove-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto Founders Monument\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-add-custom-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-duration-undo-reload",
+    "width": 834,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto City Museum\" 120→90 min: \"Tokyo and Kyoto City Museum now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "failure-injected-mid-edit",
+    "width": 834,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "map-pins-match-day-stops",
+    "width": 834,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 3, day 4: 3, day 5: 3"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "ics-download",
+    "width": 834,
+    "result": "pass",
+    "evidence": "37 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "calendar-feed",
+    "width": 834,
+    "result": "pass",
+    "evidence": "feed served 37 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "print-packet",
+    "width": 834,
+    "result": "pass",
+    "evidence": "10 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "map-links",
+    "width": 834,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:3, d4:3, d5:3, d6:3, d9:2"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "share-link",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 10 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "share-revoked-dies",
+    "width": 834,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "reopen-with-saved-cookie",
+    "width": 834,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 834,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "second-user-cannot-open",
+    "width": 834,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip 821acdc4-bd38-4781-b656-878dcf787022, url http://127.0.0.1:4510/trips/821acdc4-bd38-4781-b656-878dcf787022/plan"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,iconic_crowds,budget,day_shape,dietary,food_tradeoff,convenience_spend,stairs_hills,scenic_reach,everyone_every_day,hard_constraints; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 4 nights · 5 days WHO 2 adults WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR History & culture (the heart of the trip); survives reload"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "15 places, 9 chosen by Sidequest"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 6 to 7 included, and survives a reload"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Vienna Castle\", skipped \"Vienna River Walk\"; 15 statuses identical after reload"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 15 picks"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/821acdc4-bd38-4781-b656-878dcf787022/itinerary"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "5 days, DAY 1 · SUN 12 SEPT … DAY 5 · THU 16 SEPT"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 0 min / 0 stops, departure 0 min / 0 stops, busiest 270 min / 3 stops"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "7/7 on the plan, 0 explained"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "7 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "must-dos-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Vienna City Museum\" scheduled; the unplaceable one is explained"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no driving legs; no strenuous stops"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-09-12 → 2027-09-16, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Vienna Valley Village\" day 2→3: \"You moved Vienna Valley Village to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Vienna Central Market\" removed from day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Vienna Castle\" 120→90 min: \"Vienna Castle now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 3: 3, day 4: 3"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "15 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 15 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "5 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d3:3, d4:3"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 5 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "accessible-low-intensity",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "european-city-break",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"have_plan\", trip 601fe917-368a-454d-a696-edc40bc73d6e, url http://127.0.0.1:4510/trips/601fe917-368a-454d-a696-edc40bc73d6e/plan"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,city_shape,hard_constraints; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 3 nights · 4 days WHO 2 adults WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR History & culture (the heart of the trip), Markets & street ; survives reload"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "12 places, 7 chosen by Sidequest"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 4 to 6 included, and survives a reload"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Lisbon Castle\", skipped \"Lisbon Craft Quarter\"; 12 statuses identical after reload"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "european-city-break",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 12 picks"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/601fe917-368a-454d-a696-edc40bc73d6e/itinerary"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "4 days, DAY 1 · FRI 8 OCT … DAY 4 · MON 11 OCT"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 0 min / 0 stops, departure 0 min / 0 stops, busiest 300 min / 3 stops"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "6/6 on the plan, 0 explained"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "6 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "existing-plan-checked-not-replaced",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "the plan they brought is critiqued on the finished trip and its places are scheduled"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no driving legs"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-10-08 → 2027-10-11, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Lisbon Castle\" day 2→3: \"You moved Lisbon Castle to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Lisbon City Museum\" removed from day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Lisbon Ridge Viewpoint\" 60→90 min: \"Lisbon Ridge Viewpoint now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 1, day 3: 4"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "13 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 13 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "4 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d3:4"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 4 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "european-city-break",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "family-young-children",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip cd0e3d4f-244e-4ea8-9303-895fc6906a9d, url http://127.0.0.1:4510/trips/cd0e3d4f-244e-4ea8-9303-895fc6906a9d/plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,everyone_every_day,hard_constraints; transport answered \"rent_car\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 7 nights · 8 days WHO 2 adults, 2 children WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Wildlife (the heart of the trip); survives reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "25 places, 17 chosen by Sidequest"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 14 to 16 included, and survives a reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Costa Rica Riverside Park\", skipped \"Costa Rica Castle\"; 25 statuses identical after reload"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "family-young-children",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 25 picks"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/cd0e3d4f-244e-4ea8-9303-895fc6906a9d/itinerary"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "8 days, DAY 1 · FRI 12 FEB … DAY 8 · FRI 19 FEB"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 360 min / 3 stops"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "16/16 on the plan, 0 explained"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "16 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "car trip; diet on food plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "5 links over 1 stays, 2027-02-12 → 2027-02-19, adults 2, children 2, 2 car searches"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Costa Rica Central Market\" day 2→3: \"You moved Costa Rica Central Market to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Costa Rica Ridge Lookout\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Costa Rica Lake\" 90→120 min: \"Costa Rica Lake now has 120 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 4, day 4: 3, day 5: 2"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "30 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 30 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "8 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:4, d4:3, d5:2, d6:3"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 8 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "family-young-children",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip 0c3ce1ce-1543-4021-81e8-a506dd41aa20, url http://127.0.0.1:4510/trips/0c3ce1ce-1543-4021-81e8-a506dd41aa20/plan"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,daily_driving,scenic_reach,trek_nights,hard_constraints; transport answered \"rent_car\" of [rent_car, mixed]; review: LENGTH 8 nights · 9 days WHO 4 adults WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Scenic viewpoints (the heart of the trip), Hot springs (a fe; survives reload"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "28 places, 22 chosen by Sidequest"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 19 to 21 included, and survives a reload"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Iceland Sunset Point\", skipped \"Iceland Castle\"; 28 statuses identical after reload"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 28 picks"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/0c3ce1ce-1543-4021-81e8-a506dd41aa20/itinerary"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "9 days, DAY 1 · TUE 15 JUN … DAY 9 · WED 23 JUN"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 105 min / 2 stops, departure 0 min / 0 stops, busiest 330 min / 3 stops"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "19/22 on the plan, 3 explained"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "22 scheduled stops; 3 added by the planner as fillers beyond the ticks: Iceland Marshes Reserve, Iceland Hill Temple, Iceland Summit Trail"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "must-dos-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Iceland Hot Springs\" scheduled; the unplaceable one is explained"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "car trip"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "5 links over 1 stays, 2027-06-15 → 2027-06-23, adults 4, children 0, 2 car searches"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Iceland Craft Quarter\" day 2→3: \"You moved Iceland Craft Quarter to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Iceland Cathedral\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Iceland Sunset Point\" 45→90 min: \"Iceland Sunset Point now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 1: 1, day 2: 2, day 3: 4, day 4: 3"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "38 events, TZ Atlantic/Reykjavik"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 38 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "9 days visible in print media, a 20-page PDF, window.print called"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:4, d4:3, d5:3, d6:3, d7:3, d8:2"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 9 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "iceland-road-trip",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip 84f2f246-630a-468c-9dfa-c79cf5b26600, url http://127.0.0.1:4510/trips/84f2f246-630a-468c-9dfa-c79cf5b26600/plan"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,hike_appetite,scenic_reach,trek_load,trek_nights,hard_constraints; transport answered \"rail_transfers\" of [rail_transfers, guided, rent_car, mixed]; review: LENGTH 11 nights · 12 days WHO 1 adult WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE One major experience, then time to linger GOING FOR Hiking (the heart of the trip), Lakes & rivers ; survives reload"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "28 places, 18 chosen by Sidequest"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 15 to 17 included, and survives a reload"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Kyrgyzstan River Walk\", skipped \"Kyrgyzstan Castle\"; 28 statuses identical after reload"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 28 picks"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/84f2f246-630a-468c-9dfa-c79cf5b26600/itinerary"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "12 days, DAY 1 · THU 8 JUL … DAY 12 · MON 19 JUL"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 0 min / 0 stops, departure 0 min / 0 stops, busiest 300 min / 2 stops"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "17/17 on the plan, 0 explained"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "17 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no driving legs"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-07-08 → 2027-07-19, adults 1, children 0, 0 car searches"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Kyrgyzstan River Walk\" day 2→3: \"You moved Kyrgyzstan River Walk to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Kyrgyzstan Old Quarter\" removed from day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Kyrgyzstan Lake Loop\" 150→90 min: \"Kyrgyzstan Lake Loop now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 3: 3, day 4: 2, day 5: 1, day 6: 2"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "43 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 43 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "12 days visible in print media, a 19-page PDF, window.print called"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d3:3, d4:2, d6:2, d7:2, d8:2, d10:2"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 12 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "kyrgyzstan-remote",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "safari",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "advisor shortlist → Plan this on \"Kruger & Sabi Sand\" → trip b1674966-3536-4810-bb63-404f185f9b38"
+  },
+  {
+    "journey": "safari",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: 13; transport answered \"mixed\" of [rent_car, mixed]; review: LENGTH 8 nights · 9 days WHO 2 adults WHEN Your dates SHAPE A moving route PACE Two or three meaningful stops GOING FOR Scenic viewpoints (the heart of the trip), Wildlife (a few times)"
+  },
+  {
+    "journey": "safari",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "30 places, 22 chosen by Sidequest"
+  },
+  {
+    "journey": "safari",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 19 to 20 included, and survives a reload"
+  },
+  {
+    "journey": "safari",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Kruger National Park, South Africa Sunset Point\", skipped \"Kruger National Park, South Africa Castle\"; 30 statuses identical after reload"
+  },
+  {
+    "journey": "safari",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "safari",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 30 picks"
+  },
+  {
+    "journey": "safari",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/b1674966-3536-4810-bb63-404f185f9b38/itinerary"
+  },
+  {
+    "journey": "safari",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "9 days, DAY 1 · THU 12 AUG … DAY 9 · FRI 20 AUG"
+  },
+  {
+    "journey": "safari",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 405 min / 3 stops"
+  },
+  {
+    "journey": "safari",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "19/21 on the plan, 2 explained"
+  },
+  {
+    "journey": "safari",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "22 scheduled stops; 3 added by the planner as fillers beyond the ticks: Kruger National Park, South Africa Ridge Viewpoint, Kruger National Park, South Africa Art Gallery, Kruger National Park, South Africa Summit"
+  },
+  {
+    "journey": "safari",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no car-free option was offered here (transport answered \"mixed\" of [rent_car, mixed])"
+  },
+  {
+    "journey": "safari",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "5 links over 1 stays, 2027-08-12 → 2027-08-20, adults 2, children 0, 2 car searches"
+  },
+  {
+    "journey": "safari",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "safari",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Kruger National Park, South Africa Falls\" day 2→3: \"You moved Kruger National Park, South Africa Falls to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "safari",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Kruger National Park, South Africa Sunset Point\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "safari",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "safari",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Kruger National Park, South Africa Harbour Boat Trip\" 120→90 min: \"Kruger National Park, South Africa Harbour Boat Trip now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "safari",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "safari",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 4, day 4: 3, day 5: 3"
+  },
+  {
+    "journey": "safari",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "41 events, TZ Africa/Johannesburg"
+  },
+  {
+    "journey": "safari",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 41 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "safari",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "9 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "safari",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:4, d4:3, d5:3, d6:3, d7:3, d8:3"
+  },
+  {
+    "journey": "safari",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 9 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "safari",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "safari",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "safari",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "safari",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
     "journey": "tenerife-island",
     "step": "entry",
     "width": 1440,
     "result": "pass",
-    "evidence": "door \"known\", trip 4c99f158-c21a-43c2-8843-76804fe59298, url http://127.0.0.1:4510/trips/4c99f158-c21a-43c2-8843-76804fe59298/plan"
+    "evidence": "door \"known\", trip 9f587193-2ce8-444a-8f44-83f1553ed1d0, url http://127.0.0.1:4510/trips/9f587193-2ce8-444a-8f44-83f1553ed1d0/plan"
   },
   {
     "journey": "tenerife-island",
     "step": "interview",
     "width": 1440,
     "result": "pass",
-    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,day_trips,hike_appetite,walking_tolerance,transit_comfort,hard_constraints; review: LENGTH 6 nights · 7 days WHO 2 adults WHEN Your dates SHAPE One base, the city on foot (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Hiking (the heart of the trip), Scenic viewpoints; survives reload"
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,day_trips,hike_appetite,walking_tolerance,transit_comfort,hard_constraints; transport answered \"transit_walk\" of [transit_walk, taxis, rent_car]; review: LENGTH 6 nights · 7 days WHO 2 adults WHEN Your dates SHAPE One base, the city on foot (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Hiking (the heart of the trip), Scenic viewpoints; survives reload"
   },
   {
     "journey": "tenerife-island",
@@ -53,7 +2608,7 @@
     "step": "build",
     "width": 1440,
     "result": "pass",
-    "evidence": "http://127.0.0.1:4510/trips/4c99f158-c21a-43c2-8843-76804fe59298/itinerary"
+    "evidence": "http://127.0.0.1:4510/trips/9f587193-2ce8-444a-8f44-83f1553ed1d0/itinerary"
   },
   {
     "journey": "tenerife-island",
@@ -81,7 +2636,7 @@
     "step": "plan-stops-were-on-the-board-as-picks",
     "width": 1440,
     "result": "pass",
-    "evidence": "13 scheduled stops, every board place among them ticked"
+    "evidence": "13 scheduled stops; 0 added by the planner as fillers beyond the ticks"
   },
   {
     "journey": "tenerife-island",
@@ -211,6 +2766,636 @@
   },
   {
     "journey": "tenerife-island",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip f1c566cb-a513-4648-9d3b-a192b0d4044f, url http://127.0.0.1:4510/trips/f1c566cb-a513-4648-9d3b-a192b0d4044f/plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,scenic_reach,hard_constraints; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 9 nights · 10 days WHO 2 adults WHEN Your dates SHAPE A moving route (Sidequest’s read) PACE Two or three meaningful stops GOING FOR History & culture (the heart of the trip), Markets & street ; survives reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "28 places, 21 chosen by Sidequest"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 18 to 19 included, and survives a reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Tokyo and Kyoto Castle\", skipped \"Tokyo and Kyoto Riverside Park\"; 28 statuses identical after reload"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 28 picks"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/f1c566cb-a513-4648-9d3b-a192b0d4044f/itinerary"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "10 days, DAY 1 · SAT 3 APR … DAY 10 · MON 12 APR"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 30 min / 1 stops, departure 0 min / 0 stops, busiest 315 min / 3 stops"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "19/19 on the plan, 0 explained"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "19 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no driving legs; diet on food plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-04-03 → 2027-04-12, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto Ridge Lookout\" day 2→3: \"You moved Tokyo and Kyoto Ridge Lookout to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto Founders Monument\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tokyo and Kyoto City Museum\" 120→90 min: \"Tokyo and Kyoto City Museum now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 3, day 4: 3, day 5: 3"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "37 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 37 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "10 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:3, d4:3, d5:3, d6:3, d9:2"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 10 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "tokyo-kyoto-transit",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "us-national-park",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip dd5c686c-bcc7-4637-a291-f0dc99f8063f, url http://127.0.0.1:4510/trips/dd5c686c-bcc7-4637-a291-f0dc99f8063f/plan"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,daily_driving,hike_appetite,scenic_reach,hard_constraints; transport answered \"rent_car\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 5 nights · 6 days WHO 4 adults WHEN Your dates SHAPE Not decided yet (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Hiking (the heart of the trip), Scenic viewpoints (a few tim; survives reload"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "18 places, 12 chosen by Sidequest"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 9 to 12 included, and survives a reload"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Yosemite National Park Central Market\", skipped \"Yosemite National Park Sunset Point\"; 18 statuses identical after reload"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "us-national-park",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 18 picks"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/dd5c686c-bcc7-4637-a291-f0dc99f8063f/itinerary"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "6 days, DAY 1 · SUN 20 JUN … DAY 6 · FRI 25 JUN"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 60 min / 1 stops, departure 0 min / 0 stops, busiest 360 min / 3 stops"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "12/12 on the plan, 0 explained"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "12 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "car trip"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "5 links over 1 stays, 2027-06-20 → 2027-06-25, adults 4, children 0, 2 car searches"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Yosemite National Park Castle\" day 2→3: \"You moved Yosemite National Park Castle to day 3. That day now runs long.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Yosemite National Park Cathedral\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Yosemite National Park City Museum\" 120→90 min: \"Yosemite National Park City Museum now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 4, day 4: 3, day 5: 2"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "22 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 22 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "6 days visible in print media, a 16-page PDF, window.print called"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:4, d4:3, d5:2"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 6 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "us-national-park",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  },
+  {
+    "journey": "winter-sports",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "advisor shortlist → Plan this on \"Slovenia\" → trip 750bbae0-ada8-4a62-8a34-29ae368f0c7a"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: 12; transport answered \"transit_walk\" of [rent_car, no_car, transit_walk, mixed]; review: LENGTH 7 nights · 8 days WHO 2 adults WHEN Your dates SHAPE A moving route PACE Two or three meaningful stops GOING FOR Scenic viewpoints (the heart of the trip)"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "27 places, 18 chosen by Sidequest"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 15 to 16 included, and survives a reload"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Slovenia Riverside Park\", skipped \"Slovenia River Walk\"; 27 statuses identical after reload"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "winter-sports",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 27 picks"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/750bbae0-ada8-4a62-8a34-29ae368f0c7a/itinerary"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "8 days, DAY 1 · TUE 12 JAN … DAY 8 · TUE 19 JAN"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 0 min / 0 stops, departure 0 min / 0 stops, busiest 345 min / 3 stops"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "16/16 on the plan, 0 explained"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "16 scheduled stops; 0 added by the planner as fillers beyond the ticks"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no driving legs"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-01-12 → 2027-01-19, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Slovenia Lake Loop\" day 2→3: \"You moved Slovenia Lake Loop to day 3. That day now runs long.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Slovenia Lake\" removed from day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Slovenia Hill Temple\" 45→90 min: \"Slovenia Hill Temple now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 1, day 3: 3, day 4: 3, day 5: 3"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "30 events, TZ Europe/Ljubljana"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 30 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "8 days visible in print media, a 17-page PDF, window.print called"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d3:3, d4:3, d5:3, d6:3, d7:2"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 8 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "winter-sports",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "winter-sports",
     "step": "second-user-cannot-open",
     "width": 1440,
     "result": "pass",
