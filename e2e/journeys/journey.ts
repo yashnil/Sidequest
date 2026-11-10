@@ -246,7 +246,7 @@ const NO_CAR_MODES = ['transit_walk', 'no_car', 'rail_transfers', 'taxis', 'guid
 const CAR_MODES = ['rent_car', 'self_drive', 'mixed'];
 
 /** Answers the survey from the archetype; everything unstated is handed to Sidequest. */
-export async function answerInterview(page: Page, tripId: string, arch: Archetype): Promise<string[]> {
+export async function answerInterview(page: Page, tripId: string, arch: Archetype): Promise<{ seen: string[]; transport: string | null; offered: string[] }> {
   if (!/\/questionnaire/.test(page.url())) await page.goto(`/trips/${tripId}/questionnaire`);
   await expect(page.getByTestId('interview')).toBeVisible({ timeout: 30_000 });
   const start = page.getByTestId('interview-start');
@@ -255,6 +255,8 @@ export async function answerInterview(page: Page, tripId: string, arch: Archetyp
     await start.click();
   }
   const seen: string[] = [];
+  let transport: string | null = null;
+  let offered: string[] = [];
   const fixed: Record<string, string[]> = {
     day_shape: [arch.pace, 'two_three'],
     effort: [arch.effort, 'moderate', 'easy'],
@@ -298,12 +300,14 @@ export async function answerInterview(page: Page, tripId: string, arch: Archetyp
         continue;
       }
       let answered = false;
+      if (id === 'transport_mode') offered = await screen.locator('input[type=radio]').evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
       for (const value of fixed[id] ?? []) {
         const radio = screen.locator(`input[type=radio][value="${value}"]`);
         if ((await radio.count()) > 0) {
           await radio.first().check();
           await page.getByTestId('interview-continue').click();
           answered = true;
+          if (id === 'transport_mode') transport = value;
           break;
         }
       }
@@ -318,8 +322,11 @@ export async function answerInterview(page: Page, tripId: string, arch: Archetyp
     expect(await answerOnScreen(), 'the personalised round should reach the review').toBe(true);
     expect(seen, 'a dietary question should be reachable').toContain('dietary');
   }
-  return seen;
+  return { seen, transport, offered };
 }
+
+/** The modes that genuinely mean the traveller has no car of their own at the wheel. */
+export const CAR_FREE_MODES: ReadonlySet<string> = new Set(['transit_walk', 'no_car', 'rail_transfers', 'taxis', 'guided', 'boats_transfers']);
 
 // ---------------------------------------------------------------------------
 // Board
