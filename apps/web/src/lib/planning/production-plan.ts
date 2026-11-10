@@ -72,7 +72,7 @@ import { compileQualitySafely } from './quality-compiler';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
-import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, plannerUnscheduledPicks, type PlannerComposition } from './planner-composer';
+import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, plannerUnplacedMustDos, plannerUnscheduledPicks, type PlannerComposition } from './planner-composer';
 import { getScanProposalExtras } from '../db/scan-repository';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
@@ -1193,6 +1193,7 @@ async function generatePlan(
   };
   /* Production pass — the traveller's picks the planner could not place are unscheduled places, never only prose (`plannerUnscheduledPicks`). */
   const plannerPicksUnscheduled = plannerComposition ? plannerUnscheduledPicks(plannerComposition).filter((u) => !applied.itinerary.unscheduled.some((existing) => existing.placeId === u.placeId)) : [];
+  plannerPicksUnscheduled.push(...plannerUnplacedMustDos(input.ownWords.mustDo, { days: applied.itinerary.days, unscheduled: [...applied.itinerary.unscheduled, ...plannerPicksUnscheduled] }));
   const itinerary = applied.itinerary.package
     ? {
         ...applied.itinerary,

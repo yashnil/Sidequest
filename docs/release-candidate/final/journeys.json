@@ -1,0 +1,219 @@
+[
+  {
+    "journey": "tenerife-island",
+    "step": "entry",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "door \"known\", trip 4c99f158-c21a-43c2-8843-76804fe59298, url http://127.0.0.1:4510/trips/4c99f158-c21a-43c2-8843-76804fe59298/plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "interview",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "questions: priorities,priority_roles,transport_mode,effort,iconic_crowds,budget,day_shape,dietary,food_tradeoff,day_trips,hike_appetite,walking_tolerance,transit_comfort,hard_constraints; review: LENGTH 6 nights · 7 days WHO 2 adults WHEN Your dates SHAPE One base, the city on foot (Sidequest’s read) PACE Two or three meaningful stops GOING FOR Hiking (the heart of the trip), Scenic viewpoints; survives reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "board-opens",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "24 places, 15 chosen by Sidequest"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "auto-pick-changes-selections",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "un-ticked 3; \"Choose for me\" went from 12 to 13 included, and survives a reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "manual-pick-and-rejection-persist",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "included \"Tenerife Riverside Park\", skipped \"Tenerife River Walk\"; 24 statuses identical after reload"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "auto-pick-respects-traveller",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "manual pick and rejection unchanged after a second \"Choose for me\""
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "failure-injected-mid-build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a build press whose request died showed an error and left all 24 picks"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "build",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "http://127.0.0.1:4510/trips/4c99f158-c21a-43c2-8843-76804fe59298/itinerary"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-dates-and-days",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "7 days, DAY 1 · MON 10 MAY … DAY 7 · SUN 16 MAY"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-edges-lighter",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "arrival 45 min / 1 stops, departure 0 min / 0 stops, busiest 315 min / 3 stops"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "picks-present-or-explained",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "13/13 on the plan, 0 explained"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "plan-stops-were-on-the-board-as-picks",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "13 scheduled stops, every board place among them ticked"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "must-dos-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tenerife Castle\" scheduled; the unplaceable one is explained"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "constraints-reach-the-plan",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "no driving legs"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "booking-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "3 links over 1 stays, 2027-05-10 → 2027-05-16, adults 2, children 0, 0 car searches"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "book-a-fact",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a booking with a reference, a cost and a note is on the trip"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-move-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tenerife Ridge Viewpoint\" day 2→3: \"You moved Tenerife Ridge Viewpoint to day 3.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-remove-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tenerife Ridge Lookout\" removed from day 1; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-add-custom-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Journey coffee stop\" added to day 2; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "edit-duration-undo-reload",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "\"Tenerife Harbour Boat Trip\" 120→90 min: \"Tenerife Harbour Boat Trip now has 90 minutes.\"; undo restored; re-applied and read back"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "failure-injected-mid-edit",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "an edit whose request died said so and changed nothing"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "map-pins-match-day-stops",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "pins per day — day 2: 2, day 3: 2, day 4: 3, day 5: 2"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "ics-download",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "25 events, TZ Europe/Lisbon"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "calendar-feed",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "feed served 25 events with no private fields, and 404 after revoke"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "print-packet",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "7 days visible in print media, a 18-page PDF, window.print called"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "map-links",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "Google/Apple links well-formed: d2:2, d3:2, d4:3, d5:2, d6:3"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "share-link",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a fresh browser sees all 7 days and stops, no private fields, no edit controls"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "share-revoked-dies",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "revoked link 404s in a fresh browser"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "reopen-with-saved-cookie",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "a new context with the saved cookie sees the identical, edited plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "sign-out-and-back-in-keeps-trip",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "sign out closed it, sign in reopened the identical plan"
+  },
+  {
+    "journey": "tenerife-island",
+    "step": "second-user-cannot-open",
+    "width": 1440,
+    "result": "pass",
+    "evidence": "another account: HTTP 200, page reads \"We cannot find that trip\""
+  }
+]

@@ -1,8 +1,9 @@
-import { estimateLegMinutes, haversineKm, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
+import { estimateLegMinutes, haversineKm, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
 import type { ScanProposalExtras } from '../db/scan-repository';
+import { matchNamedMustDos } from '../discovery-scan/match';
 import { archetypeFor, planStructure, transportFor, type DropReason, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerDayWindow, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type AnchorCategory, type DraftAnchor, type DraftDay, type TripDraft } from './trip-draft';
 
@@ -623,6 +624,37 @@ export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFa
   if (spare.length === 0) return 'insufficient_candidates';
   if (composed.plan.mustConflicts.length > 0 && spare.every((d) => d.candidate.status === 'must')) return 'required_user_places_unplaceable';
   return 'no_feasible_day_assignment';
+}
+
+/**
+ * A THING THE TRAVELLER TYPED AS A MUST-DO THAT NOBODY COULD FIND.
+ *
+ * Named on the plan or named here: "Booked, fixed, or would regret missing" was
+ * read by the scan as a hint and then forgotten, so a typed place that was
+ * neither on the board nor matched left no trace anywhere on the finished trip
+ * while the review had promised to keep it. A typed must-do is matched by name
+ * against the scheduled stops and against what is already unscheduled; whatever
+ * is left is listed under "Could not be scheduled" with the smallest fix.
+ */
+export function plannerUnplacedMustDos(mustDos: readonly string[], itinerary: Pick<Itinerary, 'days' | 'unscheduled'>): UnscheduledPlace[] {
+  const pool = [
+    ...itinerary.days.flatMap((day) => day.items).filter((item) => item.kind === 'activity').map((item) => ({ id: item.placeId ?? item.id, name: item.title })),
+    ...itinerary.unscheduled.map((entry) => ({ id: entry.placeId, name: entry.name })),
+  ];
+  const out: UnscheduledPlace[] = [];
+  for (const raw of mustDos) {
+    const name = raw.trim();
+    if (name.length === 0 || matchNamedMustDos([name], pool).length > 0) continue;
+    out.push({
+      placeId: `must-do:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+      name,
+      wasManual: true,
+      reasonCode: 'selection_not_on_board',
+      reason: 'You said you would regret missing this, and it is not on the plan: nothing the board found matches that name.',
+      suggestedRemedy: 'Add it to a day as a stop of your own, or re-scan the board.',
+    });
+  }
+  return out;
 }
 
 /**

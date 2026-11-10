@@ -84,7 +84,12 @@ export function StopEditMenu({
   const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string; undoable?: boolean; restoresPlaceId?: string }>) => {
     setStatus(null);
     startTransition(async () => {
-      const result = await work();
+      const outcome = await callAction(work);
+      if (!outcome.ok) {
+        setStatus(outcome.message);
+        return;
+      }
+      const result = outcome.value;
       if (!result.ok) {
         setStatus(result.error ?? 'That change could not be made.');
         return;
@@ -100,7 +105,12 @@ export function StopEditMenu({
   const loadOffers = () => {
     setStatus(null);
     startTransition(async () => {
-      const result = await swapAlternativesAction(tripId, dayNumber, placeId);
+      const outcome = await callAction(() => swapAlternativesAction(tripId, dayNumber, placeId));
+      if (!outcome.ok) {
+        setStatus(outcome.message);
+        return;
+      }
+      const result = outcome.value;
       if (!result.ok) {
         setStatus(result.error ?? 'We could not look for alternatives just then.');
         return;
@@ -242,7 +252,12 @@ export function EaseDayButton({ tripId, dayNumber }: { tripId: string; dayNumber
         onClick={() => {
           setStatus(null);
           startTransition(async () => {
-            const result = await easeDayAction(tripId, dayNumber);
+            const outcome = await callAction(() => easeDayAction(tripId, dayNumber));
+            if (!outcome.ok) {
+              setStatus(outcome.message);
+              return;
+            }
+            const result = outcome.value;
             if (!result.ok) {
               setStatus(result.error ?? 'This day could not be made easier.');
               return;

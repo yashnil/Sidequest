@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { callAction } from './client-action';
 import {
   FACT_PATH_LABELS,
   FACT_VERIFICATION_LABELS,
@@ -362,7 +363,8 @@ export function DiscoveryBoardView({
     startTransition(async () => {
       applyOptimistic({ [placeId]: next });
       // Un-ticking an include (ours or theirs) is stored as a decision — see `withdrawSelection`.
-      const result = await setSelectionAction(tripId, placeId, next ?? null, next === 'excluded' ? (reason ?? null) : null);
+      const outcome = await callAction(() => setSelectionAction(tripId, placeId, next ?? null, next === 'excluded' ? (reason ?? null) : null));
+      const result = outcome.ok ? outcome.value : { ok: false as const, error: outcome.message };
       if (result.ok) {
         // Any hand-made answer makes the card the traveller's, never Sidequest's pick.
         setMirror((current) => ({
@@ -416,10 +418,8 @@ export function DiscoveryBoardView({
     setError(null);
     startTransition(async () => {
       applyOptimistic(Object.fromEntries(target.ids.map((id) => [id, 'excluded' as const])));
-      const results = await Promise.all(
-        target.ids.map((id) => setSelectionAction(tripId, id, 'excluded', target.reason)),
-      );
-      if (results.every((result) => result.ok)) {
+      const outcome = await callAction(() => Promise.all(target.ids.map((id) => setSelectionAction(tripId, id, 'excluded', target.reason))));
+      if (outcome.ok && outcome.value.every((result) => result.ok)) {
         setMirror((current) => ({
           ...current,
           autoPicks: current.autoPicks.filter((id) => !target.ids.includes(id)),
@@ -429,7 +429,7 @@ export function DiscoveryBoardView({
           },
         }));
       } else {
-        setError('Some of those did not save. Reload to see what stuck.');
+        setError(outcome.ok ? 'Some of those did not save. Reload to see what stuck.' : outcome.message);
       }
     });
   }
@@ -448,8 +448,8 @@ export function DiscoveryBoardView({
     setFollowUp(null);
     startTransition(async () => {
       applyOptimistic(Object.fromEntries(ids.map((id) => [id, status ?? undefined])));
-      const results = await Promise.all(ids.map((id) => setSelectionAction(tripId, id, status, null)));
-      if (results.every((result) => result.ok)) {
+      const outcome = await callAction(() => Promise.all(ids.map((id) => setSelectionAction(tripId, id, status, null))));
+      if (outcome.ok && outcome.value.every((result) => result.ok)) {
         setMirror((current) => ({
           ...current,
           autoPicks: current.autoPicks.filter((id) => !ids.includes(id)),
@@ -457,7 +457,7 @@ export function DiscoveryBoardView({
         }));
       } else {
         setMirror((current) => ({ ...current, value: previous }));
-        setError('Some of those did not save. Reload to see what stuck.');
+        setError(outcome.ok ? 'Some of those did not save. Reload to see what stuck.' : outcome.message);
       }
     });
   }
@@ -466,7 +466,12 @@ export function DiscoveryBoardView({
     setError(null);
     setFollowUp(null);
     startTransition(async () => {
-      const result = await autoPickAction(tripId);
+      const outcome = await callAction(() => autoPickAction(tripId));
+      if (!outcome.ok) {
+        setError(outcome.message);
+        return;
+      }
+      const result = outcome.value;
       if (!result.ok || !result.selections) {
         setError(result.error ?? 'We could not build a selection just then.');
         return;
@@ -1572,6 +1577,7 @@ function SkipRow({
   return (
     <article
       data-place-card={place.id}
+      data-status={status ?? 'undecided'}
       className={cx(
         'flex scroll-mt-[calc(var(--chrome-height)+7rem)] flex-wrap items-start gap-x-4 gap-y-3 px-4 py-3.5 transition-colors',
         status === 'included' && 'bg-paper-raised',

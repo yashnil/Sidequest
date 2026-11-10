@@ -4,6 +4,7 @@ import { announceTripEdit } from '@/components/hub/EditToast';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass, cx } from '@/components/ui';
+import { callAction } from '@/components/client-action';
 import { addCustomStopAction, fixDayAction, moveStopAction, setStopDurationAction, setStopKeepAction, shiftStopAction, updateBookedItemAction, discoverStaysAction, discoverFoodAction, type DiscoveryActionResult } from './actions';
 
 /**
@@ -33,7 +34,12 @@ export function StopDayControls({ tripId, dayNumber, stopId, title, dayCount, ro
   const run = (work: () => Promise<{ ok: boolean; error?: string; changed?: string; undoable?: boolean }>) => {
     setStatus(null);
     startTransition(async () => {
-      const result = await work();
+      const outcome = await callAction(work);
+      if (!outcome.ok) {
+        setStatus(outcome.message);
+        return;
+      }
+      const result = outcome.value;
       if (!result.ok) {
         setStatus(result.error ?? 'That change could not be made.');
         return;
@@ -136,7 +142,12 @@ export function FixDayButton({ tripId, dayNumber }: { tripId: string; dayNumber:
           setStatus(null);
           setSteps([]);
           startTransition(async () => {
-            const result = await fixDayAction(tripId, dayNumber);
+            const outcome = await callAction(() => fixDayAction(tripId, dayNumber));
+            if (!outcome.ok) {
+              setStatus(outcome.message);
+              return;
+            }
+            const result = outcome.value;
             if (!result.ok) {
               setStatus(result.error ?? 'This day could not be repaired.');
               return;
@@ -177,7 +188,12 @@ export function AddStopForm({ tripId, dayNumber }: { tripId: string; dayNumber: 
             const minutes = Number(form.get('minutes') ?? 60);
             setStatus(null);
             startTransition(async () => {
-              const result = await addCustomStopAction(tripId, dayNumber, { title, minutes });
+              const outcome = await callAction(() => addCustomStopAction(tripId, dayNumber, { title, minutes }));
+              if (!outcome.ok) {
+                setStatus(outcome.message);
+                return;
+              }
+              const result = outcome.value;
               if (!result.ok) {
                 setStatus(result.error ?? 'That stop could not be added.');
                 return;
@@ -230,7 +246,12 @@ export function BookedStatusControl({ tripId, id, status, cost, paid, refundable
   const apply = (patch: Record<string, unknown>) => {
     setError(null);
     startTransition(async () => {
-      const result = await updateBookedItemAction(tripId, id, patch);
+      const outcome = await callAction(() => updateBookedItemAction(tripId, id, patch));
+      if (!outcome.ok) {
+        setError(outcome.message);
+        return;
+      }
+      const result = outcome.value;
       if (!result.ok) {
         setError(result.error ?? 'That could not be saved.');
         return;

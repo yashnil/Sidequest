@@ -1,6 +1,7 @@
 'use client';
 
 import { humanDate } from './plan-format';
+import { callAction } from '../client-action';
 
 import { useState, useTransition } from 'react';
 import { BOOKED_ITEM_TYPES, BOOKED_ITEM_TYPE_LABELS, type BookedPlanItem, type TravelReadinessProfile } from '@sidequest/core';
@@ -54,7 +55,12 @@ export function BookedItemForm({ tripId, startDate, endDate }: { tripId: string;
       ...(get('refundable') ? { refundable: get('refundable') } : {}),
     };
     startTransition(async () => {
-      const result = await addBookedItemAction(tripId, payload);
+      const outcome = await callAction(() => addBookedItemAction(tripId, payload));
+      if (!outcome.ok) {
+        setError(outcome.message);
+        return;
+      }
+      const result = outcome.value;
       if (!result.ok) {
         setError(result.error ?? 'That did not save.');
         return;
