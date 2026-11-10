@@ -432,6 +432,34 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         });
     if (!placement) return fail('provider_unavailable', 'no geocoder or places provider is configured to place the proposal');
     let plan = planScanPoints(proposal, placement.positions);
+    /*
+     * A place to sleep the geocoder failed on (a timeout, a 5xx) is asked once
+     * more on its own. A live Moab scan placed 25 places and lost the whole
+     * board to one failed lookup of the town itself.
+     */
+    const failedBases = placement.diagnostics.filter((d) => d.isBase && d.outcome === 'provider_failure');
+    if (!openData && !fixtureScan() && failedBases.length > 0 && !plan.points.some((p) => p.kind === 'base')) {
+      const again = await placeScanProposal(
+        { ...proposal, candidates: [], bases: proposal.bases.filter((b) => failedBases.some((d) => d.name === b.name)) },
+        {
+          center: envelope.center,
+          maxDistanceKm: reach,
+          ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
+          ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+          placesBudget: 0,
+          namedByTraveller: namedMustDos,
+          priorities,
+          deadline: () => false,
+        },
+      ).catch(() => null);
+      if (again) {
+        const positions = new Map(placement.positions);
+        for (const [key, position] of again.positions) if (position) positions.set(key, position);
+        placement = { ...placement, positions, geocoderCalls: placement.geocoderCalls + again.geocoderCalls };
+        plan = planScanPoints(proposal, placement.positions);
+        console.warn(`Discovery scan base retry for ${tripId}: ${failedBases.map((d) => d.name).join(', ')} → ${plan.points.some((p) => p.kind === 'base') ? 'placed' : 'still unplaced'}.`);
+      }
+    }
 
     // --- 2b. enough to plan from? one bounded supplement if not -------------------------
     const requested = scanCandidateTarget(days).min;

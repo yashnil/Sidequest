@@ -21,6 +21,9 @@ const TRIPS = [
   { label: 'kyoto-city', destination: 'Kyoto and Nara, Japan', start: '2027-04-05', end: '2027-04-11' },
   { label: 'tenerife-island', destination: 'Tenerife, Canary Islands', start: '2027-02-08', end: '2027-02-13' },
   { label: 'tanzania-safari', destination: 'Arusha and the Serengeti, Tanzania', start: '2027-07-05', end: '2027-07-13' },
+  { label: 'iceland-road-trip', destination: 'Iceland Ring Road', start: '2027-06-14', end: '2027-06-22' },
+  { label: 'kyrgyzstan-remote', destination: 'Karakol and Issyk-Kul, Kyrgyzstan', start: '2027-08-09', end: '2027-08-16' },
+  { label: 'lisbon-city-break', destination: 'Lisbon, Portugal', start: '2027-05-13', end: '2027-05-16' },
 ];
 
 test.describe.configure({ mode: 'serial' });
