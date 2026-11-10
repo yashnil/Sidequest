@@ -1247,9 +1247,9 @@ export function ItineraryView({
               </Link>
             ) : null}
             {tripId ? (
-              <DismissableDetails className="relative">
+              <DismissableDetails className="sm:relative">
                 <summary className={cx(atlasButtonClass(), 'list-none cursor-pointer [&::-webkit-details-marker]:hidden')}>More</summary>
-                <div className="z-10 mt-1 flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] max-sm:fixed max-sm:inset-x-4 max-sm:w-auto sm:absolute sm:left-0">
+                <div className="absolute z-10 mt-1 flex w-[min(22rem,calc(100vw-2.5rem))] flex-col gap-1 rounded-[var(--radius-card)] border border-rule bg-paper-raised p-2 text-ink shadow-[var(--shadow-panel)] max-sm:inset-x-4 max-sm:w-auto sm:left-0">
                   {today?.active ? (
                     <Link href={`/trips/${tripId}/pack`} className={buttonClass('ghost', 'sm')} data-testid="open-pack">
                       Take it with you
