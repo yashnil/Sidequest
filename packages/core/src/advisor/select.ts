@@ -29,6 +29,9 @@ export const FLOOR_GAP = 0.14;
 export const FLOOR_ABSOLUTE = 0.5;
 /** Below the bar but worth showing when nothing clears it — never lower than this. */
 export const STRETCH_FLOOR = 0.3;
+const NAMED_ABOUT = 0.45;
+/** A guide can mention a gorilla in a zoo; the place still has to be good at the wider thing. */
+const NAMED_MIN_FIT = 0.3;
 /**
  * Calibration on the lead (Steck 2018, in miniature): once the traveller has
  * said what the trip must be brilliant at, every *primary* pick has to be good
@@ -102,6 +105,13 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     (candidate.interestFit[0]?.value ?? 0) >= (candidate.destination.origin === 'editorial' ? LEAD_FLOOR : LEAD_FLOOR_DERIVED) ||
     /* Above anything the meaning channel can give on its own: this takes the guide actually using the words. */
     (candidate.destination.mention ?? 0) >= 0.7;
+  /*
+   * The request named a thing ("gorillas") and enough places are written up for
+   * it: the primaries come from those. A place superb at the wider interest is
+   * still an alternate, but it does not have what was asked for.
+   */
+  const about = (candidate: ScoredDestination) => (candidate.destination.namedMention ?? 0) >= NAMED_ABOUT && Math.max(0, ...candidate.interestFit.map((fit) => fit.value)) >= NAMED_MIN_FIT;
+  const named = profile.named.length > 0 && ranked.filter(about).filter((candidate, index, list) => !list.slice(0, index).some((other) => overlap(candidate.destination, other.destination) >= 1)).length >= 2;
   const servesLead = ranked.filter(leadOk);
   const top = (servesLead[0] ?? ranked[0])?.score ?? 0;
   const floor = Math.max(FLOOR_ABSOLUTE, top - FLOOR_GAP);
@@ -114,6 +124,8 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     ...servesLead.filter((candidate) => candidate.score >= floor).slice(0, 60),
     ...ranked.filter((candidate) => !leadOk(candidate) && candidate.score >= floor).slice(0, 30),
   ];
+  /* Named things come in even when the wider interest would have left them under the bar. */
+  if (named) for (const candidate of ranked.filter(about).slice(0, 20)) if (candidate.score >= STRETCH_FLOOR && !pool.includes(candidate)) pool.push(candidate);
   /*
    * The gap keeps a much weaker place from getting in for being different; it
    * must not empty a list. When fewer places clear it than the list holds, the
@@ -154,6 +166,7 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     if (remaining.length === 0) break;
     /* Primaries come from the places that serve the lead while any are left. */
     let eligible = chosen.length < size && remaining.some(leadOk) ? remaining.filter(leadOk) : remaining;
+    if (named && chosen.length < size && remaining.some(about)) eligible = remaining.filter(about);
     /* Nothing left serves the lead: the closest to it comes next, and being different is no qualification. */
     if (chosen.length < size && profile.leadStated && !remaining.some(leadOk)) {
       const closest = Math.max(...remaining.map((candidate) => candidate.interestFit[0]?.value ?? 0));

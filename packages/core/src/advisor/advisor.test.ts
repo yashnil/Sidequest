@@ -147,6 +147,12 @@ describe('reading what somebody typed', () => {
     }
   });
 
+  it('reads a flight named in hours as a reach, and long-haul refused as one', () => {
+    expect(parseTravelRequest('Wreck diving within a five hour flight of London', base()).answers.flightTolerance).toBe('moderate');
+    expect(parseTravelRequest('Sun on a three-hour flight', base()).answers.flightTolerance).toBe('short');
+    expect(parseTravelRequest('Hiking in January without a long-haul flight', base()).answers.flightTolerance).toBe('moderate');
+  });
+
   it('drops the mood the moment something specific is said', () => {
     const parsed = parseTravelRequest('Somewhere beautiful for hiking', base());
     expect(parsed.answers.discovery?.focus).toEqual(['hiking']);

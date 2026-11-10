@@ -78,6 +78,7 @@ export function rankCatalog(answers: TripComposerAnswers, source: DestinationSou
     within: withinTargets && withinTargets.length > 0 ? withinTargets.map((entry) => entry.id) : null,
     similarTo: target?.id ?? null,
     terms: profile.terms,
+    named: profile.named,
     ...(profile.phrase ? { phrase: profile.phrase } : {}),
     months: profile.months,
     excluded: profile.excluded,

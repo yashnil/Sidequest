@@ -38,6 +38,8 @@ export interface AdvisorProfile {
   interests: AdvisorInterest[];
   /** True when the first interest is the stated lead (ranked, or the only one). */
   leadStated: boolean;
+  /** Specific things the request named ("gorillas"): picks should be places whose guides are about them. */
+  named: string[];
   /** True when every interest is a mood read from a vague request: a leaning Sidequest assumed, not a wish the traveller stated. */
   inferredInterests: boolean;
   /** 0 comfortable … 3 expedition. */
@@ -365,6 +367,7 @@ export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
     focus,
     interests,
     leadStated: (interests.length === 1 && !interests[0]!.any) || (discovery?.focusRanked === true && interests.length > 1 && focus.length > 0),
+    named: discovery?.named ?? [],
     inferredInterests: interests.length > 0 && interests.every((interest) => interest.any === true),
     adventure,
     budget,

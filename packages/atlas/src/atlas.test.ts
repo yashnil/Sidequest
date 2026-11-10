@@ -245,3 +245,24 @@ describe('travel advisories', () => {
     expect(inCountry(stale).advisory?.asOf).toBe(inCountry(fresh).advisory?.asOf);
   });
 });
+
+describe('a thing the request names', () => {
+  const NOW = new Date('2026-11-08T12:00:00Z');
+  const picksFor = (text: string) => {
+    const { atlas } = loadAtlas({ now: NOW })!;
+    const base = { ...emptyComposerAnswers('help_me_decide', NOW), dates: { mode: 'month' as const, wantsRecommendation: false } };
+    const parsed = parseTravelRequest(text, base, NOW, atlas);
+    return { parsed, shortlist: buildAdvisorShortlist({ answers: parsed.answers, catalog: atlas, catalogVersion: atlas.version, now: NOW }) };
+  };
+
+  it('keeps gorillas to places written up for gorillas, and the general wildlife parks out of the primaries', () => {
+    const { parsed, shortlist } = picksFor('Gorilla trekking in the drier months');
+    expect(parsed.answers.discovery?.named?.length).toBeGreaterThan(0);
+    const continents = shortlist.picks.map((pick) => pick.context);
+    expect(continents.join(' ')).not.toMatch(/Alaska|Hokkaido|Australia/);
+  });
+
+  it('does not treat a safari as a thing to find in a guide: a zoo’s safari park is not one', () => {
+    expect(picksFor('Safari in April').parsed.answers.discovery?.named).toBeUndefined();
+  });
+});

@@ -123,6 +123,8 @@ export interface Destination {
   landmass?: number | null;
   /** What a room costs here, as a range, when listings or a fitted estimate say. Never a current price. */
   costEvidence?: DestinationCostEvidence | null;
+  /** How squarely its guide is about the specific things the request named, 0–1. Set per query. */
+  namedMention?: number;
   /** Lexical relevance to words in the request that no structured field captured, 0–1. Set per query. */
   mention?: number;
 }
@@ -219,6 +221,8 @@ export interface CandidateQuery {
   /** A destination to resemble ("like the Dolomites"), which is itself left out. */
   similarTo: string | null;
   /** Words from the request no structured field captured ("tea plantations"). */
+  /** Specific things named in the request, scored apart from its other words. */
+  named?: readonly string[];
   terms: readonly string[];
   /** The same words as a phrase, in the traveller's order, for the meaning channel. */
   phrase?: string;

@@ -45,7 +45,7 @@ const FOCUS_PATTERNS: [RegExp, FocusKey[]][] = [
   [/\b(?<!(jungle|rainforest|forest|gorilla|chimp|chimpanzee|orangutan|desert|camel|village|elephant)\s)(trek(s|king)?|hut[- ]to[- ]hut|thru[- ]hike)\b/, ['mountains', 'hiking']],
   [/\b(jungle|rainforest|forest|gorilla|chimp|chimpanzee|orangutan|desert|camel|village|elephant)\s(trek(s|king)?)\b/, ['hiking']],
   [/\b(glaciers?|icebergs?|ice ?(fields?|caps?)|summits?|mountaineering|base camp)\b/, ['mountains']],
-  [/\b(mountains?|alpine|alps|high country|peaks?|highlands)\b/, ['mountains']],
+  [/\b(mountains?|alpine|alps|high country|peaks?|highlands|(?:high|mountain) pass(?:es)?)\b/, ['mountains']],
   [/\b(wildlife|animals?|safari|game drives?|birds?|birding|bears?|whales?|puffins?|gorillas?|penguins?|orangutans?|big cats?|elephants?|lions?|tigers?|leopards?|monkeys?|sloths?|turtles?|dolphins?|seals?)\b/, ['wildlife']],
   [/\blakes?\b/, ['lakes']],
   [/\b(beach(es)?|coast(al|line)?|seaside|island(s)?|snorkel(ling|ing)?|div(e|ing)|reefs?|sea\b|ocean)\b/, ['beaches']],
@@ -315,6 +315,9 @@ const GENERIC_INTEREST_WORDS = new Set(
     /\s+/,
   ),
 );
+
+/** Words the interest table knows that describe a kind of trip, not a thing to go and see: a zoo's "safari" park is not a safari. */
+const TOO_BROAD_TO_NAME = new Set('safari safaris nightlife monkey monkeys bird birds museum museums market markets ruins archaeology archaeological architecture heritage medieval colonial palace palaces christmas snowy winter sea sand ocean'.split(' '));
 
 /**
  * The request's own words: what is left when place names, filler and the
@@ -666,6 +669,16 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
     answers = { ...answers, flightTolerance: 'short' };
     readings.push({ kind: 'reach', label: 'Close to home' });
   }
+  /* A flight named in hours is a reach: three hours is close, eight is not the far side of the world. */
+  const hours = /\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)[- ]hours?\s+(?:flight|fly|flying|plane)\b/.exec(t);
+  if (hours && numberOf(hours[1]!) !== null) {
+    const span = numberOf(hours[1]!)!;
+    answers = { ...answers, flightTolerance: span <= 3 ? 'short' : span <= 8 ? 'moderate' : 'long' };
+    readings.push({ kind: 'reach', label: `Within a ${span}-hour flight` });
+  } else if (/\b(no|not|without|avoid(?:ing)?)\b[^|]{0,24}\blong[- ]haul\b/.test(t) || /\bshort[- ]haul\b/.test(t)) {
+    answers = { ...answers, flightTolerance: /\bshort[- ]haul\b/.test(t) ? 'short' : 'moderate' };
+    readings.push({ kind: 'reach', label: 'No long-haul flight' });
+  }
   if (/\b(domestic|in my own country|in the country)\b/.test(t)) {
     answers = { ...answers, tripScope: 'domestic' };
     readings.push({ kind: 'reach', label: 'Stay in my country' });
@@ -840,6 +853,14 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
       own.phrase = `aurora northern lights ${own.phrase}`.trim();
     }
     if (own.terms.length > 0) patchDiscovery({ terms: own.terms.slice(0, 8), phrase: own.phrase });
+    /*
+     * "Gorillas" reads as wildlife, "monasteries" as culture, and a place can be
+     * superb at either without having one. A word the interest table recognised
+     * and the guides can be searched for is what the traveller actually asked
+     * to see.
+     */
+    const named = own.phrase.split(' ').filter((word) => word && !TOO_BROAD_TO_NAME.has(word) && FOCUS_PATTERNS.some(([pattern]) => pattern.test(` ${word} `))).map((word) => atlasTokens(word)[0]).filter((term): term is string => Boolean(term));
+    if (named.length > 0) patchDiscovery({ named: [...new Set(named)].slice(0, 6) });
   }
   /* Comparatives. "Cheaper", "quieter", "less touristy" are asks in their own right, most often said against a named place. */
   if (/\b(cheaper|less expensive|less pricey|more affordable|lower cost|costs? less)\b/.test(t) && !answers.budget) {

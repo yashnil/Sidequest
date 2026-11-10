@@ -177,6 +177,8 @@ export const ADVISORY_FRESH_DAYS = 180;
 
 /** What a meaning-only match counts for beside a word-for-word one. */
 const SEMANTIC_SHARE = 0.6;
+/** A guide this much about a thing the request named counts as being about it. */
+export const NAMED_MENTION = 0.45;
 
 /** Below this, a row is too thin to be offered on its own; it can still be reached by name or as part of a named area. */
 export const SUBSTANCE_FLOOR = 0.22;
@@ -826,6 +828,7 @@ export class Atlas implements DestinationWorld {
     const targetVector = target ? EXPERIENCES.map((experience) => target.experiences[experience] ?? 0) : null;
     const targetNorm = targetVector ? Math.sqrt(targetVector.reduce((sum, value) => sum + value * value, 0)) : 0;
     const mention = query.terms.length > 0 || query.phrase ? this.mentions(query.terms, query.phrase) : null;
+    const named = query.named && query.named.length > 0 ? this.lexicalScores(query.named) : null;
     const months = query.months && query.months.length < 12 ? query.months : null;
     const seasons = months ? this.seasons() : null;
     const activityOf = wantIndex.map((index) => ACTIVITIES.indexOf(EXPERIENCE_ACTIVITY[EXPERIENCES[index]!]));
@@ -892,6 +895,11 @@ export class Atlas implements DestinationWorld {
     const chosen = new Set<number>();
     for (const entry of scored.slice(0, query.limit)) chosen.add(entry.row);
     /* The strongest mentions are always read closely, whatever else the first pass thought of them. */
+    /* Whoever is actually written up for the thing named is always read closely. */
+    if (named) {
+      const about = scored.filter((entry) => named[entry.row]! >= NAMED_MENTION).sort((a, b) => named[b.row]! - named[a.row]!);
+      for (const entry of about.slice(0, 80)) chosen.add(entry.row);
+    }
     if (mention) {
       const said = scored.filter((entry) => mention[entry.row]! >= 0.34).sort((a, b) => mention[b.row]! - mention[a.row]!);
       for (const entry of said.slice(0, 80)) chosen.add(entry.row);
@@ -920,11 +928,12 @@ export class Atlas implements DestinationWorld {
         if (!inside) continue;
       }
       const twin = this.twinRowOfCurated.get(destination.id);
-      out.push(mention && twin !== undefined ? { ...destination, mention: mention[twin]! } : mention ? { ...destination, mention: 0 } : destination);
+      const namedPart = named ? { namedMention: twin !== undefined ? named[twin]! : 0 } : {};
+      out.push(mention && twin !== undefined ? { ...destination, mention: mention[twin]!, ...namedPart } : mention ? { ...destination, mention: 0, ...namedPart } : destination);
     }
     for (const row of chosen) {
       const destination = this.destinationOfRow(row);
-      out.push(mention ? { ...destination, mention: mention[row]! } : destination);
+      out.push(mention ? { ...destination, mention: mention[row]!, ...(named ? { namedMention: named[row]! } : {}) } : destination);
     }
     return out;
   }
