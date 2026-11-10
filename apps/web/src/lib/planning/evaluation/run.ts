@@ -164,6 +164,12 @@ export interface CaseMetrics {
     droppedMusts: number;
     /** Defect days (over limit, overfull, heavy edge, back-to-back hard) that the plan does not state anywhere. */
     unstatedDefectDays: number;
+    /** A lunch written on a day the traveller is not there for it. */
+    lunchOutsideWindow: number;
+    dinnerAfterDeparture: number;
+    breakfastBeforeArrival: number;
+    /** An ordinary empty day with nothing saying why. */
+    silentEmptyDays: number;
   };
   /** Day-level notes the planner recorded, when it records any. */
   notes: string[];
@@ -429,6 +435,10 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
   let missingLunch = 0;
   let missingDinner = 0;
   let unstated = 0;
+  let lunchOutsideWindow = 0;
+  let dinnerAfterDeparture = 0;
+  let breakfastBeforeArrival = 0;
+  let silentEmptyDays = 0;
   const loadOf = (day: PlannedDay, index: number) => {
     const window = input.windows.find((w) => w.date === day.date);
     const t = dayTravel(input, day, index, total);
@@ -502,6 +512,10 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
     const meals = draft.days[index]?.meals;
     const window = input.windows.find((w) => w.date === day.date);
     if (daytime.length > 0 && window && window.startMinute <= 12 * 60 + 30 && window.endMinute >= 13 * 60 + 30 && !meals?.lunch) missingLunch += 1;
+    if (window && meals?.lunch && (window.startMinute > 13 * 60 + 30 || window.endMinute < 12 * 60)) lunchOutsideWindow += 1;
+    if (index === total - 1 && meals?.dinner) dinnerAfterDeparture += 1;
+    if (index === 0 && meals?.breakfast) breakfastBeforeArrival += 1;
+    if (interior && day.stops.length === 0 && day.capacityMinutes >= 60 && !day.relocation && !statedDays.has(day.dayNumber)) silentEmptyDays += 1;
     if (index < total - 1 && !meals?.dinner) missingDinner += 1;
     const edge = index === 0 || index === total - 1;
     if (edge && (loadOf(day, index) > 0.8 || hard(day))) defect = true;
@@ -631,8 +645,12 @@ export function measureCase(fixture: BoardFixture, profileCase: ProfileCase, set
       stopsWithUnknownHours: unknownHours,
       droppedMusts: mustIds.length - mustsPlaced,
       unstatedDefectDays: unstated,
+      lunchOutsideWindow,
+      dinnerAfterDeparture,
+      breakfastBeforeArrival,
+      silentEmptyDays,
     },
-    notes: (record.dayNotes ?? []).map((n) => `Day ${n.dayNumber} [${n.code}]: ${n.note}`),
+    notes: [...(record.dayNotes ?? []).map((n) => `Day ${n.dayNumber} [${n.code}]: ${n.note}`), ...(composition.baseSuggestion ? [`Base suggestion: ${composition.baseSuggestion}`] : [])],
   };
 }
 
@@ -661,7 +679,7 @@ function failedCase(fixture: BoardFixture, profileCase: ProfileCase, error: stri
     moves: [],
     stayPut: null,
     plan: { poolSize: 0, stops: 0, score: 0, mustsAsked: 0, mustsPlaced: 0, repairs: 0 },
-    defects: { daysOverTravelLimit: 0, daysOverTravelLimitPlannerRule: 0, overTravelMinutes: 0, overLimitTransferAlone: 0, overLimitMovingDay: 0, overLimitOwnPick: 0, overLimitOther: 0, overfullDays: 0, overfullMinutes: 0, overfullOwnPick: 0, emptyInteriorDays: 0, emptyInteriorMovingDays: 0, oneStopDays: 0, oneStopDaysWithCompatibleNeighbour: 0, backtrackingDays: 0, backtrackExcessKm: 0, strenuousBackToBack: 0, heavyArrivalDay: 0, heavyDepartureDay: 0, arrivalLoad: 0, departureLoad: 0, missingLunch: 0, missingDinner: 0, hoursConflicts: 0, stopsWithKnownHours: 0, stopsWithUnknownHours: 0, droppedMusts: 0, unstatedDefectDays: 0 },
+    defects: { daysOverTravelLimit: 0, daysOverTravelLimitPlannerRule: 0, overTravelMinutes: 0, overLimitTransferAlone: 0, overLimitMovingDay: 0, overLimitOwnPick: 0, overLimitOther: 0, overfullDays: 0, overfullMinutes: 0, overfullOwnPick: 0, emptyInteriorDays: 0, emptyInteriorMovingDays: 0, oneStopDays: 0, oneStopDaysWithCompatibleNeighbour: 0, backtrackingDays: 0, backtrackExcessKm: 0, strenuousBackToBack: 0, heavyArrivalDay: 0, heavyDepartureDay: 0, arrivalLoad: 0, departureLoad: 0, missingLunch: 0, missingDinner: 0, hoursConflicts: 0, stopsWithKnownHours: 0, stopsWithUnknownHours: 0, droppedMusts: 0, unstatedDefectDays: 0, lunchOutsideWindow: 0, dinnerAfterDeparture: 0, breakfastBeforeArrival: 0, silentEmptyDays: 0 },
     notes: [],
   };
 }
@@ -693,7 +711,7 @@ export interface EvaluationSummary {
 
 export function summarise(cases: readonly CaseMetrics[]): EvaluationSummary {
   const ok = cases.filter((c) => c.ok);
-  const keys = ['daysOverTravelLimit', 'daysOverTravelLimitPlannerRule', 'overTravelMinutes', 'overLimitTransferAlone', 'overLimitMovingDay', 'overLimitOwnPick', 'overLimitOther', 'overfullDays', 'overfullMinutes', 'overfullOwnPick', 'emptyInteriorDays', 'emptyInteriorMovingDays', 'oneStopDays', 'oneStopDaysWithCompatibleNeighbour', 'backtrackingDays', 'backtrackExcessKm', 'strenuousBackToBack', 'heavyArrivalDay', 'heavyDepartureDay', 'missingLunch', 'missingDinner', 'hoursConflicts', 'stopsWithKnownHours', 'stopsWithUnknownHours', 'droppedMusts', 'unstatedDefectDays'] as const;
+  const keys = ['daysOverTravelLimit', 'daysOverTravelLimitPlannerRule', 'overTravelMinutes', 'overLimitTransferAlone', 'overLimitMovingDay', 'overLimitOwnPick', 'overLimitOther', 'overfullDays', 'overfullMinutes', 'overfullOwnPick', 'emptyInteriorDays', 'emptyInteriorMovingDays', 'oneStopDays', 'oneStopDaysWithCompatibleNeighbour', 'backtrackingDays', 'backtrackExcessKm', 'strenuousBackToBack', 'heavyArrivalDay', 'heavyDepartureDay', 'missingLunch', 'missingDinner', 'hoursConflicts', 'stopsWithKnownHours', 'stopsWithUnknownHours', 'droppedMusts', 'unstatedDefectDays', 'lunchOutsideWindow', 'dinnerAfterDeparture', 'breakfastBeforeArrival', 'silentEmptyDays'] as const;
   const totals = Object.fromEntries(keys.map((k) => [k, ok.reduce((n, c) => n + c.defects[k], 0)])) as EvaluationSummary['totals'];
   const tripsAffected = Object.fromEntries(keys.map((k) => [k, ok.filter((c) => c.defects[k] > 0).length]));
   const moves = ok.flatMap((c) => c.moves);

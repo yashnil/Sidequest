@@ -3,7 +3,7 @@ import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
 import type { ScanProposalExtras } from '../db/scan-repository';
-import { archetypeFor, planStructure, transportFor, type DropReason, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
+import { archetypeFor, planStructure, transportFor, type DropReason, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerDayWindow, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type AnchorCategory, type DraftAnchor, type DraftDay, type TripDraft } from './trip-draft';
 
 /**
@@ -29,6 +29,8 @@ export interface PlannerComposition {
   plannerInput: StructurePlannerInput;
   /** Why the trip sleeps where it does, when the region's bases were chosen by the stay objective. */
   stay?: StayDecision;
+  /** One sentence naming a base this scan proposed that would reach the traveller's picks, when one exists. */
+  baseSuggestion?: string;
 }
 
 const CATEGORY_FOR_PLACE: Record<string, AnchorCategory> = {
@@ -251,9 +253,57 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
   const plan = planStructure(plannerInput);
 
   const seasonalNotes = new Map(compiled.places.filter((p) => p.seasonalAccess.closureRisk !== 'none' && p.seasonalAccess.note).map((p) => [p.id, p.seasonalAccess.note!] as const));
-  const draft = draftFromPlan({ plan, bases, input, poolSize: pool.length, minutes, coordinates, seasonalNotes });
+  const draft = draftFromPlan({ plan, bases, input, windows, poolSize: pool.length, minutes, coordinates, seasonalNotes });
   const stay = region.basePortfolio?.decision;
-  return { draft, plan, provenance: Object.fromEntries(provenanceOf), poolSize: pool.length, plannerInput, ...(stay ? { stay } : {}) };
+  const baseSuggestion = suggestBaseForPicks({
+    plan,
+    bases,
+    allBases: compiled.bases.map((b) => ({ id: b.routingId ?? b.id, name: b.name })),
+    pool,
+    minutes,
+    limit: plannerInput.maxDailyTravelMinutes,
+    mayMove: profile.interview.baseMoveTolerance !== 'stay_put' && (profile.interview.baseMoveTolerance !== 'move_once' || bases.length < 2),
+  });
+  return { draft, plan, provenance: Object.fromEntries(provenanceOf), poolSize: pool.length, plannerInput, ...(stay ? { stay } : {}), ...(baseSuggestion ? { baseSuggestion } : {}) };
+}
+
+/**
+ * THE TRAVELLER'S PICKS, AND A PLACE TO SLEEP THAT WOULD REACH THEM.
+ *
+ * Bases are chosen when the scan is assembled, before anybody has been to the
+ * board, so a pick made there cannot change them. This does not change them
+ * either: moving a hotel is the traveller's call. It says so, once, when a base
+ * this scan already proposed would bring within reach a pick that this plan
+ * either could not place or could only place as a long day out.
+ */
+export function suggestBaseForPicks(input: {
+  plan: StructurePlan;
+  bases: readonly PlannerBase[];
+  allBases: readonly { id: string; name: string }[];
+  pool: readonly PlannerCandidate[];
+  minutes: (from: string, to: string) => number | null;
+  limit: number;
+  mayMove: boolean;
+}): string | null {
+  const reach = Math.max(45, Math.floor(input.limit / 2));
+  const stayingAt = new Set(input.bases.map((b) => b.id));
+  const nearest = (id: string) => Math.min(...input.bases.map((b) => input.minutes(b.id, id) ?? Infinity));
+  const unreached = new Set(input.plan.mustConflicts.map((m) => m.candidateId));
+  const placedFar = input.plan.days.flatMap((d) => d.stops.filter((s) => s.candidate.status === 'must' && nearest(s.candidate.id) > reach).map((s) => s.candidate.id));
+  const wanted = [...new Set([...unreached, ...placedFar])].filter((id) => nearest(id) > reach && input.pool.some((c) => c.id === id));
+  if (wanted.length === 0) return null;
+  const options = input.allBases
+    .filter((b) => !stayingAt.has(b.id))
+    .map((b) => ({ base: b, covers: wanted.filter((id) => { const m = input.minutes(b.id, id); return m !== null && m <= reach; }) }))
+    .filter((o) => o.covers.length > 0)
+    .sort((a, b) => b.covers.length - a.covers.length || a.base.name.localeCompare(b.base.name));
+  const best = options[0];
+  if (!best) return null;
+  const nameOf = new Map(input.pool.map((c) => [c.id, c.name] as const));
+  const names = best.covers.map((id) => nameOf.get(id)!).slice(0, 3);
+  const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
+  const sleepers = input.bases.map((b) => b.name);
+  return `${list} ${names.length === 1 ? 'is' : 'are'} on your list but far from ${sleepers.length === 1 ? sleepers[0]! : 'where this trip sleeps'}. A night or two in ${best.base.name} would bring ${names.length === 1 ? 'it' : 'them'} within reach${input.mayMove ? '' : ', if you would accept another hotel change'}.`;
 }
 
 function themeFor(day: StructurePlan['days'][number], baseName: string, isFirst: boolean, isLast: boolean): string {
@@ -269,6 +319,7 @@ function themeFor(day: StructurePlan['days'][number], baseName: string, isFirst:
 }
 
 function draftFromPlan(args: {
+  windows: readonly PlannerDayWindow[];
   plan: StructurePlan;
   bases: readonly PlannerBase[];
   input: PlannerComposeInput;
@@ -313,7 +364,11 @@ function draftFromPlan(args: {
      */
     const outdoorHeavy = day.stops.some((s) => WILD_GROUND.has(s.candidate.category) && s.candidate.exposure === 'outdoor' && s.candidate.intensity !== 'none' && (args.minutes(day.baseId, s.candidate.id) ?? 0) > 45);
     const early = day.stops.some((s) => s.slot === 'sunrise' || s.candidate.intensity === 'strenuous');
-    const lunch = day.lunchFoodArea
+    const windowForDay = args.windows.find((w) => w.date === day.date);
+    const lunchFits = !windowForDay || (windowForDay.startMinute <= 13 * 60 + 30 && windowForDay.endMinute >= 12 * 60);
+    const lunch = !lunchFits
+      ? undefined
+      : day.lunchFoodArea
       ? `Lunch around ${day.lunchFoodArea.name}${day.lunchFoodArea.specialty ? ` — ${day.lunchFoodArea.specialty}` : ''}`
       : outdoorHeavy
         ? `Pack a lunch — food is thin out near ${(day.lunchNear ?? 'the trail').replace(/^near\s+/i, '')}`
@@ -321,12 +376,10 @@ function draftFromPlan(args: {
           ? `Casual lunch in ${day.lunchNear.replace(/^near\s+/i, '')}, near the midday stop`
           : undefined;
     const weatherNote = (() => {
-      /* What could not be repaired is said on the day first: it is the part the traveller has to plan around. */
-      const stated = plan.dayNotes.filter((n) => n.dayNumber === day.dayNumber).map((n) => n.note);
+      /* What could not be repaired is written on the day from `package.planning.dayNotes`, in full; a draft note is too short to carry it. */
       const moved = plan.weatherMoves.filter((m) => m.chosenDate === day.date);
       const forecast = moved.length > 0 ? `Scheduled here for the better forecast: ${moved.map((m) => m.name).join(', ')}.` : day.weather && day.weather.severity >= 2 ? `The forecast says ${day.weather.label}; the backup below is close by.` : null;
-      const all = [...stated, ...(forecast ? [forecast] : [])];
-      return all.length > 0 ? all.join(' ') : undefined;
+      return forecast;
     })();
     const lead = day.stops.find((s) => s.slot === 'day') ?? day.stops[0];
     return {
@@ -450,6 +503,7 @@ export function planningRecordOf(composed: PlannerComposition): {
     weatherMoves: composed.plan.weatherMoves.map((m) => ({ name: m.name, avoidedDate: m.avoidedDate, chosenDate: m.chosenDate })),
     mustConflicts: composed.plan.mustConflicts.map((m) => ({ name: m.name, detail: m.detail })),
     ...(composed.stay ? { stay: composed.stay } : {}),
+    ...(composed.baseSuggestion ? { baseSuggestion: composed.baseSuggestion } : {}),
     dayRepairs: composed.plan.repairs.map((r) => ({ ...r })),
     dayNotes: composed.plan.dayNotes.map((n) => ({ ...n })),
   };

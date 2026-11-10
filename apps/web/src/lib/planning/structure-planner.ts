@@ -203,6 +203,8 @@ const COHERENT_HOP_MINUTES = 50;
 export const UNKNOWN_LEG_MINUTES = 60;
 /** A day whose transfer uses up the traveller's limit still gets this much of a loop near where it ends. */
 const MOVE_DAY_LOOP_MINUTES = 45;
+/** With the limit nearly spent by the move, a stop may still cost this much off the road: a break, inside the error of an estimate. */
+const MOVE_DAY_ROADSIDE_MINUTES = 15;
 
 function dayWindowOf(input: StructurePlannerInput, date: string): PlannerDayWindow {
   return input.windows.find((w) => w.date === date) ?? { date, startMinute: 9 * 60, endMinute: 18 * 60 };
@@ -465,7 +467,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     /* What is left of an edge day after a long transfer is not a sightseeing window: under ninety minutes, the day is the journey. */
     const capacity = Math.max(0, (isFirst || isLast) && edgeTransfer > 0 && raw < 90 ? 0 : raw);
     /* A transfer is travel: it comes off the traveller's limit, and a day that spends it all still gets a short loop near where it ends. */
-    const travelBudget = transfer > 0 ? Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_LOOP_MINUTES) : input.maxDailyTravelMinutes;
+    const travelBudget = transfer > 0 ? (transfer >= input.maxDailyTravelMinutes ? MOVE_DAY_LOOP_MINUTES : Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_ROADSIDE_MINUTES)) : input.maxDailyTravelMinutes;
     return { index: i, dayNumber: i + 1, date, baseId: base.id, ...(relocation ? { previousBaseId: previousBase.id } : {}), relocation, capacityMinutes: capacity, windowMinutes: span, transferMinutes: transfer, travelBudgetMinutes: travelBudget, weather: weatherByDate.get(date) ?? null, isFirst, isLast };
   });
 
@@ -554,7 +556,19 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const alone = stops.length === 1;
     /* A whole-day outing to another town may use a day of its own beyond the usual reach — alone on an ordinary day, never on an arrival, departure or moving day. */
     const soloDayTrip = s.dayTrip && slot === 'day' && fromBase !== null && fromBase <= dayTripReach && alone && !edge && !day.relocation;
-    if (fromBase !== null && fromBase > reach && !user && !soloDayTrip) return fail('too_far', `About ${Math.round(fromBase)} minutes each way from where you sleep that night.`);
+    /*
+     * On a moving day "how far from where you sleep" is the wrong question: the
+     * day is a journey, so what matters is how far a stop takes it off that
+     * journey. The day's travel budget still bounds it below.
+     */
+    const onTheWay = (() => {
+      if (!day.relocation || !day.previousBaseId || slot !== 'day') return false;
+      const out = leg(day.previousBaseId, s.id);
+      const on = leg(s.id, day.baseId);
+      const allowance = day.transferMinutes >= input.maxDailyTravelMinutes ? MOVE_DAY_ROADSIDE_MINUTES : day.travelBudgetMinutes;
+      return out !== null && on !== null && out + on - day.transferMinutes <= allowance;
+    })();
+    if (fromBase !== null && fromBase > reach && !user && !soloDayTrip && !onTheWay) return fail('too_far', `About ${Math.round(fromBase)} minutes each way from where you sleep that night.`);
     if (!user && stops.some((o) => o !== s && o.dayTrip && (leg(day.baseId, o.id) ?? 0) > reach)) return fail('capacity', 'That day is a day trip elsewhere.');
     if (slot === 'sunrise') {
       if (day.isFirst || day.relocation || stops.some((o) => o !== s && slotOf(o) === 'sunrise')) return fail('capacity', 'No free sunrise.');

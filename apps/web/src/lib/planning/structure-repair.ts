@@ -1,3 +1,4 @@
+import { haversineKm } from '@sidequest/geo';
 import type { PlanState, PlannerCandidate, PlannerKernel } from './structure-planner';
 
 /**
@@ -25,7 +26,7 @@ import type { PlanState, PlannerCandidate, PlannerKernel } from './structure-pla
  * Pure and deterministic: fixed orders over days and ids, no clock.
  */
 
-export type DayNoteCode = 'transfer_over_limit' | 'travel_over_limit' | 'day_overfull' | 'edge_day_heavy' | 'hard_days_together';
+export type DayNoteCode = 'transfer_over_limit' | 'travel_over_limit' | 'day_overfull' | 'edge_day_heavy' | 'hard_days_together' | 'open_day';
 
 export interface DayNote {
   dayNumber: number;
@@ -156,7 +157,105 @@ export function repairDays(kernel: PlannerKernel, seed: PlanState): { state: Pla
       }
     }
   }
+  fillThinDays(kernel, state);
   return { state, repairs };
+}
+
+/** Under this share of its capacity, a day with one stop or none is thin enough to want company. */
+const THIN_DAY_SHARE = 0.5;
+
+/**
+ * A DAY THAT COULD HOLD MORE, AND A PLACE THAT WOULD GO THERE.
+ *
+ * The search optimises a score, so it can stop with a thin day while a good
+ * place sits unused because adding it did not pay. Only a place the day's own
+ * validator accepts, inside the interest caps, and only until the day stops
+ * being thin; a place already in the plan is never moved, so nothing the
+ * traveller chose is disturbed.
+ */
+function fillThinDays(kernel: PlannerKernel, state: PlanState): void {
+  const caps = kernel.input.frequencyCaps;
+  const stopsOf = (index: number) => state[index] ?? [];
+  const thin = (index: number) => {
+    const day = kernel.days[index]!;
+    if (day.isFirst || day.isLast) return false;
+    const stops = stopsOf(index);
+    const metrics = kernel.dayMetrics(index, stops);
+    return stops.length <= 1 && metrics.activityMinutes + metrics.tourMinutes < day.capacityMinutes * THIN_DAY_SHARE;
+  };
+  for (let index = 0; index < state.length; index += 1) {
+    for (let guard = 0; guard < 3 && thin(index); guard += 1) {
+      const taken = new Set(state.flat().map((s) => s.id));
+      const used = new Map<string, number>();
+      for (const s of state.flat()) if (s.primaryInterest) used.set(s.primaryInterest, (used.get(s.primaryInterest) ?? 0) + 1);
+      const underCap = (c: PlannerCandidate) => !c.primaryInterest || caps[c.primaryInterest] === undefined || (used.get(c.primaryInterest) ?? 0) < caps[c.primaryInterest]!;
+      const next = kernel.plannable
+        .filter((c) => !taken.has(c.id) && c.fit >= kernel.fillerMinFit && underCap(c))
+        .sort((a, b) => kernel.experienceValue(b) - kernel.experienceValue(a) || a.id.localeCompare(b.id))
+        .find((c) => kernel.checkDay(index, [...stopsOf(index), c], stopsOf, c.id).ok);
+      if (!next) break;
+      state[index] = [...stopsOf(index), next];
+    }
+  }
+}
+
+/**
+ * A MOVE OVER THE LIMIT, AND WHAT COULD BE DONE ABOUT IT.
+ *
+ * One concrete alternative, the most useful that is actually there: a night on
+ * the way, named after a place on this trip's own board; a faster mode, named as
+ * unmeasured because nothing here consulted a timetable; or the price of
+ * dropping the move, counted from this plan.
+ */
+function moveAlternative(kernel: PlannerKernel, index: number, state: PlanState): string {
+  const day = kernel.days[index]!;
+  const input = kernel.input;
+  const from = day.previousBaseId;
+  if (!from || !day.relocation) return '';
+  const limit = input.maxDailyTravelMinutes;
+  const basesByName = new Set(input.bases.map((b) => b.name.toLowerCase()));
+  const places = [...kernel.plannable, ...state.flat()];
+  /* A locality half the board shares names a region, not somewhere to stay the night. */
+  const sharedBy = new Map<string, number>();
+  for (const c of kernel.input.candidates) if (c.locality) sharedBy.set(c.locality.trim().toLowerCase(), (sharedBy.get(c.locality.trim().toLowerCase()) ?? 0) + 1);
+  const isTown = (where: string) => where.toLowerCase() !== input.destinationName.trim().toLowerCase() && (sharedBy.get(where.toLowerCase()) ?? 0) <= Math.max(3, Math.floor(kernel.input.candidates.length / 5));
+  const onTheWay = places
+    .flatMap((c) => {
+      const out = input.minutes(from, c.id);
+      const on = input.minutes(c.id, day.baseId);
+      const where = (c.locality || c.name).trim();
+      if (out === null || on === null || out > limit || on > limit || !where || basesByName.has(where.toLowerCase()) || !isTown(where)) return [];
+      if (out + on > day.transferMinutes + 45 || out < 45 || on < 45) return [];
+      return [{ where, out, on }];
+    })
+    .sort((a, b) => Math.max(a.out, a.on) - Math.max(b.out, b.on) || a.where.localeCompare(b.where))[0];
+  if (onTheWay) return ` A night around ${onTheWay.where} would break it into about ${clock(onTheWay.out)} and ${clock(onTheWay.on)}, each inside your limit.`;
+  const fromBase = input.bases.find((b) => b.id === from);
+  const toBase = input.bases.find((b) => b.id === day.baseId);
+  const km = fromBase && toBase ? haversineKm({ id: fromBase.id, ...fromBase.coordinates }, { id: toBase.id, ...toBase.coordinates }) : 0;
+  if (km >= 200) return ` ${input.carAvailable ? 'A train or a flight' : 'A flight'} between them may be quicker; Sidequest has not timed one, so check before you book.`;
+  const out = state.flatMap((stops, i) => (kernel.days[i]!.baseId === day.baseId ? stops : [])).filter((c) => (input.minutes(from, c.id) ?? 0) > Math.max(45, limit / 2)).length;
+  const name = fromBase?.name ?? 'the last base';
+  return out > 0 ? ` Staying on in ${name} would save the move, but ${out} of the planned stops would then be out of reach.` : ` Staying on in ${name} would save the move and keep today's stops within reach.`;
+}
+
+/** A day nothing could fill, said on the day. An empty day is never left to explain itself. */
+function openDayNote(kernel: PlannerKernel, index: number, state: PlanState): string | null {
+  const day = kernel.days[index]!;
+  if (day.isFirst || day.isLast || (state[index] ?? []).length > 0 || day.capacityMinutes < 60) return null;
+  const input = kernel.input;
+  const name = input.bases.find((b) => b.id === day.baseId)?.name ?? 'where you are staying';
+  if (day.relocation) return day.transferMinutes > input.maxDailyTravelMinutes ? null : `The move to ${name} is the day: nothing left on your list sits on the way, inside your ${clock(input.maxDailyTravelMinutes)} of travel.`;
+  const taken = new Set(state.flat().map((s) => s.id));
+  const nearest = kernel.plannable
+    .flatMap((c) => {
+      const minutes = input.minutes(day.baseId, c.id);
+      return !taken.has(c.id) && minutes !== null ? [{ name: c.name, minutes }] : [];
+    })
+    .sort((a, b) => a.minutes - b.minutes || a.name.localeCompare(b.name))[0];
+  return nearest
+    ? `This day is free: nothing left on your list is within reach of ${name} under your ${clock(input.maxDailyTravelMinutes)} of travel. The nearest is ${nearest.name}, about ${clock(nearest.minutes)} each way; add it from the board and it goes here, or sleep nearer it if you want it.`
+    : `This day is free: everything on your list is already in the plan. Add a place from the board and it goes here.`;
 }
 
 /** What is still wrong with each day, in words. Called on the plan the traveller gets. */
@@ -174,12 +273,14 @@ export function describeDays(kernel: PlannerKernel, state: PlanState): DayNote[]
     const total = load.travel + day.transferMinutes;
     if (day.transferMinutes > limit) {
       const where = day.relocation ? `The move to ${nameOf.get(day.baseId) ?? 'the next base'}` : 'Getting between the airport or station and where you sleep';
-      notes.push({ dayNumber: day.dayNumber, code: 'transfer_over_limit', note: `${where} is about ${clock(day.transferMinutes)}, past your ${clock(limit)} a day: a travel day.` });
+      notes.push({ dayNumber: day.dayNumber, code: 'transfer_over_limit', note: `${where} is about ${clock(day.transferMinutes)}, past your ${clock(limit)} a day: a travel day.${moveAlternative(kernel, index, state)}` });
     } else if (total > limit) {
       notes.push({ dayNumber: day.dayNumber, code: 'travel_over_limit', note: `About ${clock(total)} of travel today, over the ${clock(limit)} a day you set.${because}` });
     }
     if (load.overflow > 0) notes.push({ dayNumber: day.dayNumber, code: 'day_overfull', note: `This day has about ${clock(load.overflow)} less time than its plan needs.${because} Expect to cut a visit short.` });
     else if (load.heavyEdge) notes.push({ dayNumber: day.dayNumber, code: 'edge_day_heavy', note: `A full plan for ${day.isFirst ? 'an arrival' : 'a departure'} day.${because} Leave yourself room if ${day.isFirst ? 'you land late' : 'your departure is early'}.` });
+    const open = openDayNote(kernel, index, state);
+    if (open) notes.push({ dayNumber: day.dayNumber, code: 'open_day', note: open });
     if (index > 0 && hard(index) && hard(index - 1)) notes.push({ dayNumber: day.dayNumber, code: 'hard_days_together', note: 'A second strenuous day in a row; you asked for a fast pace, and the legs may disagree.' });
   });
   return notes;

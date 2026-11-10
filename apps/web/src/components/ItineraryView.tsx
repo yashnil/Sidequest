@@ -617,6 +617,7 @@ export function ItineraryView({
                 <DayFocusTarget dayNumber={day.dayNumber}>
                   <DayCard
                     day={day}
+                    plannerNotes={(itinerary.package?.planning?.dayNotes ?? []).filter((n) => n.dayNumber === day.dayNumber && (n.code !== 'open_day' || day.items.every((item) => item.kind === 'free_time'))).map((n) => n.note)}
                     /*
                      * V11 §D — where the day starts, so the header can say
                      * "Banff → Jasper" on the day that moves and "based in
@@ -776,6 +777,7 @@ export function ItineraryView({
                 <BaseCards bases={baseSequence} />
               </div>
               {staySentence ? <p className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="stay-decision">{staySentence}</p> : null}
+              {itinerary.package.planning?.baseSuggestion ? <p className="mt-2 max-w-[62ch] type-small text-ink" data-testid="stay-suggestion">{itinerary.package.planning.baseSuggestion}</p> : null}
             </section>
           ) : null}
           {signatureExperiences.length > 0 ? (
@@ -2115,6 +2117,7 @@ const CHAPTER_ROLE_WORD: Record<string, string> = {
 
 function DayCard({
   day,
+  plannerNotes = [],
   episode = null,
   renderedAt,
   coordinates,
@@ -2156,6 +2159,8 @@ function DayCard({
   tiles?: MapBasemap | null;
   /** PRODUCTION UI V1 — what kind of thing each stop is; only a named place carries a verification chip. */
   anchorKinds?: Record<string, AnchorKind>;
+  /** What is still hard about this day, written by the planner with its figures and an alternative. */
+  plannerNotes?: readonly string[];
   /** What the plan wanted on THIS day and could not schedule, with the reason. See `plannedOffByDay`. */
   plannedOff?: readonly { name: string; reason: string }[];
   /** LIVE WORLD V1 — how many days the plan has, for "move to day". */
@@ -2457,10 +2462,10 @@ function DayCard({
 
       {isEmpty ? (
         <div className="border-t border-rule py-5 text-sm text-ink-muted">
-          <p>
+          <p data-testid={`day-empty-${day.dayNumber}`}>
             {isFirst || isLast
               ? 'Nothing scheduled — on an arrival or departure day that is usually right.'
-              : 'Nothing scheduled. Everything you picked fitted better on another day, so the hours are yours.'}
+              : plannerNotes[0] ?? 'Nothing scheduled, so the hours are yours.'}
           </p>
           {plannedOff.length > 0 ? (
             <div className="mt-3">
@@ -2515,10 +2520,10 @@ function DayCard({
         "times are estimates") are one line inside the day's notes instead of an
         amber strip on every day.
       */}
-      {compacted.sentences.length > 0 ? (
+      {compacted.sentences.length > 0 || (plannerNotes.length > 0 && !isEmpty) ? (
         <div className="mt-3 border-l-2 border-l-amber py-1 pl-3 text-sm leading-relaxed text-ink-muted" data-testid={`day-warnings-${day.dayNumber}`}>
           <ul>
-            {compacted.sentences.map((warning) => (
+            {[...(isEmpty ? [] : plannerNotes), ...compacted.sentences].map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>

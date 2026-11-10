@@ -33,6 +33,29 @@ const twoBases = (transfer: number): Pick<StructurePlannerInput, 'bases'> => ({
   ],
 });
 
+describe('a moving day is a journey', () => {
+  it('takes a stop on the way, however far it is from tonight\'s bed', () => {
+    const onTheWay = stop('way', { fit: 80 });
+    const kernel = createPlannerKernel(input({ ...twoBases(120), candidates: [onTheWay] }, { 'b|c': 120, 'b|way': 40, 'way|c': 100 }));
+    expect(kernel.checkDay(2, [onTheWay], () => [], 'way')).toEqual({ ok: true });
+  });
+
+  it('still refuses a stop that takes the day off its road', () => {
+    const offRoad = stop('off', { fit: 80 });
+    const kernel = createPlannerKernel(input({ ...twoBases(120), candidates: [offRoad] }, { 'b|c': 120, 'b|off': 100, 'off|c': 100 }));
+    expect(kernel.checkDay(2, [offRoad], () => [], 'off')).toMatchObject({ ok: false, reason: 'too_far' });
+  });
+
+  it('keeps a move inside the limit unless the transfer has already spent it', () => {
+    const within = createPlannerKernel(input({ ...twoBases(120), candidates: [] })).days[2]!;
+    expect(within.travelBudgetMinutes).toBe(30);
+    const nearlyAll = createPlannerKernel(input({ ...twoBases(145), candidates: [] })).days[2]!;
+    expect(nearlyAll.travelBudgetMinutes).toBe(15);
+    const overLimit = createPlannerKernel(input({ ...twoBases(200), candidates: [] })).days[2]!;
+    expect(overLimit.travelBudgetMinutes).toBe(45);
+  });
+});
+
 describe('prevention: a transfer is travel', () => {
   it('a moving day gives what its transfer used back to the traveller’s limit', () => {
     const near = stop('near');
@@ -40,8 +63,8 @@ describe('prevention: a transfer is travel', () => {
     const kernel = createPlannerKernel(planner);
     const day = kernel.days[2]!;
     expect(day.relocation).toBe(true);
-    expect(day.travelBudgetMinutes).toBe(45);
-    /* 90 + 90 − 120 = 60 of detour, past the 45 the day has left. */
+    expect(day.travelBudgetMinutes).toBe(30);
+    /* 90 + 90 − 120 = 60 of detour, past the 30 the day has left. */
     expect(kernel.checkDay(2, [near], () => [], 'near')).toMatchObject({ ok: false, reason: 'too_far' });
   });
 
@@ -85,7 +108,33 @@ describe('repair: an include parked where it does not fit', () => {
   it('a transfer past the limit is said on the day, with its figures', () => {
     const kernel = createPlannerKernel(input({ ...twoBases(280), candidates: [] }, { 'b|c': 280 }));
     const notes = describeDays(kernel, [[], [], [], []]);
-    expect(notes).toEqual([expect.objectContaining({ dayNumber: 3, code: 'transfer_over_limit', note: expect.stringContaining('4 h 40') })]);
+    expect(notes).toContainEqual(expect.objectContaining({ dayNumber: 3, code: 'transfer_over_limit', note: expect.stringContaining('4 h 40') }));
+  });
+
+  it('never leaves an empty day to explain itself', () => {
+    const far = stop('far');
+    const kernel = createPlannerKernel(input({ candidates: [far] }, { 'b|far': 400 }));
+    const notes = describeDays(kernel, [[], [], [], []]);
+    const interior = notes.filter((n) => n.code === 'open_day').map((n) => n.dayNumber);
+    expect(interior).toEqual([2, 3]);
+    expect(notes.find((n) => n.code === 'open_day')!.note).toMatch(/far.*6 h 40 each way/);
+    /* An arrival or departure day says nothing: a short day there is the shape of the trip. */
+    expect(notes.some((n) => n.dayNumber === 1 && n.code === 'open_day')).toBe(false);
+  });
+
+  it('says what can be done about a move over the limit', () => {
+    const halfway = stop('halfway', { locality: 'Midtown' });
+    const withStop = createPlannerKernel(input({ ...twoBases(280), candidates: [halfway] }, { 'b|c': 280, 'b|halfway': 140, 'halfway|c': 145 }));
+    expect(describeDays(withStop, [[], [], [], []]).find((n) => n.code === 'transfer_over_limit')!.note).toContain('A night around Midtown');
+    const bare = createPlannerKernel(input({ ...twoBases(280), candidates: [] }, { 'b|c': 280 }));
+    expect(describeDays(bare, [[], [], [], []]).find((n) => n.code === 'transfer_over_limit')!.note).toMatch(/A train or a flight|Staying on in First/);
+  });
+
+  it('a locality half the board shares is a region, not somewhere to spend the night', () => {
+    const shared = ['a', 'b2', 'c2', 'd', 'e', 'f'].map((id) => stop(id, { locality: 'The Highlands' }));
+    const onWay = stop('way', { locality: 'The Highlands' });
+    const kernel = createPlannerKernel(input({ ...twoBases(280), candidates: [...shared, onWay] }, { 'b|c': 280, 'b|way': 140, 'way|c': 145 }));
+    expect(describeDays(kernel, [[], [], [], []]).find((n) => n.code === 'transfer_over_limit')!.note).not.toContain('A night around');
   });
 
   it('a repaired plan still passes the day validator for everything Sidequest chose', () => {

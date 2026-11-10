@@ -1322,6 +1322,8 @@ export const tripPackageSchema = z.object({
       mustConflicts: z.array(z.object({ name: z.string().min(1), detail: z.string().min(1) })).default([]),
       /** Release candidate — why the trip sleeps where it does, with the numbers (`decision.sentence` is one line a screen can show). */
       stay: stayDecisionSchema.optional(),
+      /** A base the scan proposed that would reach the traveller's picks this plan could not; the traveller decides. */
+      baseSuggestion: z.string().min(1).optional(),
       /** What the planner's repair pass changed before anyone saw the plan. */
       dayRepairs: z.array(z.object({ dayNumber: z.number().int().positive(), code: z.string().min(1), note: z.string().min(1) })).optional(),
       /** What is still wrong with a day after repair, as it is written on that day. */
