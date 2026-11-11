@@ -1,4 +1,9 @@
-{"at":"2026-11-09T23:17:07.166Z","kind":"trip","label":"utah-road-trip","destination":"Moab, Arches and Canyonlands, Utah","start":"2027-04-12","end":"2027-04-17","tripId":"962b84c9-693c-44c7-b3fe-a0429bc8c37d","seconds":172}
-{"at":"2026-11-09T23:20:11.185Z","kind":"trip","label":"kyoto-city","destination":"Kyoto and Nara, Japan","start":"2027-04-05","end":"2027-04-11","tripId":"8f6820ed-84ec-446a-a946-b1ce0dc60a6e","seconds":181}
-{"at":"2026-11-09T23:23:32.676Z","kind":"trip","label":"tenerife-island","destination":"Tenerife, Canary Islands","start":"2027-02-08","end":"2027-02-13","tripId":"37054cfb-6490-4ffe-a814-7dda901b00b6","seconds":197}
-{"at":"2026-11-10T01:09:22.266Z","kind":"decide","request":"Remote monasteries and high passes in October.","url":"http://127.0.0.1:4320/decide/7c13480f-b004-4218-8fcf-4c85b60bb278","seconds":46}
+{"at":"2026-11-10T19:24:15.415Z","kind":"trip","label":"utah-road-trip","destination":"Moab, Arches and Canyonlands, Utah","start":"2027-04-12","end":"2027-04-17","tripId":"a8a79a07-193b-4da3-911b-61c142d292fc","seconds":119}
+{"at":"2026-11-10T19:26:58.650Z","kind":"trip","label":"kyoto-city","destination":"Kyoto and Nara, Japan","start":"2027-04-05","end":"2027-04-11","tripId":"05667c79-d890-42f9-abc8-6ceb31bf8d43","seconds":160}
+{"at":"2026-11-10T19:29:47.017Z","kind":"trip","label":"tenerife-island","destination":"Tenerife, Canary Islands","start":"2027-02-08","end":"2027-02-13","tripId":"498eae83-1970-4036-93c7-b2cdb141c363","seconds":166}
+{"at":"2026-11-10T19:33:19.217Z","kind":"trip","label":"tanzania-safari","destination":"Arusha and the Serengeti, Tanzania","start":"2027-07-05","end":"2027-07-13","tripId":"378faf11-42d7-46ac-8362-136990a4c66b","seconds":210}
+{"at":"2026-11-10T19:36:20.984Z","kind":"trip","label":"iceland-road-trip","destination":"Iceland Ring Road","start":"2027-06-14","end":"2027-06-22","tripId":"771df77a-5f5f-434b-bf86-1fd8afd8eac9","seconds":180}
+{"at":"2026-11-10T19:39:28.573Z","kind":"trip","label":"kyrgyzstan-remote","destination":"Karakol and Issyk-Kul, Kyrgyzstan","start":"2027-08-09","end":"2027-08-16","tripId":"f719c796-d230-431d-a0e2-8ebcd06d3fb0","seconds":184}
+{"at":"2026-11-10T19:42:00.528Z","kind":"trip","label":"lisbon-city-break","destination":"Lisbon, Portugal","start":"2027-05-13","end":"2027-05-16","tripId":"e698fe86-7cfd-4319-8114-f3227a59f4d4","seconds":150}
+{"at":"2026-11-10T19:42:45.415Z","kind":"decide","request":"Remote monasteries and high passes in October.","url":"http://127.0.0.1:4320/decide/d1dc31bb-ce17-421f-901c-47bf8bfbf040","seconds":41}
+{"at":"2026-11-10T19:43:32.573Z","kind":"decide","request":"Somewhere beautiful and relaxing.","url":"http://127.0.0.1:4320/decide/d0130eeb-85ca-4234-bc1b-b742d596e6c7","seconds":47}
