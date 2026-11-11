@@ -60,8 +60,11 @@ export function plannerAutoPick(input: {
   });
   const first = preferred.length < input.candidates.length ? compose(preferred) : null;
   const emptyDays = (plan: ReturnType<typeof compose>['plan']) => plan.days.filter((day) => day.stops.length === 0).length;
-  const everything = first && emptyDays(first.plan) === 0 ? null : compose(input.candidates);
-  const composed = first && (!everything || emptyDays(first.plan) <= emptyDays(everything.plan)) ? first : everything!;
+  const travellerIncluded = new Set(travellerRows.filter((s) => s.status === 'included').map((s) => s.placeId));
+  const newPicks = (plan: ReturnType<typeof compose>['plan']) => plan.days.flatMap((d) => d.stops).filter((s) => !travellerIncluded.has(s.candidate.id)).length;
+  /* Pressing "Choose for me" and seeing nothing happen is worse than a pick the board is lukewarm about. */
+  const everything = first && emptyDays(first.plan) === 0 && newPicks(first.plan) > 0 ? null : compose(input.candidates);
+  const composed = first && (!everything || (emptyDays(first.plan) <= emptyDays(everything.plan) && newPicks(first.plan) > 0)) ? first : everything!;
   const userIncluded = new Set(travellerRows.filter((s) => s.status === 'included').map((s) => s.placeId));
   const scheduled = composed.plan.days.flatMap((d) => d.stops.map((s) => s.candidate));
   const selectedIds = scheduled.filter((c) => !userIncluded.has(c.id)).map((c) => c.id);
