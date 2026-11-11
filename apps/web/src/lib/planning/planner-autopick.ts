@@ -60,8 +60,9 @@ export function plannerAutoPick(input: {
   });
   const first = preferred.length < input.candidates.length ? compose(preferred) : null;
   const emptyDays = (plan: ReturnType<typeof compose>['plan']) => plan.days.filter((day) => day.stops.length === 0).length;
-  const travellerIncluded = new Set(travellerRows.filter((s) => s.status === 'included').map((s) => s.placeId));
-  const newPicks = (plan: ReturnType<typeof compose>['plan']) => plan.days.flatMap((d) => d.stops).filter((s) => !travellerIncluded.has(s.candidate.id)).length;
+  /* "New" means not already ticked on the board, by anyone: re-picking what is already there changes nothing the traveller can see. */
+  const alreadyOn = new Set(input.selections.filter((s) => s.status === 'included').map((s) => s.placeId));
+  const newPicks = (plan: ReturnType<typeof compose>['plan']) => plan.days.flatMap((d) => d.stops).filter((s) => !alreadyOn.has(s.candidate.id)).length;
   /* Pressing "Choose for me" and seeing nothing happen is worse than a pick the board is lukewarm about. */
   const everything = first && emptyDays(first.plan) === 0 && newPicks(first.plan) > 0 ? null : compose(input.candidates);
   const composed = first && (!everything || (emptyDays(first.plan) <= emptyDays(everything.plan) && newPicks(first.plan) > 0)) ? first : everything!;

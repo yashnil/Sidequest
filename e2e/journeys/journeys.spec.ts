@@ -66,6 +66,8 @@ const CUSTOM_STOP = 'Journey coffee stop';
 const PRIVATE_NOTE = 'JOURNEY-PRIVATE-NOTE-7731';
 const PRIVATE_REF = 'JRN-CONF-5501';
 const PRIVATE_COST = '4321';
+/* Event UIDs are random hex: a four-digit cost can occur inside one by chance, which is not a leak. */
+const withoutIds = (ics: string) => ics.split(/\r?\n/).filter((line) => !/^UID:/.test(line)).join('\n');
 
 /** Which archetypes each width walks in full. */
 function archetypesFor(project: string): readonly Archetype[] {
@@ -502,7 +504,7 @@ for (const arch of ARCHETYPES) {
       const consistent = assertIcsConsistent(ics, dates, '.ics');
       const activities = plan.flatMap((d) => d.activities);
       expect(ics.events.length, 'at least one event per scheduled stop').toBeGreaterThanOrEqual(activities.length);
-      for (const leak of [PRIVATE_NOTE, PRIVATE_REF, PRIVATE_COST]) expect(ics.unfolded, `"${leak}" must not leave in the calendar`).not.toContain(leak);
+      for (const leak of [PRIVATE_NOTE, PRIVATE_REF, PRIVATE_COST]) expect(withoutIds(ics.unfolded), `"${leak}" must not leave in the calendar`).not.toContain(leak);
       expect(ics.events.some((e) => e.summary.includes(CUSTOM_STOP)), 'the custom stop is in the calendar').toBe(true);
       expect(ics.unfolded, 'a removed stop is not').not.toMatch(/SUMMARY:(?!Booked).*\bJourney removed\b/);
       return consistent;
@@ -523,7 +525,7 @@ for (const arch of ARCHETYPES) {
       expect(response.status()).toBe(200);
       const ics = parseIcs(await response.text());
       expect(ics.events.length, 'the feed carries the plan').toBeGreaterThan(0);
-      for (const leak of [PRIVATE_NOTE, PRIVATE_REF, PRIVATE_COST]) expect(ics.unfolded, `"${leak}" must not leave in the feed`).not.toContain(leak);
+      for (const leak of [PRIVATE_NOTE, PRIVATE_REF, PRIVATE_COST]) expect(withoutIds(ics.unfolded), `"${leak}" must not leave in the feed`).not.toContain(leak);
       await page.getByTestId('pack-feed-revoke').click();
       await page.getByTestId('pack-feed-revoke').click();
       await expect(page.getByTestId('pack-feed')).toHaveAttribute('data-active', 'false', { timeout: 20_000 });
