@@ -125,6 +125,39 @@ describe('discovery scan', () => {
   });
 });
 
+describe('a board that cannot fill every day, with no model to fall back on (staging finding)', () => {
+  it('ships the planner’s plan with its empty days rather than failing the build', async () => {
+    /* Four weeks on one fixture board: some interior day is left empty, which used to send the build to composition. */
+    const tripId = await dynamicTrip('Testmouth', '2026-08-12', '2026-09-09');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 150 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(scanView(tripId).state).toBe('ready');
+    /* The traveller skips all but three places, so a four-week trip cannot fill its days from the board. */
+    const { getTrip, setSelection } = await import('@/lib/db/repository');
+    const { resolveTripRegion, boardFor } = await import('@/lib/region');
+    const { defaultProfileFor } = await import('@/lib/planning/production-plan');
+    const resolved = await resolveTripRegion(getTrip(tripId)!);
+    if (!resolved.ok) throw new Error('the scan region did not resolve');
+    const board = boardFor(getTrip(tripId)!, defaultProfileFor(getTrip(tripId)!, null), resolved.context);
+    board.candidates.forEach((candidate, index) => setSelection(tripId, candidate.place.id, index < 3 ? 'included' : 'excluded', 'user', index < 3 ? null : 'not_my_thing'));
+    /* The model is away: no fixture composer, no credential — as when a caller's share of the day is spent. */
+    delete process.env.SIDEQUEST_COMPOSER_PROVIDER;
+    delete process.env.ANTHROPIC_API_KEY;
+    const { generateSidequestPlanForTrip } = await import('@/lib/planning/production-plan');
+    const result = await generateSidequestPlanForTrip(tripId, { caller: 'test', now: NOW });
+    expect(result.ok, result.error).toBe(true);
+    const planning = result.result!.itinerary.package?.planning;
+    expect(planning?.mode).toBe('planner');
+    expect(result.result!.itinerary.days.length).toBe(29);
+    /* The empty days shipped, and each says why: the traveller left too little to fill four weeks. */
+    const empty = planning?.density?.days.filter((d) => d.stops === 0 && d.dayNumber > 1 && d.dayNumber < 29) ?? [];
+    expect(empty.length).toBeGreaterThan(0);
+    expect(empty.every((d) => d.class !== 'full')).toBe(true);
+  }, 60_000);
+});
+
 describe('a thin scan (live Tokyo finding)', () => {
   it('asks once for more, places only the new places, records why, and plans on the planner', async () => {
     const tripId = await dynamicTrip('thinscan harbour');

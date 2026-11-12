@@ -5,7 +5,9 @@ vi.mock('server-only', () => ({}));
 vi.mock('../providers/registry', () => ({ capability: () => ({ configured: false }) }));
 vi.mock('../providers/nominatim', () => ({
   geocode: vi.fn(async (query: string) => ({
-    places: query === 'Passo Giau, Italy' ? [{ lat: '46.4830', lon: '12.0540', place_rank: 30, address: { country_code: 'it', village: 'San Vito di Cadore' } }] : query === 'Far Away Lake, Italy' ? [{ lat: '40.0', lon: '15.0', place_rank: 30, address: { country_code: 'it' } }] : query.startsWith('전쟁기념관') ? [{ lat: '37.5364', lon: '126.9773', place_rank: 30, address: { country_code: 'kr', city_district: '용산구' } }] : [],
+    places: query === 'Akureyri, Akureyri, Iceland' ? [{ name: 'Akureyri (Hof)', category: 'amenity', type: 'charging_station', lat: '65.684', lon: '-18.086', place_rank: 30, address: { country_code: 'is' } }]
+      : query === 'Akureyri, Iceland' || query === 'Egilsstaðir, Iceland' ? [{ name: query.split(',')[0], category: 'place', type: 'town', lat: query.startsWith('A') ? '65.683' : '65.262', lon: query.startsWith('A') ? '-18.112' : '-14.403', place_rank: 16, address: { country_code: 'is', town: query.split(',')[0] } }]
+      : query === 'Passo Giau, Italy' ? [{ lat: '46.4830', lon: '12.0540', place_rank: 30, address: { country_code: 'it', village: 'San Vito di Cadore' } }] : query === 'Far Away Lake, Italy' ? [{ lat: '40.0', lon: '15.0', place_rank: 30, address: { country_code: 'it' } }] : query.startsWith('전쟁기념관') ? [{ lat: '37.5364', lon: '126.9773', place_rank: 30, address: { country_code: 'kr', city_district: '용산구' } }] : [],
     calls: 1,
     cacheHit: false,
   })),
@@ -25,6 +27,29 @@ describe('placement by the local name (live Seoul finding)', () => {
     const diagnostic = result.diagnostics.find((d) => d.key === key)!;
     expect(diagnostic.outcome).toBe('placed');
     expect(diagnostic.attempts.map((a) => `${a.query} → ${a.outcome}`)).toEqual(['War Memorial of Korea, Yongsan, South Korea → no_results', 'War Memorial of Korea, South Korea → no_results', '전쟁기념관, South Korea → placed']);
+  });
+});
+
+describe('a place to sleep named as its own locality (staging Iceland finding)', () => {
+  it('is asked for as "town, country", and a region locality that finds nothing falls back to the same', async () => {
+    const normalized = normalizeScanProposal({
+      bases: [
+        { name: 'Akureyri', locality: 'Akureyri', nightsHint: 2, why: 'North.' },
+        { name: 'Egilsstaðir', locality: 'Austurland', nightsHint: 2, why: 'East.' },
+      ],
+      candidates: [{ name: 'Goðafoss', locality: 'Þingeyjarsveit', kind: 'viewpoint', tier: 'classic', why: 'Falls.' }],
+    });
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const { placeScanProposal } = await import('./placement');
+    const result = await placeScanProposal({ ...normalized.proposal, candidates: [] }, { center: { lat: 64.9, lng: -18.5 }, maxDistanceKm: 500, countryCode: 'IS', countryName: 'Iceland', placesBudget: 0, deadline: () => false });
+    const [akureyri, egilsstadir] = normalized.proposal.bases;
+    const a = result.diagnostics.find((d) => d.key === akureyri!.key)!;
+    expect(a.outcome).toBe('placed');
+    expect(a.attempts[0]!.query).toBe('Akureyri, Iceland');
+    expect(result.positions.get(akureyri!.key)?.approximate).toBe(false);
+    const e = result.diagnostics.find((d) => d.key === egilsstadir!.key)!;
+    expect(e.outcome).toBe('placed');
+    expect(e.attempts.map((x) => x.query)).toEqual(['Egilsstaðir, Austurland, Iceland', 'Egilsstaðir, Iceland']);
   });
 });
 

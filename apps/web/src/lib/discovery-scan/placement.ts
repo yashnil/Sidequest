@@ -206,6 +206,12 @@ function localityFrom(place: NominatimPlace): string | undefined {
   return a.city ?? a.town ?? a.village ?? a.suburb ?? a.municipality ?? a.county ?? undefined;
 }
 
+/** Two spellings of one name, ignoring case, accents and punctuation. */
+function sameName(a: string | undefined, b: string): boolean {
+  const fold = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return Boolean(a) && fold(a!) === fold(b);
+}
+
 export async function placeScanProposal(proposal: ScanProposal, options: PlacementOptions): Promise<PlacementResult> {
   const positions = new Map<string, ResolvedPosition | null>();
   const usePlaces = googlePlacesUsable();
@@ -271,7 +277,14 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       }
     }
     if (!position) {
-      const query = `${item.lookupName}, ${item.locality}${country}`;
+      /*
+       * Staging acceptance (2026-11) — a place to sleep whose locality is its
+       * own name ("Akureyri", "Akureyri") was asked for as "Akureyri, Akureyri,
+       * Iceland", which the open geocoder answers with a charging station and
+       * an airport, never the town; the ladder below then skipped it because
+       * the locality equalled the name. The name is never its own locality.
+       */
+      const query = sameName(item.locality, item.lookupName) ? `${item.lookupName}${country}` : `${item.lookupName}, ${item.locality}${country}`;
       try {
         geocoderCalls += 1;
         const hit = await geocodeFirst(query, options, nameFirst);
@@ -295,7 +308,8 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
      * after "nothing came back" — a refusal (wrong country, too far) is an
      * answer, not a miss, and is never retried.
      */
-    if (!position && !isBase && item.locality && attempts.length > 0 && attempts[attempts.length - 1]!.outcome === 'no_results') {
+    /* A place to sleep gets the same rung: "Akureyri, North Iceland, Iceland" finds nothing, "Akureyri, Iceland" finds the town (still gated by country and distance). */
+    if (!position && item.locality && !sameName(item.locality, item.lookupName) && attempts.length > 0 && attempts[attempts.length - 1]!.outcome === 'no_results') {
       const query = `${item.lookupName}${country}`;
       try {
         geocoderCalls += 1;
@@ -303,7 +317,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), answerScale: answerScaleOfRow(hit.place), ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), answerScale: answerScaleOfRow(hit.place), ...(locality ? { locality } : {}) };
           position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }

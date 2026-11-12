@@ -482,6 +482,13 @@ export type WireNormalization =
 export interface WireTripFacts {
   /** Days the trip has (nights + 1). When given, a draft with another day count is a semantic failure. */
   days?: number;
+  /**
+   * The draft is Sidequest's own planner's, not a model's. A model that leaves
+   * a middle day empty has stopped trying; the planner that does so ran out of
+   * places it may use, and says so on the day (`planning.density`). Refusing
+   * its draft threw a real plan away whenever the model was not there to redo it.
+   */
+  deterministic?: boolean;
 }
 
 const CATEGORY_ALIASES: Record<string, AnchorCategory> = {
@@ -1144,7 +1151,7 @@ export function normalizeTripDraftWire(raw: unknown, facts: WireTripFacts = {}):
   }
   const structure = draftStructureIssues(parsed.data);
   if (structure.length > 0) return { ok: false, kind: 'semantic', issues: structure.map((message) => ({ path: 'days', code: 'structure', message })) };
-  const abandoned = abandonedDraftIssues(parsed.data);
+  const abandoned = abandonedDraftIssues(parsed.data).filter((issue) => !(facts.deterministic && issue.code === 'abandoned'));
   if (abandoned.length > 0) return { ok: false, kind: 'semantic', issues: abandoned };
   return { ok: true, draft: parsed.data, normalizedFields: touched };
 }

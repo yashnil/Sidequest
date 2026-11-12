@@ -786,7 +786,7 @@ export function compositionWireDecision(): { schemaSha256: string; profile: Wire
  * reported with the exact paths — never retried and never repaired by a
  * second model call.
  */
-export async function generateTripDraft(input: { model: StructuredModel; context: CompositionContext; onRawResponse?: (raw: RawCompositionResponse) => void }): Promise<CompositionOutcome> {
+export async function generateTripDraft(input: { model: StructuredModel; context: CompositionContext; onRawResponse?: (raw: RawCompositionResponse) => void; /** Sidequest's planner wrote the draft; see `WireTripFacts.deterministic`. */ deterministic?: boolean }): Promise<CompositionOutcome> {
   const decision = compositionWireDecision();
   const enforcement = decision.enforcement;
   if (input.model.callsRemaining <= 0) {
@@ -846,7 +846,7 @@ export async function generateTripDraft(input: { model: StructuredModel; context
     // Nothing usable came back (no JSON object, a truncated one, a transport failure): the transport's sentence names the reason.
     return { ok: false, failureKind: 'malformed_output', detail: message, enforcement, issueKind: 'no_json', issues: [{ path: '', code: 'no_json', message }], ...provider };
   }
-  const normalized = normalizeTripDraftWire(raw, { days: input.context.brief.tripFacts.days });
+  const normalized = normalizeTripDraftWire(raw, { days: input.context.brief.tripFacts.days, ...(input.deterministic ? { deterministic: true } : {}) });
   if (!normalized.ok) {
     const first = normalized.issues[0];
     return {

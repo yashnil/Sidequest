@@ -625,15 +625,30 @@ async function generatePlan(
       destinationInput: trip.basics.destinationInput,
     });
   } else {
-    if (!isCompositionModelConfigured()) {
-      const failure = buildFailure(plannerTooThin || plannerFallbackReason === 'insufficient_placed_candidates' ? 'planner_refused' : 'composer_not_configured');
+    /*
+     * Staging acceptance (2026-11) — a planner plan with an empty day was sent
+     * to composition, and when the model was away (no credential, or the
+     * caller's share of the day spent) the build failed outright with an
+     * untyped error, throwing away a plan that existed. The fallback is an
+     * improvement when it can run, never a precondition: without it the
+     * planner's plan ships and its empty days say why (`planning.density`).
+     */
+    const configured = isCompositionModelConfigured();
+    const reservation = configured ? reserveModelCalls(1, { now, caller: options.caller }) : null;
+    if (!reservation?.allowed && plannerAttempt) {
+      console.warn('Planner plan kept: the composition fallback is unavailable', { tripId, plannerFallbackReason, configured });
+      plannerComposition = plannerAttempt;
+      const supplied = plannerAttempt.draft;
+      model = { callsRemaining: 1, structured: async () => supplied as never } as unknown as StructuredModel;
+    } else if (!configured) {
+      const failure = buildFailure(plannerFallbackReason === 'insufficient_placed_candidates' ? 'planner_refused' : 'composer_not_configured');
       return { ok: false, error: failure.message, failure };
+    } else if (!reservation?.allowed) {
+      const failure = buildFailure('provider_quota_or_limit', 'daily_allowance');
+      return { ok: false, error: reservation?.message ?? failure.message, failure };
+    } else {
+      model = new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() });
     }
-    const reservation = reserveModelCalls(1, { now, caller: options.caller });
-    if (!reservation.allowed) {
-      return { ok: false, error: reservation.message ?? 'Today’s planning allowance is used up. Try again tomorrow.' };
-    }
-    model = new ResearchModel({ maxCalls: 1, maxRetries: 0, model: composerModel() });
   }
 
   /*
@@ -667,6 +682,7 @@ async function generatePlan(
   const outcome = await generateTripDraft({
     model,
     context,
+    deterministic: Boolean(plannerComposition),
     onRawResponse: fixture || options.reuseStoredDraft || options.useDraft
       ? undefined
       : (raw) => {
