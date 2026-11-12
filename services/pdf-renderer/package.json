@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Prints Sidequest's dedicated guide layout to PDF with headless Chromium.",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test server.test.mjs"
   },
   "dependencies": {
     "playwright-core": "1.62.1"
