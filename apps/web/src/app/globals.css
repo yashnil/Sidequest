@@ -814,6 +814,114 @@
     color: var(--color-ink);
   }
   /*
+   * 2026-11 — THE CHROME FOLLOWS THE PAGE'S FIRST SURFACE.
+   *
+   * The signed-in pages that open on a night stage (the trips home, sign-in)
+   * are mounted under a layout whose chrome is paper, so the bar sat as a pale
+   * strip over a night hero — the seam that made signing in feel like leaving
+   * the front page. A page that opens on night says so (`data-chrome-tone`)
+   * and the bar continues it, the way the front page's `tone="night"` does.
+   */
+  body:has([data-chrome-tone='night']) [data-testid='product-chrome'] {
+    --color-paper: #0d1a1f;
+    --color-paper-raised: #13242b;
+    --color-paper-sunk: #1a2e36;
+    --color-ink: #f1ebdf;
+    --color-ink-muted: #b9b7ae;
+    --color-ink-faint: #959a95;
+    --color-rule: #24383f;
+    color: var(--color-ink);
+    background-color: rgb(13 26 31 / 0.95);
+    border-bottom-color: rgb(241 235 223 / 0.08);
+  }
+
+  /*
+   * THE NIGHT STAGE — the front page's ground, for the pages after it.
+   *
+   * The night survey sheet, a low ember from one corner, a breath of glacier
+   * from the other, and the contour sheet drifting very slowly underneath, so
+   * a signed-in page has the same weather as the landing hero without a map
+   * library. The drift moves a composited layer (transform only), never the
+   * mask, so it costs no paint per frame; reduced motion holds it still.
+   */
+  .night-stage {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    color: var(--color-atlas-ink);
+    background-color: var(--color-night);
+  }
+  /*
+   * The ember, the glacier breath and the survey grid sit on a pseudo-element,
+   * not the section: painted on the section they made the whole stage the
+   * page's "largest image" (LCP), timed to whenever the globe let the main
+   * thread paint it. Offsets are in pixels, never percentages, so the layer's
+   * corner does not move when the stage's height settles — a %-inset layer was
+   * reported as a 0.21 layout shift on every font swap.
+   */
+  .night-stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image:
+      radial-gradient(ellipse 60% 70% at 100% 0%, rgb(255 90 31 / 0.13), transparent 62%),
+      radial-gradient(ellipse 55% 75% at 0% 100%, rgb(127 209 224 / 0.07), transparent 60%),
+      linear-gradient(rgb(241 235 223 / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(241 235 223 / 0.04) 1px, transparent 1px);
+    background-size: auto, auto, 120px 120px, 120px 120px;
+  }
+  .night-stage::before {
+    content: '';
+    position: absolute;
+    top: -90px;
+    left: -140px;
+    right: -140px;
+    bottom: -90px;
+    z-index: -1;
+    pointer-events: none;
+    background-color: var(--color-bone);
+    opacity: 0.07;
+    -webkit-mask: url('/brand/contours.svg') 0 0 / 1100px 730px repeat;
+    mask: url('/brand/contours.svg') 0 0 / 1100px 730px repeat;
+    animation: stage-drift 140s linear infinite alternate;
+    will-change: transform;
+  }
+  @keyframes stage-drift {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-120px, 80px, 0); }
+  }
+  /* The order tracing itself through a plate's stops (`pathLength="1"`) when its group is hovered or focused. `.route-draw` above is the one that draws on arrival. */
+  .route-trace {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 1200ms var(--ease-out);
+  }
+  .group:hover .route-trace,
+  .group:focus-within .route-trace {
+    stroke-dashoffset: 0;
+  }
+  /* The up-next mark on the atlas: a slow sonar, not a blink. */
+  .mark-sonar {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: mark-sonar 2.8s var(--ease-out) infinite;
+  }
+  @keyframes mark-sonar {
+    0% { transform: scale(0.6); opacity: 0.9; }
+    100% { transform: scale(2.6); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .night-stage::before,
+    .mark-sonar {
+      animation: none;
+    }
+    .route-trace {
+      transition: none;
+    }
+  }
+  /*
    * V6 — A PHOTOGRAPH AS THE BAND'S GROUND.
    *
    * One of this trip's own places, bled off the right edge and dissolved into

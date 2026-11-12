@@ -1,0 +1,8 @@
+{"project":"desktop","label":"dashboard-empty","url":"/trips","lcp":72,"cls":0.0003,"tbt":0,"domContentLoaded":42,"jsKB":0,"imgKB":0,"totalKB":131}
+{"project":"desktop","label":"itinerary","url":"/trips/:id/itinerary","lcp":136,"cls":0,"tbt":5152,"domContentLoaded":127,"jsKB":279,"imgKB":0,"totalKB":1645}
+{"project":"desktop","label":"dashboard-many","url":"/trips","lcp":84,"cls":0.0001,"tbt":0,"domContentLoaded":42,"jsKB":0,"imgKB":0,"totalKB":122}
+{"project":"tablet","label":"dashboard-empty","url":"/trips","lcp":52,"cls":0.0004,"tbt":0,"domContentLoaded":24,"jsKB":0,"imgKB":0,"totalKB":128}
+{"project":"tablet","label":"itinerary","url":"/trips/:id/itinerary","lcp":172,"cls":0.0026,"tbt":4176,"domContentLoaded":122,"jsKB":279,"imgKB":0,"totalKB":1645}
+{"project":"tablet","label":"dashboard-many","url":"/trips","lcp":88,"cls":0,"tbt":0,"domContentLoaded":45,"jsKB":0,"imgKB":0,"totalKB":122}
+{"project":"phone","label":"dashboard-empty","url":"/trips","lcp":48,"cls":0,"tbt":0,"domContentLoaded":26,"jsKB":0,"imgKB":0,"totalKB":126}
+{"project":"phone","label":"itinerary","url":"/trips/:id/itinerary","lcp":164,"cls":0,"tbt":4398,"domContentLoaded":117,"jsKB":279,"imgKB":0,"totalKB":1639}

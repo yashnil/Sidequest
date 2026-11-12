@@ -1,0 +1,12 @@
+{"project":"desktop","label":"landing","lcp":1076,"cls":0,"tbt":12971,"fcp":1076,"jsKB":169,"cssKB":10,"totalKB":1101}
+{"project":"desktop","label":"signin","lcp":96,"cls":0,"tbt":0,"fcp":84,"jsKB":146,"cssKB":0,"totalKB":664}
+{"project":"desktop","label":"dashboard-empty","lcp":404,"cls":0,"tbt":2658,"fcp":176,"jsKB":203,"cssKB":10,"totalKB":1159}
+{"project":"desktop","label":"dashboard-two","lcp":224,"cls":0.0002,"tbt":0,"fcp":124,"jsKB":354,"cssKB":0,"totalKB":881}
+{"project":"tablet","label":"landing","lcp":84,"cls":0.0005,"tbt":8784,"fcp":84,"jsKB":169,"cssKB":10,"totalKB":1101}
+{"project":"tablet","label":"signin","lcp":116,"cls":0.0005,"tbt":0,"fcp":72,"jsKB":146,"cssKB":0,"totalKB":664}
+{"project":"tablet","label":"dashboard-empty","lcp":1420,"cls":0.0019,"tbt":6133,"fcp":1420,"jsKB":203,"cssKB":10,"totalKB":1157}
+{"project":"tablet","label":"dashboard-two","lcp":176,"cls":0.0005,"tbt":0,"fcp":104,"jsKB":354,"cssKB":0,"totalKB":881}
+{"project":"phone","label":"landing","lcp":500,"cls":0,"tbt":10915,"fcp":500,"jsKB":169,"cssKB":10,"totalKB":1101}
+{"project":"phone","label":"signin","lcp":64,"cls":0,"tbt":0,"fcp":64,"jsKB":146,"cssKB":0,"totalKB":664}
+{"project":"phone","label":"dashboard-empty","lcp":1772,"cls":0,"tbt":6126,"fcp":1772,"jsKB":203,"cssKB":10,"totalKB":1156}
+{"project":"phone","label":"dashboard-two","lcp":116,"cls":0,"tbt":0,"fcp":92,"jsKB":354,"cssKB":0,"totalKB":876}

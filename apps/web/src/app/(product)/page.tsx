@@ -4,6 +4,7 @@ import { ProductChrome } from '@/components/ProductChrome';
 import { buttonClass } from '@/components/ui';
 import { AtlasGlobe } from '@/components/landing/AtlasGlobe';
 import { HowSheet } from '@/components/landing/HowSheet';
+import { DestinationLine } from '@/components/landing/DestinationLine';
 import { resolveVectorBasemap } from '@/components/map-adapter';
 import { chromeAccount } from '@/lib/auth/chrome';
 import { buildFailure } from '@/lib/planning/build-failure';
@@ -116,7 +117,7 @@ export default async function HomePage() {
                 Name a place. Sidequest finds the famous stops and the quiet ones, routes the days, and checks them before you see them.
               </p>
               <div className="rise-in" style={{ ['--d' as string]: '120ms' }}>
-                <HomeDestinationForm />
+                <DestinationLine id="home-destination" className="mt-9" />
               </div>
               <ul className="rise-in mt-5 flex flex-wrap gap-x-6 gap-y-1 text-sm" style={{ ['--d' as string]: '180ms' }} aria-label="Two ways to start">
                 <li>
@@ -180,44 +181,10 @@ export default async function HomePage() {
             </h2>
           </div>
           <div className="w-full max-w-md">
-            <HomeDestinationForm compact />
+            <DestinationLine id="home-destination-foot" />
           </div>
         </div>
       </section>
     </ProductChrome>
-  );
-}
-
-/**
- * The destination field, in the hero and again at the foot of the page. A
- * plain GET form into the setup flow's own prefill (`?destination=`), so it
- * works before hydration and with JavaScript off.
- *
- * Set as a typed line on a hairline — the way the survey sheet asks a
- * question — with the one flare action at its end.
- */
-function HomeDestinationForm({ compact = false }: { compact?: boolean }) {
-  const id = compact ? 'home-destination-foot' : 'home-destination';
-  return (
-    <form action="/trips/new" method="get" className={`group ${compact ? '' : 'mt-9'} w-full max-w-[34rem]`} role="search" aria-label="Start a trip">
-      <label htmlFor={id} className="sheet-label text-[var(--color-atlas-muted)]">
-        Where to?
-      </label>
-      <div className="mt-1 flex min-w-0 items-end gap-3 border-b border-white/30 pb-2 transition-colors duration-[var(--motion-fast)] focus-within:border-[var(--color-flare)] hover:border-white/55">
-        <input
-          id={id}
-          name="destination"
-          type="text"
-          autoComplete="off"
-          placeholder="Dolomites in July"
-          className="min-h-12 min-w-0 flex-1 bg-transparent font-display text-[1.65rem] leading-tight text-[var(--color-atlas-ink)] italic caret-[var(--color-flare)] placeholder:text-[var(--color-atlas-muted)]/70 focus:outline-none sm:text-[1.9rem]"
-          data-testid={id}
-        />
-        <button type="submit" className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-full bg-[var(--color-flare)] px-5 text-sm font-semibold text-[var(--color-night)] transition-transform duration-[var(--motion-fast)] hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2">
-          Start
-          <span aria-hidden="true">→</span>
-        </button>
-      </div>
-    </form>
   );
 }

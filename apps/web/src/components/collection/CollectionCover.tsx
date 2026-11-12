@@ -23,7 +23,7 @@ import { baseLine, countdown, countdownWords, formatCatalogue, projectShape } fr
 const W = 560;
 const H = 380;
 
-export function CollectionCover({ row, catalogue, today, onError }: { row: DashboardCardRow; catalogue: number; today: string; onError: (message: string | null) => void }) {
+export function CollectionCover({ row, catalogue, today, onError, embedded = false }: { row: DashboardCardRow; catalogue: number; today: string; onError: (message: string | null) => void; /** Set inside the trips home's night stage: no ground or box of its own, a rule above it instead. */ embedded?: boolean }) {
   const projected = projectShape(row.shape ?? { center: null, bases: [], stops: [] }, { width: W, height: H, pad: 56 });
   const line = baseLine(projected.bases);
   const drawn = projected.bases.length + projected.stops.length > 0;
@@ -35,8 +35,8 @@ export function CollectionCover({ row, catalogue, today, onError }: { row: Dashb
   const numbered = projected.stops.length <= 24;
 
   return (
-    <section className="survey-night relative isolate mt-8 overflow-hidden text-[var(--color-atlas-ink)]" aria-labelledby="collection-cover-title" data-testid="collection-cover">
-      <div className="grid min-w-0 gap-8 px-5 py-7 sm:px-8 sm:py-9 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
+    <section className={`${embedded ? 'mt-10 border-t border-white/12 pt-2' : 'survey-night mt-8'} relative isolate overflow-hidden text-[var(--color-atlas-ink)]`} aria-labelledby="collection-cover-title" data-testid="collection-cover">
+      <div className={`grid min-w-0 gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10 ${embedded ? 'py-7 sm:py-9' : 'px-5 py-7 sm:px-8 sm:py-9'}`}>
         <div className="relative z-[1] flex min-w-0 flex-col">
           <p className="sheet-label text-[var(--color-glacier)]">
             Up next <span className="opacity-60">·</span> {LIFECYCLE_LABELS[row.lifecycle]}
@@ -140,7 +140,7 @@ export function CollectionCover({ row, catalogue, today, onError }: { row: Dashb
               </div>
             ) : null}
           </div>
-          <figcaption className="coordbar mt-2.5 flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1 whitespace-normal text-[var(--color-atlas-muted)]">
+          <figcaption className="coordbar mt-2.5 flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1 !whitespace-normal text-[var(--color-atlas-muted)]">
             <span>{!drawn ? 'No places on the map yet' : projected.bases.length > 1 ? 'Where you sleep, in order' : 'Your stops, in order'}</span>
             {line.length > 1 || projected.stops.length > 1 ? (
               <span className="inline-flex items-center gap-2">

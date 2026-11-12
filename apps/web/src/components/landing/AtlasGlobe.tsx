@@ -143,7 +143,7 @@ function tourData(tour: AtlasTour, progress: number) {
   };
 }
 
-export function AtlasGlobe({ enabled }: { enabled: boolean }) {
+export function AtlasGlobe({ enabled, eager = true }: { enabled: boolean; /** Start at once on a wide screen (the front page, where the globe is the stage). The trips home passes false: the words and the field come first at every width, and the WebGL probe waits too. */ eager?: boolean }) {
   const host = useRef<HTMLDivElement | null>(null);
   const container = useRef<HTMLDivElement | null>(null);
   const map = useRef<MapHandle | null>(null);
@@ -177,7 +177,7 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
     const element = host.current;
     if (!element) return;
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
-    if (saveData || !supportsWebGL2()) {
+    if (saveData || (eager && !supportsWebGL2())) {
       /* After this frame, so the still replaces the silhouette without a render cascade. */
       const declined = window.setTimeout(() => setPhase('failed'), 0);
       return () => window.clearTimeout(declined);
@@ -287,6 +287,10 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
     const start = () => {
       if (started || cancelled) return;
       started = true;
+      if (!eager && !supportsWebGL2()) {
+        setPhase('failed');
+        return;
+      }
       setStill(reducedMotion());
       setPhase('loading');
       boot(0);
@@ -304,7 +308,7 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
      * it waits for the load event and an idle moment.
      */
     const begin = () => {
-      if (window.innerWidth >= 1024) {
+      if (eager && window.innerWidth >= 1024) {
         start();
         return;
       }
@@ -338,7 +342,7 @@ export function AtlasGlobe({ enabled }: { enabled: boolean }) {
       map.current?.remove();
       map.current = null;
     };
-  }, [enabled]);
+  }, [enabled, eager]);
 
   /* Fly to the current region and draw its route. */
   useEffect(() => {

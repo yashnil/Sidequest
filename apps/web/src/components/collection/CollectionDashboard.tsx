@@ -1,13 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { LIFECYCLE_LABELS, type TripLifecycle } from '@sidequest/core';
-import { ErrorNote, buttonClass, cx } from '../ui';
+import { ErrorNote, cx } from '../ui';
 import { TripCard, type DashboardCardRow } from '@/app/(product)/trips/TripCard';
-import { CollectionCover } from './CollectionCover';
-import { catalogueNumbers, coverTrip } from './stamp-geometry';
+import { catalogueNumbers } from './stamp-geometry';
 
 /**
  * THE COLLECTION — every journey as a catalogue entry, the next one as a cover.
@@ -35,15 +33,6 @@ const SECTION_NOTE: Record<string, string> = {
   past: 'Been and gone.',
   archived: 'Out of the way, not deleted.',
 };
-
-/** Places to start from on an empty page. Words only: each opens the first question with the field filled. */
-const EMPTY_EXAMPLES = ['Lisbon', 'Japan', 'The Dolomites', 'Iceland', 'Scottish Highlands'] as const;
-
-const EMPTY_STEPS = [
-  { title: 'Tell it about the trip', body: 'Where, when, who — then a short interview about how you like to travel.' },
-  { title: 'Pick what sounds good', body: 'A board of classics and hidden gems near where you are going. Tick, skip, or let it choose.' },
-  { title: 'Get days that work', body: 'Stops in a sensible order, meals and breaks in, travel times checked, ready to take with you.' },
-] as const;
 
 /** Trips still ahead get the editorial entries; ideas and what is over go in the ruled index. */
 const AHEAD = new Set(['traveling', 'upcoming', 'booked', 'planning']);
@@ -84,7 +73,7 @@ export function CollectionDashboard({
   query,
   sort,
   filter,
-  signedIn,
+  coverId,
   today,
 }: {
   rows: DashboardCardRow[];
@@ -92,7 +81,8 @@ export function CollectionDashboard({
   query: string;
   sort: 'date' | 'changed';
   filter: string;
-  signedIn: boolean;
+  /** The trip the page's stage shows as the cover; it is not repeated here (it read as a duplicate). */
+  coverId: string | null;
   /** `YYYY-MM-DD` from the server's own clock, so the countdown cannot disagree on hydration. */
   today: string;
 }) {
@@ -100,7 +90,6 @@ export function CollectionDashboard({
   const [search, setSearch] = useState(query);
   const [error, setError] = useState<string | null>(null);
   const numbers = useMemo(() => catalogueNumbers(rows), [rows]);
-  const cover = useMemo(() => (rows.length >= 2 ? coverTrip(rows, today) : null), [rows, today]);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -115,70 +104,10 @@ export function CollectionDashboard({
     router.replace(`/trips${params.toString() ? `?${params.toString()}` : ''}`);
   };
 
-  if (rows.length === 0) {
-    return (
-      <div className="survey-night relative mt-10 overflow-hidden px-6 py-12 sm:px-12 sm:py-16" data-testid="dashboard-empty">
-        <div className="relative grid min-w-0 items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="min-w-0">
-            <p className="sheet-label text-[var(--color-glacier)]">Your first trip</p>
-            <p className="mt-3 font-display text-[clamp(2.4rem,1.6rem+2.8vw,4rem)] leading-[0.95] font-[340] tracking-[-0.03em] text-[var(--color-atlas-ink)]">Nowhere yet.</p>
-            <p className="mt-4 max-w-md type-body text-[var(--color-atlas-muted)]">Name a place — a town, a park, a whole country — and Sidequest asks a few questions, finds what is worth it, and plans the days.</p>
-            {/*
-              A real starting move, not a pointer to one: the words typed here
-              are carried to the first question (`?destination=`), where they
-              are placed exactly as if typed there. A plain GET form, so it
-              works before the page has hydrated.
-            */}
-            <form action="/trips/new" method="get" className="mt-7 flex max-w-lg min-w-0 items-center gap-2 rounded-full border border-white/20 bg-white/[0.04] p-1.5 pl-5 focus-within:border-[var(--color-glacier)]" data-testid="dashboard-empty-start">
-              <label htmlFor="empty-destination" className="sr-only">
-                Where to?
-              </label>
-              <input id="empty-destination" name="destination" required minLength={2} autoComplete="off" placeholder="Where to?" className="min-h-11 min-w-0 flex-1 bg-transparent font-display text-xl text-[var(--color-atlas-ink)] outline-none placeholder:text-[var(--color-atlas-muted)]" />
-              <button type="submit" className={buttonClass('accent', 'md')}>
-                Start
-                <span aria-hidden="true">→</span>
-              </button>
-            </form>
-            <ul className="mt-4 flex flex-wrap gap-2" aria-label="Or start from an example">
-              {EMPTY_EXAMPLES.map((example) => (
-                <li key={example}>
-                  <Link href={`/trips/new?destination=${encodeURIComponent(example)}`} className="inline-flex min-h-9 items-center rounded-full border border-white/15 px-3.5 text-sm text-[var(--color-atlas-muted)] transition-colors hover:border-white/40 hover:text-[var(--color-atlas-ink)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2">
-                    {example}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-8 text-sm text-[var(--color-atlas-muted)]">
-              No destination in mind?{' '}
-              <Link href="/decide" className="text-[var(--color-atlas-ink)] underline decoration-white/30 underline-offset-4 hover:decoration-[var(--color-flare)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2">
-                Help me decide where
-              </Link>
-              {!signedIn ? <span className="block pt-1.5 opacity-80">Trips you make here stay on this browser until you sign in.</span> : null}
-            </p>
-          </div>
-          {/* How it goes, in three moves — the shape of the product before anybody has used it. Decorative numbers, real steps. */}
-          <ol className="grid min-w-0 gap-px overflow-hidden border border-white/12 bg-white/10" aria-label="How Sidequest plans a trip">
-            {EMPTY_STEPS.map((step, index) => (
-              <li key={step.title} className="fade-up flex min-w-0 items-start gap-4 bg-[var(--color-night)] p-5" style={{ ['--d' as string]: `${120 + index * 90}ms` }}>
-                <span aria-hidden="true" className="font-display text-3xl leading-none text-[var(--color-flare)]">
-                  {index + 1}
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-display text-lg leading-tight text-[var(--color-atlas-ink)]">{step.title}</span>
-                  <span className="mt-1 block text-sm leading-snug text-[var(--color-atlas-muted)]">{step.body}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    );
-  }
+  if (rows.length === 0) return null;
 
   return (
     <div className="mt-6">
-      {cover ? <CollectionCover row={cover} catalogue={numbers.get(cover.id) ?? 1} today={today} onError={setError} /> : null}
-
       {/* The controls as one typeset line: Find [ ] · sorted by [trip date] · showing [everything]. Two trips need no search. */}
       <div className={cx('mt-10', rows.length < 3 ? 'hidden' : '')} data-few={rows.length < 3 ? 'true' : undefined}>
       <div className="flex min-w-0 flex-wrap items-end gap-x-8 gap-y-3 border-b border-ink/15 pb-3" data-testid="dashboard-controls">
@@ -237,7 +166,7 @@ export function CollectionDashboard({
       ) : null}
 
       {sections
-        .map((section) => ({ section, inSection: visible.filter((row) => section.lifecycles.includes(row.lifecycle) && row.id !== cover?.id) }))
+        .map((section) => ({ section, inSection: visible.filter((row) => section.lifecycles.includes(row.lifecycle) && row.id !== coverId) }))
         .filter(({ inSection }) => inSection.length > 0)
         .map(({ section, inSection }) => {
         return (

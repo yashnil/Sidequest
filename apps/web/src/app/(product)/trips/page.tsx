@@ -6,9 +6,14 @@ import { countUnclaimedTrips } from '@/lib/db/auth-repository';
 import { sessionToken } from '@/lib/net/caller';
 import { DASHBOARD_V3_SECTIONS, dashboardRowsFor, lastTouched } from '@/lib/trips/dashboard';
 import { renderInstant } from '@/lib/clock';
-import { buttonClass } from '@/components/ui';
 import { ClaimBanner } from './ClaimBanner';
 import { CollectionDashboard } from '@/components/collection/CollectionDashboard';
+import { catalogueNumbers, countdown, coverTrip } from '@/components/collection/stamp-geometry';
+import { DashboardStage } from '@/components/dashboard/DashboardStage';
+import { ExampleShapes } from '@/components/dashboard/ExampleShapes';
+import type { AtlasTrip } from '@/components/dashboard/YourAtlas';
+import { greetingName } from '@/components/dashboard/stage-model';
+import { resolveVectorBasemap } from '@/components/map-adapter';
 import type { DashboardCardRow } from './TripCard';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +40,10 @@ export const metadata: Metadata = {
  * SURVEY ATLAS (2026-10) — the page is a collection now (`CollectionDashboard`):
  * the next trip as a cover, every trip as a numbered, stamped entry. The
  * behaviour, the sections and every test id are `TripDashboard`'s.
+ *
+ * VISUAL CONTINUITY (2026-11) — the page opens on the front page's night
+ * (`DashboardStage`): a greeting, the globe or your atlas, and the cover; the
+ * collection follows on paper. With nothing yet, example shapes follow instead.
  */
 export default async function TripsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
@@ -52,49 +61,55 @@ export default async function TripsPage({ searchParams }: { searchParams: Promis
   const sort = params.sort === 'changed' ? 'changed' : 'date';
   const filter = typeof params.status === 'string' ? params.status : 'all';
 
-  const signedInName = user ? (user.displayName ? `${user.displayName}’s trips` : 'Your trips') : rows.length > 0 ? 'Your trips · on this browser' : 'Your trips';
+  const today = now.toISOString().slice(0, 10);
+  const numbers = catalogueNumbers(rows);
+  const cover = rows.length >= 2 ? coverTrip(rows, today) : null;
+  const next = rows.map((row) => countdown(row, today)).filter((c): c is { kind: 'until'; days: number } => c.kind === 'until').sort((a, b) => a.days - b.days)[0];
+  const atlas: AtlasTrip[] = rows
+    .filter((row) => row.lifecycle !== 'archived')
+    .map((row) => {
+      const at = row.shape?.center ?? row.shape?.bases[0] ?? null;
+      return at ? { id: row.id, title: row.title, href: row.href, lat: at.lat, lng: at.lng, catalogue: numbers.get(row.id) ?? 0, upNext: row.id === cover?.id, past: row.lifecycle === 'past' } : null;
+    })
+    .filter((trip): trip is AtlasTrip => trip !== null);
 
   return (
-    <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14" data-testid="trips-dashboard">
-      <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-5">
-        <div className="min-w-0">
-          <p className="sheet-label text-ink-muted">
-            {signedInName} <span className="text-ink-faint">·</span> {rows.length === 0 ? 'none yet' : `${rows.length} ${rows.length === 1 ? 'trip' : 'trips'}`}
-          </p>
-          <h1 className="mt-3 font-display text-[clamp(3rem,2rem+4vw,5.75rem)] leading-[0.92] font-[320] tracking-[-0.04em] text-ink">
-            <span className="mask-rise">
-              <span>Where</span>
-            </span>{' '}
-            <span className="mask-rise">
-              <span className="italic" style={{ ['--d' as string]: '90ms' }}>
-                next?
-              </span>
-            </span>
-          </h1>
+    <div data-testid="trips-dashboard">
+      <DashboardStage
+        name={greetingName(user?.displayName)}
+        rows={rows}
+        atlas={atlas}
+        cover={cover}
+        coverCatalogue={cover ? (numbers.get(cover.id) ?? 1) : 1}
+        nextInDays={next ? next.days : null}
+        today={today}
+        globe={resolveVectorBasemap(process.env) !== null}
+        signedIn={Boolean(user)}
+      />
+      {rows.length === 0 ? (
+        <>
+          {user && unclaimed > 0 ? (
+            <div className="mx-auto max-w-7xl px-5 sm:px-8">
+              <ClaimBanner count={unclaimed} />
+            </div>
+          ) : null}
+          <ExampleShapes />
+        </>
+      ) : (
+        <div className="mx-auto max-w-7xl px-5 pb-14 sm:px-8">
+          {user && unclaimed > 0 ? <ClaimBanner count={unclaimed} /> : null}
+          {!user && providers.any ? (
+            <p className="mt-6 type-body text-ink-muted" data-testid="dashboard-signin-offer">
+              These trips live on this browser.{' '}
+              <Link href="/signin?returnTo=%2Ftrips" className="text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2">
+                Sign in
+              </Link>{' '}
+              to keep them on every device.
+            </p>
+          ) : null}
+          <CollectionDashboard rows={rows} sections={DASHBOARD_V3_SECTIONS} query={query} sort={sort} filter={filter} coverId={cover?.id ?? null} today={today} />
         </div>
-        {/* An empty collection carries its own start (`dashboard-empty`); the header does not repeat the flare action above it. */}
-        <div className={rows.length === 0 ? 'hidden' : 'flex min-w-0 flex-wrap items-center gap-2'}>
-          <Link href="/decide" className={buttonClass('secondary')}>
-            Help me decide
-          </Link>
-          <Link href="/trips/new" className={buttonClass('accent')} data-testid="dashboard-new-trip">
-            New trip
-          </Link>
-        </div>
-      </div>
-
-      {user && unclaimed > 0 ? <ClaimBanner count={unclaimed} /> : null}
-      {!user && providers.any && rows.length > 0 ? (
-        <p className="mt-6 type-body text-ink-muted" data-testid="dashboard-signin-offer">
-          These trips live on this browser.{' '}
-          <Link href="/signin?returnTo=%2Ftrips" className="text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-pine focus-visible:outline-offset-2">
-            Sign in
-          </Link>{' '}
-          to keep them on every device.
-        </p>
-      ) : null}
-
-      <CollectionDashboard rows={rows} sections={DASHBOARD_V3_SECTIONS} query={query} sort={sort} filter={filter} signedIn={Boolean(user)} today={now.toISOString().slice(0, 10)} />
+      )}
     </div>
   );
 }

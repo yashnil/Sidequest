@@ -339,7 +339,7 @@ export function TripCard({
             <p className="px-0.5 pt-1.5 pb-2 font-mono text-[9px] uppercase tracking-[0.1em] text-[#5f625c]">{row.destination}</p>
           </div>
         ) : null}
-        <p className="coordbar flex min-w-0 flex-wrap gap-x-3 gap-y-1 px-4 pb-3 whitespace-normal text-ink-faint">
+        <p className="coordbar flex min-w-0 flex-wrap gap-x-3 gap-y-1 px-4 pb-3 !whitespace-normal text-ink-faint">
           <span>{plateCaption}</span>
           {placed && (row.shape!.bases.length > 1 || row.shape!.stops.length > 1) ? (
             <span className="inline-flex items-center gap-1.5">

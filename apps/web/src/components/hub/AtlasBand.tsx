@@ -83,7 +83,7 @@ export function AtlasBand({
 }) {
   if (stage) {
     return (
-      <header className={cx('topo relative isolate -mx-5 bg-night text-bone has-[details[open]]:z-30 [--topo-opacity:0.07] sm:-mx-6', className)} data-testid="atlas-band" data-cover="stage">
+      <header className={cx('topo relative isolate -mx-5 bg-night text-bone has-[details[open]]:z-30 [--topo-opacity:0.07] sm:-mx-6', className)} data-testid="atlas-band" data-cover="stage" data-chrome-tone="night">
         {/* The map: a band above the type on a phone, the whole ground on a wide screen. */}
         {/* The contour sheet sits under the map, so the cover is never a black slab while the tiles arrive. */}
         <div className="relative h-[38vh] min-h-[240px] overflow-hidden lg:absolute lg:inset-0 lg:h-auto print:hidden">{stage}</div>
@@ -97,7 +97,7 @@ export function AtlasBand({
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-40 bg-gradient-to-t from-night/90 via-night/40 to-transparent lg:block" />
         <div className="relative px-5 pt-5 pb-5 sm:px-8 lg:flex lg:min-h-[min(58vh,560px)] lg:max-w-[44rem] lg:flex-col lg:justify-end lg:pt-16 lg:pb-8 xl:px-12">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <p className="coordbar text-bone/75">{eyebrow}</p>
+            <p className="coordbar !whitespace-normal text-bone/75">{eyebrow}</p>
             {status ? (
               <p
                 className={cx(

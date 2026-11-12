@@ -53,6 +53,10 @@ export function RoutePlate({ shape, width: W, height: H, detail = 'full', classN
       </g>
       {stopLine ? <polyline points={projected.stops.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--color-ink)" strokeOpacity={0.35} strokeWidth={mini ? 1 : 1.3} strokeDasharray={mini ? '0.1 3' : '0.1 5'} strokeLinecap="round" strokeLinejoin="round" /> : null}
       {line.length > 1 ? <polyline points={line.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--color-route)" strokeWidth={mini ? 1.6 : 2.2} strokeDasharray={mini ? '0.1 3.2' : '0.1 6'} strokeLinecap="round" strokeLinejoin="round" /> : null}
+      {/* 2026-11 — on hover or focus the order traces itself through the stops in flare: the same line, made legible, never a road. */}
+      {!mini && projected.stops.length > 1 ? (
+        <polyline points={projected.stops.map((p) => `${p.x},${p.y}`).join(' ')} pathLength={1} fill="none" stroke="var(--color-route)" strokeOpacity={0.55} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" className="route-trace" />
+      ) : null}
       <g fill="var(--color-route)" stroke="var(--color-paper-raised)" strokeWidth={mini ? 0.6 : 1.4}>
         {projected.stops.map((s, i) => (
           <circle key={`s${i}`} cx={s.x} cy={s.y} r={mini ? 1.7 : 4.2} />
