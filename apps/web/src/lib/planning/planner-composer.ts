@@ -406,15 +406,28 @@ export function suggestBaseForPicks(input: {
   return `${list} ${names.length === 1 ? 'is' : 'are'} on your list but far from ${sleepers.length === 1 ? sleepers[0]! : 'where this trip sleeps'}. A night or two in ${best.base.name} would bring ${names.length === 1 ? 'it' : 'them'} within reach${input.mayMove ? '' : ', if you would accept another hotel change'}.`;
 }
 
-function themeFor(day: StructurePlan['days'][number], baseName: string, isFirst: boolean, isLast: boolean): string {
-  const daytime = day.stops.filter((s) => s.slot === 'day').map((s) => s.candidate.name);
-  const evening = day.stops.find((s) => s.slot === 'sunset' || s.slot === 'night');
-  const lead = daytime.slice(0, 2).join(' & ');
-  const tail = evening ? `${lead ? ', ' : ''}${evening.candidate.name} ${evening.slot === 'sunset' ? 'at sunset' : 'after dark'}` : '';
-  const body = `${lead}${tail}`;
-  if (day.relocation) return clip(`On to ${baseName}${body ? `: ${body}` : ''}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
-  if (isFirst) return clip(body ? `Arrive and settle in — ${body}` : 'Arrive and settle in', DRAFT_SOFT_PROSE_CAPS.dayTheme);
-  if (isLast) return clip(body ? `A last look — ${body} — then departure` : 'Departure day', DRAFT_SOFT_PROSE_CAPS.dayTheme);
+/**
+ * A day's title: short, and about the day (2026-11). It joined every stop's
+ * name — "Inyo Craters & Panorama Gondola, Minaret Vista at sunset" — so the
+ * heading repeated the timeline under it and wrapped three lines on a phone.
+ * Now it leads with the day's defining stop, adds a second only while the
+ * title stays short, and otherwise says how many more; an evening stop stays
+ * in the timeline. Arrival, move and departure days say so first.
+ */
+function joinAnd(words: readonly string[]): string {
+  return words.length <= 1 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
+
+export function themeFor(day: StructurePlan['days'][number], baseName: string, isFirst: boolean, isLast: boolean): string {
+  const daytime = day.stops.filter((s) => s.slot === 'day').map((s) => s.candidate);
+  const ranked = [...daytime].sort((a, b) => b.significance - a.significance || b.fit - a.fit || daytime.indexOf(a) - daytime.indexOf(b));
+  const lead = ranked[0]?.name ?? day.stops[0]?.candidate.name ?? '';
+  const second = ranked[1]?.name;
+  const rest = Math.max(0, ranked.length - 1);
+  const body = !lead ? '' : second && rest === 1 && `${lead} & ${second}`.length <= 38 ? `${lead} & ${second}` : rest > 0 ? `${lead} + ${rest} more` : lead;
+  if (day.relocation) return clip(`On to ${baseName}${body ? ` · ${body}` : ''}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
+  if (isFirst) return clip(body ? `Arrive in ${baseName} · ${body}` : `Arrive in ${baseName}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
+  if (isLast) return clip(body ? `Departure · ${body} first` : 'Departure', DRAFT_SOFT_PROSE_CAPS.dayTheme);
   return clip(body || `A slower day around ${baseName}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
 }
 
@@ -531,7 +544,8 @@ function draftFromPlan(args: {
 
   const draft = {
     archetype: archetypeFor({ bases: bases.length, carAvailable: input.carAvailable, urban }),
-    purpose: clip(`${plan.days.length} days in ${input.destinationName}${topInterests.length > 0 ? ` built around ${topInterests.join(', ')}` : ''} — ${scheduled.length} places chosen from the ${args.poolSize} on your board.`, DRAFT_SOFT_PROSE_CAPS.purpose),
+    /* About the trip, not about Sidequest's working: how many board places were weighed is the page's business, not the headline's. */
+    purpose: clip(`${plan.days.length} days in ${input.destinationName}${topInterests.length > 0 ? `, built around ${joinAnd(topInterests)}` : ''}.`, DRAFT_SOFT_PROSE_CAPS.purpose),
     routeRationale: clip(
       bases.length > 1
         ? `${bases.map((b) => `${b.name} (${b.nights} night${b.nights === 1 ? '' : 's'})`).join(', then ')}, with each day's stops grouped around where you sleep.`

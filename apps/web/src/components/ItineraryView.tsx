@@ -79,7 +79,7 @@ import type { BookingImport } from '@/lib/db/execution-repository';
 import { assuranceSummary, dayPartFor, sameIdentity, dayState, feasibilityHeadline, normalizeStays, splitPlanFor, type AnchorKind, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { CoverStage } from './hub/CoverStage';
 import { AtlasBand, atlasButtonClass, type AtlasFact } from './hub/AtlasBand';
-import { heroStats, travellerTransportLine } from './hub/hero-stats';
+import { heroStats, splitDayTheme, travellerTransportLine } from './hub/hero-stats';
 import { BaseSequence, type BaseSequenceStop } from './hub/BaseSequence';
 import { BookingSuggestions } from './hub/BookingSuggestions';
 import { suggestedBookings } from './hub/booking-links';
@@ -2384,6 +2384,7 @@ function DayCard({
       ? `${travelApprox ? '≈' : ''}${travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} ${drivingMinutes > 0 ? 'driving' : 'travelling'}`
       : null;
   const backup = dayBackup(day, backups);
+  const notesAvailable = day.items.length > 0 && (day.totals.travelMinutes > 0 || day.items.some((item) => item.food) || placedStops.length > 0 || day.window.note || caveat || routineNotes.length > 0);
 
   return (
     <article className="day-sheet" data-testid={`day-card-${day.dayNumber}`}>
@@ -2409,7 +2410,7 @@ function DayCard({
           clock window on its own line and the controls between heading and
           plan made a phone scroll a full screen before the first stop.
         */}
-        <header className={cx('grid gap-5 pt-5 pb-4', identity.hero && 'sm:grid-cols-[minmax(0,1fr)_9rem] md:grid-cols-[minmax(0,1fr)_11rem] lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_11rem]')}>
+        <header className="grid gap-5 pt-5 pb-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <h2 className="sheet-label text-ink">
@@ -2419,7 +2420,9 @@ function DayCard({
               </h2>
               {stateBadge}
             </div>
-            <p className="mt-1.5 font-display text-[clamp(1.5rem,1.15rem+1.1vw,2.1rem)] leading-[1.08] font-light tracking-[-0.02em] text-ink text-balance">{day.theme}</p>
+            {/* 2026-11 — a short title; the rest of an old joined-up theme is a quiet second line, never a three-line heading. */}
+            <p className="mt-1.5 font-display text-[clamp(1.5rem,1.15rem+1.1vw,2.1rem)] leading-[1.08] font-light tracking-[-0.02em] text-ink text-balance" data-testid={`day-title-${day.dayNumber}`}>{splitDayTheme(day.theme).title}</p>
+            {splitDayTheme(day.theme).places ? <p className="mt-1 type-small text-ink-muted">{splitDayTheme(day.theme).places}</p> : null}
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 type-small text-ink-muted" data-testid={`day-facts-${day.dayNumber}`}>
               <span className="inline-flex items-center gap-1.5 text-ink">
                 <span aria-hidden="true" className="inline-block h-2.5 w-2.5 border-[1.5px] border-ink" />
@@ -2455,15 +2458,28 @@ function DayCard({
               </p>
             ) : null}
           </div>
-          {identity.hero ? (
-            <figure className="m-0 hidden min-w-0 self-start overflow-hidden rounded-[var(--radius-card)] sm:block lg:hidden xl:block">
-              {placeFrame(identity.hero.placeId, identity.hero.name, images, livePhotos, rationale, '4 / 3', { credit: false })}
-              <figcaption className="sr-only">
-                {identity.hero.name}. {identity.hero.image ? <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" /> : identity.hero.livePhotoHref ? <span>Photo &copy; Google</span> : null}
-              </figcaption>
-            </figure>
-          ) : null}
         </header>
+        {/*
+          2026-11 — the day's picture, at every width. It was a 9-rem thumbnail
+          hidden on the widths where the map sits beside the days, which is most
+          desktops; a day is easier to tell apart, and to look forward to, from
+          a wide photograph of its defining place. Licensed images only; none
+          means none.
+        */}
+        {identity.hero ? (
+          <figure className="m-0 mb-4 min-w-0 overflow-hidden rounded-[var(--radius-card)]" data-testid={`day-hero-${day.dayNumber}`}>
+            {placeFrame(identity.hero.placeId, identity.hero.name, images, livePhotos, rationale, '21 / 9', { credit: false })}
+            <figcaption className="mt-1.5 type-meta text-ink-faint">
+              {identity.hero.name}
+              {identity.hero.image ? (
+                <>
+                  {' · '}
+                  <ImageCredit image={identity.hero.image} as="span" className="mt-0 inline" />
+                </>
+              ) : identity.hero.livePhotoHref ? <span> · Photo &copy; Google</span> : null}
+            </figcaption>
+          </figure>
+        ) : null}
         {split ? <div className="pb-4">{split}</div> : null}
       </div>
 
@@ -2538,14 +2554,15 @@ function DayCard({
       ) : null}
 
       {/* The day's own actions, together and quiet, after the plan rather than in front of it. */}
-      {links || tripId ? (
-        <div className="mt-3 flex flex-wrap items-center gap-x-1 gap-y-1 print:hidden" data-testid={`day-controls-${day.dayNumber}`}>
+      {/* 2026-11 — the day's three actions on one quiet row: directions, edit, and the details (map, hours, weather) that open below it. */}
+      {links || tripId || notesAvailable ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-1 gap-y-1" data-testid={`day-controls-${day.dayNumber}`}>
           {links ? (
             <a
               href={links.google}
               target="_blank"
               rel="noreferrer noopener"
-              className={buttonClass('ghost', 'sm')}
+              className={cx(buttonClass('ghost', 'sm'), 'print:hidden')}
               data-testid={`day-route-${day.dayNumber}`}
               title={
                 links.omitted > 0
@@ -2558,7 +2575,7 @@ function DayCard({
             </a>
           ) : null}
           {tripId && ((day.intensity !== 'light' && day.totals.activityMinutes > 0) || itineraryHasPackage(day)) ? (
-            <details className="open:basis-full" data-testid={`day-edit-${day.dayNumber}`}>
+            <details className="open:basis-full print:hidden" data-testid={`day-edit-${day.dayNumber}`}>
               <summary className={cx(buttonClass('ghost', 'sm'), 'cursor-pointer list-none [&::-webkit-details-marker]:hidden')}>
                 Edit this day <span aria-hidden="true" className="details-caret text-xs">▸</span>
               </summary>
@@ -2569,52 +2586,45 @@ function DayCard({
               </div>
             </details>
           ) : null}
+          {notesAvailable ? <details className="open:basis-full" data-print="open" data-testid={`day-notes-${day.dayNumber}`}>
+            <summary className={cx(buttonClass('ghost', 'sm'), 'cursor-pointer list-none [&::-webkit-details-marker]:hidden')}>
+              {placedStops.length > 0 ? 'Map, hours & weather' : 'Hours & weather'} <span aria-hidden="true" className="details-caret text-xs">▸</span>
+            </summary>
+            <div className="pb-3">
+              {placedStops.length > 0 ? (
+                <div className="mt-1 mb-4 lg:hidden print:hidden">
+                  <DayMap base={mapModel.base} markers={mapModel.markers} connectors={mapModel.connectors} omitted={mapModel.omitted} dayNumber={day.dayNumber} tiles={tiles} />
+                </div>
+              ) : null}
+              {caveat ? (
+                <p className="type-small text-ink-muted" data-testid={`day-caveat-${day.dayNumber}`}>
+                  {caveat}.
+                </p>
+              ) : null}
+              {routineNotes.map((note) => (
+                <p key={note} className="mt-1 type-small text-ink-muted">
+                  {note} Estimated times are marked ≈.
+                </p>
+              ))}
+              <DayHours day={day} />
+              <DayWeather day={day} renderedAt={renderedAt} />
+              {day.window.note ? <p className="mt-2 type-small text-ink-muted">{day.window.note}</p> : null}
+              {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
+              <DayFood day={day} />
+              {links ? (
+                <p className="mt-3 type-small text-ink-muted print:hidden">
+                  Prefer Apple Maps?{' '}
+                  <a href={links.apple} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
+                    Open the day there
+                  </a>{' '}
+                  — it takes one destination at a time, so it runs first stop to last.
+                </p>
+              ) : null}
+            </div>
+          </details> : null}
         </div>
       ) : null}
 
-      {/*
-        V11 §D — TIMING & CHECKS, AFTER THE DAY. Opening hours, the weather
-        read, how the day moves and eats, and (on a phone) the day's map, in
-        one disclosure that prints open.
-      */}
-      {day.items.length > 0 && (day.totals.travelMinutes > 0 || day.items.some((item) => item.food) || placedStops.length > 0 || day.window.note || caveat || routineNotes.length > 0) ? (
-        <details className="mt-1 py-1" data-print="open" data-testid={`day-notes-${day.dayNumber}`}>
-          <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 type-small text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
-            <span aria-hidden="true" className="details-caret text-xs">▸</span> {placedStops.length > 0 ? 'Map, hours & weather' : 'Hours & weather'}
-          </summary>
-          <div className="pb-3">
-            {placedStops.length > 0 ? (
-              <div className="mt-1 mb-4 lg:hidden print:hidden">
-                <DayMap base={mapModel.base} markers={mapModel.markers} connectors={mapModel.connectors} omitted={mapModel.omitted} dayNumber={day.dayNumber} tiles={tiles} />
-              </div>
-            ) : null}
-            {caveat ? (
-              <p className="type-small text-ink-muted" data-testid={`day-caveat-${day.dayNumber}`}>
-                {caveat}.
-              </p>
-            ) : null}
-            {routineNotes.map((note) => (
-              <p key={note} className="mt-1 type-small text-ink-muted">
-                {note} Estimated times are marked ≈.
-              </p>
-            ))}
-            <DayHours day={day} />
-            <DayWeather day={day} renderedAt={renderedAt} />
-            {day.window.note ? <p className="mt-2 type-small text-ink-muted">{day.window.note}</p> : null}
-            {day.totals.travelMinutes > 0 ? <DayTransport day={day} /> : null}
-            <DayFood day={day} />
-            {links ? (
-              <p className="mt-3 type-small text-ink-muted print:hidden">
-                Prefer Apple Maps?{' '}
-                <a href={links.apple} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2">
-                  Open the day there
-                </a>{' '}
-                — it takes one destination at a time, so it runs first stop to last.
-              </p>
-            ) : null}
-          </div>
-        </details>
-      ) : null}
     </article>
   );
 }

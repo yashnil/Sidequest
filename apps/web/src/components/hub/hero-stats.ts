@@ -128,8 +128,19 @@ export function heroStats(input: HeroStatsInput): HeroStat[] {
  */
 export function splitDayTheme(theme: string): { title: string; places: string | null } {
   const clean = theme.replace(/\.$/, '').trim();
-  const at = clean.indexOf(' — ');
-  if (at > 0) return { title: clean.slice(0, at).trim(), places: clean.slice(at + 3).trim() || null };
+  /* 2026-11 themes separate the lead with " · "; older ones with " — ". */
+  for (const separator of [' · ', ' — ']) {
+    const at = clean.indexOf(separator);
+    if (at > 0) return { title: clean.slice(0, at).trim(), places: clean.slice(at + separator.length).trim() || null };
+  }
+  /*
+   * An older theme that joined every stop ("A & B, C at sunset") reads as a
+   * heading only up to its first comma; the rest is the timeline's to say.
+   */
+  if (clean.length > 44 && clean.includes(', ')) {
+    const at = clean.indexOf(', ');
+    return { title: clean.slice(0, at).trim(), places: clean.slice(at + 2).trim() || null };
+  }
   return { title: clean, places: null };
 }
 
