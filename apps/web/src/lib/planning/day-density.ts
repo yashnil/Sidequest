@@ -214,3 +214,22 @@ export function tripDensityLine(density: Pick<TripDensity, 'complete' | 'losses'
   const lost = [places, bases].filter(Boolean).join(' and ');
   return `${gapDays === 1 ? 'One day is' : `${gapDays} days are`} lighter than ${gapDays === 1 ? 'it' : 'they'} should be: Sidequest could not put ${lost || 'everything it found'} on the map. That is Sidequest's to fix — nothing for you to do.`;
 }
+
+/**
+ * IS THE TRIP LONGER THAN THIS AREA HOLDS? (2026-11 experience transformation)
+ *
+ * Read from the days themselves: an ordinary day with nothing left within
+ * reach of where the traveller sleeps (`nothing_in_reach`) — not a day the
+ * pace held back, not a discovery gap — is a day the area cannot fill with
+ * what the traveller chose. Two or more of them (or a fifth of the trip) and
+ * the honest advice is a shorter stay here or nights somewhere else, said
+ * plainly. Null when the days are full, deliberately relaxed, or light for a
+ * reason Sidequest owns (that is `tripDensityLine`). Pure; render-safe.
+ */
+export function tripLengthLine(density: Pick<TripDensity, 'days'> | null | undefined): string | null {
+  if (!density || density.days.length < 4) return null;
+  const empty = density.days.filter((d) => d.class === 'nothing_in_reach').length;
+  if (empty < 2 && empty < density.days.length * 0.2) return null;
+  const held = density.days.length - empty;
+  return `What this area holds that fits you fills about ${held} of your ${density.days.length} days; ${empty === 1 ? 'one day has' : `${empty} days have`} nothing left within reach. A shorter stay here, or a few nights somewhere else, would use ${empty === 1 ? 'it' : 'them'} better — or keep ${empty === 1 ? 'it' : 'them'} as free days.`;
+}

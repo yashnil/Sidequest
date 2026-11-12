@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { planStructure, type PlannerCandidate, type StructurePlannerInput } from './structure-planner';
-import { classifyDayDensity, densityNote, discoveryLossesOf, lossesAreMaterial, tripDensityLine, type DiscoveryLosses } from './day-density';
+import { classifyDayDensity, densityNote, discoveryLossesOf, lossesAreMaterial, tripDensityLine, tripLengthLine, type DiscoveryLosses } from './day-density';
 
 /*
  * A fictional valley with one base. Minutes are a function of straight-line
@@ -127,5 +127,16 @@ describe('a light day says why it is light', () => {
     expect(lossesAreMaterial({ bases: [], places: ['x', 'y'], proposed: 40 })).toBe(false);
     expect(lossesAreMaterial({ bases: [], places: ['a', 'b', 'c', 'd', 'e', 'f'], proposed: 40 })).toBe(true);
     expect(discoveryLossesOf(null)).toEqual({ bases: [], places: [] });
+  });
+});
+
+describe('is the trip longer than this area holds', () => {
+  const day = (dayNumber: number, cls: string) => ({ dayNumber, class: cls }) as never;
+  it('says so when several ordinary days have nothing left within reach', () => {
+    const line = tripLengthLine({ days: [day(1, 'edge_day'), day(2, 'full'), day(3, 'full'), day(4, 'nothing_in_reach'), day(5, 'nothing_in_reach'), day(6, 'full'), day(7, 'edge_day')] });
+    expect(line).toMatch(/fills about 5 of your 7 days; 2 days have nothing left within reach/);
+  });
+  it('says nothing for a deliberately relaxed trip or one light for Sidequest’s own reasons', () => {
+    expect(tripLengthLine({ days: [day(1, 'edge_day'), day(2, 'relaxed_by_pace'), day(3, 'relaxed_by_pace'), day(4, 'discovery_gap'), day(5, 'edge_day')] })).toBeNull();
   });
 });

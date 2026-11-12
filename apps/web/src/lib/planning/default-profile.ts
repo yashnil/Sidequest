@@ -25,6 +25,8 @@ export function defaultProfileFor(trip: Trip, composer: TripComposerAnswers | nu
   if (restful >= 0.5) {
     if (!composer?.pace) answers.pace = 'slow';
     if (!composer?.outdoorIntensity) answers.dailyIntensity = 'light';
+    /* A restful trip is not two hours in a car each way: far places earn another base or are left out, honestly, rather than driven to daily. */
+    if (composer?.maxDailyDriveMinutes === undefined) answers.maxDailyTravelMinutes = Math.min(answers.maxDailyTravelMinutes ?? 150, 150);
   }
   if (composer?.transport === 'public_transport') answers.willDrive = false;
   if (composer?.maxDailyDriveMinutes !== undefined) {

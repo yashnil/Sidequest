@@ -129,6 +129,15 @@ export const OBJECTIVE_WEIGHTS = {
  */
 export const TIME_VALUE: Record<'slow' | 'balanced' | 'fast', number> = { slow: 0.12, balanced: 0.08, fast: 0.04 };
 
+/**
+ * What a minute on the road costs, by pace (2026-11). α was one figure for
+ * everybody, so a slow, restful trip accepted a two-hour drive to a town worth
+ * a fit of 80 every day — an eleven-day Kumano plan drove 1,382 km from one
+ * base. Somebody travelling slowly values a minute in a car less than somebody
+ * covering ground does; a balanced trip keeps the calibrated 0.15.
+ */
+export const TRAVEL_COST: Record<'slow' | 'balanced' | 'fast', number> = { slow: 0.25, balanced: 0.15, fast: 0.12 };
+
 export interface StructureObjective {
   mustsPlaced: number;
   pinnedHeld: number;
@@ -294,7 +303,8 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
   const imbalance = loads.reduce((n, l) => n + (l - mean) ** 2, 0);
   const tau = TIME_VALUE[kernel.input.pace];
   const timeMinutes = activity;
-  const score = value - W.alpha * travelMinutes - W.beta * zoneSwitches - W.alpha * weather - W.gamma * imbalance - W.delta * overpack - W.zeta * overflowMinutes - W.epsilon * emptyDays - tau * timeMinutes;
+  const alpha = TRAVEL_COST[kernel.input.pace];
+  const score = value - alpha * travelMinutes - W.beta * zoneSwitches - W.alpha * weather - W.gamma * imbalance - W.delta * overpack - W.zeta * overflowMinutes - W.epsilon * emptyDays - tau * timeMinutes;
   return { mustsPlaced, pinnedHeld, score, parts: { value, travelMinutes, zoneSwitches, weatherPenalty: weather, imbalance, overpack, overflowMinutes, emptyDays, timeMinutes }, stops };
 }
 
@@ -310,6 +320,7 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
 function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: ReadonlyMap<number, readonly PlannerCandidate[]>, sameSet?: boolean) => StructureObjective {
   const W = OBJECTIVE_WEIGHTS;
   const tau = TIME_VALUE[kernel.input.pace];
+  const alpha = TRAVEL_COST[kernel.input.pace];
   const facts = state.map((row, i) => rowFacts(kernel, i, row));
   let musts = 0;
   let pinned = 0;
@@ -403,7 +414,7 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
     const t = { travel: travel + dTravel, zones: zones + dZones, weather: weather + dWeather, overpack: overpack + dOverpack, overflow: overflow + dOverflow, empty: empty + dEmpty };
     const imbalance = loadN > 0 ? Math.max(0, sq - (sum * sum) / loadN) : 0;
     const timeMinutes = activity + dActivity;
-    const score = value - W.alpha * t.travel - W.beta * t.zones - W.alpha * t.weather - W.gamma * imbalance - W.delta * t.overpack - W.zeta * t.overflow - W.epsilon * t.empty - tau * timeMinutes;
+    const score = value - alpha * t.travel - W.beta * t.zones - W.alpha * t.weather - W.gamma * imbalance - W.delta * t.overpack - W.zeta * t.overflow - W.epsilon * t.empty - tau * timeMinutes;
     return { mustsPlaced: musts + dMusts, pinnedHeld: pinned + dPinned, score, parts: { value, travelMinutes: t.travel, zoneSwitches: t.zones, weatherPenalty: t.weather, imbalance, overpack: t.overpack, overflowMinutes: t.overflow, emptyDays: t.empty, timeMinutes }, stops: stopCount + dStops };
   };
 }

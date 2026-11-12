@@ -106,6 +106,7 @@ describe('defaultProfileFor', () => {
     const fromConcept = defaultProfileFor(TRIP, restful as never);
     expect(fromConcept.pace).toBe('slow');
     expect(fromConcept.dailyIntensity).toBe('light');
+    expect(fromConcept.transport.maxDailyDriveMinutes).toBeLessThanOrEqual(150);
     /* The traveller's own answer wins over the concept. */
     expect(defaultProfileFor(TRIP, { ...restful, pace: 'packed' } as never).pace).toBe('fast');
     /* A trekking trip is not slowed down by the concept reading. */

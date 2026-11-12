@@ -305,6 +305,17 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
 
   // --- booking ---------------------------------------------------------------------------
   for (const title of input.requiredUnbooked ?? []) items.push({ area: 'booking', severity: 'caution', detail: `${title} needs arranging before this works as planned.` });
+  /*
+   * 2026-11 — what a one-way walk leaves to arrange (`planner-composer.ts#walkNotes`).
+   * Bags sent ahead to the end of a walk are a booking the plan depends on:
+   * without it the traveller arrives at the next bed with nothing. A way back
+   * from the end is a caution: there usually is one, but its last departure
+   * is the traveller's to check, and the plan is not "ready" as if it were.
+   */
+  for (const note of pkg?.planning?.dayNotes ?? []) {
+    if (note.code === 'walk_luggage' && /send your bags ahead/.test(note.note)) items.push({ area: 'booking', severity: 'dependency', dayNumber: note.dayNumber, detail: note.note });
+    else if (note.code === 'walk_return') items.push({ area: 'transport', severity: 'caution', dayNumber: note.dayNumber, detail: note.note });
+  }
   const bookedRespected = input.audit?.checks.find((c) => c.id === 'booked_respected');
   if (bookedRespected && !bookedRespected.ok) items.push({ area: 'booking', severity: 'blocker', detail: bookedRespected.detail });
 

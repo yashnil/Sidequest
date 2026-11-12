@@ -50,7 +50,7 @@ import type { MapConnector, MapMarker } from './InteractiveMap';
 import { dayMapModel } from './day-map-legs';
 import type { MapBasemap } from './map-adapter';
 import { plannedOffByDay } from '../lib/planning/planned-off';
-import { tripDensityLine } from '../lib/planning/day-density';
+import { tripDensityLine, tripLengthLine } from '../lib/planning/day-density';
 import {dayRouteLinks, mapModeFor} from '@/lib/maps';
 import { PrintButton } from './PrintButton';
 import { GuideExportChoice } from './guide/GuideExportChoice';
@@ -747,6 +747,7 @@ export function ItineraryView({
   const staySentence = stayRecord && new Set(stayRecord.chosen.stays.map((stay) => stay.baseId)).size === baseSequence.length ? stayRecord.sentence : null;
   /* Sparse-itinerary pass — a plan thinned by a discovery gap says so once, beside where it sleeps; a relaxed one says nothing. */
   const densityLine = tripDensityLine(itinerary.package?.planning?.density);
+  const lengthLine = tripLengthLine(itinerary.package?.planning?.density);
   /*
    * 2026-11 — THE TRIP, IN ONE SCREEN, ABOVE ITS DAYS.
    *
@@ -784,6 +785,7 @@ export function ItineraryView({
               {staySentence ? <p className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="stay-decision">{staySentence}</p> : null}
               {itinerary.package.planning?.baseSuggestion ? <p className="mt-2 max-w-[62ch] type-small text-ink" data-testid="stay-suggestion">{itinerary.package.planning.baseSuggestion}</p> : null}
               {densityLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="density-gap">{densityLine}</p> : null}
+              {lengthLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="trip-length-verdict">{lengthLine}</p> : null}
             </section>
           ) : null}
           {signatureExperiences.length > 0 ? (
