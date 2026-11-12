@@ -194,19 +194,32 @@ function paintCluster(el: HTMLButtonElement, cluster: MarkerCluster, ground: 'ni
   el.setAttribute('aria-label', clusterLabel(cluster));
   el.style.zIndex = '600';
   const days = daysText(cluster.days);
-  const names = cluster.members.slice(0, 6).map((m) => `<li class="truncate">${escapeHtml(m.label)}</li>`).join('');
-  const more = cluster.members.length > 6 ? `<li class="opacity-70">and ${cluster.members.length - 6} more</li>` : '';
-  el.innerHTML = `
-    <span aria-hidden="true" class="grid place-items-center rounded-full transition-transform duration-150 group-hover:scale-110 group-focus-visible:scale-110" style="width:${size}px;height:${size}px;background:${clusterRing(cluster, night ? 'night' : 'paper')};box-shadow:0 1px 6px rgb(0 0 0 / 0.45)">
-      <span class="grid place-items-center rounded-full font-mono text-[12px] font-semibold leading-none" style="width:${size - 8}px;height:${size - 8}px;background:${night ? '#0d1a1f' : '#f1ebdf'};color:${night ? '#f1ebdf' : '#0d1a1f'}">${cluster.members.length}</span>
-    </span>
-    <span aria-hidden="true" class="pointer-events-none absolute bottom-[calc(100%+2px)] left-1/2 hidden w-max max-w-[15rem] -translate-x-1/2 border px-2.5 py-2 text-left text-[11px] leading-snug group-hover:block group-focus-visible:block ${night ? 'border-[#f1ebdf]/20 bg-[#0d1a1f]/95 text-[#f1ebdf]' : 'border-[#0d1a1f]/15 bg-[#f1ebdf] text-[#0d1a1f]'}">
-      <span class="block font-mono text-[10px] uppercase tracking-[0.12em] opacity-70">${cluster.members.length} places${days ? ` · ${days}` : ''}</span>
-      <ul class="mt-1 space-y-0.5">${names}${more}</ul>
-      <span class="mt-1 block opacity-60">Press to zoom in</span>
-    </span>`;
+  /* Built with DOM calls and textContent, never markup: place names come from providers (CLAUDE.md, "never renders raw HTML"). */
+  const make = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] => {
+    const node = document.createElement(tag);
+    node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const disc = make('span', 'grid place-items-center rounded-full transition-transform duration-150 group-hover:scale-110 group-focus-visible:scale-110');
+  disc.setAttribute('aria-hidden', 'true');
+  disc.style.width = `${size}px`;
+  disc.style.height = `${size}px`;
+  disc.style.background = clusterRing(cluster, night ? 'night' : 'paper');
+  disc.style.boxShadow = '0 1px 6px rgb(0 0 0 / 0.45)';
+  const count = make('span', 'grid place-items-center rounded-full font-mono text-[12px] font-semibold leading-none', String(cluster.members.length));
+  count.style.width = `${size - 8}px`;
+  count.style.height = `${size - 8}px`;
+  count.style.background = night ? '#0d1a1f' : '#f1ebdf';
+  count.style.color = night ? '#f1ebdf' : '#0d1a1f';
+  disc.append(count);
+  const tip = make('span', `pointer-events-none absolute bottom-[calc(100%+2px)] left-1/2 hidden w-max max-w-[15rem] -translate-x-1/2 border px-2.5 py-2 text-left text-[11px] leading-snug group-hover:block group-focus-visible:block ${night ? 'border-[#f1ebdf]/20 bg-[#0d1a1f]/95 text-[#f1ebdf]' : 'border-[#0d1a1f]/15 bg-[#f1ebdf] text-[#0d1a1f]'}`);
+  tip.setAttribute('aria-hidden', 'true');
+  tip.append(make('span', 'block font-mono text-[10px] uppercase tracking-[0.12em] opacity-70', `${cluster.members.length} places${days ? ` · ${days}` : ''}`));
+  const list = make('ul', 'mt-1 space-y-0.5');
+  for (const member of cluster.members.slice(0, 6)) list.append(make('li', 'truncate', member.label));
+  if (cluster.members.length > 6) list.append(make('li', 'opacity-70', `and ${cluster.members.length - 6} more`));
+  tip.append(list, make('span', 'mt-1 block opacity-60', 'Press to zoom in'));
+  el.replaceChildren(disc, tip);
 }
 
-function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
