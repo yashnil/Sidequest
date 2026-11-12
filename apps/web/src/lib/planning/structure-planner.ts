@@ -548,6 +548,16 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
 
   const fail = (reason: DropReason, detail: string): DayVerdict => ({ ok: false, reason, detail });
 
+  /** Whether a stop sits on the road of this day's move: the detour it adds is within what the day allows off that road. */
+  function rideOnMove(day: DaySkeleton, s: PlannerCandidate): boolean {
+    if (!day.relocation || !day.previousBaseId) return false;
+    const out = leg(day.previousBaseId, s.id);
+    const on = leg(s.id, day.baseId);
+    const roadside = Math.max(MOVE_DAY_ROADSIDE_MINUTES, Math.round(day.transferMinutes * MOVE_DAY_ROADSIDE_SHARE));
+    const allowance = day.transferMinutes >= input.maxDailyTravelMinutes ? roadside : day.travelBudgetMinutes;
+    return out !== null && on !== null && out + on - day.transferMinutes <= allowance;
+  }
+
   /** The rules that belong to one stop on the day: locks, closures, effort, reach and the hard time-of-day slots. */
   function stopVerdict(day: DaySkeleton, s: PlannerCandidate, stops: readonly PlannerCandidate[], stopsOf: (index: number) => readonly PlannerCandidate[]): DayVerdict | null {
     const user = s.status === 'must';
@@ -570,14 +580,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
      * day is a journey, so what matters is how far a stop takes it off that
      * journey. The day's travel budget still bounds it below.
      */
-    const onTheWay = (() => {
-      if (!day.relocation || !day.previousBaseId || slot !== 'day') return false;
-      const out = leg(day.previousBaseId, s.id);
-      const on = leg(s.id, day.baseId);
-      const roadside = Math.max(MOVE_DAY_ROADSIDE_MINUTES, Math.round(day.transferMinutes * MOVE_DAY_ROADSIDE_SHARE));
-      const allowance = day.transferMinutes >= input.maxDailyTravelMinutes ? roadside : day.travelBudgetMinutes;
-      return out !== null && on !== null && out + on - day.transferMinutes <= allowance;
-    })();
+    const onTheWay = slot === 'day' && rideOnMove(day, s);
     if (fromBase !== null && fromBase > reach && !user && !soloDayTrip && !onTheWay) return fail('too_far', `About ${Math.round(fromBase)} minutes each way from where you sleep that night.`);
     if (!user && stops.some((o) => o !== s && o.dayTrip && (leg(day.baseId, o.id) ?? 0) > reach)) return fail('capacity', 'That day is a day trip elsewhere.');
     if (slot === 'sunrise') {
@@ -622,8 +625,18 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     if (daytime.length >= 2 && daytime.some((s) => s.status !== 'must')) {
       const parent = daytime.map((_, i) => i);
       const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
+      /*
+       * On a moving day the road is what holds the day together: two stops both
+       * on the way (a beach by the first base, a lagoon by the next) are one
+       * outing, however far apart (staging Iceland finding, 2026-11).
+       */
+      const riding = daytime.map((s) => rideOnMove(day, s));
       for (let i = 0; i < daytime.length; i += 1) {
         for (let j = i + 1; j < daytime.length; j += 1) {
+          if (riding[i] && riding[j]) {
+            parent[find(i)] = find(j);
+            continue;
+          }
           const ab = leg(daytime[i]!.id, daytime[j]!.id);
           const ba = leg(daytime[j]!.id, daytime[i]!.id);
           const near = (ab === null && ba === null) || (ab !== null && ab <= COHERENT_HOP_MINUTES) || (ba !== null && ba <= COHERENT_HOP_MINUTES);

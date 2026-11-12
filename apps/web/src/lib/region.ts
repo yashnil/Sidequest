@@ -464,14 +464,14 @@ export function boardFor(
        * from the first.
        */
       ...(context.basePortfolio && context.basePortfolio.bases.length > 1
-        ? {
-            baseIds: context.basePortfolio.bases
-              .map(
-                (assignment) =>
-                  context.compiled.bases.find((base) => base.id === assignment.baseId)?.routingId,
-              )
-              .filter((routingId): routingId is string => routingId !== undefined),
-          }
+        ? (() => {
+            const routing = [...context.basePortfolio.bases]
+              .sort((a, b) => a.order - b.order)
+              .map((assignment) => context.compiled.bases.find((base) => base.id === assignment.baseId)?.routingId)
+              .filter((routingId): routingId is string => routingId !== undefined);
+            /* The same ids in sleeping order: a place on the road between two consecutive stays rides on that move. */
+            return { baseIds: routing, stayOrder: routing };
+          })()
         : {}),
     },
   });

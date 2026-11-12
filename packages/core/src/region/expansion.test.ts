@@ -108,6 +108,33 @@ describe('regional expansion', () => {
   });
 });
 
+describe('a place on the road between two stays (staging Iceland finding)', () => {
+  it('is costed by the detour it adds to the move, not a round trip from either end', () => {
+    const shared = boardContext(AUGUST_DATES);
+    const traveller = profile(MAMMOTH_HIKER_ANSWERS, context());
+    const travel = expansionTravel(traveller);
+    /* Two stays down US-395: Mammoth, then the Alabama Hills. Manzanar sits on that road. */
+    const run = (stayOrder?: string[]) => expandRegion({
+      region: EASTERN_SIERRA,
+      places: EASTERN_SIERRA_PLACES,
+      profile: traveller,
+      months: shared.months,
+      dates: shared.dates,
+      access: shared.access,
+      hours: shared.hours,
+      travel: { ...travel, baseIds: [travel.baseId, 'alabama-hills'], ...(stayOrder ? { stayOrder } : {}) },
+    });
+    const all = (e: ReturnType<typeof run>) => [...e.base, ...e.satellites, ...e.beyondRadius, ...e.unmeasured];
+    const withMove = all(run([travel.baseId, 'alabama-hills'])).find((item) => item.place.id === 'manzanar-historic-site')!;
+    expect(withMove.onRoute, 'Manzanar rides on the Mammoth → Alabama Hills move').toBeTruthy();
+    expect(withMove.detourClass).not.toBe('too_far');
+    expect(withMove.travelBudgetShare).toBeLessThanOrEqual(1);
+    /* Off the road it is not: Bodie is north of Mammoth, the move goes south. */
+    const bodie = all(run([travel.baseId, 'alabama-hills'])).find((item) => item.place.id === 'bodie-state-historic-park');
+    expect(bodie?.onRoute).toBeUndefined();
+  });
+});
+
 describe('seasonal access', () => {
   it('reports a summer-only place as open in August and closed in January', () => {
     const postpile = placeById('devils-postpile')!;

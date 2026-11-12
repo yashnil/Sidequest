@@ -96,6 +96,8 @@ export interface SatelliteAssessment {
    * all, which is not a lenient budget, it is an absent one.
    */
   travelBudgetShare: number;
+  /** On the road between two consecutive stays: the move it rides on and what it adds. */
+  onRoute?: { fromBaseId: string; toBaseId: string; detourMinutes: number };
   season: SeasonAssessment;
   /** Whether this traveller can legally reach it, date by date. */
   access: PlaceAccessAssessment;
@@ -173,6 +175,15 @@ export interface ExpansionInput {
      * Optional; absent means the one base in `baseId` is the whole trip.
      */
     baseIds?: readonly string[];
+    /**
+     * The stays in the order the trip sleeps at them, when there is more than
+     * one. A place close to the road between two consecutive stays is visited
+     * on that move, so its cost is the detour it adds to the move, not a round
+     * trip from either end (staging acceptance, 2026-11: a ring road's glacier
+     * lagoon, on the road between two stays, was refused as 160 minutes there
+     * and back from the nearer one). Optional; absent means no moves.
+     */
+    stayOrder?: readonly string[];
   };
 }
 
@@ -207,15 +218,21 @@ export function expandRegion(input: ExpansionInput): RegionExpansion {
         dates,
         capability,
       });
+      const onRoute = reach.status === 'measured' ? onRouteBetweenStays(travel.knowledge, travel.stayOrder ?? [], place.id, reach.mode) : null;
+      const classified = classifyDetour(place, reach, profile, placeAccess, travel.knowledge);
       return {
         place,
-        detourClass: classifyDetour(place, reach, profile, placeAccess, travel.knowledge),
+        /* Riding on a move is a stretch at most: the move is happening anyway. */
+        detourClass: onRoute && classified === 'too_far' ? 'stretch' : classified,
+        ...(onRoute ? { onRoute } : {}),
         travelMinutesFromBase: reach.status === 'measured' ? reach.travelMinutes : null,
         travelModeFromBase: reach.status === 'measured' ? reach.mode : null,
         reach,
         journeyProxy: journeyIsProxyWalk(reach, travel.knowledge),
         distanceKm: reach.status === 'measured' ? reach.distanceKm : null,
-        travelBudgetShare: travelBudgetShareOf(reach, travel.knowledge, placeAccess),
+        travelBudgetShare: onRoute
+          ? Math.min(travelBudgetShareOf(reach, travel.knowledge, placeAccess), reach.status === 'measured' ? onRoute.detourMinutes / Math.max(1, dailyCapFor(travel.knowledge, budgetedModeOf(reach.mode, placeAccess))) : 1)
+          : travelBudgetShareOf(reach, travel.knowledge, placeAccess),
         season: assessSeason(place, months),
         access: placeAccess,
         operating: assessOperatingHours({
@@ -249,6 +266,39 @@ export function expandRegion(input: ExpansionInput): RegionExpansion {
     beyondRadius: assessed.filter((item) => item.detourClass === 'too_far'),
     unmeasured: assessed.filter((item) => item.detourClass === 'unknown'),
   };
+}
+
+/** A stop on a move may add this much, or this share of the move, whichever is more — the planner's own roadside rule (`structure-planner.ts`). */
+const ON_ROUTE_MIN_MINUTES = 15;
+const ON_ROUTE_SHARE = 0.15;
+
+/**
+ * The move between two consecutive stays this place sits on, if any: the
+ * detour (stay A → place → stay B, less A → B) is within the planner's roadside
+ * allowance. Only measured legs in the same mode count; anything unknown is
+ * not on a route, so nothing becomes workable on a guess.
+ */
+function onRouteBetweenStays(
+  knowledge: TravelKnowledge,
+  stays: readonly string[],
+  placeId: string,
+  mode: TransportMode,
+): { fromBaseId: string; toBaseId: string; detourMinutes: number } | null {
+  let best: { fromBaseId: string; toBaseId: string; detourMinutes: number } | null = null;
+  for (let i = 1; i < stays.length; i += 1) {
+    const from = stays[i - 1]!;
+    const to = stays[i]!;
+    if (from === to) continue;
+    const out = resolveCandidateReach(knowledge, from, placeId);
+    const on = resolveCandidateReach(knowledge, to, placeId);
+    const move = resolveCandidateReach(knowledge, from, to);
+    if (out.status !== 'measured' || on.status !== 'measured' || move.status !== 'measured') continue;
+    if (out.mode !== mode || on.mode !== mode || move.mode !== mode) continue;
+    const detour = Math.max(0, out.travelMinutes + on.returnMinutes - move.travelMinutes);
+    if (detour > Math.max(ON_ROUTE_MIN_MINUTES, Math.round(move.travelMinutes * ON_ROUTE_SHARE))) continue;
+    if (!best || detour < best.detourMinutes) best = { fromBaseId: from, toBaseId: to, detourMinutes: detour };
+  }
+  return best;
 }
 
 /**

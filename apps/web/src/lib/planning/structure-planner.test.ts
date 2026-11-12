@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planStructure, plannerPriority, tourMinutes, type PlannerCandidate, type PlannerDayWeather, type StructurePlannerInput } from './structure-planner';
+import { createPlannerKernel, planStructure, plannerPriority, tourMinutes, type PlannerCandidate, type PlannerDayWeather, type StructurePlannerInput } from './structure-planner';
 
 /*
  * A fictional valley — two clusters of things to do around one base, a far
@@ -307,5 +307,25 @@ describe('a place on the road of a long move is a stop, not a detour (staging Ic
     expect(moveDay, 'there is a moving day').toBeTruthy();
     expect(moveDay!.stops.map((s) => s.candidate.id)).toContain('lagoon');
   });
-});
 
+  it('keeps two stops of one move on the same day, one by each end of the road', () => {
+    const dates = ['2027-06-14', '2027-06-15', '2027-06-16', '2027-06-17'];
+    const table: Record<string, number> = {
+      'vik>hofn': 230, 'hofn>vik': 230, 'vik>lagoon': 180, 'lagoon>vik': 180, 'lagoon>hofn': 80, 'hofn>lagoon': 80,
+      'vik>beach': 10, 'beach>vik': 10, 'beach>hofn': 225, 'hofn>beach': 225, 'beach>lagoon': 175, 'lagoon>beach': 175,
+    };
+    const lagoon = c('lagoon', { coordinates: { lat: 64.05, lng: -16.2 }, durationMinutes: 60, fit: 90, significance: 0.9, primaryInterest: 'lakes_and_rivers', interests: ['lakes_and_rivers'] });
+    const beach = c('beach', { coordinates: { lat: 63.4, lng: -19.04 }, durationMinutes: 45, fit: 88, significance: 0.9, primaryInterest: 'beaches_and_swimming', interests: ['beaches_and_swimming'] });
+    const kernel = createPlannerKernel(input([lagoon, beach], {
+      windows: dates.map((date) => ({ date, startMinute: 9 * 60, endMinute: 19 * 60 })),
+      bases: [
+        { id: 'vik', name: 'Vík', why: 'South coast.', coordinates: { lat: 63.42, lng: -19.0 }, fromDate: dates[0]!, toDate: dates[2]!, nights: 2, transferMinutesFromPrevious: 0 },
+        { id: 'hofn', name: 'Höfn', why: 'East.', coordinates: { lat: 64.25, lng: -15.21 }, fromDate: dates[2]!, toDate: dates[3]!, nights: 1, transferMinutesFromPrevious: 230 },
+      ],
+      minutes: (a, b) => (a === b ? 0 : table[`${a}>${b}`] ?? null),
+      maxDailyTravelMinutes: 150,
+    }));
+    const moveIndex = kernel.days.findIndex((d) => d.relocation);
+    expect(kernel.checkDay(moveIndex, [beach, lagoon], () => [])).toEqual({ ok: true });
+  });
+});

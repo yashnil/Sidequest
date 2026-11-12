@@ -921,6 +921,8 @@ export interface BuildBoardInput {
     baseId: string;
     /** Every base the trip sleeps at, for a multi-base trip. See `ExpansionInput`. */
     baseIds?: readonly string[];
+    /** The stays in sleeping order (`ExpansionInput.travel.stayOrder`). */
+    stayOrder?: readonly string[];
     /**
      * Whether the destination's own evidence records a scheduled network —
      * see `ScheduledNetworkPresence` in the reach module. Optional, and the
@@ -989,6 +991,7 @@ export function buildDiscoveryBoard(input: BuildBoardInput): DiscoveryBoard {
       knowledge,
       baseId: travel.baseId,
       ...(travel.baseIds ? { baseIds: travel.baseIds } : {}),
+      ...(travel.stayOrder ? { stayOrder: travel.stayOrder } : {}),
     },
   });
 
