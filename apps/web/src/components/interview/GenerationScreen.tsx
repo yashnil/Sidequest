@@ -1,5 +1,6 @@
 'use client';
 
+import { JourneySteps } from '../JourneySteps';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -175,7 +176,7 @@ export function GenerationScreen({
             <BuildFailure destination={destination} tripId={tripId} view={progress} retrying={retrying} retryError={retryError} onRetry={retry} />
           ) : (
             <>
-              <p className="type-small atlas-muted">Building {destination}</p>
+              <JourneySteps current={2} label={`planning ${destination}`} />
               {/* The current stage, named large; a stage change replaces the name with a short rise. */}
               <div className="relative mt-2 min-h-[1.1em]">
                 <AnimatePresence mode="wait" initial={false}>

@@ -8,6 +8,7 @@ import { callAction, newBuildKey } from './client-action';
 import type { TravellerScanView } from '@/lib/discovery-scan/view';
 import { startDiscoveryScanAction } from '@/app/(product)/trips/[id]/discover/scan-actions';
 import { retryBuildAction } from '@/app/(product)/trips/[id]/questionnaire/actions';
+import { JourneySteps } from './JourneySteps';
 import { formatElapsed } from '@/lib/build-progress/placed-projection';
 import { ScanMap } from './ScanMap';
 
@@ -175,10 +176,7 @@ export function ScanScreen({
     <div className="survey-night min-h-[calc(100svh-var(--chrome-height))] text-[var(--color-atlas-ink)]" data-testid="scan-screen" data-state={view.state}>
     <div className={cx('mx-auto px-5 py-10 sm:px-8 sm:py-14', view.map && !view.failure ? 'grid max-w-7xl gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start' : 'max-w-3xl')}>
     <div className="min-w-0">
-      <p className="sheet-label fade-up flex min-w-0 flex-wrap gap-x-2 text-[var(--color-glacier)]">
-        <span>Step 2 of 3 · Finding places</span>
-        <span className="text-[var(--color-atlas-muted)]">· {destination}</span>
-      </p>
+      <JourneySteps current={1} label={`finding them in ${destination}`} className="fade-up" />
 
       {running || (view.state === 'ready' && !idle) ? (
         <section aria-labelledby="scan-heading" className="mt-3">

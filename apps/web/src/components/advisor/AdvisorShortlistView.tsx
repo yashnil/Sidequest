@@ -134,6 +134,8 @@ function PickCard({ pick, index, media, sessionId }: { pick: AdvisorPick; index:
           {kind && pick.context ? ' · ' : null}
           {pick.context}
         </p>
+        {/* Whose reading this is — ours, or open data nobody has checked — stays on the card: it is how far to trust everything below. */}
+        <Provenance pick={pick} className="mt-1.5" />
         {pick.feel ? (
           <p data-testid="advisor-feel" className={cx('mt-3 inline-flex max-w-full items-center gap-2 self-start rounded-full px-3 py-1 text-sm', pick.feel.value >= 0.8 ? 'bg-pine-soft text-pine' : 'bg-amber-soft text-ink')}>
             <span aria-hidden="true" className={cx('h-1.5 w-1.5 shrink-0 rounded-full', pick.feel.value >= 0.8 ? 'bg-pine' : 'bg-amber')} />
@@ -209,7 +211,6 @@ function PickCard({ pick, index, media, sessionId }: { pick: AdvisorPick; index:
               ))}
             </ul>
           ) : null}
-          <Provenance pick={pick} className="mt-3" />
           <Sources pick={pick} />
           <details className="mt-2">
             <summary className="min-h-11 cursor-pointer py-2 text-ink-muted hover:text-ink">Not checked yet</summary>

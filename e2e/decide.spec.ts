@@ -73,10 +73,14 @@ test('the shortlist argues for each place and says what it has not checked', asy
   const picks = page.getByTestId('advisor-pick');
   await expect(picks).toHaveCount(3);
   const first = picks.first();
-  for (const label of ['Best time', 'Trip length', 'Character', 'Costs', 'Getting there', 'Getting around', 'Where you’d stay', 'Weather check']) {
+  /* At a glance: when, how long, what it costs, and the catch that matters most (2026-11 card). */
+  for (const label of ['Best time', 'Stay', 'Costs']) await expect(first.getByText(label, { exact: true })).toBeVisible();
+  await expect(first.getByText('The catch')).toBeVisible();
+  /* Everything else is one press away, never gone. */
+  await first.getByText(/^More about /).click();
+  for (const label of ['Character', 'Getting there', 'Getting around', 'Where you’d stay', 'Weather check']) {
     await expect(first.getByText(label, { exact: true })).toBeVisible();
   }
-  await expect(first.getByText('The catch')).toBeVisible();
   /* What kind of place it is, and whose reading: ours, or open data nobody has checked. */
   for (const card of await picks.all()) {
     await expect(card.getByTestId('advisor-kind')).toBeVisible();
