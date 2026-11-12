@@ -7,7 +7,8 @@
  * `thinscan` makes the first pass propose only four places, so the bounded
  * supplement can be exercised; the supplement (`already` given) proposes the rest.
  * `stuck` alongside it makes the supplement propose nothing new, so the open-data
- * top-up and the thin-board notice can be exercised.
+ * top-up and the thin-board notice can be exercised. `routegap` exercises the
+ * route coverage supplement (below).
  */
 const KINDS = [
   ['Old Quarter', 'neighbourhood', 'classic', 120, 'easy', 'mixed', ['neighbourhoods_and_local_life', 'history_and_culture']],
@@ -33,6 +34,27 @@ const KINDS = [
 export function fixtureScanProposal(destinationName: string, typed: string, days: number, options: { already?: readonly string[] } = {}): unknown {
   if (/\bunscannable\b/i.test(typed)) throw new Error('The fixture proposer refused this destination, as asked.');
   const name = destinationName.trim() || 'Destination';
+  /*
+   * `routegap`: a route-shaped trip whose first pass strings four bases along
+   * one line (fixture placement puts each base further along a diagonal), so
+   * the route coverage check finds one side of a loop; the supplement then
+   * proposes a fifth base and places beside it, so merging a route
+   * supplement's bases can be exercised.
+   */
+  if (/\broutegap\b/i.test(typed)) {
+    const stops = [name, `${name} East`, `${name} Coast`, `${name} Cape`];
+    const far = `${name} Far Side`;
+    const base = (stop: string) => ({ name: stop, locality: stop, nightsHint: 2, why: 'A fixture stop on the route.' });
+    const candidate = ([label, kind, tier, duration, intensity, exposure, interests]: (typeof KINDS)[number], locality: string, prefix: string) => ({ name: `${prefix} ${label}`, locality, kind, tier, durationMinutes: duration, intensity, costLevel: 1, exposure, bestTime: 'any', crowd: 'moderate', booking: 'none', rainyDayOk: exposure === 'indoor', interests, why: `A fixture ${kind.replace(/_/g, ' ')} on the route.` });
+    const first = !options.already;
+    return {
+      bases: first ? stops.map(base) : [...stops, far].map(base),
+      candidates: first ? KINDS.map((kind, i) => candidate(kind, stops[i % stops.length]!, name)) : KINDS.slice(0, 6).map((kind) => candidate(kind, far, far)),
+      foodAreas: [],
+      skipped: [],
+      package: { transportSummary: 'Fixture route.', transportNotes: [], beforeYouGo: [], packing: [], foodStrategy: [], bookingPriorities: [] },
+    };
+  }
   const second = `${name} Hills`;
   const count = Math.min(KINDS.length, Math.max(12, days * 3));
   return {

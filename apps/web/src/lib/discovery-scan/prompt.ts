@@ -17,7 +17,7 @@ import type { DestinationEnvelope } from '../planning/composition';
  * one again on the way back.
  */
 
-export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-10-06.2';
+export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-11.1';
 export const SCAN_JSON_TAG = 'scan_proposal';
 
 /** How many candidates to ask for: enough to choose from, never so many the answer runs long. */
@@ -38,7 +38,7 @@ What a strong pool looks like:
 5. One place per candidate. Never combine several stops into one candidate ("X to Y to Z"), and never list the same place twice under different names. A day trip is a candidate named by its town ("Kamakura", kind small_town) with the highlights in "why".
 6. Real names only. Every candidate and base must be a real, specific, findable place with its proper name and the town or district it is in ("locality"). Never invent a venue. If you are unsure a place exists or is open, leave it out. Where the place's own name is written in another language or script locally, give that name too as "localName" (for example the name on the sign at the entrance); maps in that country often know only it.
 7. Honest attributes. durationMinutes is time on site, not travel. intensity is physical effort (none, easy, moderate, strenuous). costLevel is 0 free, 1 cheap, 2 moderate, 3 expensive. booking is "required" only when entry genuinely needs advance booking.
-8. Bases. Propose 1 to 5 places to sleep, in the order a traveller arriving would reach them, each with a nightsHint (your suggestion; Sidequest re-allocates nights from what is near each base) and why. A single dense city is usually one base. Respect how willing they are to change hotels.
+8. Bases. Propose 1 to 5 places to sleep (up to 6 when the task says the trip is a route, spaced along all of it), in the order a traveller arriving would reach them, each with a nightsHint (your suggestion; Sidequest re-allocates nights from what is near each base) and why. A single dense city is usually one base. Respect how willing they are to change hotels.
 9. "why" is one sentence about why THIS traveller would want it, grounded in what they told you. No hype words.
 10. "skipped": up to 6 famous things you deliberately left out because they do not fit this traveller, each with a one-line reason.
 11. "package": short practical prose — how to get around (transportSummary, transportNotes), beforeYouGo, packing (specific to the season and the activities you proposed), foodStrategy, bookingPriorities. Do not state entry, visa or health rules as fact; say what to check and where.
@@ -125,11 +125,40 @@ export function buildScanTask(input: ScanPromptInput): string {
     ...(envelope.gateways && envelope.gateways.length > 0 ? [`gateways (where people arrive; context, not destinations): ${envelope.gateways.join(', ')}`] : []),
     ...(envelope.accessFacts && envelope.accessFacts.length > 0 ? [`operational facts: ${envelope.accessFacts.join(' | ')}`] : []),
     `</destination>`,
+    ...routeBlock(envelope),
     `<dates>${input.startDate} to ${input.endDate} (${input.days} days)</dates>`,
     renderTravelerBriefXml(brief),
-    `<task>Propose ${target.min} to ${target.max} candidates, 1 to 5 bases, up to 8 food areas, up to 6 skipped classics, and the package. ${input.namedMustDos.length > 0 ? 'Every place the traveller named as a must-do appears as a candidate unless it is genuinely impossible on these dates (then put it in skipped with the reason).' : ''}</task>`,
+    `<task>Propose ${target.min} to ${target.max} candidates, ${envelope.route ? '2 to 6 bases in travel order along the route' : '1 to 5 bases'}, up to 8 food areas, up to 6 skipped classics, and the package. ${input.namedMustDos.length > 0 ? 'Every place the traveller named as a must-do appears as a candidate unless it is genuinely impossible on these dates (then put it in skipped with the reason).' : ''}</task>`,
   ];
   return lines.join('\n');
+}
+
+/**
+ * A ROUTE-SHAPED TRIP — THE WHOLE ROUTE, NOT ONE END OF IT.
+ *
+ * A live "Iceland Ring Road" proposal covered the south coast only and named
+ * the north as "does not fit"; nothing in the task had said the trip was a
+ * loop. When the traveller's words read as a journey (`readRouteShape`), the
+ * task says so: cover the whole route, space the bases along it in travel
+ * order a day's travel apart, close a loop, and leave Sidequest to decide what
+ * the nights can hold. Sidequest's own words only; the phrase stays untrusted.
+ */
+function routeBlock(envelope: DestinationEnvelope): string[] {
+  const route = envelope.route;
+  if (!route) return [];
+  const shape =
+    route.kind === 'loop'
+      ? 'Cover the WHOLE loop, every stretch of it, not one side: candidates spread along the entire route, and bases spaced along it in travel order — the first where a traveller arrives, each a day of driving or less from the next, going round in one direction until the loop closes back near the first.'
+      : route.kind === 'linear'
+        ? `Cover the WHOLE route from one end to the other${route.stops && route.stops.length >= 2 ? ` (${route.stops.join(' → ')})` : ''}: candidates spread along its entire length, and bases in travel order from the start to the end, each a day of travel or less from the next.`
+        : 'Cover the WHOLE route, not one corner of it: candidates spread along its entire length, and bases in travel order, each a day of travel or less from the next; if the route returns to where it starts, end the bases back near the first.';
+  return [
+    `<route>`,
+    route.description,
+    shape,
+    'Propose the route as it is even if the nights look short for it: Sidequest measures the drives and decides what the nights can hold, and says which stretch it cuts. Do not cut a stretch yourself because it seems far; list a stretch in "skipped" only when it is closed, unsafe or impossible on these dates, or breaks one of the traveller\'s hard rules.',
+    `</route>`,
+  ];
 }
 
 /**
@@ -140,7 +169,7 @@ export function buildScanTask(input: ScanPromptInput): string {
  * missing. Called at most once per scan, only when `scanSufficiency` says the
  * placed pool cannot be planned from.
  */
-export function buildScanSupplementTask(input: ScanPromptInput, gap: { already: readonly string[]; count: number; missingInterests: readonly string[]; underfilled?: boolean }): string {
+export function buildScanSupplementTask(input: ScanPromptInput, gap: { already: readonly string[]; count: number; missingInterests: readonly string[]; underfilled?: boolean; route?: { uncovered: readonly string[]; bases: readonly string[] } }): string {
   /*
    * Release pass (2026-11) — two shapes. A top-up after a pool that came back
    * thin once placement dropped some of it; or, when the first answer itself
@@ -149,6 +178,21 @@ export function buildScanSupplementTask(input: ScanPromptInput, gap: { already: 
    * full count, across every kind of place, not a narrow "what is missing".
    */
   const already = gap.already.length > 0 ? ` that are NOT in this list: ${gap.already.slice(0, 60).join('; ')}` : '';
+  /*
+   * A route the first pass covered only part of (`routeCoverage`): the stretch
+   * that is missing, by direction or by name, with places AND places to sleep
+   * along it, so the stay choice has bases to follow the route through.
+   */
+  const routeGap = gap.route && gap.route.uncovered.length > 0 ? gap.route : null;
+  if (routeGap && !gap.underfilled) {
+    const where = routeGap.uncovered.map((u) => (/^(north|south|east|west|northeast|northwest|southeast|southwest)$/.test(u) ? `to the ${u}` : u)).join(', ');
+    const task = [
+      `<task>The first pass covered only part of the route: nothing was proposed ${where} of what it found. Propose ${gap.count} to ${gap.count + 8} MORE candidates along the stretches of the route not yet covered (wherever among those directions the route actually runs) — real, specific, findable places with their proper names and localities${already}.`,
+      gap.missingInterests.length > 0 ? ` Where it fits, favour: ${gap.missingInterests.map((i) => i.replace(/_/g, ' ')).join(', ')}.` : '',
+      ` Also propose the places to sleep along those stretches, in travel order, each a day of travel or less from the next${routeGap.bases.length > 0 ? `; the bases already proposed are ${routeGap.bases.slice(0, 6).join(', ')} — do not repeat them` : ''}. Food areas, skipped classics and the package may be empty.</task>`,
+    ].join('');
+    return buildScanTask(input).replace(/<task>[\s\S]*<\/task>/, task);
+  }
   const task = gap.underfilled
     ? [
         `<task>The first pass returned only ${gap.already.length} candidate${gap.already.length === 1 ? '' : 's'} — far too few to plan ${input.days} days from. Propose the full candidate pool now: ${gap.count} to ${gap.count + 8} candidates — real, specific, findable places with their proper names and localities${already}.`,

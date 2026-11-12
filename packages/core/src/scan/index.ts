@@ -5,3 +5,4 @@ export * from './sufficiency';
 export * from './access-point';
 export * from './candidate-identity';
 export * from './base-staleness';
+export * from './route-coverage';

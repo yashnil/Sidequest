@@ -177,6 +177,63 @@ describe('a thin scan (live Tokyo finding)', () => {
   });
 });
 
+describe('a route-shaped scan (live Iceland Ring Road finding)', () => {
+  it('a loop covered on one side only spends the one supplement on the missing stretch, merges its new base, and records the route', async () => {
+    const tripId = await dynamicTrip('Testisle Ring Road routegap');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 150 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(scanView(tripId).state).toBe('ready');
+    const diagnostics = getScanProposalExtras(tripId)!.diagnostics!;
+    expect(diagnostics.route?.kind).toBe('loop');
+    expect(diagnostics.route?.cue).toBe('ring road');
+    expect(diagnostics.route?.before?.checked).toBe(true);
+    expect(diagnostics.route?.before?.covered).toBe(false);
+    /* Enough places by count: only the route made the supplement run. */
+    expect(diagnostics.recovery.before.have).toBeGreaterThanOrEqual(diagnostics.recovery.before.needed);
+    expect(diagnostics.recovery.attempted).toBe(true);
+    expect(diagnostics.recovery.reasons).toContain('route_uncovered');
+    expect(diagnostics.recovery.outcome).toBe('added');
+    expect(diagnostics.route?.basesAdded).toBe(1);
+    expect(diagnostics.route?.after).toBeDefined();
+
+    const { getTrip } = await import('@/lib/db/repository');
+    const { resolveTripRegion } = await import('@/lib/region');
+    const resolved = await resolveTripRegion(getTrip(tripId)!);
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.context.compiled.bases.map((b) => b.name)).toContain('Testisle Ring Road routegap Far Side');
+    expect(resolved.context.compiled.basePortfolio?.decision?.route?.shape).toBe('loop');
+  }, 60_000);
+
+  it('the one proposal call is told the trip is a loop; a place is not; the route supplement names the missing stretch and asks for bases', async () => {
+    const { scanPromptFor } = await import('./run');
+    const { buildScanSupplementTask } = await import('./prompt');
+    const route = (await scanPromptFor(await dynamicTrip('Testisle Ring Road'), NOW))!;
+    expect(route.envelope.route?.kind).toBe('loop');
+    expect(route.task).toContain('<route>');
+    expect(route.task).toContain('Cover the WHOLE loop');
+    expect(route.task).toContain('2 to 6 bases in travel order along the route');
+    const place = (await scanPromptFor(await dynamicTrip('Testmouth'), NOW))!;
+    expect(place.envelope.route).toBeUndefined();
+    expect(place.task).not.toContain('<route>');
+    const supplement = buildScanSupplementTask(route.promptInput, { already: ['A'], count: 12, missingInterests: [], route: { uncovered: ['north', 'between A and B'], bases: ['Testisle'] } });
+    expect(supplement).toContain('nothing was proposed to the north, between A and B of what it found');
+    expect(supplement).toContain('Also propose the places to sleep along those stretches');
+    expect(supplement).toContain('do not repeat them');
+  });
+
+  it('a place that is not a route never runs the coverage check', async () => {
+    const tripId = await dynamicTrip('Testmouth');
+    const { startDiscoveryScan } = await import('./run');
+    startDiscoveryScan(tripId, { autoBuild: false, caller: 'test', now: NOW });
+    const { scanView, getScanProposalExtras } = await import('@/lib/db/scan-repository');
+    for (let i = 0; i < 100 && scanView(tripId).state === 'running'; i += 1) await new Promise((r) => setTimeout(r, 20));
+    expect(getScanProposalExtras(tripId)?.diagnostics?.route).toBeUndefined();
+  });
+});
+
 describe('scan regions are estimated, and say so (live Utah finding)', () => {
   it('a planner build on a distance-estimated region never relabels an estimate "measured", and asks the router itself', async () => {
     const tripId = await dynamicTrip('Testmouth');

@@ -19,7 +19,8 @@ import type { Region } from '../schemas/region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
 import { SCAN_KIND_PROFILES, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
-import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type StayTraveller } from './stay-objective';
+import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller } from './stay-objective';
+import type { RouteShapeKind } from '../destinations/route-shape';
 
 /**
  * V1 CONVERGENCE — FROM A LOCATED PROPOSAL TO A REGION THE PRODUCT ALREADY READS.
@@ -224,6 +225,14 @@ export interface AssembleScanRegionInput {
   namedParts?: readonly { label: string; center: { lat: number; lng: number } }[];
   /** Proposal keys of the candidates the traveller named as must-dos at setup. */
   mustSeeKeys?: readonly string[];
+  /**
+   * The trip is a route (`destinations/route-shape.ts`): the proposed bases,
+   * asked for in travel order along it, are the traveller's intent — each one
+   * a part the stays must sleep within a day's reach of, as the nights and the
+   * hotel changes allowed permit — and where no gateway is known the route
+   * begins at the first proposed base (and a loop ends there).
+   */
+  route?: { kind: RouteShapeKind };
   proposal: ScanProposal;
   positions: ReadonlyMap<string, ResolvedPosition | null>;
   plan: ScanPointPlan;
@@ -312,8 +321,10 @@ export interface ChooseScanBasesInput {
   dayMinutes?: readonly number[];
   /** Whether a router measured the minutes. */
   basis?: 'measured' | 'estimated';
-  /** Parts of the destination the traveller named, each with the bases that sleep in or beside it (`stay-objective.ts`). */
-  mustCover?: readonly { name: string; baseIds: readonly string[] }[];
+  /** Parts of the destination the traveller named, each with the bases that sleep in or beside it (`stay-objective.ts`); a route's bases as anchored parts. */
+  mustCover?: readonly MustCoverPart[];
+  /** The trip is a route; the decision records which of its parts the stays sleep along. */
+  route?: RouteShapeKind;
   /** Places the traveller named as must-dos: a structure that cannot reach one pays for it several times over. */
   mustSee?: ReadonlySet<string>;
 }
@@ -360,6 +371,7 @@ export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesRes
     order: (ids) => (input.edges ? orderBasesForEdges(proposalOrder(ids), minutes, input.edges, cap, Math.max(1, nights)) : { order: shortestOpenPath(proposalOrder(ids), minutes), splitStay: false }),
     ...(input.basis ? { basis: input.basis } : {}),
     ...(input.mustCover ? { mustCover: input.mustCover } : {}),
+    ...(input.route ? { route: input.route } : {}),
   });
   const kept = choice.stays.map((stay, i) => ({
     id: stay.baseId,
@@ -516,6 +528,17 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     if (haversineKm(at, point) <= CAR_FREE_WALK_KM) return 0;
     return estimateLegMinutes({ from: point, to: at, mode: matrix.mode === 'foot' ? 'rail' : 'drive' })?.minutes ?? null;
   };
+  /*
+   * A route with no known gateway begins where its first proposed base is (the
+   * proposal is asked for bases in travel order from where a traveller
+   * arrives); a loop, or a road trip whose end the words do not settle, comes
+   * back there, and a route from one end to another leaves from its last. The
+   * departure leg is then part of every structure's cost, so an out-and-back
+   * is costed as one rather than ending wherever the stays happen to.
+   */
+  const routeStart = input.route && !input.edges ? baseEntries[0]!.id : null;
+  const routeEnd = routeStart ? (input.route!.kind === 'linear' ? baseEntries[baseEntries.length - 1]!.id : routeStart) : null;
+  const edgeDays = input.dayMinutes && input.dayMinutes.length > 0 ? { arrival: input.dayMinutes[0]!, departure: input.dayMinutes[input.dayMinutes.length - 1]! } : { arrival: 240, departure: 180 };
   const edges: TripEdges | undefined = input.edges
     ? {
         fromArrival: (id) => edgeMinutes(input.edges!.arrival, id),
@@ -523,11 +546,20 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
         arrivalUsableMinutes: input.edges.arrivalUsableMinutes,
         departureUsableMinutes: input.edges.departureUsableMinutes,
       }
-    : undefined;
+    : routeStart && routeEnd
+      ? {
+          fromArrival: (id) => (id === routeStart ? 0 : minutes(routeStart, id)),
+          toDeparture: (id) => (id === routeEnd ? 0 : minutes(id, routeEnd)),
+          arrivalUsableMinutes: edgeDays.arrival,
+          departureUsableMinutes: edgeDays.departure,
+        }
+      : undefined;
   /* A part is covered by the proposed bases sleeping in or beside it; a part no base is near constrains nothing. */
-  const mustCover = (input.namedParts ?? [])
+  const mustCover: MustCoverPart[] = (input.namedParts ?? [])
     .map((part) => ({ name: part.label, baseIds: baseEntries.filter((b) => { const at = pointAt.get(b.id); return at !== undefined && haversineKm(at, part.center) <= NAMED_PART_REACH_KM; }).map((b) => b.id) }))
     .filter((part) => part.baseIds.length > 0);
+  /* A route's proposed bases are where the traveller asked to go: each is a part the stays sleep within a day's reach of. */
+  if (input.route) for (const base of baseEntries) mustCover.push({ name: base.proposal.name, baseIds: [base.id], anchorId: base.id });
   const choice = chooseScanBases({
     bases: baseEntries,
     places: placeEntries,
@@ -539,6 +571,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     ...(input.dayMinutes ? { dayMinutes: input.dayMinutes } : {}),
     basis: matrix.provenance.kind === 'measured' && matrix.mode !== 'foot' ? 'measured' : 'estimated',
     ...(mustCover.length > 0 ? { mustCover } : {}),
+    ...(input.route ? { route: input.route.kind } : {}),
     ...(input.mustSeeKeys && input.mustSeeKeys.length > 0 ? { mustSee: new Set(input.mustSeeKeys.map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined)) } : {}),
   });
   const keptIds = choice.kept.map((k) => k.id);

@@ -11,6 +11,7 @@ import {
   estimatedScanMatrix,
   normalizeScanProposal,
   planScanPoints,
+  routeCoverage,
   scanSufficiency,
   tripDates,
   validateCompiledRegion,
@@ -69,6 +70,8 @@ import { composerKnownRejected } from '../readiness/probe-cache';
 
 const SCAN_MODEL_TIMEOUT_MS = 150_000;
 const SCAN_MAX_TOKENS = 16_000;
+/** The proposal's own cap on places to sleep (`normalizeScanProposal`); a supplement never adds past it. */
+const SCAN_MAX_BASES = 6;
 const PLACEMENT_DEADLINE_MS = 120_000;
 const HEARTBEAT_MS = 10_000;
 /** How many placed points the scan screen's map is sent. */
@@ -298,6 +301,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const prepared = await scanPromptFor(tripId, now);
     if (!prepared) return fail('internal_generation_error', 'trip disappeared');
     const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput } = prepared;
+    if (envelope.route) console.warn(`Discovery scan for ${tripId}: a route-shaped trip (${envelope.route.kind}, "${envelope.route.cue}").`);
     if (!envelope.center || (envelope.center.lat === 0 && envelope.center.lng === 0)) {
       return fail('destination_unplaced', 'no destination centre');
     }
@@ -473,6 +477,22 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       });
     const firstSufficiency = sufficiencyOf();
     /*
+     * A route-shaped trip (a ring road, a road trip, "A to B") is checked for
+     * coverage as well as count: thirty places along one coast of an island are
+     * enough places and no ring road (a live Iceland scan, 2026-11). An
+     * uncovered stretch is asked for by the same one supplement — never a
+     * second extra call. Unknown ≠ false: with no basis to judge, nothing is asked.
+     */
+    const routeStops = (concept?.parts ?? []).flatMap((part) => (part.center ? [{ label: part.label, center: part.center }] : []));
+    const routeExtent = concept?.travelExtent?.bounds ?? (concept?.extent && concept.extent.source !== 'none' ? concept.extent.bounds : null);
+    const coverageOf = () =>
+      envelope.route
+        ? routeCoverage({ kind: envelope.route.kind, points: plan.points, extent: routeExtent, ...(routeStops.length >= 2 ? { stops: routeStops } : {}), reachKm: reach })
+        : null;
+    const firstCoverage = coverageOf();
+    const routeUncovered = !openData && firstCoverage?.checked && !firstCoverage.covered ? firstCoverage : null;
+    const routeDiagnostics: ScanDiagnostics['route'] = envelope.route ? { kind: envelope.route.kind, cue: envelope.route.cue, ...(firstCoverage ? { before: firstCoverage } : {}) } : undefined;
+    /*
      * Release pass (2026-11) — an answer that holds a fraction of what was asked
      * is not a thin board, it is a failed answer: the supplement then asks for
      * the whole pool again (still the one extra call a scan may make).
@@ -481,14 +501,18 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const recovery: ScanDiagnostics['recovery'] = { attempted: false, reasons: firstSufficiency.reasons, before: { have: firstSufficiency.have, needed: firstSufficiency.needed, kinds: firstSufficiency.distinctKinds }, ...(underfilled ? { underfilled: true } : {}) };
     /* No supplement on the open-data path: the supplement is a second model call, and the model is what was unavailable. */
     if (openData) recovery.outcome = 'not_attempted_open_data';
-    if (!firstSufficiency.sufficient && !openData) {
-      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count: underfilled ? requested : Math.max(8, firstSufficiency.needed - firstSufficiency.have + 4), underfilled, typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
+    if ((!firstSufficiency.sufficient || routeUncovered) && !openData) {
+      const count = underfilled ? requested : Math.max(routeUncovered ? 12 : 8, firstSufficiency.needed - firstSufficiency.have + 4);
+      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count, underfilled, ...(routeUncovered ? { route: { uncovered: routeUncovered.uncovered } } : {}), typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
       recovery.attempted = true;
       recovery.outcome = supplement.outcome;
+      if (routeUncovered) recovery.reasons = [...new Set([...recovery.reasons, 'route_uncovered'])];
       if (supplement.proposal) {
+        /* Places to sleep along a stretch the first pass missed: only for a route gap, and never past the proposal's own cap on bases. */
+        const newBases = supplement.proposal.bases.slice(0, Math.max(0, SCAN_MAX_BASES - proposal.bases.length));
         const supplementPlacement = fixtureScan()
-          ? fixturePlacement({ ...supplement.proposal, bases: proposal.bases }, envelope.center)
-          : await placeScanProposal({ ...supplement.proposal, bases: [] }, {
+          ? fixturePlacement({ ...supplement.proposal, bases: [...proposal.bases, ...newBases] }, envelope.center)
+          : await placeScanProposal({ ...supplement.proposal, bases: newBases }, {
               center: envelope.center,
               maxDistanceKm: reach,
               ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
@@ -498,14 +522,16 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
             });
         const positions = new Map(placement.positions);
         for (const c of supplement.proposal.candidates) positions.set(c.key, supplementPlacement.positions.get(c.key) ?? null);
-        proposal = { ...proposal, candidates: [...proposal.candidates, ...supplement.proposal.candidates] };
-        placement = { ...placement, positions, diagnostics: [...placement.diagnostics, ...supplementPlacement.diagnostics.filter((d) => !d.isBase)], placesCalls: placement.placesCalls + supplementPlacement.placesCalls, geocoderCalls: placement.geocoderCalls + supplementPlacement.geocoderCalls };
+        for (const b of newBases) positions.set(b.key, supplementPlacement.positions.get(b.key) ?? null);
+        proposal = { ...proposal, bases: [...proposal.bases, ...newBases], candidates: [...proposal.candidates, ...supplement.proposal.candidates] };
+        if (routeDiagnostics && newBases.length > 0) routeDiagnostics.basesAdded = newBases.length;
+        placement = { ...placement, positions, diagnostics: [...placement.diagnostics, ...supplementPlacement.diagnostics.filter((d) => !d.isBase || newBases.some((b) => b.name === d.name))], placesCalls: placement.placesCalls + supplementPlacement.placesCalls, geocoderCalls: placement.geocoderCalls + supplementPlacement.geocoderCalls };
         plan = planScanPoints(proposal, placement.positions);
         recovery.added = supplement.proposal.candidates.length;
       }
       const after = sufficiencyOf();
       recovery.after = { have: after.have, needed: after.needed, kinds: after.distinctKinds };
-      console.warn(`Discovery scan supplement for ${tripId}: ${recovery.outcome}${underfilled ? ' (first answer underfilled)' : ''}; ${firstSufficiency.have} → ${after.have} placed (needed ${after.needed}).`);
+      console.warn(`Discovery scan supplement for ${tripId}: ${recovery.outcome}${underfilled ? ' (first answer underfilled)' : ''}${routeUncovered ? ` (route uncovered: ${routeUncovered.uncovered.join(', ')})` : ''}; ${firstSufficiency.have} → ${after.have} placed (needed ${after.needed}).`);
     }
     /*
      * Release pass (2026-11) — still thin after the supplement (or the supplement
@@ -562,6 +588,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       ...(openData ? { openData: { source: openData.source, ...openData.diagnostics } } : {}),
       proposal: { returned: rawCandidateCount, kept: normalized.proposal.candidates.length, dropped: normalized.dropped.map((d) => ({ name: d.name, reason: d.reason })), stopReason: (rawInfo as { stopReason: string | null } | null)?.stopReason ?? null, outputTokens: (rawInfo as { outputTokens: number | null } | null)?.outputTokens ?? null },
       envelope: { scale: envelope.scale ?? null, reachKm: reach, center: envelope.center },
+      ...(routeDiagnostics ? { route: { ...routeDiagnostics, ...(recovery.attempted && firstCoverage ? { after: coverageOf()! } : {}) } } : {}),
       placement: {
         attempted: placement.diagnostics.length,
         unplaced: placementDiagnostics.map((d) => ({ name: d.name, locality: d.locality, category: d.category, isBase: d.isBase, outcome: d.outcome, attempts: d.attempts })),
@@ -647,6 +674,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       traveller: stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null }),
       dayMinutes: buildDailyWindows(trip.basics, profile, resolveConfig()).map((w) => Math.max(0, w.window.endMinute - w.window.startMinute)),
       mustSeeKeys: matchNamedMustDos(namedMustDos, proposal.candidates.map((c) => ({ id: c.key, name: c.name }))),
+      /* A journey the traveller asked for: the bases along it are their intent, and a loop is costed back to where it began (`scan/stay-objective.ts`). */
+      ...(envelope.route ? { route: { kind: envelope.route.kind } } : {}),
       /* Only parts the traveller's own phrase joined ("Tokyo and Kyoto"); a model's or a geocoder's parts are not a request. */
       ...(concept?.extent?.source === 'union_of_parts' ? { namedParts: concept.parts.map((part) => ({ label: part.label, center: part.center })) } : {}),
       ...((edges) => (edges ? { edges } : {}))(tripEdgesFor(trip, profile, envelope.center, conceptGateways, envelope.scale)),
@@ -745,6 +774,8 @@ async function proposeSupplement(input: {
   missingInterests: readonly string[];
   count: number;
   underfilled?: boolean;
+  /** A route the first pass covered only part of: the stretches to ask for, with places to sleep along them. */
+  route?: { uncovered: readonly string[] };
   typed: string;
   envelopeName: string;
   days: number;
@@ -764,7 +795,7 @@ async function proposeSupplement(input: {
       raw = await model.structured({
         promptVersion: SCAN_PROMPT_VERSION,
         instruction: SCAN_INSTRUCTION,
-        task: buildScanSupplementTask(input.promptInput, { already, count: input.count, missingInterests: input.missingInterests, ...(input.underfilled ? { underfilled: true } : {}) }),
+        task: buildScanSupplementTask(input.promptInput, { already, count: input.count, missingInterests: input.missingInterests, ...(input.underfilled ? { underfilled: true } : {}), ...(input.route ? { route: { uncovered: input.route.uncovered, bases: input.proposal.bases.map((b) => b.name) } } : {}) }),
         untrusted: buildScanUntrusted(input.promptInput),
         schema: scanProposalWireSchema as unknown as z.ZodType<unknown>,
         validationSchema: z.unknown() as z.ZodType<unknown>,
@@ -792,8 +823,13 @@ async function proposeSupplement(input: {
   const fresh = normalized.proposal.candidates
     .filter((c) => !seen.has(c.name.toLowerCase()))
     .map((c, i) => ({ ...c, key: `c${offset + i + 1}` }));
-  if (fresh.length === 0) return { outcome: 'none_new', proposal: null };
-  return { outcome: 'added', proposal: { ...normalized.proposal, candidates: fresh } };
+  /* Only a route gap asks for places to sleep; any other supplement repeats the first pass's bases, which are not new. */
+  const knownBases = new Set(input.proposal.bases.map((b) => b.name.toLowerCase()));
+  const freshBases = input.route && Array.isArray(record.bases) && record.bases.length > 0
+    ? normalized.proposal.bases.filter((b) => !knownBases.has(b.name.toLowerCase())).map((b, i) => ({ ...b, key: `b${input.proposal.bases.length + i + 1}` }))
+    : [];
+  if (fresh.length === 0 && freshBases.length === 0) return { outcome: 'none_new', proposal: null };
+  return { outcome: 'added', proposal: { ...normalized.proposal, bases: freshBases, candidates: fresh } };
 }
 
 /**

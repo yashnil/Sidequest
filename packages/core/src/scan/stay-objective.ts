@@ -47,6 +47,14 @@
  *   the traveller's daily travel from every stay is unseen from that structure,
  *   which is how a low daily limit legitimately earns another base.
  *
+ * A route-shaped trip (a ring road, a road trip, "A to B") adds its proposed
+ * bases as parts to cover: each is covered by any stay within the planner's
+ * reach of it, so a ring road is slept along rather than priced as a list of
+ * places a single town can leave unseen (a live Iceland trip, 2026-11, chose
+ * eight nights in one town). A leg longer than the traveller's day weighs
+ * double there, and the decision says which stretch the nights or the cap
+ * could not follow.
+ *
  * The traveller's stated cap is hard (`maxBaseChanges`): "one base" is never
  * overridden, and the record says what it cost. A stay has a minimum sensible
  * length from the trip's length and the traveller. A structure with more moves
@@ -63,6 +71,7 @@
  */
 
 import type { MoveTolerance, StayDecision, StayOption } from '../schemas/stay';
+import type { RouteShapeKind } from '../destinations/route-shape';
 
 
 /** Who is travelling, as far as changing hotels and reaching things is concerned. */
@@ -131,7 +140,26 @@ export interface StayObjectiveInput {
    * compared: what somebody asked for by name outranks what Sidequest infers
    * about their time. A part no proposed base covers constrains nothing.
    */
-  mustCover?: readonly { name: string; baseIds: readonly string[] }[];
+  mustCover?: readonly MustCoverPart[];
+  /**
+   * The trip is a route (`destinations/route-shape.ts`). Changes only what the
+   * record says: which route parts the choice sleeps along and which it could
+   * not, in the decision and its sentence. The parts themselves arrive as
+   * `mustCover` entries with an `anchorId`.
+   */
+  route?: RouteShapeKind;
+}
+
+/**
+ * A part of the destination a structure should sleep in or beside. Covered when
+ * a stay is one of `baseIds`, or — for a part with an `anchorId`, such as a
+ * proposed base along a route — when a stay is within the planner's own reach
+ * of the anchor, so two bases an hour apart do not both have to be slept in.
+ */
+export interface MustCoverPart {
+  name: string;
+  baseIds: readonly string[];
+  anchorId?: string;
 }
 
 
@@ -180,6 +208,8 @@ const FILL_TARGET = { slow: 0.55, balanced: 0.7, fast: 0.85 } as const;
 const IDLE_WEIGHT = 0.5;
 /** Under this much room a day holds no stop, so leaving it empty is no failing. The planner's own figure. */
 const MIN_DAY_WORTH_FILLING = 60;
+/** On a route-shaped trip, the part of a transfer beyond the traveller's daily ceiling counts this many times over (once on any other trip). */
+const ROUTE_OVER_LIMIT_WEIGHT = 2;
 /** Most stays a structure may have, whatever the cap: the proposal holds at most six bases. */
 const MAX_STAYS = 5;
 
@@ -293,6 +323,13 @@ function modelFor(input: StayObjectiveInput): Model {
     everything,
     hint: new Map(input.bases.map((b) => [b.id, Math.max(0, b.nightsHint ?? 0)] as const)),
   };
+}
+
+/** Whether a set of stays sleeps in or (for an anchored part) within a day's reach of a part. Unknown ≠ far: an untimed anchor is never out of reach. */
+function partCovered(model: Model, part: MustCoverPart, baseIds: readonly string[]): boolean {
+  if (part.baseIds.some((id) => baseIds.includes(id))) return true;
+  if (!part.anchorId) return false;
+  return baseIds.some((id) => id === part.anchorId || (model.input.minutes(id, part.anchorId!) ?? 0) <= model.reach);
 }
 
 /** The loop base → stops → base with `id` inserted where it adds least. */
@@ -424,10 +461,11 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
   const unseen = Math.max(0, model.everything - seenValue);
   const overhead = moves * model.move.overheadMinutes;
   const inconvenience = moves * model.move.inconvenienceMinutes;
-  const total = dayTravel + transferMinutes + overLimitTransfer + overhead + inconvenience + IDLE_WEIGHT * idle + unseen;
+  /* On a route the road is driven in day-sized legs: a leg longer than the traveller's own day is what a stay between would prevent, so it weighs double. */
+  const total = dayTravel + transferMinutes + (input.route ? ROUTE_OVER_LIMIT_WEIGHT : 1) * overLimitTransfer + overhead + inconvenience + IDLE_WEIGHT * idle + unseen;
   /* Unknown ≠ far: a must-see nobody has timed from any stay still counts as within reach. */
   const reachable = (place: StayPlaceInput) => baseIds.some((id) => (input.minutes(id, place.id) ?? 0) <= (place.soloDayTrip ? model.dayTripReach : model.reach));
-  const covered = [...(input.mustCover ?? []).filter((part) => part.baseIds.some((id) => baseIds.includes(id))).map((part) => part.name), ...input.places.filter((place) => place.mustSee && reachable(place)).map((place) => place.id)];
+  const covered = [...(input.mustCover ?? []).filter((part) => partCovered(model, part, baseIds)).map((part) => part.name), ...input.places.filter((place) => place.mustSee && reachable(place)).map((place) => place.id)];
   return {
     home,
     covered,
@@ -689,6 +727,32 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
       return { baseId: b.id, reason: `Sleeping here too would ${gain}, but the extra move costs about ${hours(cost)} of packing up, checking in and travelling, which is not worth it for this trip.` };
     });
 
+  /* A route: which of its parts the chosen stays sleep along, and which the nights or the hotel changes allowed could not reach. */
+  const routeParts = input.route ? (input.mustCover ?? []).filter((part) => part.anchorId) : [];
+  const chosenBaseIds = [...keptIds];
+  const route = input.route
+    ? {
+        shape: input.route,
+        parts: routeParts.map((part) => part.name),
+        covered: routeParts.filter((part) => partCovered(model, part, chosenBaseIds)).map((part) => part.name),
+        uncovered: routeParts.filter((part) => !partCovered(model, part, chosenBaseIds)).map((part) => part.name),
+      }
+    : null;
+  const routeNote = route && route.uncovered.length > 0
+    ? ` ${capped ? 'One place to sleep' : maxMoves < input.bases.length - 1 && model.nights >= input.bases.length ? 'The hotel changes you allow' : `${model.nights} night${model.nights === 1 ? '' : 's'}`} cannot follow the whole route: ${route.uncovered.join(', ')} ${route.uncovered.length === 1 ? 'is' : 'are'} beyond a day's reach of where you stay.`
+    : '';
+  /* What the cheapest structure that does not follow the route would have left beyond reach, so the sentence can say why these stays. */
+  const ruledOutRoute = route && ruledOut ? routeParts.filter((part) => !partCovered(model, part, ruledOut.evaluation.option.stays.map((s) => s.baseId))).map((part) => part.name) : [];
+  const routeLead =
+    route && chosenOption.moves > 0 && route.uncovered.length === 0
+      ? `${new Set(chosenOption.stays.map((s) => s.baseName)).size} bases along the route, ${[...new Set(chosenOption.stays.map((s) => s.baseName))].join(', ')}${
+          ruledOut && ruledOutRoute.length > 0
+            ? `: staying only at ${[...new Set(ruledOut.evaluation.option.stays.map((s) => nameOf.get(s.baseId) ?? s.baseId))].join(' and ')} would leave ${ruledOutRoute.join(', ')} beyond a day's reach`
+            : ''
+        }; the ${chosenOption.moves} move${chosenOption.moves === 1 ? '' : 's'} cost about ${hours(chosenOption.transferMinutes + chosenOption.moveOverheadMinutes)} of travelling, packing up and checking in${route.shape === 'loop' ? ', the way back to where the route began included' : ''}.`
+      : null;
+  const ruledOutNote = ruledOut && !routeLead ? (route ? ' It takes these stays to follow the route.' : ' It takes these stays to reach the places you named.') : '';
+
   return {
     stays: chosen.evaluation.option.stays.map((s) => ({ ...s })),
     splitStay: chosen.splitStay,
@@ -703,7 +767,8 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
       maxMovesAllowed: maxMoves,
       basis,
       marginMinutes: margin,
-      sentence: `${sentenceFor(input, model, chosenOption, alternatives, capped)}${ruledOut ? ' It takes these stays to reach the places you named.' : ''}`,
+      sentence: routeLead ?? `${sentenceFor(input, model, chosenOption, alternatives, capped)}${ruledOutNote}${routeNote}`,
+      ...(route ? { route } : {}),
     },
   };
 }

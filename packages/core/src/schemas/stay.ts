@@ -53,5 +53,19 @@ export const stayDecisionSchema = z.object({
   marginMinutes: minutes,
   /** One sentence a screen can show. */
   sentence: z.string().min(1),
+  /**
+   * A route-shaped trip (a ring road, a road trip, "A to B"): the proposed
+   * bases along the route, which of them the chosen stays sleep within a
+   * day's reach of, and which the nights or the hotel changes allowed could
+   * not. Absent on a trip that is not a route.
+   */
+  route: z
+    .object({
+      shape: z.enum(['loop', 'linear', 'touring']),
+      parts: z.array(z.string().min(1)).default([]),
+      covered: z.array(z.string().min(1)).default([]),
+      uncovered: z.array(z.string().min(1)).default([]),
+    })
+    .optional(),
 });
 export type StayDecision = z.infer<typeof stayDecisionSchema>;
