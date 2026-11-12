@@ -1,3 +1,4 @@
+import { imageCropPolicy } from '@sidequest/core';
 import {
   PACKING_CATEGORY_LABELS,
   TRANSPORT_MODE_LABELS,
@@ -161,7 +162,10 @@ function photoFor(placeId: string | undefined, name: string, images: GuideInput[
   if (!placeId) return undefined;
   const image = images[placeId];
   if (!image || image.subjectConfidence === 'weak') return undefined;
-  return { src: image.thumbnailUrl, alt: name, credit: image.attributionText, crop: image.useTier === 'modifiable' };
+  /* Licence-aware (`imageCropPolicy`): a share-alike crop prints its conditions in the credit itself — paper has no links to follow. */
+  const policy = imageCropPolicy(image.licenceId);
+  const notice = policy.crop === 'with_notice' && policy.notice ? ` · ${policy.notice.text}${policy.notice.licenceUrl ? ` (${policy.notice.licenceUrl.replace(/^https?:\/\//, '')})` : ''}` : '';
+  return { src: image.thumbnailUrl, alt: name, credit: `${image.attributionText}${notice}`, crop: policy.crop !== 'never' };
 }
 
 type Precision = 'fixed' | 'measured' | 'estimated' | 'band';

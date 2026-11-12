@@ -62,12 +62,13 @@ describe('photo or plate', () => {
     expect(html).toMatch(/object-position:50% 0%/);
   });
 
-  it('shows a share-alike file whole, never cropped, with a standard-width srcset and the one-line credit', () => {
+  it('crops a share-alike file only with its conditions met: the change said and the crop offered under the same licence', () => {
     const html = renderToStaticMarkup(createElement(MediaImage, { media: MEDIA, context: 'card', place: PLACE }));
     expect(MEDIA.shareAlike).toBe(true);
-    expect(html).toContain('object-contain');
-    expect(html).not.toContain('object-position');
-    expect(html).toContain('data-share-alike="true"');
+    expect(html).toContain('object-cover');
+    expect(html).toContain('data-crop="with_notice"');
+    expect(html).toContain('Cropped; this crop is shared under CC BY-SA 4.0');
+    expect(html).toContain('href="https://creativecommons.org/licenses/by-sa/4.0/"');
     expect(html).toContain('330px-Valley_at_dawn.jpg 330w');
     expect(html).toContain('aspect-ratio:3 / 2');
     expect(html).toContain('A. Photographer, CC BY-SA 4.0');

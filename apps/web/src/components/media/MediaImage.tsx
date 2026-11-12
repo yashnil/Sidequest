@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { imageCropPolicy, type ImageCropPolicy } from '@sidequest/core';
 import { MEDIA_CONTEXT_SPECS, objectPositionFor, type MediaContext } from '@/lib/media/frame';
 import type { SelectedMedia } from '@/lib/media/select';
 import { ImageCredit } from '../DestinationImage';
@@ -95,6 +96,7 @@ export function MediaImage({
   const presentation = mediaPresentation(media, context);
   const spec = MEDIA_CONTEXT_SPECS[context];
   const photo = presentation.kind === 'photo' && presentation.media.image.thumbnailUrl !== failed ? presentation.media : null;
+  const policy = photo ? imageCropPolicy(photo.image.licenceId) : { crop: 'never' as const };
 
   return (
     <figure className={cx('m-0 min-w-0', className)} data-testid="media-image" data-context={context} data-media={photo ? 'photo' : 'plate'}>
@@ -126,20 +128,41 @@ export function MediaImage({
               if (element?.complete && element.naturalWidth === 0) setFailed(photo.image.thumbnailUrl);
             }}
             /*
-             * A share-alike file is shown whole, at its own aspect, on the plate:
-             * cropping it — even as a CSS window — is treated as an adaptation,
-             * the rule `DestinationImage` already keeps (and that print keeps).
-             * Only a file whose licence allows modification is cropped on its
-             * focal point to fill the frame.
+             * Licence-aware (`imageCropPolicy`): public domain and CC BY crop
+             * freely; CC BY-SA crops on condition that the change is said and
+             * the crop is offered under the same licence, which the credit line
+             * below does. Nothing is ever drawn over the photograph.
              */
-            className={cx('absolute inset-0 h-full w-full', photo.shareAlike ? 'object-contain' : 'object-cover')}
-            data-share-alike={photo.shareAlike ? 'true' : undefined}
-            style={photo.shareAlike ? undefined : { objectPosition: objectPositionFor(photo.focal, photo.original.width / photo.original.height, spec.aspect) }}
+            className={cx('absolute inset-0 h-full w-full', policy.crop === 'never' ? 'object-contain' : 'object-cover')}
+            data-crop={policy.crop}
+            style={policy.crop === 'never' ? undefined : { objectPosition: objectPositionFor(photo.focal, photo.original.width / photo.original.height, spec.aspect) }}
           />
         ) : null}
       </div>
-      {presentation.kind === 'photo' && credit === 'below' ? <ImageCredit image={presentation.media.image} as="figcaption" /> : null}
+      {presentation.kind === 'photo' && credit === 'below' ? (
+        <figcaption>
+          <ImageCredit image={presentation.media.image} as="span" />
+          <CropNotice policy={imageCropPolicy(presentation.media.image.licenceId)} />
+        </figcaption>
+      ) : null}
     </figure>
+  );
+}
+
+/** The share-alike conditions of a crop, said beside the credit: the change, and the licence the crop is offered under. */
+export function CropNotice({ policy, className }: { policy: ImageCropPolicy; className?: string }) {
+  if (policy.crop !== 'with_notice' || !policy.notice) return null;
+  return (
+    <span data-testid="crop-notice" className={cx('type-meta text-ink-faint', className)}>
+      {' · '}
+      {policy.notice.licenceUrl ? (
+        <a href={policy.notice.licenceUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-ink-muted hover:underline">
+          {policy.notice.text}
+        </a>
+      ) : (
+        policy.notice.text
+      )}
+    </span>
   );
 }
 

@@ -33,7 +33,7 @@ export interface GuidePhoto {
   alt: string;
   /** The credit line, in the words the licence requires. Always printed. */
   credit: string;
-  /** Only a licence that allows modification may be cropped to fill a frame. */
+  /** Whether the frame may crop it (`imageCropPolicy`); a share-alike crop carries its notice in `credit`. */
   crop: boolean;
 }
 

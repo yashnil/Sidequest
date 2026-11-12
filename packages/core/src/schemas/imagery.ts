@@ -207,6 +207,47 @@ export const IMAGE_LICENCES: Record<ImageLicenceId, ImageLicenceTerms> = {
   },
 };
 
+/**
+ * MAY THIS FILE BE CROPPED, AND ON WHAT TERMS (2026-11, the owner's ruling).
+ *
+ * `useTier` says what a licence permits with no further conditions. The
+ * owner has ruled that share-alike files may be cropped where the licence
+ * permits it on conditions, provided those conditions are met — and CC BY-SA
+ * does permit adaptation, on three conditions (CC BY-SA 4.0 §3(a)–(b); the
+ * same obligations in 2.0 and 3.0, §4):
+ *
+ * 1. the original attribution is kept (creator, source, licence) — already
+ *    on every credit line;
+ * 2. the change is indicated — the credit says the photograph was cropped;
+ * 3. the adaptation is shared under the same licence (or, for 2.0/3.0, a later
+ *    version of it): the cropped view is offered under the file's own licence,
+ *    linked, and nothing is added that would restrict it (no DRM, no extra
+ *    terms — a CSS window over the unmodified file adds none).
+ *
+ * So the policy is three-valued: `free` (no conditions), `with_notice` (crop,
+ * and carry `notice` beside the credit), `never` (an unrecognised licence —
+ * the allow-list already refuses those, this is the belt to its braces).
+ * Compositing text or a scrim onto a share-alike photograph is a further
+ * adaptation this policy does not cover: callers draw nothing over it.
+ */
+export interface ImageCropPolicy {
+  crop: 'free' | 'with_notice' | 'never';
+  /** For `with_notice`: the words to show beside the credit, and the licence the cropped view is offered under. */
+  notice?: { text: string; licenceName: string; licenceUrl?: string };
+}
+
+export function imageCropPolicy(licenceId: string | null | undefined): ImageCropPolicy {
+  const terms = licenceId && licenceId in IMAGE_LICENCES ? IMAGE_LICENCES[licenceId as ImageLicenceId] : null;
+  if (!terms) return { crop: 'never' };
+  if (terms.useTier === 'modifiable') return { crop: 'free' };
+  if (terms.shareAlike) {
+    /* "CC-BY-SA-4.0" → "CC BY-SA 4.0" */
+    const short = terms.id.replace(/^CC-/, 'CC ').replace(/-(\d)/, ' $1');
+    return { crop: 'with_notice', notice: { text: `Cropped; this crop is shared under ${short}`, licenceName: terms.name, ...(terms.url ? { licenceUrl: terms.url } : {}) } };
+  }
+  return { crop: 'never' };
+}
+
 // ---------------------------------------------------------------------------
 // Subjects
 // ---------------------------------------------------------------------------
