@@ -225,8 +225,8 @@ export interface ScanDiagnostics {
   recovery: {
     attempted: boolean;
     reasons: string[];
-    before: { have: number; needed: number; kinds: number };
-    after?: { have: number; needed: number; kinds: number };
+    before: { have: number; needed: number; kinds: number; inReach?: number };
+    after?: { have: number; needed: number; kinds: number; inReach?: number };
     /** `added` | `none_new` | `model_unavailable` | `allowance_used` | `model_failed` | `invalid_response`. */
     outcome?: string;
     added?: number;

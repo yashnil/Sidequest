@@ -6,7 +6,7 @@ import { validateCompiledRegion } from '../region/source';
 import { unavailableWeatherDataset } from '../weather/snapshot';
 import { assembleScanRegion, chooseScanBases, estimatedScanMatrix, planScanPoints, type ResolvedPosition } from './assemble';
 import { normalizeScanProposal, type ScanProposal } from './proposal';
-import { scanSufficiency } from './sufficiency';
+import { candidatesInReach, scanSufficiency } from './sufficiency';
 import { edgeTransferCost, orderBasesForEdges, type TripEdges } from './assemble';
 
 /*
@@ -271,6 +271,52 @@ describe('discovery scan — car-free geography', () => {
   });
 });
 
+describe('discovery scan — sparse-itinerary pass (live Tanzania scan, 2026-11-10)', () => {
+  it('a game drive answered by its area, or by a camp inside it, stays on the board; one answered only by a town does not', () => {
+    const normalized = normalizeScanProposal({
+      bases: [{ name: 'Northport', locality: 'Northport', nightsHint: 3, why: 'x' }],
+      candidates: [
+        { name: 'Crater game drive', locality: 'Crater', kind: 'wildlife', tier: 'classic', why: 'x' },
+        { name: 'Valley game drive', locality: 'Central Valley', kind: 'wildlife', tier: 'classic', why: 'x' },
+        { name: 'Plains game drive', locality: 'Plains District', kind: 'wildlife', tier: 'classic', why: 'x' },
+        { name: 'Old Museum', locality: 'Northport', kind: 'museum', tier: 'classic', why: 'x' },
+      ],
+    });
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const [crater, valley, plains, museum] = normalized.proposal.candidates;
+    const positions = new Map<string, ResolvedPosition | null>([
+      [normalized.proposal.bases[0]!.key, { coordinates: NORTH, method: 'geocoder', provider: 't', approximate: false }],
+      [crater!.key, { coordinates: SOUTH, method: 'geocoder', provider: 't', approximate: true, answerScale: 'area' }],
+      [valley!.key, { coordinates: SOUTH, method: 'locality', provider: 't', approximate: true, answerScale: 'point' }],
+      [plains!.key, { coordinates: SOUTH, method: 'geocoder', provider: 't', approximate: true, answerScale: 'settlement' }],
+      [museum!.key, { coordinates: NORTH, method: 'locality', provider: 't', approximate: true, answerScale: 'area' }],
+    ]);
+    const plan = planScanPoints(normalized.proposal, positions);
+    expect(plan.placeIdByKey.has(crater!.key)).toBe(true);
+    expect(plan.placeIdByKey.has(valley!.key)).toBe(true);
+    expect(plan.placeIdByKey.has(plains!.key)).toBe(false);
+    /* A museum is a pin: an area answer is still not where it is. */
+    expect(plan.placeIdByKey.has(museum!.key)).toBe(false);
+  });
+
+  it('a single base says the others could not be placed, rather than that the scan proposed only one', () => {
+    const normalized = normalizeScanProposal(rawProposal());
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const proposal = normalized.proposal;
+    const positions = positionsFor(proposal);
+    for (const b of proposal.bases) if (b.name !== 'Northport') positions.set(b.key, null);
+    const plan = planScanPoints(proposal, positions);
+    const assembly = assembleScanRegion({
+      regionId: 'scan-test-lost-bases', destinationName: 'The Test Coast', entityType: 'natural_region', breadth: 'region', center: { lat: 43.5, lng: 8.2 }, timeZone: 'Europe/Rome',
+      dates: DATES, carAvailable: true, maxBaseChanges: 2, proposal, positions, plan, matrix: estimatedScanMatrix(plan.points, 'car'), createdAt: '2026-08-01T00:00:00.000Z', providers: { proposal: 'test', placement: ['test'], routing: 'estimate' },
+    });
+    const sentence = assembly.region.basePortfolio!.decision!.sentence;
+    expect(sentence).toContain('Southbay and Midvale');
+    expect(sentence).toContain('could not be placed on the map');
+    expect(sentence).not.toContain('only place to sleep the scan proposed');
+  });
+});
+
 describe('base names', () => {
   it('a trailing bracketed aside is a note about the route, not part of the place name', () => {
     const raw = rawProposal() as { bases: { name: string }[] };
@@ -301,6 +347,28 @@ describe('scan sufficiency', () => {
     const varied = scanSufficiency({ days: 3, stopsPerDay: 2, requested: 18, placed: ['museum', 'temple', 'market', 'park', 'viewpoint', 'museum'].map((k) => place(k)), priorities: ['hiking'] as never[] });
     expect(varied.sufficient).toBe(true);
     expect(varied.missingInterests).toEqual(['hiking']);
+  });
+
+  /* Live Tanzania scan (2026-11-10): 29 placed against 28 needed, but three of four bases lost and most of the 29 three hours from the one left. */
+  it('enough places by count is still thin when too few are within a day of a placed base', () => {
+    const kinds = ['museum', 'temple', 'market', 'park', 'viewpoint', 'wildlife'];
+    const placed = Array.from({ length: 29 }, (_, i) => place(kinds[i % kinds.length]!));
+    const far = scanSufficiency({ days: 9, stopsPerDay: 3, requested: 28, placed, priorities: [], inReach: 6 });
+    expect(far.sufficient).toBe(false);
+    expect(far.reasons).toEqual(['too_little_in_reach']);
+    expect(far.inReach).toBe(6);
+    expect(scanSufficiency({ days: 9, stopsPerDay: 3, requested: 28, placed, priorities: [], inReach: 26 }).sufficient).toBe(true);
+    /* Not judged: the old behaviour. */
+    expect(scanSufficiency({ days: 9, stopsPerDay: 3, requested: 28, placed, priorities: [] }).sufficient).toBe(true);
+  });
+
+  it('counts places within half a day of travel of some base, by the trip mode', () => {
+    const arusha = { lat: -3.3697, lng: 36.688 };
+    const market = { lat: -3.3725, lng: 36.6866 };
+    const crater = { lat: -3.1618, lng: 35.5877 };
+    expect(candidatesInReach({ bases: [arusha], places: [market, crater], carAvailable: false, maxDailyTravelMinutes: 150 })).toBe(1);
+    expect(candidatesInReach({ bases: [arusha, { lat: -3.3387, lng: 35.6733 }], places: [market, crater], carAvailable: false, maxDailyTravelMinutes: 150 })).toBe(2);
+    expect(candidatesInReach({ bases: [], places: [market], carAvailable: true, maxDailyTravelMinutes: 150 })).toBe(0);
   });
 });
 

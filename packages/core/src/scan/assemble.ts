@@ -66,6 +66,15 @@ export interface ResolvedPosition {
   accessPoint?: { kind: AccessKind; provider: string; query: string; name?: string; footprint?: { lat: number; lng: number } };
   /** An area-level candidate whose access point was searched for and not verified. */
   accessPointUnverified?: boolean;
+  /**
+   * What kind of thing answered: a settlement (a town, a village, an
+   * administrative district), an area (a park, reserve, conservation area or
+   * natural feature) or anything else at point scale (a camp, a building, a
+   * peak). Absent on positions recorded before it existed. Read only to decide
+   * whether an approximate answer is good enough for an experience that *is* an
+   * area (`AREA_EXPERIENCE`).
+   */
+  answerScale?: 'settlement' | 'area' | 'point';
 }
 
 export interface ScanPoint {
@@ -143,7 +152,7 @@ export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<st
       unplaced.push({ key: candidate.key, name: candidate.name, reason: 'Could not be placed on the map.', code: 'not_placed' });
       continue;
     }
-    if (position.approximate && !AREA_LIKE.has(candidate.kind)) {
+    if (position.approximate && !AREA_LIKE.has(candidate.kind) && !areaExperienceAnswered(candidate.kind, position)) {
       unplaced.push({
         key: candidate.key,
         name: candidate.name,
@@ -172,6 +181,21 @@ function sharesLeadingName(a: string, b: string): boolean {
 }
 
 const AREA_LIKE = new Set(['neighbourhood', 'small_town', 'scenic_drive', 'market', 'street_food', 'nightlife', 'island', 'national_park']);
+
+/**
+ * Experiences that happen across an area rather than at a pin: a game drive
+ * in a crater or a park sector, a night of stargazing out on the plains. A
+ * provider that answered with the area itself — or with something inside it
+ * that is not a town — has placed such an experience as precisely as it can be
+ * placed; demanding a trailhead for a game drive is how a live Tanzania scan
+ * lost "Seronera Valley game drive". A *settlement* answer is still refused:
+ * the town a game drive starts from is not where the animals are.
+ */
+const AREA_EXPERIENCE = new Set(['wildlife', 'stargazing']);
+
+export function areaExperienceAnswered(kind: string, position: Pick<ResolvedPosition, 'answerScale'>): boolean {
+  return AREA_EXPERIENCE.has(kind) && (position.answerScale === 'area' || position.answerScale === 'point');
+}
 
 /**
  * A matrix from coordinates alone, for when no router could answer. Labelled
@@ -574,6 +598,16 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     ...(input.route ? { route: input.route.kind } : {}),
     ...(input.mustSeeKeys && input.mustSeeKeys.length > 0 ? { mustSee: new Set(input.mustSeeKeys.map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined)) } : {}),
   });
+  /*
+   * "The only place to sleep the scan proposed" is false when the scan
+   * proposed four and the map placed one. The stay decision is computed over
+   * the bases that were placed; its sentence says so when others were lost.
+   */
+  const lostBases = plan.unplaced.filter((u) => u.code === 'not_placed' && proposal.bases.some((b) => b.key === u.key)).map((u) => u.name);
+  if (baseEntries.length === 1 && lostBases.length > 0) {
+    const list = lostBases.length === 1 ? lostBases[0]! : `${lostBases.slice(0, -1).join(', ')} and ${lostBases[lostBases.length - 1]!}`;
+    choice.decision = { ...choice.decision, sentence: `One base, ${baseEntries[0]!.proposal.name}: the scan also proposed ${list}, but ${lostBases.length === 1 ? 'it' : 'they'} could not be placed on the map, so every day is planned from here.` };
+  }
   const keptIds = choice.kept.map((k) => k.id);
   const primaryBaseId = keptIds[0]!;
   const positionOf = (key: string) => positions.get(key)!;

@@ -5,6 +5,7 @@ import type { RegionContext } from '../region';
 import type { ScanProposalExtras } from '../db/scan-repository';
 import { matchNamedMustDos } from '../discovery-scan/match';
 import { archetypeFor, planStructure, transportFor, type DropReason, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerDayWindow, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
+import { classifyDayDensity, densityNote, discoveryLossesOf, type TripDensity } from './day-density';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type AnchorCategory, type DraftAnchor, type DraftDay, type TripDraft } from './trip-draft';
 
 /**
@@ -32,6 +33,10 @@ export interface PlannerComposition {
   stay?: StayDecision;
   /** One sentence naming a base this scan proposed that would reach the traveller's picks, when one exists. */
   baseSuggestion?: string;
+  /** Why each light day is light — pace, one long experience, nothing in reach, or a discovery gap (`day-density.ts`). */
+  density?: TripDensity;
+  /** The sentences those classes put on their days, in the shape of `plan.dayNotes`. */
+  densityNotes?: { dayNumber: number; code: string; note: string }[];
 }
 
 const CATEGORY_FOR_PLACE: Record<string, AnchorCategory> = {
@@ -265,7 +270,18 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     limit: plannerInput.maxDailyTravelMinutes,
     mayMove: profile.interview.baseMoveTolerance !== 'stay_put' && (profile.interview.baseMoveTolerance !== 'move_once' || bases.length < 2),
   });
-  return { draft, plan, provenance: Object.fromEntries(provenanceOf), poolSize: pool.length, plannerInput, ...(stay ? { stay } : {}), ...(baseSuggestion ? { baseSuggestion } : {}) };
+  const density = classifyDayDensity({ plan, planner: plannerInput, freeTimeHeavy: profile.freeTime === 'lots', losses: discoveryLossesOf(input.extras?.diagnostics) });
+  const baseNameOf = new Map(bases.map((b) => [b.id, b.name] as const));
+  const firstGap = density.days.find((d) => d.class === 'discovery_gap')?.dayNumber;
+  const densityNotes = density.days.flatMap((d) => {
+    const day = plan.days.find((p) => p.dayNumber === d.dayNumber)!;
+    /* The full sentence once; a later light day points back to it rather than repeating it. */
+    const note = d.class === 'discovery_gap' && firstGap !== undefined && d.dayNumber !== firstGap
+      ? `A light day for the same reason as day ${firstGap}: Sidequest could not place everything it found for this trip. Nothing for you to do.`
+      : densityNote(d, density, { baseName: baseNameOf.get(day.baseId) ?? input.destinationName, maxDailyTravelMinutes: plannerInput.maxDailyTravelMinutes, isEmpty: day.stops.length === 0 });
+    return note ? [{ dayNumber: d.dayNumber, code: `density_${d.class}`, note }] : [];
+  });
+  return { draft, plan, provenance: Object.fromEntries(provenanceOf), poolSize: pool.length, plannerInput, ...(stay ? { stay } : {}), ...(baseSuggestion ? { baseSuggestion } : {}), density, ...(densityNotes.length > 0 ? { densityNotes } : {}) };
 }
 
 /**
@@ -486,6 +502,7 @@ export function planningRecordOf(composed: PlannerComposition): {
   stay?: StayDecision;
   dayRepairs: { dayNumber: number; code: string; note: string }[];
   dayNotes: { dayNumber: number; code: string; note: string }[];
+  density?: TripDensity;
 } {
   const scheduled = { traveller: 0, sidequest: 0, maybe: 0, filler: 0 };
   for (const day of composed.plan.days) {
@@ -506,7 +523,9 @@ export function planningRecordOf(composed: PlannerComposition): {
     ...(composed.stay ? { stay: composed.stay } : {}),
     ...(composed.baseSuggestion ? { baseSuggestion: composed.baseSuggestion } : {}),
     dayRepairs: composed.plan.repairs.map((r) => ({ ...r })),
-    dayNotes: composed.plan.dayNotes.map((n) => ({ ...n })),
+    /* A discovery gap leads its day — on an empty day the first note is the one the day shows. */
+    dayNotes: [...(composed.densityNotes ?? []).filter((n) => n.code === 'density_discovery_gap'), ...composed.plan.dayNotes.map((n) => ({ ...n })), ...(composed.densityNotes ?? []).filter((n) => n.code !== 'density_discovery_gap')],
+    ...(composed.density ? { density: composed.density } : {}),
   };
 }
 
