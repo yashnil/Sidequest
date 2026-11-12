@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LADDER_LIMITS, describeUnplaced, placementBlocksReady, splitAlternatives, stripTrailingDescriptor, placementQueries, placementReportSchema, routeCriticalRate, stripHedgeWords, unplacedCritical } from './critical';
+import { LADDER_LIMITS, describeUnplaced, placeNameForms, placementBlocksReady, splitAlternatives, stripParenthetical, stripTrailingDescriptor, placementQueries, placementReportSchema, routeCriticalRate, stripHedgeWords, unplacedCritical } from './critical';
 
 /**
  * V10 §5 — the three bases the founder's Iceland trip failed to place, asked the
@@ -151,5 +151,20 @@ describe('the placement report', () => {
       expect(sentence).toContain(placement.name);
     }
     expect(describeUnplaced(report.placements[2]!)).toContain('will not guess');
+  });
+});
+
+describe('a parenthetical gloss is a note, not part of the name (live Tanzania scan, 2026-11-10)', () => {
+  it('reads the name outside the brackets first, then the place named inside them', () => {
+    expect(stripParenthetical('Karatu (Ngorongoro gateway)')).toEqual({ outer: 'Karatu', inner: ['Ngorongoro gateway'] });
+    expect(stripParenthetical('Serengeti National Park (Seronera)')).toEqual({ outer: 'Serengeti National Park', inner: ['Seronera'] });
+    expect(stripParenthetical('Vík')).toBeNull();
+  });
+
+  it('every bracketed or slashed base the scan lost has a form the geocoder knows, tried only after the name as written', () => {
+    expect(placeNameForms('Karatu (Ngorongoro gateway)').slice(0, 2)).toEqual(['Karatu (Ngorongoro gateway)', 'Karatu']);
+    expect(placeNameForms('Serengeti National Park (Seronera)')).toEqual(['Serengeti National Park (Seronera)', 'Serengeti National Park', 'Seronera', 'Serengeti']);
+    expect(placeNameForms('Mto wa Mbu / Lake Manyara')).toEqual(['Mto wa Mbu / Lake Manyara', 'Mto wa Mbu', 'Lake Manyara']);
+    expect(placementQueries({ name: 'Karatu (Ngorongoro gateway)', countryName: 'Tanzania' })).toContain('Karatu, Tanzania');
   });
 });

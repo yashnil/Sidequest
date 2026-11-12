@@ -1,0 +1,1150 @@
+{
+ "about": "Live trip 'Arusha and the Serengeti, Tanzania', 2027-07-05..13, recorded 2026-11-10 in rc-live.db (trip 378faf11). Trimmed: names, localities, kinds and recorded positions only. Lost candidates' kinds were not stored and are assumed from their names (kindAssumed). Geocoder rows under `geocoder` were recorded from public Nominatim on 2026-11-11 for the queries the current placement sends.",
+ "trip": {
+  "startDate": "2027-07-05",
+  "endDate": "2027-07-13",
+  "days": 9,
+  "nights": 8,
+  "pace": "balanced",
+  "freeTime": "balanced",
+  "activitySlotsPerDay": 3,
+  "maxDailyTravelMinutes": 150,
+  "carAvailable": false,
+  "countryCode": "TZ",
+  "countryName": "Tanzania",
+  "center": {
+   "lat": -3.9522193333333333,
+   "lng": 35.74832683333333
+  },
+  "reachKm": 1600,
+  "frequencyCaps": {
+   "hiking": 1,
+   "easy_nature_walks": 1,
+   "scenic_viewpoints": 9,
+   "lakes_and_rivers": 1,
+   "scenic_drives": 6,
+   "wildlife": 1,
+   "geology_and_geothermal": 1,
+   "hot_springs": 1,
+   "history_and_culture": 6,
+   "food_and_towns": 1,
+   "photography_golden_hour": 1,
+   "stargazing": 1,
+   "museums_and_galleries": 1,
+   "architecture_and_landmarks": 1,
+   "neighbourhoods_and_local_life": 1,
+   "markets_and_street_food": 1,
+   "beaches_and_swimming": 1
+  },
+  "maxPhysicalIntensity": "strenuous",
+  "moveTolerance": "move_freely",
+  "windows": [
+   {
+    "date": "2027-07-05",
+    "startMinute": 960,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-06",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-07",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-08",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-09",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-10",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-11",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-12",
+    "startMinute": 540,
+    "endMinute": 1140
+   },
+   {
+    "date": "2027-07-13",
+    "startMinute": 540,
+    "endMinute": 570
+   }
+  ]
+ },
+ "recordedStages": {
+  "proposed": 38,
+  "proposedBases": 4,
+  "placedBases": 1,
+  "placedCandidates": 29,
+  "boardPlaces": 29,
+  "autoPicked": 3,
+  "scheduled": 7,
+  "placementUnplaced": [
+   {
+    "name": "Karatu lodges",
+    "isBase": true,
+    "outcome": "no_results"
+   },
+   {
+    "name": "Central Serengeti camps",
+    "isBase": true,
+    "outcome": "no_results"
+   },
+   {
+    "name": "Lake Manyara area lodge",
+    "isBase": true,
+    "outcome": "no_results"
+   },
+   {
+    "name": "Moru Kopjes & Maasai rock paintings",
+    "isBase": false,
+    "outcome": "partial_identity"
+   },
+   {
+    "name": "Meserani Snake Park & Maasai museum",
+    "isBase": false,
+    "outcome": "partial_identity"
+   },
+   {
+    "name": "Shanga social enterprise workshop",
+    "isBase": false,
+    "outcome": "no_results"
+   }
+  ],
+  "assembly": [
+   {
+    "name": "Olmoti Crater walk",
+    "code": "approximate_only"
+   },
+   {
+    "name": "Seronera Valley game drive",
+    "code": "approximate_only"
+   },
+   {
+    "name": "Serengeti sunset viewpoint, Simba Kopjes",
+    "code": "approximate_only"
+   },
+   {
+    "name": "Momella Lakes viewpoint",
+    "code": "approximate_only"
+   },
+   {
+    "name": "Endoro Waterfall walk",
+    "code": "approximate_only"
+   },
+   {
+    "name": "Serengeti stargazing night drive",
+    "code": "approximate_only"
+   }
+  ],
+  "recovery": {
+   "attempted": false,
+   "reasons": [],
+   "before": {
+    "have": 29,
+    "needed": 28,
+    "kinds": 11
+   }
+  }
+ },
+ "bases": [
+  {
+   "name": "Arusha town lodges",
+   "locality": "Arusha",
+   "recorded": {
+    "lat": -3.3696827,
+    "lng": 36.6880794
+   }
+  },
+  {
+   "name": "Karatu lodges",
+   "locality": "Karatu (Ngorongoro gateway)",
+   "recorded": null,
+   "recordedAttempts": [
+    "Karatu lodges, Karatu (Ngorongoro gateway), Tanzania -> no_results",
+    "Karatu (Ngorongoro gateway), Tanzania -> no_results"
+   ]
+  },
+  {
+   "name": "Central Serengeti camps",
+   "locality": "Serengeti National Park (Seronera)",
+   "recorded": null,
+   "recordedAttempts": [
+    "Central Serengeti camps, Serengeti National Park (Seronera), Tanzania -> no_results",
+    "Serengeti National Park (Seronera), Tanzania -> no_results"
+   ]
+  },
+  {
+   "name": "Lake Manyara area lodge",
+   "locality": "Mto wa Mbu / Lake Manyara",
+   "recorded": null,
+   "recordedAttempts": [
+    "Lake Manyara area lodge, Mto wa Mbu / Lake Manyara, Tanzania -> no_results",
+    "Mto wa Mbu / Lake Manyara, Tanzania -> no_results"
+   ]
+  }
+ ],
+ "candidates": [
+  {
+   "name": "Ngorongoro Crater floor game drive",
+   "locality": "Ngorongoro Conservation Area",
+   "kind": "wildlife",
+   "tier": "classic",
+   "durationMinutes": 360,
+   "intensity": "easy",
+   "interests": [
+    "wildlife",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.1617522,
+    "lng": 35.5876697
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Ngorongoro Crater rim viewpoint",
+   "locality": "Ngorongoro Conservation Area",
+   "kind": "viewpoint",
+   "tier": "classic",
+   "durationMinutes": 30,
+   "intensity": "none",
+   "interests": [
+    "scenic_viewpoints",
+    "photography_golden_hour"
+   ],
+   "bestTime": "sunrise",
+   "recorded": {
+    "lat": -3.240128,
+    "lng": 35.49691
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Olduvai Gorge Museum",
+   "locality": "Olduvai Gorge, Ngorongoro",
+   "kind": "museum",
+   "tier": "hidden_gem",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "history_and_culture",
+    "museums_and_galleries"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -2.9963428999999997,
+    "lng": 35.352057599999995
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Shifting Sands",
+   "locality": "Ngorongoro Conservation Area / Serengeti border",
+   "kind": "landmark",
+   "tier": "hidden_gem",
+   "durationMinutes": 30,
+   "intensity": "easy",
+   "interests": [
+    "geology_and_geothermal",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "any",
+   "recorded": {
+    "lat": -2.9453821,
+    "lng": 35.3149348
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Empakaai Crater viewpoint",
+   "locality": "Ngorongoro Highlands",
+   "kind": "viewpoint",
+   "tier": "side_quest",
+   "durationMinutes": 120,
+   "intensity": "moderate",
+   "interests": [
+    "scenic_viewpoints",
+    "hiking"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -2.9125718,
+    "lng": 35.7870823
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Maasai cultural village visit",
+   "locality": "Near Ngorongoro / Karatu",
+   "kind": "cultural_experience",
+   "tier": "classic",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "history_and_culture"
+   ],
+   "bestTime": "afternoon",
+   "recorded": {
+    "lat": -3.4098397,
+    "lng": 37.1092271
+   },
+   "recordedSource": "osm"
+  },
+  {
+   "name": "Gibb's Farm coffee tour",
+   "locality": "Karatu",
+   "kind": "cultural_experience",
+   "tier": "hidden_gem",
+   "durationMinutes": 90,
+   "intensity": "easy",
+   "interests": [
+    "food_and_towns",
+    "history_and_culture"
+   ],
+   "bestTime": "afternoon",
+   "recorded": {
+    "lat": -3.2981479,
+    "lng": 35.6646589
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Lake Eyasi Hadzabe visit",
+   "locality": "Lake Eyasi",
+   "kind": "cultural_experience",
+   "tier": "side_quest",
+   "durationMinutes": 180,
+   "intensity": "moderate",
+   "interests": [
+    "history_and_culture"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.6347587999999997,
+    "lng": 35.0828588
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Hot air balloon safari",
+   "locality": "Central Serengeti",
+   "kind": "guided_activity",
+   "tier": "classic",
+   "durationMinutes": 60,
+   "intensity": "none",
+   "interests": [
+    "scenic_viewpoints",
+    "photography_golden_hour"
+   ],
+   "bestTime": "sunrise",
+   "recorded": {
+    "lat": -3.3815489,
+    "lng": 36.701194799999996
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Retina Hippo Pool",
+   "locality": "Seronera, Serengeti",
+   "kind": "wildlife",
+   "tier": "hidden_gem",
+   "durationMinutes": 40,
+   "intensity": "easy",
+   "interests": [
+    "wildlife"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -2.2934049,
+    "lng": 34.7994079
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Grumeti River crossing points",
+   "locality": "Western Serengeti",
+   "kind": "wildlife",
+   "tier": "side_quest",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "wildlife",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -2.1571781,
+    "lng": 34.218938300000005
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Naabi Hill viewpoint",
+   "locality": "Serengeti entrance, Naabi",
+   "kind": "viewpoint",
+   "tier": "hidden_gem",
+   "durationMinutes": 30,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "any",
+   "recorded": {
+    "lat": -2.8322778,
+    "lng": 34.997811899999995
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Lake Manyara National Park game drive",
+   "locality": "Lake Manyara",
+   "kind": "wildlife",
+   "tier": "classic",
+   "durationMinutes": 180,
+   "intensity": "easy",
+   "interests": [
+    "wildlife",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.6077858999999997,
+    "lng": 35.7575588
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Lake Manyara canoeing",
+   "locality": "Lake Manyara",
+   "kind": "boat_trip",
+   "tier": "hidden_gem",
+   "durationMinutes": 90,
+   "intensity": "easy",
+   "interests": [
+    "lakes_and_rivers",
+    "wildlife"
+   ],
+   "bestTime": "afternoon",
+   "recorded": {
+    "lat": -3.6678146999999997,
+    "lng": 35.7460632
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Mto wa Mbu village walk",
+   "locality": "Mto wa Mbu",
+   "kind": "small_town",
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "neighbourhoods_and_local_life",
+    "food_and_towns",
+    "markets_and_street_food"
+   ],
+   "bestTime": "afternoon",
+   "recorded": {
+    "lat": -3.3735158,
+    "lng": 35.853472599999996
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Mto wa Mbu banana beer and farm tour",
+   "locality": "Mto wa Mbu",
+   "kind": "cultural_experience",
+   "tier": "hidden_gem",
+   "durationMinutes": 90,
+   "intensity": "easy",
+   "interests": [
+    "food_and_towns",
+    "history_and_culture"
+   ],
+   "bestTime": "afternoon",
+   "recorded": {
+    "lat": -3.3802627,
+    "lng": 35.8912009
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Arusha National Park / Mount Meru viewpoint drive",
+   "locality": "Arusha National Park",
+   "kind": "scenic_drive",
+   "tier": "hidden_gem",
+   "durationMinutes": 240,
+   "intensity": "easy",
+   "interests": [
+    "scenic_drives",
+    "scenic_viewpoints",
+    "wildlife"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.2392762999999998,
+    "lng": 36.7626981
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Arusha Cultural Heritage Centre",
+   "locality": "Arusha town",
+   "kind": "museum",
+   "tier": "hidden_gem",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "history_and_culture",
+    "museums_and_galleries"
+   ],
+   "bestTime": "any",
+   "recorded": {
+    "lat": -3.3769058,
+    "lng": 36.6581811
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Arusha Central Market",
+   "locality": "Arusha town",
+   "kind": "market",
+   "tier": "classic",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "markets_and_street_food",
+    "neighbourhoods_and_local_life"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.3725319999999996,
+    "lng": 36.6866213
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Materuni Waterfall",
+   "locality": "Materuni village, near Moshi",
+   "kind": "waterfall",
+   "tier": "side_quest",
+   "durationMinutes": 150,
+   "intensity": "moderate",
+   "interests": [
+    "hiking",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.2740787,
+    "lng": 37.3834917
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Kilimanjaro viewpoint, Marangu foothills",
+   "locality": "Marangu, near Moshi",
+   "kind": "viewpoint",
+   "tier": "side_quest",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.2824668,
+    "lng": 37.5179549
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Ngorongoro Highlands scenic drive",
+   "locality": "Between Karatu and Serengeti",
+   "kind": "scenic_drive",
+   "tier": "classic",
+   "durationMinutes": 180,
+   "intensity": "none",
+   "interests": [
+    "scenic_drives",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "any",
+   "recorded": {
+    "lat": -7.7699391,
+    "lng": 35.6897046
+   },
+   "recordedSource": "osm"
+  },
+  {
+   "name": "Serengeti sunrise game drive",
+   "locality": "Central Serengeti",
+   "kind": "wildlife",
+   "tier": "classic",
+   "durationMinutes": 180,
+   "intensity": "easy",
+   "interests": [
+    "wildlife",
+    "photography_golden_hour"
+   ],
+   "bestTime": "sunrise",
+   "recorded": {
+    "lat": -3.3496139,
+    "lng": 36.6822502
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Olpopongi Maasai Cultural Village",
+   "locality": "West Kilimanjaro",
+   "kind": "cultural_experience",
+   "tier": "side_quest",
+   "durationMinutes": 180,
+   "intensity": "easy",
+   "interests": [
+    "history_and_culture"
+   ],
+   "bestTime": "afternoon",
+   "recorded": {
+    "lat": -2.9784265999999997,
+    "lng": 36.9407473
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Karatu local coffee and vegetable market",
+   "locality": "Karatu town",
+   "kind": "market",
+   "tier": "hidden_gem",
+   "durationMinutes": 45,
+   "intensity": "easy",
+   "interests": [
+    "markets_and_street_food",
+    "neighbourhoods_and_local_life"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -3.3391824999999997,
+    "lng": 35.6688504
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Tloma Falls",
+   "locality": "Karatu",
+   "kind": "waterfall",
+   "tier": "hidden_gem",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "any",
+   "recorded": {
+    "lat": -3.3113630000000005,
+    "lng": 35.671239
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Ngorongoro Serena viewpoint lodge terrace",
+   "locality": "Ngorongoro rim",
+   "kind": "viewpoint",
+   "tier": "hidden_gem",
+   "durationMinutes": 30,
+   "intensity": "none",
+   "interests": [
+    "scenic_viewpoints",
+    "photography_golden_hour"
+   ],
+   "bestTime": "sunset",
+   "recorded": {
+    "lat": -3.2644094,
+    "lng": 35.573867899999996
+   },
+   "recordedSource": "google_places"
+  },
+  {
+   "name": "Gol Kopjes",
+   "locality": "Eastern Serengeti",
+   "kind": "wildlife",
+   "tier": "side_quest",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "wildlife",
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": {
+    "lat": -2.7679875,
+    "lng": 35.0909296
+   },
+   "recordedSource": "osm"
+  },
+  {
+   "name": "Lake Ndutu viewpoint",
+   "locality": "Southern Serengeti / Ndutu",
+   "kind": "viewpoint",
+   "tier": "side_quest",
+   "durationMinutes": 60,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints",
+    "wildlife"
+   ],
+   "bestTime": "any",
+   "recorded": {
+    "lat": -3.0032571,
+    "lng": 34.9970122
+   },
+   "recordedSource": "osm"
+  },
+  {
+   "name": "Olmoti Crater walk",
+   "locality": "Ngorongoro Highlands",
+   "kind": "easy_walk",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "approximate_only"
+  },
+  {
+   "name": "Seronera Valley game drive",
+   "locality": "Central Serengeti",
+   "kind": "wildlife",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "approximate_only"
+  },
+  {
+   "name": "Serengeti sunset viewpoint, Simba Kopjes",
+   "locality": "Central Serengeti",
+   "kind": "viewpoint",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "approximate_only"
+  },
+  {
+   "name": "Momella Lakes viewpoint",
+   "locality": "Arusha National Park",
+   "kind": "viewpoint",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "approximate_only"
+  },
+  {
+   "name": "Endoro Waterfall walk",
+   "locality": "Ngorongoro Highlands near Karatu",
+   "kind": "waterfall",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "approximate_only"
+  },
+  {
+   "name": "Serengeti stargazing night drive",
+   "locality": "Central Serengeti camp",
+   "kind": "stargazing",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "approximate_only"
+  },
+  {
+   "name": "Moru Kopjes & Maasai rock paintings",
+   "locality": "Southern Serengeti",
+   "kind": "historic_site",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "partial_identity"
+  },
+  {
+   "name": "Meserani Snake Park & Maasai museum",
+   "locality": "Near Arusha",
+   "kind": "historic_site",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "partial_identity"
+  },
+  {
+   "name": "Shanga social enterprise workshop",
+   "locality": "Arusha / near Shanga, Usa River",
+   "kind": "cultural_experience",
+   "kindAssumed": true,
+   "tier": "hidden_gem",
+   "durationMinutes": 120,
+   "intensity": "easy",
+   "interests": [
+    "scenic_viewpoints"
+   ],
+   "bestTime": "morning",
+   "recorded": null,
+   "recordedLoss": "no_results"
+  }
+ ],
+ "selections": [
+  {
+   "placeId": "scan-place-arusha-central-market",
+   "status": "included",
+   "source": "auto"
+  },
+  {
+   "placeId": "scan-place-serengeti-sunrise-game-drive",
+   "status": "included",
+   "source": "auto"
+  },
+  {
+   "placeId": "scan-place-hot-air-balloon-safari",
+   "status": "included",
+   "source": "auto"
+  }
+ ],
+ "itineraryDays": [
+  {
+   "dayNumber": 1,
+   "date": "2027-07-05",
+   "theme": "Arrive and settle in",
+   "usableMinutes": 180,
+   "stops": [],
+   "activityMinutes": 0,
+   "travelMinutes": 0,
+   "freeMinutes": 120
+  },
+  {
+   "dayNumber": 2,
+   "date": "2027-07-06",
+   "theme": "A slower day around Arusha town lodges",
+   "usableMinutes": 810,
+   "stops": [
+    "Hot air balloon safari"
+   ],
+   "activityMinutes": 60,
+   "travelMinutes": 50,
+   "freeMinutes": 565
+  },
+  {
+   "dayNumber": 3,
+   "date": "2027-07-07",
+   "theme": "Maasai cultural village visit",
+   "usableMinutes": 600,
+   "stops": [
+    "Maasai cultural village visit"
+   ],
+   "activityMinutes": 60,
+   "travelMinutes": 200,
+   "freeMinutes": 235
+  },
+  {
+   "dayNumber": 4,
+   "date": "2027-07-08",
+   "theme": "A slower day around Arusha town lodges",
+   "usableMinutes": 810,
+   "stops": [
+    "Serengeti sunrise game drive"
+   ],
+   "activityMinutes": 180,
+   "travelMinutes": 50,
+   "freeMinutes": 445
+  },
+  {
+   "dayNumber": 5,
+   "date": "2027-07-09",
+   "theme": "Arusha National Park / Mount Meru viewpoint drive",
+   "usableMinutes": 600,
+   "stops": [
+    "Arusha National Park / Mount Meru viewpoint drive"
+   ],
+   "activityMinutes": 240,
+   "travelMinutes": 120,
+   "freeMinutes": 135
+  },
+  {
+   "dayNumber": 6,
+   "date": "2027-07-10",
+   "theme": "Arusha Central Market",
+   "usableMinutes": 600,
+   "stops": [
+    "Arusha Central Market"
+   ],
+   "activityMinutes": 60,
+   "travelMinutes": 12,
+   "freeMinutes": 423
+  },
+  {
+   "dayNumber": 7,
+   "date": "2027-07-11",
+   "theme": "Olpopongi Maasai Cultural Village",
+   "usableMinutes": 600,
+   "stops": [
+    "Olpopongi Maasai Cultural Village"
+   ],
+   "activityMinutes": 180,
+   "travelMinutes": 210,
+   "freeMinutes": 105
+  },
+  {
+   "dayNumber": 8,
+   "date": "2027-07-12",
+   "theme": "Arusha Cultural Heritage Centre",
+   "usableMinutes": 600,
+   "stops": [
+    "Arusha Cultural Heritage Centre"
+   ],
+   "activityMinutes": 60,
+   "travelMinutes": 60,
+   "freeMinutes": 375
+  },
+  {
+   "dayNumber": 9,
+   "date": "2027-07-13",
+   "theme": "Departure day",
+   "usableMinutes": 30,
+   "stops": [],
+   "activityMinutes": 0,
+   "travelMinutes": 0,
+   "freeMinutes": 30
+  }
+ ],
+ "geocoder": {
+  "Karatu lodges, Karatu (Ngorongoro gateway), Tanzania": [],
+  "Karatu (Ngorongoro gateway), Tanzania": [],
+  "Karatu, Tanzania": [
+   {
+    "lat": "-3.4901971",
+    "lon": "35.5682879",
+    "name": "Karatu",
+    "display_name": "Karatu, Arusha, Northern Zone",
+    "category": "boundary",
+    "type": "administrative",
+    "place_rank": 10,
+    "address": {
+     "country_code": "tz"
+    }
+   },
+   {
+    "lat": "-3.3386568",
+    "lon": "35.6733489",
+    "name": "Karatu",
+    "display_name": "Karatu, Arusha, Northern Zone",
+    "category": "place",
+    "type": "town",
+    "place_rank": 18,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Central Serengeti camps, Serengeti National Park (Seronera), Tanzania": [],
+  "Serengeti National Park (Seronera), Tanzania": [],
+  "Serengeti National Park, Tanzania": [
+   {
+    "lat": "-2.3712909",
+    "lon": "34.6983828",
+    "name": "Serengeti National Park",
+    "display_name": "Serengeti National Park, Lake Zone, 31611",
+    "category": "boundary",
+    "type": "national_park",
+    "place_rank": 25,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Lake Manyara area lodge, Mto wa Mbu / Lake Manyara, Tanzania": [],
+  "Mto wa Mbu / Lake Manyara, Tanzania": [],
+  "Mto wa Mbu, Tanzania": [
+   {
+    "lat": "-3.3767101",
+    "lon": "35.8558004",
+    "name": "Mto wa Mbu",
+    "display_name": "Mto wa Mbu, Monduli, Arusha",
+    "category": "place",
+    "type": "town",
+    "place_rank": 18,
+    "address": {
+     "country_code": "tz"
+    }
+   },
+   {
+    "lat": "-3.3914582",
+    "lon": "35.8460861",
+    "name": "Mto wa Mbu",
+    "display_name": "Mto wa Mbu, Monduli, Arusha",
+    "category": "waterway",
+    "type": "river",
+    "place_rank": 19,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Olmoti Crater, Ngorongoro Highlands, Tanzania": [],
+  "Olmoti Crater, Tanzania": [
+   {
+    "lat": "-3.0115362",
+    "lon": "35.6496824",
+    "name": "Olmoti Crater",
+    "display_name": "Olmoti Crater, Nainokanoka, Ngorongoro",
+    "category": "natural",
+    "type": "caldera",
+    "place_rank": 22,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Seronera Valley, Central Serengeti, Tanzania": [],
+  "Seronera Valley, Tanzania": [],
+  "Central Serengeti, Tanzania": [
+   {
+    "lat": "-2.3292977",
+    "lon": "34.8173247",
+    "name": "Nyikani Camp - Central Serengeti",
+    "display_name": "Nyikani Camp - Central Serengeti, T17, Ikoma",
+    "category": "tourism",
+    "type": "camp_site",
+    "place_rank": 30,
+    "address": {
+     "country_code": "tz"
+    }
+   },
+   {
+    "lat": "-2.4335212",
+    "lon": "34.8890639",
+    "name": "Central Serengeti Luxury Camp",
+    "display_name": "Central Serengeti Luxury Camp, Salinero Serengeti Trail, Ikoma",
+    "category": "tourism",
+    "type": "camp_site",
+    "place_rank": 30,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Serengeti sunset viewpoint, Simba Kopjes, Central Serengeti, Tanzania": [],
+  "Serengeti sunset viewpoint, Simba Kopjes, Tanzania": [],
+  "Momella Lakes, Arusha National Park, Tanzania": [],
+  "Momella Lakes, Tanzania": [],
+  "Arusha National Park, Tanzania": [
+   {
+    "lat": "-3.2627584",
+    "lon": "36.8839218",
+    "name": "Arusha National Park",
+    "display_name": "Arusha National Park, Nkoasenga, Leguruki",
+    "category": "leisure",
+    "type": "nature_reserve",
+    "place_rank": 24,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Endoro Waterfall, Ngorongoro Highlands near Karatu, Tanzania": [],
+  "Endoro Waterfall, Tanzania": [],
+  "Ngorongoro Highlands near Karatu, Tanzania": [],
+  "Serengeti, Central Serengeti camp, Tanzania": [],
+  "Serengeti, Tanzania": [
+   {
+    "lat": "-1.9622630",
+    "lon": "34.7690573",
+    "name": "Serengeti",
+    "display_name": "Serengeti, Mara, Lake Zone",
+    "category": "boundary",
+    "type": "administrative",
+    "place_rank": 10,
+    "address": {
+     "country_code": "tz"
+    }
+   },
+   {
+    "lat": "-2.1919529",
+    "lon": "33.8692372",
+    "name": "Serengeti",
+    "display_name": "Serengeti, Bunda Town, Mara",
+    "category": "place",
+    "type": "village",
+    "place_rank": 19,
+    "address": {
+     "country_code": "tz"
+    }
+   }
+  ],
+  "Moru Kopjes & Maasai rock paintings, Southern Serengeti, Tanzania": [],
+  "Moru Kopjes & Maasai rock paintings, Tanzania": [],
+  "Meserani Snake Park & Maasai museum, Near Arusha, Tanzania": [],
+  "Meserani Snake Park & Maasai museum, Tanzania": [],
+  "Shanga social enterprise workshop, Arusha / near Shanga, Usa River, Tanzania": [],
+  "Shanga social enterprise workshop, Tanzania": []
+ }
+}

@@ -1154,6 +1154,10 @@ export type PlanDiagnostics = z.infer<typeof planDiagnosticsSchema>;
  * "quality score" implies a measurement the planner cannot make, and invites
  * people to optimise a figure instead of reading the actual conflict.
  */
+/** Why a day is as full as it is (`apps/web/src/lib/planning/day-density.ts`). */
+export const DAY_DENSITY_CLASSES = ['full', 'edge_day', 'travel_day', 'episode_day', 'relaxed_by_pace', 'constrained', 'nothing_in_reach', 'discovery_gap'] as const;
+export type DayDensityClass = (typeof DAY_DENSITY_CLASSES)[number];
+
 export const ITINERARY_STATUSES = ['ready', 'ready_with_cautions', 'needs_decision'] as const;
 export const itineraryStatusSchema = z.enum(ITINERARY_STATUSES);
 export type ItineraryStatus = z.infer<typeof itineraryStatusSchema>;
@@ -1328,6 +1332,37 @@ export const tripPackageSchema = z.object({
       dayRepairs: z.array(z.object({ dayNumber: z.number().int().positive(), code: z.string().min(1), note: z.string().min(1) })).optional(),
       /** What is still wrong with a day after repair, as it is written on that day. */
       dayNotes: z.array(z.object({ dayNumber: z.number().int().positive(), code: z.string().min(1), note: z.string().min(1) })).optional(),
+      /**
+       * Sparse-itinerary pass (2026-11) — why each light day is light, with the
+       * figures (`apps/web/src/lib/planning/day-density.ts`). A deliberately
+       * relaxed day and a day thinned by a discovery gap read the same on a
+       * timeline; this is what tells them apart. `complete: false` means at
+       * least one day is light because the scan could not place what it found.
+       */
+      density: z
+        .object({
+          version: z.literal(1),
+          class: z.enum(DAY_DENSITY_CLASSES),
+          complete: z.boolean(),
+          stops: z.number().int().min(0),
+          thinDays: z.number().int().min(0),
+          losses: z.object({ bases: z.array(z.string()), places: z.number().int().min(0), examples: z.array(z.string()) }),
+          days: z.array(
+            z.object({
+              dayNumber: z.number().int().positive(),
+              class: z.enum(DAY_DENSITY_CLASSES),
+              stops: z.number().int().min(0),
+              target: z.number().int().min(0),
+              usableMinutes: z.number().min(0),
+              activityMinutes: z.number().min(0),
+              travelMinutes: z.number().min(0),
+              freeMinutes: z.number().min(0),
+              unusedInReach: z.number().int().min(0),
+              unusedReasons: z.array(z.string()),
+            }),
+          ),
+        })
+        .optional(),
     })
     .optional(),
   draftVersion: z.number().int().min(1),

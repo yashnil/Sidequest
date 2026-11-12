@@ -12,6 +12,7 @@ import {
   normalizeScanProposal,
   planScanPoints,
   scanSufficiency,
+  candidatesInReach,
   tripDates,
   validateCompiledRegion,
   type DestinationEntityType,
@@ -463,14 +464,25 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
 
     // --- 2b. enough to plan from? one bounded supplement if not -------------------------
     const requested = scanCandidateTarget(days).min;
-    const sufficiencyOf = () =>
-      scanSufficiency({
+    /* Coverage, not just a count: what a placed base can reach in a day is what has to fill the days. */
+    const reachDailyMinutes = canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes;
+    const sufficiencyOf = () => {
+      const placedCandidates = proposal.candidates.filter((c) => plan.placeIdByKey.has(c.key));
+      const pointOf = new Map(plan.points.map((p) => [p.key, p.coordinates] as const));
+      return scanSufficiency({
         days,
         stopsPerDay: profile.derived.activitySlotsPerDay,
         requested,
-        placed: proposal.candidates.filter((c) => plan.placeIdByKey.has(c.key)).map((c) => ({ kind: c.kind, interests: c.interests })),
+        placed: placedCandidates.map((c) => ({ kind: c.kind, interests: c.interests })),
         priorities,
+        inReach: candidatesInReach({
+          bases: plan.points.filter((p) => p.kind === 'base').map((p) => p.coordinates),
+          places: placedCandidates.flatMap((c) => (pointOf.get(c.key) ? [pointOf.get(c.key)!] : [])),
+          carAvailable: canonical.movement.carAvailable !== false,
+          maxDailyTravelMinutes: reachDailyMinutes,
+        }),
       });
+    };
     const firstSufficiency = sufficiencyOf();
     /*
      * Release pass (2026-11) — an answer that holds a fraction of what was asked
@@ -478,11 +490,11 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
      * the whole pool again (still the one extra call a scan may make).
      */
     const underfilled = !openData && rawCandidateCount < Math.max(6, Math.ceil(requested * UNDERFILLED_SHARE));
-    const recovery: ScanDiagnostics['recovery'] = { attempted: false, reasons: firstSufficiency.reasons, before: { have: firstSufficiency.have, needed: firstSufficiency.needed, kinds: firstSufficiency.distinctKinds }, ...(underfilled ? { underfilled: true } : {}) };
+    const recovery: ScanDiagnostics['recovery'] = { attempted: false, reasons: firstSufficiency.reasons, before: { have: firstSufficiency.have, needed: firstSufficiency.needed, kinds: firstSufficiency.distinctKinds, ...(firstSufficiency.inReach !== undefined ? { inReach: firstSufficiency.inReach } : {}) }, ...(underfilled ? { underfilled: true } : {}) };
     /* No supplement on the open-data path: the supplement is a second model call, and the model is what was unavailable. */
     if (openData) recovery.outcome = 'not_attempted_open_data';
     if (!firstSufficiency.sufficient && !openData) {
-      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count: underfilled ? requested : Math.max(8, firstSufficiency.needed - firstSufficiency.have + 4), underfilled, typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
+      const supplement = await proposeSupplement({ tripId, promptInput, proposal, missingInterests: firstSufficiency.missingInterests, count: underfilled ? requested : Math.max(8, firstSufficiency.needed - Math.min(firstSufficiency.have, firstSufficiency.inReach ?? firstSufficiency.have) + 4), underfilled, typed: trip.basics.destinationInput, envelopeName: envelope.name, days, caller: options.caller ?? null, now });
       recovery.attempted = true;
       recovery.outcome = supplement.outcome;
       if (supplement.proposal) {

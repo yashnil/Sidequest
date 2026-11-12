@@ -244,6 +244,63 @@ export function stripHedgeWords(name: string): string | null {
   return stripped;
 }
 
+/**
+ * A name carrying a parenthetical gloss — "Karatu (Ngorongoro gateway)",
+ * "Serengeti National Park (Seronera)" — is a name and a note. No gazetteer
+ * holds the brackets: a live Tanzania scan lost three of its four places to
+ * sleep that way, each asked for exactly as written and each answered with
+ * nothing. The name outside the brackets is the first fallback; what is inside
+ * is often a more specific place ("Seronera") and is the second. Both are only
+ * ever reached after the name as written found nothing, so a wrong reading
+ * costs a request, never a wrong answer.
+ */
+export function stripParenthetical(name: string): { outer: string; inner: string[] } | null {
+  if (!/[()[\]]/.test(name)) return null;
+  const inner = [...name.matchAll(/[([]([^()[\]]+)[)\]]/g)].map((m) => m[1]!.trim()).filter((part) => part.length >= 2);
+  const outer = name
+    .replace(/[([][^()[\]]*[)\]]/g, ' ')
+    .replace(/[()[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*[,;/-]\s*$/, '')
+    .trim();
+  if (outer.length < 2 && inner.length === 0) return null;
+  return { outer: outer.length >= 2 ? outer : inner[0]!, inner: outer.length >= 2 ? inner : inner.slice(1) };
+}
+
+/**
+ * The forms of a place name worth asking for, best-known first and
+ * deduplicated by identity: as written, aliases, hedge words stripped, the
+ * name outside a parenthetical then the names inside it, each side of an
+ * alternation, then a trailing descriptor removed. No qualifiers — the caller
+ * adds the locality, province or country it knows. Shared by the
+ * verification ladder (`placementQueries`) and the discovery scan's placement.
+ */
+export function placeNameForms(name: string, aliases: readonly string[] = []): string[] {
+  const forms: string[] = [];
+  const addForm = (value: string | null | undefined) => {
+    const trimmed = value?.trim();
+    if (trimmed && !forms.some((existing) => sameIdentity(existing, trimmed))) forms.push(trimmed);
+  };
+  const raw = name.trim();
+  addForm(raw);
+  for (const alias of aliases) addForm(alias);
+  const stripped = stripHedgeWords(raw);
+  addForm(stripped);
+  const bracketed = stripParenthetical(stripped ?? raw);
+  const plain = bracketed?.outer ?? stripped ?? raw;
+  if (bracketed) {
+    addForm(bracketed.outer);
+    addForm(stripHedgeWords(bracketed.outer));
+  }
+  for (const alternative of splitAlternatives(plain)) {
+    addForm(alternative);
+    addForm(stripHedgeWords(alternative));
+  }
+  for (const inner of bracketed?.inner ?? []) addForm(inner);
+  for (const form of [...forms]) addForm(stripTrailingDescriptor(form));
+  return forms;
+}
+
 export interface PlacementQueryInput {
   /** What the draft called it. */
   name: string;
@@ -299,7 +356,6 @@ export function placementQueries(input: PlacementQueryInput): string[] {
    * ever reached because the earlier one found nothing acceptable — so a wrong
    * strip costs one request and never a wrong answer.
    */
-  const forms: string[] = [];
   /*
    * V11 §K — DEDUPLICATED BY IDENTITY, NOT BY STRING.
    *
@@ -308,22 +364,10 @@ export function placementQueries(input: PlacementQueryInput): string[] {
    * so the ladder spent two of its eight queries on one name, and on a trip with
    * several such names it spent them all before reaching the qualified forms
    * that actually resolve. `sameIdentity` reduces both to one, which is a cheaper
-   * *and* better-qualified ladder.
+   * *and* better-qualified ladder. Spellings the traveller or the plan used for
+   * the same place are aliases; never invented here.
    */
-  const addForm = (value: string | null | undefined) => {
-    const trimmed = value?.trim();
-    if (trimmed && !forms.some((existing) => sameIdentity(existing, trimmed))) forms.push(trimmed);
-  };
-  addForm(raw);
-  /* Spellings the traveller or the plan used for the same place; never invented here. */
-  for (const alias of input.aliases ?? []) addForm(alias);
-  const stripped = stripHedgeWords(raw);
-  addForm(stripped);
-  for (const alternative of splitAlternatives(stripped ?? raw)) {
-    addForm(alternative);
-    addForm(stripHedgeWords(alternative));
-  }
-  for (const form of [...forms]) addForm(stripTrailingDescriptor(form));
+  const forms = placeNameForms(raw, input.aliases ?? []);
   const out: string[] = [];
   const push = (query: string) => {
     const trimmed = query.trim().replace(/\s*,\s*/g, ', ').replace(/(,\s*)+$/, '');

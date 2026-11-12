@@ -28,7 +28,7 @@ export interface CandidateIdentity {
 }
 
 /** Words that describe an activity at a place rather than name it. */
-const ACTIVITY_WORDS = new Set(['walk', 'walks', 'hike', 'hikes', 'hiking', 'loop', 'trail', 'trails', 'circuit', 'trek', 'stroll', 'viewpoint', 'view', 'views', 'drive', 'tour', 'visit', 'ride', 'cruise', 'swim', 'climb', 'picnic', 'sunrise', 'sunset', 'panorama', 'traverse', 'excursion', 'outing']);
+const ACTIVITY_WORDS = new Set(['walk', 'walks', 'hike', 'hikes', 'hiking', 'loop', 'trail', 'trails', 'circuit', 'trek', 'stroll', 'viewpoint', 'view', 'views', 'drive', 'tour', 'visit', 'ride', 'cruise', 'swim', 'climb', 'picnic', 'sunrise', 'sunset', 'panorama', 'traverse', 'excursion', 'outing', 'game', 'safari', 'safaris', 'night', 'stargazing', 'canoeing', 'kayaking']);
 /** Words that describe a place's role or character rather than name it. */
 const DESCRIPTIVE_WORDS = new Set(['stop', 'break', 'lunch', 'dinner', 'breakfast', 'coffee', 'meal', 'area', 'surroundings', 'district', 'quarter', 'village', 'villages', 'town', 'old', 'centre', 'center', 'traditional', 'local', 'scenic', 'quiet', 'easy', 'gentle', 'short', 'long', 'famous', 'iconic', 'historic', 'classic', 'guided', 'wildlife', 'photo', 'photography', 'golden', 'hour', 'evening', 'morning', 'family', 'panoramic', 'and', 'with', 'at', 'for', 'of', 'the', 'a', 'an']);
 

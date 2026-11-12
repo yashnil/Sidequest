@@ -47,3 +47,26 @@ describe('placement by the name alone (live Dolomites finding)', () => {
     expect(result.diagnostics.find((d) => d.key === far!.key)?.outcome).toBe('outside_envelope');
   });
 });
+
+describe('the wrong kind of answer (live Tanzania scan)', () => {
+  it('a lodge or camp never stands for an experience whose name it does not carry; a lodge terrace keeps its lodge', async () => {
+    const { answerIsWrongKind } = await import('./placement');
+    /* Recorded: "Ngorongoro Highlands, Tanzania" answered with a motel 500 km south. */
+    expect(answerIsWrongKind({ lookupName: 'Ngorongoro Highlands', resultName: 'Ngorongoro Lodge', osmCategory: 'tourism', osmType: 'motel' })).toBe(true);
+    expect(answerIsWrongKind({ lookupName: 'Ngorongoro Serena viewpoint lodge terrace', resultName: 'Ngorongoro Serena Safari Lodge', googleTypes: ['lodging'] })).toBe(false);
+    expect(answerIsWrongKind({ lookupName: 'Crater rim', resultName: 'Rim Safaris Ltd', googleTypes: ['travel_agency', 'point_of_interest'] })).toBe(true);
+    expect(answerIsWrongKind({ lookupName: 'Snake Park', resultName: 'Snake Park', googleTypes: ['travel_agency', 'tourist_attraction'] })).toBe(false);
+    expect(answerIsWrongKind({ lookupName: 'Olmoti Crater', resultName: 'Olmoti Crater', osmCategory: 'natural', osmType: 'caldera' })).toBe(false);
+  });
+
+  it('reads what kind of thing answered: a town, an area, or a point', async () => {
+    const { answerScaleOfRow, answerScaleOfTypes } = await import('./placement');
+    expect(answerScaleOfRow({ category: 'boundary', type: 'administrative' })).toBe('settlement');
+    expect(answerScaleOfRow({ category: 'place', type: 'town' })).toBe('settlement');
+    expect(answerScaleOfRow({ category: 'boundary', type: 'national_park' })).toBe('area');
+    expect(answerScaleOfRow({ category: 'leisure', type: 'nature_reserve' })).toBe('area');
+    expect(answerScaleOfRow({ category: 'tourism', type: 'camp_site' })).toBe('point');
+    expect(answerScaleOfTypes(['national_park', 'point_of_interest'])).toBe('area');
+    expect(answerScaleOfTypes(['locality', 'political'])).toBe('settlement');
+  });
+});

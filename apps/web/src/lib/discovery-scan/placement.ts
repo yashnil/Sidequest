@@ -1,5 +1,5 @@
 import 'server-only';
-import { ACCESS_AMBIGUITY_KM, ACCESS_RADIUS_KM, MAX_ACCESS_QUERIES, MAX_ACCESS_RECOVERIES, accessEvidence, accessRecoveryQueries, accessRecoveryPriority, accessStemOf, haversineKm, providerNameCoversPhrase, providerNameIsCanonical, routeAnswerIsAreaLevel, type CandidateIdentityType, type ResolvedPosition, type ScanProposal, SCAN_KIND_PROFILES } from '@sidequest/core';
+import { ACCESS_AMBIGUITY_KM, ACCESS_RADIUS_KM, MAX_ACCESS_QUERIES, MAX_ACCESS_RECOVERIES, accessEvidence, placeNameForms, accessRecoveryQueries, accessRecoveryPriority, accessStemOf, haversineKm, providerNameCoversPhrase, providerNameIsCanonical, routeAnswerIsAreaLevel, type CandidateIdentityType, type ResolvedPosition, type ScanProposal, SCAN_KIND_PROFILES } from '@sidequest/core';
 import { matchNamedMustDos } from './match';
 import type { AccessKind } from '@sidequest/core';
 import { geocode, type NominatimPlace } from '../providers/nominatim';
@@ -43,7 +43,12 @@ export interface PlacementOptions {
 }
 
 /** Why one placement attempt did or did not produce a point. Typed, so a thin scan explains itself without a rerun. */
-export type PlacementOutcome = 'placed' | 'no_results' | 'country_mismatch' | 'outside_envelope' | 'provider_failure' | 'not_attempted_deadline' | 'not_attempted_budget' | 'partial_identity';
+/**
+ * `wrong_kind`: something answered under a similar name, but it is the wrong
+ * kind of thing to stand for the proposal — a tour operator's office for a
+ * game drive, a lodge for a highland drive. Refused, like a wrong country.
+ */
+export type PlacementOutcome = 'placed' | 'no_results' | 'country_mismatch' | 'outside_envelope' | 'provider_failure' | 'not_attempted_deadline' | 'not_attempted_budget' | 'partial_identity' | 'wrong_kind';
 
 export interface PlacementAttempt {
   provider: 'google-places' | 'nominatim';
@@ -92,6 +97,9 @@ export interface PlacementResult {
   diagnostics: PlacementDiagnostic[];
 }
 
+/** How many forms of a locality the placement may ask for: a place to sleep decides the trip's shape and is worth more. */
+const LOCALITY_LADDER = { base: 4, place: 2 } as const;
+
 function googlePlacesUsable(env: Record<string, string | undefined> = process.env): boolean {
   const cap = capability('places.identity', env);
   if (!cap?.configured || cap.provider !== 'google-places') return false;
@@ -122,12 +130,71 @@ function withWikidata(position: ResolvedPosition, place: NominatimPlace): Resolv
   return !position.approximate && id && /^Q\d+$/.test(id) ? { ...position, wikidataId: id } : position;
 }
 
-async function geocodeFirst(query: string, options: PlacementOptions, wholePhrase?: string): Promise<{ point: { lat: number; lng: number }; place: NominatimPlace } | { outcome: PlacementOutcome }> {
+/** Settlement, area or point: what kind of thing a geocoder row is (`ResolvedPosition.answerScale`). */
+const SETTLEMENT_TYPES = new Set(['city', 'town', 'village', 'hamlet', 'suburb', 'neighbourhood', 'quarter', 'locality', 'municipality', 'county', 'state', 'region', 'district', 'province', 'borough', 'city_block', 'isolated_dwelling', 'farm']);
+export function answerScaleOfRow(place: Pick<NominatimPlace, 'category' | 'type'>): 'settlement' | 'area' | 'point' {
+  const category = place.category ?? '';
+  const type = place.type ?? '';
+  if (category === 'place' && SETTLEMENT_TYPES.has(type)) return 'settlement';
+  if (category === 'boundary' && type === 'administrative') return 'settlement';
+  if (category === 'boundary' && (type === 'national_park' || type === 'protected_area')) return 'area';
+  if (category === 'leisure' && (type === 'nature_reserve' || type === 'park')) return 'area';
+  if (category === 'natural' && type !== 'peak' && type !== 'tree') return 'area';
+  return 'point';
+}
+
+/** Google's types, read the same way. */
+export function answerScaleOfTypes(types: readonly string[]): 'settlement' | 'area' | 'point' {
+  if (types.some((t) => t === 'locality' || t === 'sublocality' || t === 'political' || t.startsWith('administrative_area') || t === 'postal_town' || t === 'neighborhood')) return 'settlement';
+  if (types.some((t) => t === 'national_park' || t === 'park' || t === 'natural_feature' || t === 'state_park')) return 'area';
+  return 'point';
+}
+
+/** A geocoder row for somewhere to sleep. */
+const LODGING_ROWS = new Set(['hotel', 'motel', 'guest_house', 'hostel', 'camp_site', 'chalet', 'apartment', 'caravan_site']);
+/** Google types for a business that sells the experience rather than being where it happens. */
+const OFFICE_TYPES = new Set(['travel_agency', 'lodging', 'real_estate_agency', 'car_rental']);
+/** Google types that make a business also a place worth visiting. */
+const VISITABLE_TYPES = new Set(['tourist_attraction', 'park', 'natural_feature', 'museum', 'national_park', 'zoo', 'amusement_park']);
+
+/**
+ * Whether an answer is the wrong kind of thing for the proposal: a lodge or
+ * camp answering for an experience whose name it does not carry, or a tour
+ * operator's office answering for the tour. A live Tanzania scan put
+ * "Ngorongoro Highlands scenic drive" on a motel 500 km south. Never applied
+ * to a place to sleep.
+ */
+const namesTheSamePlace = (asked: string, answered: string) => providerNameCoversPhrase(asked, answered) || providerNameIsCanonical(asked, answered);
+
+export function answerIsWrongKind(input: { lookupName: string; resultName: string; osmCategory?: string | undefined; osmType?: string | undefined; googleTypes?: readonly string[] | undefined }): boolean {
+  if (input.googleTypes && input.googleTypes.some((t) => OFFICE_TYPES.has(t)) && !input.googleTypes.some((t) => VISITABLE_TYPES.has(t)) && !namesTheSamePlace(input.lookupName, input.resultName)) return true;
+  if (input.osmCategory === 'tourism' && input.osmType && LODGING_ROWS.has(input.osmType) && !namesTheSamePlace(input.lookupName, input.resultName)) return true;
+  return false;
+}
+
+interface GeocodeFirstOptions {
+  /** A phrase naming two places: placed only by a row that names both. */
+  wholePhrase?: string | undefined;
+  /** The proposal's lookup name, when a lodging row may not stand for it (every non-base). */
+  notLodgingFor?: string | undefined;
+  /** Rows to try first — a place to sleep prefers a settlement over the district around it. */
+  prefer?: (place: NominatimPlace) => boolean;
+}
+
+async function geocodeFirst(query: string, options: PlacementOptions, first: GeocodeFirstOptions = {}): Promise<{ point: { lat: number; lng: number }; place: NominatimPlace } | { outcome: PlacementOutcome }> {
   const result = await geocode(query, { limit: 5 });
   let refusal: PlacementOutcome = 'no_results';
-  for (const place of result.places) {
+  const wholePhrase = first.wholePhrase;
+  const prefer = first.prefer;
+  const rows = prefer ? [...result.places.filter((p) => prefer(p)), ...result.places.filter((p) => !prefer(p))] : result.places;
+  for (const place of rows) {
+    const rowName = place.name ?? place.display_name?.split(',')[0] ?? '';
     /* A phrase naming two places is placed only by a row that names both; a row for one of them is a guess. */
-    const verdict = wholePhrase && !providerNameCoversPhrase(wholePhrase, place.name ?? place.display_name ?? '') ? { refused: 'partial_identity' as const } : judge(place, options);
+    const verdict = wholePhrase && !providerNameCoversPhrase(wholePhrase, place.name ?? place.display_name ?? '')
+      ? { refused: 'partial_identity' as const }
+      : first.notLodgingFor && answerIsWrongKind({ lookupName: first.notLodgingFor, resultName: rowName, osmCategory: place.category, osmType: place.type })
+        ? { refused: 'wrong_kind' as const }
+        : judge(place, options);
     if ('point' in verdict) return { point: verdict.point, place };
     if (refusal === 'no_results') refusal = verdict.refused;
   }
@@ -170,6 +237,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
     const attempts: PlacementAttempt[] = [];
     let canonicalizedByProvider = false;
     const wholePhrase = item.identityType === 'ambiguous' ? item.lookupName : undefined;
+    const nameFirst: GeocodeFirstOptions = isBase ? { wholePhrase, prefer: (row: NominatimPlace) => row.category === 'place' } : { wholePhrase, notLodgingFor: item.lookupName };
     if (usePlaces && http && !isBase && placesCalls >= options.placesBudget) attempts.push({ provider: 'google-places', query: `${item.lookupName}, ${item.locality}`, outcome: 'not_attempted_budget' });
     if (usePlaces && http && !isBase && placesCalls < options.placesBudget) {
       placesCalls += 1;
@@ -181,8 +249,10 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         const far = found ? haversineKm(options.center, found.coordinates) > options.maxDistanceKm : false;
         const wrongCountry = found ? Boolean(options.countryCode && found.countryCode && found.countryCode.toUpperCase() !== options.countryCode.toUpperCase()) : false;
         const partial = found ? Boolean(wholePhrase && !providerNameCoversPhrase(wholePhrase, found.name)) : false;
-        attempts.push({ provider: 'google-places', query, outcome: !found ? 'no_results' : far ? 'outside_envelope' : wrongCountry ? 'country_mismatch' : partial ? 'partial_identity' : 'placed' });
-        if (found && !far && !wrongCountry && !partial) {
+        /* Matched, never stored: Google's display name only decides whether the answer is the thing itself. */
+        const wrongKind = found ? answerIsWrongKind({ lookupName: item.lookupName, resultName: found.name, googleTypes: found.types }) : false;
+        attempts.push({ provider: 'google-places', query, outcome: !found ? 'no_results' : far ? 'outside_envelope' : wrongCountry ? 'country_mismatch' : partial ? 'partial_identity' : wrongKind ? 'wrong_kind' : 'placed' });
+        if (found && !far && !wrongCountry && !partial && !wrongKind) {
           position = {
             coordinates: found.coordinates,
             method: 'places',
@@ -190,6 +260,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
             providerRef: found.providerRef,
             /* A route answered by an area (a hiking area, a natural feature, a park) is not a point to route to. */
             approximate: Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, googleTypes: found.types })),
+            answerScale: answerScaleOfTypes(found.types ?? []),
             // Google's own locality is not stored (Maps Content); the proposal's locality stands.
           };
           providers.add('google-places');
@@ -203,11 +274,11 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       const query = `${item.lookupName}, ${item.locality}${country}`;
       try {
         geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options, wholePhrase);
+        const hit = await geocodeFirst(query, options, nameFirst);
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), answerScale: answerScaleOfRow(hit.place), ...(locality ? { locality } : {}) };
           position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }
@@ -228,11 +299,11 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       const query = `${item.lookupName}${country}`;
       try {
         geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options, wholePhrase);
+        const hit = await geocodeFirst(query, options, nameFirst);
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: (hit.place.place_rank ?? 30) < 16 || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), answerScale: answerScaleOfRow(hit.place), ...(locality ? { locality } : {}) };
           position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }
@@ -249,11 +320,11 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
       const query = `${item.localName}${country}`;
       try {
         geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options, wholePhrase);
+        const hit = await geocodeFirst(query, options, nameFirst);
         attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
         if ('point' in hit) {
           const locality = localityFrom(hit.place);
-          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), ...(locality ? { locality } : {}) };
+          position = { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: ((hit.place.place_rank ?? 30) < 16 && !isBase) || Boolean(item.kind && routeAnswerIsAreaLevel({ kind: item.kind, osmClass: hit.place.category, osmType: hit.place.type })), answerScale: answerScaleOfRow(hit.place), ...(locality ? { locality } : {}) };
           position = withWikidata(position, hit.place);
           providers.add('nominatim');
         }
@@ -261,19 +332,38 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
       }
     }
+    /*
+     * The locality, then — only after it found nothing — its cleaner forms:
+     * the name outside a parenthetical, each side of a "/", the name inside the
+     * brackets (`placeNameForms`). A live Tanzania scan lost three of four
+     * places to sleep to "Karatu (Ngorongoro gateway)", "Mto wa Mbu / Lake
+     * Manyara" and "Serengeti National Park (Seronera)", every one a real
+     * place the geocoder knows once it is asked for the place and not the note.
+     * A place to sleep found this way is placed (the town is where it sleeps);
+     * an activity's answer stays approximate, as before.
+     */
     if (!position && (item.areaLike || isBase) && item.locality && item.locality.toLowerCase() !== item.lookupName.toLowerCase()) {
-      const query = `${item.locality}${country}`;
-      try {
-        geocoderCalls += 1;
-        const hit = await geocodeFirst(query, options);
-        attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
-        if ('point' in hit) {
-          position = { coordinates: hit.point, method: 'locality', provider: 'nominatim', approximate: true, locality: item.locality };
-          providers.add('nominatim');
+      const localityForms = placeNameForms(item.locality).filter((form) => form.toLowerCase() !== item.lookupName.toLowerCase());
+      const ladder = localityForms.slice(0, isBase ? LOCALITY_LADDER.base : LOCALITY_LADDER.place);
+      for (const [rung, form] of ladder.entries()) {
+        if (position || options.deadline()) break;
+        /* A later rung only after "nothing came back": a refusal (wrong country, too far) is an answer. */
+        if (rung > 0 && attempts[attempts.length - 1]?.outcome !== 'no_results') break;
+        const query = `${form}${country}`;
+        try {
+          geocoderCalls += 1;
+          const hit = await geocodeFirst(query, options, isBase ? { prefer: (row) => row.category === 'place' } : {});
+          attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
+          if ('point' in hit) {
+            position = isBase && rung > 0
+              ? { coordinates: hit.point, method: 'geocoder', provider: 'nominatim', approximate: false, answerScale: answerScaleOfRow(hit.place), locality: form }
+              : { coordinates: hit.point, method: 'locality', provider: 'nominatim', approximate: true, answerScale: answerScaleOfRow(hit.place), locality: rung > 0 ? form : item.locality };
+            providers.add('nominatim');
+          }
+        } catch {
+          /* absence */
+          attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
         }
-      } catch {
-        /* absence */
-        attempts.push({ provider: 'nominatim', query, outcome: 'provider_failure' });
       }
     }
     /*
@@ -309,7 +399,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
     positions.set(item.key, position);
     /* The item's outcome is the most informative refusal: a wrong country or a far match says more than "nothing came back". */
     const refusals = attempts.map((a) => a.outcome).filter((o) => o !== 'placed');
-    const outcome: PlacementOutcome = position ? 'placed' : (['partial_identity', 'country_mismatch', 'outside_envelope', 'provider_failure', 'no_results', 'not_attempted_budget'] as const).find((o) => refusals.includes(o)) ?? 'no_results';
+    const outcome: PlacementOutcome = position ? 'placed' : (['partial_identity', 'wrong_kind', 'country_mismatch', 'outside_envelope', 'provider_failure', 'no_results', 'not_attempted_budget'] as const).find((o) => refusals.includes(o)) ?? 'no_results';
     const identity: CandidateIdentityDiagnostic = { original: item.name, lookupName: item.lookupName, type: canonicalizedByProvider ? 'provider_canonicalized' : item.identityType, query: attempts[0]?.query ?? null };
     diagnosticByKey.set(item.key, { key: item.key, name: item.name, ...(isBase ? {} : { identity }), locality: item.locality, category: item.category, isBase, outcome, attempts, ...(recovery ? { recovery } : {}) });
     options.onProgress?.(placed, attempted);
