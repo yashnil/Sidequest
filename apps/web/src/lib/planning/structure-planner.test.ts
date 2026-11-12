@@ -287,3 +287,25 @@ describe('arrival and departure days carry their transfers (V1)', () => {
     expect(leaving.days.at(-1)!.capacityMinutes).toBeLessThan(plain.days.at(-1)!.capacityMinutes);
   });
 });
+
+describe('a place on the road of a long move is a stop, not a detour (staging Iceland finding)', () => {
+  it('stops at the lagoon between two bases when the estimated legs overstate the detour', () => {
+    /* The live minutes: Vík → Höfn 230, Vík → lagoon 180, lagoon → Höfn 80. Estimated legs are not additive, so the lagoon reads as 30 minutes off a road it sits on. */
+    const dates = ['2027-06-14', '2027-06-15', '2027-06-16', '2027-06-17'];
+    const table: Record<string, number> = { 'vik>hofn': 230, 'vik>lagoon': 180, 'lagoon>hofn': 80, 'hofn>lagoon': 80, 'lagoon>vik': 180, 'hofn>vik': 230 };
+    const lagoon = c('lagoon', { coordinates: { lat: 64.05, lng: -16.2 }, durationMinutes: 60, fit: 90, significance: 0.9 });
+    const plan = planStructure(input([lagoon], {
+      windows: dates.map((date) => ({ date, startMinute: 9 * 60, endMinute: 19 * 60 })),
+      bases: [
+        { id: 'vik', name: 'Vík', why: 'South coast.', coordinates: { lat: 63.42, lng: -19.0 }, fromDate: dates[0]!, toDate: dates[2]!, nights: 2, transferMinutesFromPrevious: 0 },
+        { id: 'hofn', name: 'Höfn', why: 'East.', coordinates: { lat: 64.25, lng: -15.21 }, fromDate: dates[2]!, toDate: dates[3]!, nights: 1, transferMinutesFromPrevious: 230 },
+      ],
+      minutes: (a, b) => (a === b ? 0 : table[`${a}>${b}`] ?? null),
+      maxDailyTravelMinutes: 150,
+    }));
+    const moveDay = plan.days.find((d) => d.relocation);
+    expect(moveDay, 'there is a moving day').toBeTruthy();
+    expect(moveDay!.stops.map((s) => s.candidate.id)).toContain('lagoon');
+  });
+});
+

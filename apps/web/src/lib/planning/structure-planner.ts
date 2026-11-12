@@ -205,6 +205,15 @@ export const UNKNOWN_LEG_MINUTES = 60;
 const MOVE_DAY_LOOP_MINUTES = 45;
 /** With the limit nearly spent by the move, a stop may still cost this much off the road: a break, inside the error of an estimate. */
 const MOVE_DAY_ROADSIDE_MINUTES = 15;
+/**
+ * …or this share of the move, whichever is more. Staging acceptance (2026-11):
+ * a live Iceland ring road drove Vík → Höfn (230 estimated minutes) past
+ * Jökulsárlón without stopping, because Vík → lagoon (180) + lagoon → Höfn (80)
+ * came to 30 minutes over the direct figure — estimated legs are not additive
+ * (a longer leg is estimated faster), so the place most squarely on the road
+ * read as a detour. The error grows with the leg; so does this allowance.
+ */
+const MOVE_DAY_ROADSIDE_SHARE = 0.15;
 
 function dayWindowOf(input: StructurePlannerInput, date: string): PlannerDayWindow {
   return input.windows.find((w) => w.date === date) ?? { date, startMinute: 9 * 60, endMinute: 18 * 60 };
@@ -467,7 +476,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     /* What is left of an edge day after a long transfer is not a sightseeing window: under ninety minutes, the day is the journey. */
     const capacity = Math.max(0, (isFirst || isLast) && edgeTransfer > 0 && raw < 90 ? 0 : raw);
     /* A transfer is travel: it comes off the traveller's limit, and a day that spends it all still gets a short loop near where it ends. */
-    const travelBudget = transfer > 0 ? (transfer >= input.maxDailyTravelMinutes ? MOVE_DAY_LOOP_MINUTES : Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_ROADSIDE_MINUTES)) : input.maxDailyTravelMinutes;
+    const travelBudget = transfer > 0 ? (transfer >= input.maxDailyTravelMinutes ? MOVE_DAY_LOOP_MINUTES : Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_ROADSIDE_MINUTES, Math.round(transfer * MOVE_DAY_ROADSIDE_SHARE))) : input.maxDailyTravelMinutes;
     return { index: i, dayNumber: i + 1, date, baseId: base.id, ...(relocation ? { previousBaseId: previousBase.id } : {}), relocation, capacityMinutes: capacity, windowMinutes: span, transferMinutes: transfer, travelBudgetMinutes: travelBudget, weather: weatherByDate.get(date) ?? null, isFirst, isLast };
   });
 
@@ -565,7 +574,8 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
       if (!day.relocation || !day.previousBaseId || slot !== 'day') return false;
       const out = leg(day.previousBaseId, s.id);
       const on = leg(s.id, day.baseId);
-      const allowance = day.transferMinutes >= input.maxDailyTravelMinutes ? MOVE_DAY_ROADSIDE_MINUTES : day.travelBudgetMinutes;
+      const roadside = Math.max(MOVE_DAY_ROADSIDE_MINUTES, Math.round(day.transferMinutes * MOVE_DAY_ROADSIDE_SHARE));
+      const allowance = day.transferMinutes >= input.maxDailyTravelMinutes ? roadside : day.travelBudgetMinutes;
       return out !== null && on !== null && out + on - day.transferMinutes <= allowance;
     })();
     if (fromBase !== null && fromBase > reach && !user && !soloDayTrip && !onTheWay) return fail('too_far', `About ${Math.round(fromBase)} minutes each way from where you sleep that night.`);

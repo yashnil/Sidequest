@@ -50,7 +50,8 @@ describe('a moving day is a journey', () => {
     const within = createPlannerKernel(input({ ...twoBases(120), candidates: [] })).days[2]!;
     expect(within.travelBudgetMinutes).toBe(30);
     const nearlyAll = createPlannerKernel(input({ ...twoBases(145), candidates: [] })).days[2]!;
-    expect(nearlyAll.travelBudgetMinutes).toBe(15);
+    /* A roadside allowance that grows with the move (15% of 145), because estimated legs overstate a stop on the road by more on a longer leg. */
+    expect(nearlyAll.travelBudgetMinutes).toBe(22);
     const overLimit = createPlannerKernel(input({ ...twoBases(200), candidates: [] })).days[2]!;
     expect(overLimit.travelBudgetMinutes).toBe(45);
   });
