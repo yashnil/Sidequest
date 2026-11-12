@@ -13,6 +13,10 @@ export interface AtlasPoint {
   /** What is printed on the pin: a stop number, or nothing. */
   mark?: string;
   state?: AtlasPointState;
+  /** The day it belongs to: a cluster says which days it holds. */
+  dayNumber?: number;
+  /** A fill that replaces the state's colour — a whole-trip view drawn by day. */
+  colour?: string;
 }
 
 /**
@@ -55,6 +59,34 @@ export function boundsOf(points: readonly { lat: number; lng: number }[], minSpa
     const mid = (north + south) / 2;
     south = mid - minSpan / 2;
     north = mid + minSpan / 2;
+  }
+  return { west, south, east, north };
+}
+
+/**
+ * The same box with its floor in kilometres rather than degrees.
+ *
+ * A degree of longitude is 111 km at the equator and 55 km at 60° N, so a
+ * floor written in degrees framed a square in Lisbon and a letterbox in
+ * Tromsø. Latitude span is `km / 111`; longitude span is widened by the
+ * cosine of the box's middle latitude.
+ */
+export function boundsOfKm(points: readonly { lat: number; lng: number }[], minSpanKm: number): Bounds | null {
+  const box = boundsOf(points, 0);
+  if (!box) return null;
+  const latSpan = minSpanKm / 111;
+  const midLat = (box.north + box.south) / 2;
+  const lngSpan = minSpanKm / (111 * Math.max(0.15, Math.cos((midLat * Math.PI) / 180)));
+  let { west, east, south, north } = box;
+  if (east - west < lngSpan) {
+    const mid = (east + west) / 2;
+    west = mid - lngSpan / 2;
+    east = mid + lngSpan / 2;
+  }
+  if (north - south < latSpan) {
+    const mid = (north + south) / 2;
+    south = Math.max(-85, mid - latSpan / 2);
+    north = Math.min(85, mid + latSpan / 2);
   }
   return { west, south, east, north };
 }

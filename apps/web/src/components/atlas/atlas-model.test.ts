@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsOf, formatCoordinate, groupClose, scaleBar } from './atlas-model';
+import { boundsOf, boundsOfKm, formatCoordinate, groupClose, scaleBar } from './atlas-model';
 
 describe('atlas model', () => {
   it('labels coordinates by hemisphere', () => {
@@ -88,5 +88,38 @@ describe('planToAtlas', () => {
       ],
     });
     expect(lines.map((line) => [line.id, line.style])).toEqual([['timed', 'estimated'], ['routed', 'measured']]);
+  });
+});
+
+describe('a floor in kilometres', () => {
+  it('widens one point to the stated ground on both axes, corrected for latitude', () => {
+    const lisbon = boundsOfKm([{ lat: 38.7, lng: -9.1 }], 12)!;
+    expect((lisbon.north - lisbon.south) * 111).toBeCloseTo(12, 5);
+    const tromso = boundsOfKm([{ lat: 69.65, lng: 18.95 }], 12)!;
+    /* The same 12 km is more degrees of longitude in the north. */
+    expect(tromso.east - tromso.west).toBeGreaterThan(lisbon.east - lisbon.west);
+    expect((tromso.east - tromso.west) * 111 * Math.cos((69.65 * Math.PI) / 180)).toBeCloseTo(12, 3);
+  });
+  it('leaves a frame that is already wider than the floor alone', () => {
+    const box = boundsOfKm([{ lat: 37, lng: -120 }, { lat: 38, lng: -118 }], 12)!;
+    expect(box).toEqual({ west: -120, east: -118, south: 37, north: 38 });
+    expect(boundsOfKm([], 12)).toBeNull();
+  });
+});
+
+describe('a timed leg with no road shape is not drawn as a road', () => {
+  it('keeps solid only for the router\'s own geometry', () => {
+    const { lines } = planToAtlas({
+      marks: [],
+      connectors: [
+        { id: 'routed', from: { lat: 0, lng: 0 }, to: { lat: 1, lng: 1 }, style: 'measured_drive', path: [{ lat: 0, lng: 0 }, { lat: 0.5, lng: 0.6 }, { lat: 1, lng: 1 }] },
+        { id: 'chord', from: { lat: 0, lng: 0 }, to: { lat: 1, lng: 1 }, style: 'measured_drive' },
+        { id: 'nobody', from: { lat: 0, lng: 0 }, to: { lat: 1, lng: 1 }, style: 'unmeasured' },
+      ],
+    });
+    expect(lines.find((l) => l.id === 'routed')!.style).toBe('measured');
+    expect(lines.find((l) => l.id === 'chord')!.style).toBe('estimated');
+    expect(lines.find((l) => l.id === 'chord')!.coords).toHaveLength(2);
+    expect(lines.find((l) => l.id === 'nobody')!.style).toBe('unmeasured');
   });
 });

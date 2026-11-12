@@ -51,6 +51,8 @@ export function CoverStage({
       className="absolute inset-0 !bg-transparent"
       testId="cover-stage"
       ground="night"
+      /* 2026-11 — a dense trip's pins group instead of piling up on the cover (`map-clusters.ts`). */
+      cluster
       points={points}
       lines={lines}
       controls={false}

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type * as MapLibre from 'maplibre-gl';
 import { MAPLIBRE_MODULE_URL, ensureMaplibreStylesheet } from '../map-vendor';
 import { ATLAS_ATTRIBUTION, atlasStyle, type AtlasGround } from './atlas-style';
-import { boundsOf, formatCoordinate, groupClose, scaleBar, type AtlasLine, type AtlasPoint } from './atlas-model';
+import { boundsOf, boundsOfKm, formatCoordinate, groupClose, scaleBar, type AtlasLine, type AtlasPoint } from './atlas-model';
+import { ClusterLayer } from '../map-cluster-layer';
 import { cx } from '../ui';
 
 export type { AtlasLine, AtlasPoint } from './atlas-model';
@@ -68,6 +69,7 @@ export function AtlasMap({
   controls = true,
   fitPoints,
   minSpanKm,
+  cluster = false,
 }: {
   points: readonly AtlasPoint[];
   lines?: readonly AtlasLine[];
@@ -91,6 +93,12 @@ export function AtlasMap({
   fitPoints?: readonly { lat: number; lng: number }[];
   /** The least ground the frame may cover — the camera model's guard against framing a creek. */
   minSpanKm?: number;
+  /**
+   * Group pins that overlap at this zoom into one cluster mark with a count
+   * (a whole-trip view). Off by default: the board and the cover keep their
+   * fan-out. Bases and the focused pin are never grouped.
+   */
+  cluster?: boolean;
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const map = useRef<MapLibre.Map | null>(null);
@@ -100,12 +108,15 @@ export function AtlasMap({
   /* The ground under the marks: a tile service that refuses leaves a map with no geography, and the map says so. */
   const [tilesFailed, setTilesFailed] = useState(false);
   const [camera, setCamera] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
-  const latest = useRef({ points, lines, onSelect, padding, maxZoom, drawRoute, fit: fitPoints && fitPoints.length > 0 ? fitPoints : points });
+  const latest = useRef({ points, lines, onSelect, padding, maxZoom, drawRoute, cluster, fit: fitPoints && fitPoints.length > 0 ? fitPoints : points });
   useEffect(() => {
-    latest.current = { points, lines, onSelect, padding, maxZoom, drawRoute, fit: fitPoints && fitPoints.length > 0 ? fitPoints : points };
+    latest.current = { points, lines, onSelect, padding, maxZoom, drawRoute, cluster, fit: fitPoints && fitPoints.length > 0 ? fitPoints : points };
   });
+  const clusters = useRef<ClusterLayer | null>(null);
   const reduced = useRef(false);
   const minSpanDeg = minSpanKm && minSpanKm > 0 ? minSpanKm / 111 : 0.012;
+  /* The floor in kilometres, so a high-latitude frame is not a letterbox (see `boundsOfKm`). */
+  const fitBox = (pts: readonly { lat: number; lng: number }[]) => (minSpanKm && minSpanKm > 0 ? boundsOfKm(pts, minSpanKm) : boundsOf(pts, minSpanDeg));
   const key = fitKey ?? points.map((p) => p.id).join('|');
 
   /* The map itself: created once per ground. */
@@ -125,7 +136,7 @@ export function AtlasMap({
       if (cancelled || !container.current) return;
       lib.current = maplibre;
       const { fit: pts, padding: pad, maxZoom: mz } = latest.current;
-      const bounds = boundsOf(pts, minSpanDeg);
+      const bounds = fitBox(pts);
       const instance = new maplibre.Map({
         container: container.current,
         style: atlasStyle(ground) as unknown as MapLibre.StyleSpecification,
@@ -172,9 +183,10 @@ export function AtlasMap({
         if (started || cancelled) return;
         started = true;
         instance.addSource('atlas-lines', { type: 'geojson', lineMetrics: true, data: linesGeoJson(latest.current.lines) });
-        instance.addLayer({ id: 'atlas-line-halo', type: 'line', source: 'atlas-lines', filter: ['in', ['get', 'style'], ['literal', ['measured', 'estimated', 'boat', 'rail', 'trail']]], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ground === 'night' ? '#0d1a1f' : '#ffffff', 'line-width': 7, 'line-opacity': 0.55 } });
+        instance.addLayer({ id: 'atlas-line-halo', type: 'line', source: 'atlas-lines', filter: ['in', ['get', 'style'], ['literal', ['measured', 'boat', 'rail']]], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ground === 'night' ? '#0d1a1f' : '#ffffff', 'line-width': 7, 'line-opacity': 0.55 } });
         instance.addLayer({ id: 'atlas-line-measured', type: 'line', source: 'atlas-lines', filter: ['==', ['get', 'style'], 'measured'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-width': 3.5, 'line-gradient': gradient(1) } });
-        instance.addLayer({ id: 'atlas-line-estimated', type: 'line', source: 'atlas-lines', filter: ['in', ['get', 'style'], ['literal', ['estimated', 'trail']]], layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#ff5a1f', 'line-width': 3, 'line-dasharray': [1.6, 1.2] } });
+        /* A straight connection (an estimate, or a timed leg whose shape nobody returned) is thin and broken: never the weight of a road. */
+        instance.addLayer({ id: 'atlas-line-estimated', type: 'line', source: 'atlas-lines', filter: ['in', ['get', 'style'], ['literal', ['estimated', 'trail']]], layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': '#ff5a1f', 'line-width': 1.6, 'line-opacity': 0.85, 'line-dasharray': [3, 2.5] } });
         instance.addLayer({ id: 'atlas-line-transit', type: 'line', source: 'atlas-lines', filter: ['in', ['get', 'style'], ['literal', ['boat', 'rail', 'flight']]], layout: { 'line-cap': 'round' }, paint: { 'line-color': '#7fd1e0', 'line-width': 2.5, 'line-dasharray': [3, 1.5] } });
         /*
          * The pins' footprints, invisible, on top of the basemap's symbols: a
@@ -184,7 +196,10 @@ export function AtlasMap({
          */
         instance.addSource('atlas-pin-footprints', { type: 'geojson', data: footprints(latest.current.points) });
         instance.addLayer({ id: 'atlas-pin-footprints', type: 'symbol', source: 'atlas-pin-footprints', layout: { 'text-field': 'MM', 'text-font': ['Noto Sans Regular'], 'text-size': 19, 'text-allow-overlap': true, 'text-ignore-placement': false, 'text-padding': 2 }, paint: { 'text-opacity': 0 } });
-        instance.on('moveend', () => spread());
+        instance.on('moveend', () => {
+          if (!latest.current.cluster) spread();
+        });
+        clusters.current = new ClusterLayer(instance, maplibre, { ground: ground === 'night' ? 'night' : 'survey', maxClusterZoom: 14, padding: latest.current.padding, reducedMotion: () => reduced.current });
         instance.addLayer({ id: 'atlas-line-unmeasured', type: 'line', source: 'atlas-lines', filter: ['==', ['get', 'style'], 'unmeasured'], layout: { 'line-cap': 'round' }, paint: { 'line-color': ground === 'night' ? '#a3b1b1' : '#5f625c', 'line-width': 1.5, 'line-dasharray': [0.5, 2.5], 'line-opacity': 0.8 } });
         refit(0);
         setHealth('ready');
@@ -216,6 +231,8 @@ export function AtlasMap({
     const markerMap = markers.current;
     return () => {
       cancelled = true;
+      clusters.current?.destroy();
+      clusters.current = null;
       markerMap.forEach(({ marker }) => marker.remove());
       markerMap.clear();
       map.current?.remove();
@@ -245,8 +262,11 @@ export function AtlasMap({
       }
       entry.marker.setLngLat([point.lng, point.lat]);
       const { el } = entry;
-      el.classList.add('atlas-pin');
+      el.classList.add('atlas-pin', 'before:absolute', 'before:-inset-[9px]', 'before:rounded-full', "before:content-['']");
       el.dataset.state = point.state ?? 'idle';
+      el.style.background = point.colour ?? '';
+      el.style.borderColor = point.colour ? '#0d1a1f' : '';
+      el.style.color = point.colour ? '#0d1a1f' : '';
       el.dataset.focused = String(point.id === focusRef.current);
       el.dataset.pointId = point.id;
       el.textContent = point.mark ?? '';
@@ -261,7 +281,18 @@ export function AtlasMap({
       markers.current.delete(id);
     }
     (instance.getSource('atlas-pin-footprints') as MapLibre.GeoJSONSource | undefined)?.setData(footprints(latest.current.points) as never);
-    spread();
+    if (latest.current.cluster && clusters.current) {
+      clusters.current.update(
+        latest.current.points
+          .filter((point) => point.state !== 'muted')
+          .map((point) => ({ id: point.id, lat: point.lat, lng: point.lng, label: point.label, dayNumber: point.dayNumber, pinned: point.state === 'base' || point.id === focusRef.current })),
+        new Map([...markers.current].filter(([, entry]) => entry.el.dataset.state !== 'muted')),
+        true,
+      );
+    } else {
+      clusters.current?.update([], new Map(), false);
+      spread();
+    }
   }
 
   /**
@@ -300,7 +331,7 @@ export function AtlasMap({
   /** Fit the camera to the current points. Called on load and on resize, because a fit computed against an unsized canvas is a fit to nothing. */
   function refit(duration: number) {
     const instance = map.current;
-    const bounds = boundsOf(latest.current.fit, minSpanDeg);
+    const bounds = fitBox(latest.current.fit);
     if (!instance || !bounds) return;
     instance.fitBounds([[bounds.west, bounds.south], [bounds.east, bounds.north]], { padding: latest.current.padding, maxZoom: Math.min(latest.current.maxZoom, 14), duration });
   }
@@ -348,7 +379,7 @@ export function AtlasMap({
     }
     if (lastKey.current === key) return;
     lastKey.current = key;
-    const bounds = boundsOf(fitPoints && fitPoints.length > 0 ? fitPoints : points, minSpanDeg);
+    const bounds = fitBox(fitPoints && fitPoints.length > 0 ? fitPoints : points);
     if (!bounds) return;
     map.current.fitBounds([[bounds.west, bounds.south], [bounds.east, bounds.north]], { padding, maxZoom: Math.min(maxZoom, 14), duration: reduced.current ? 0 : 1200, essential: false });
     animateDraw();

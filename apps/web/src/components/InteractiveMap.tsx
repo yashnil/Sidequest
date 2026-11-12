@@ -6,7 +6,8 @@ import { VectorBasemapLayer, type MapHealth } from './VectorBasemap';
 import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoint, type MapViewport } from './map-projection';
 import { labelBudget, selectLabels, type MapMode } from './map-camera';
 import { cx } from './ui';
-import { LEG_LINE_STYLE, legPath, legendFor } from './hub/route-styles';
+import { drawnLegStyle, legPath, legendForConnectors, lineStyleOf, type DrawnLegStyle } from './hub/route-styles';
+import { CLUSTER_RADIUS_PX, clusterLabel, clusterMarkers, dayColour, daysText, type MarkerCluster } from './map-clusters';
 
 /**
  * ONE INTERACTIVE MAP FOR THE BOARD AND THE ITINERARY.
@@ -60,6 +61,8 @@ export interface MapMarker {
   order?: number;
   category?: string;
   travelMinutes?: number | null;
+  /** The day this mark belongs to. On a whole-trip drawing a stop is coloured and numbered by its day. */
+  dayNumber?: number;
 }
 
 /**
@@ -181,6 +184,12 @@ export interface InteractiveMapProps {
    * licence obligation rather than chrome.
    */
   chromeless?: boolean;
+  /**
+   * Group marks that overlap on screen into one cluster mark with a count
+   * (the whole-trip drawings). Bases, gateways and the focused mark are never
+   * grouped. Pressing a cluster frames its members.
+   */
+  cluster?: boolean;
 }
 
 const INSETS = { top: 18, right: 18, bottom: 18, left: 18 };
@@ -293,6 +302,7 @@ export function InteractiveMap({
   mode = 'day',
   faded = [],
   minSpanKm,
+  cluster = false,
 }: InteractiveMapProps) {
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -426,6 +436,37 @@ export function InteractiveMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markers, view.cx, view.cy, view.scale, width, height]);
 
+  /*
+   * THE WHOLE TRIP, GROUPED. Screen-space grouping in viewBox units, with the
+   * radius scaled by how large the figure is actually drawn — 44 px on the
+   * screen is ~126 viewBox units on a phone rendering a 1120-wide figure.
+   */
+  const drawnScale = width / Math.max(1, renderedWidth ?? width);
+  const grouping = useMemo(() => {
+    if (!cluster) return { clusters: [] as MarkerCluster[], hidden: new Set<string>() };
+    const result = clusterMarkers(
+      placed.map(({ marker, x, y }) => ({
+        id: marker.id,
+        x,
+        y,
+        lat: marker.coordinates.lat,
+        lng: marker.coordinates.lng,
+        label: marker.name,
+        dayNumber: marker.dayNumber,
+        pinned: marker.kind === 'base' || marker.kind === 'gateway' || marker.id === focusedId,
+      })),
+      { radius: CLUSTER_RADIUS_PX * 0.8 * drawnScale },
+    );
+    return { clusters: result.clusters, hidden: new Set(result.clusters.flatMap((c) => c.members.map((m) => m.id))) };
+  }, [cluster, placed, focusedId, drawnScale]);
+  const visible = grouping.hidden.size > 0 ? placed.filter((entry) => !grouping.hidden.has(entry.marker.id)) : placed;
+  /* A pin's press target: at least 44 px on the screen, however small the figure is drawn. */
+  const hitRadius = Math.max(14, 22 * drawnScale);
+  /* On a whole-trip drawing a stop wears its day — colour and number — not its place in a day nobody is looking at. */
+  const byDay = mode !== 'day';
+  const dayFill = (marker: MapMarker): string | null => (byDay && marker.dayNumber !== undefined && (marker.kind === 'stop' || marker.kind === 'place' || marker.kind === 'signature') ? dayColour(marker.dayNumber, 'paper') : null);
+  const daysDrawn = byDay ? [...new Set(visible.flatMap(({ marker }) => (dayFill(marker) && marker.dayNumber !== undefined ? [marker.dayNumber] : [])).concat(grouping.clusters.flatMap((c) => c.days)))].sort((a, b) => a - b) : [];
+
   const baseAt = base ? viewport.project(base.coordinates) : null;
   const focused = placed.find((entry) => entry.marker.id === focusedId) ?? null;
   /*
@@ -461,7 +502,7 @@ export function InteractiveMap({
   const labelPlacement = useMemo(() => {
     if (!labelAll) return new Map<string, { text: string; side: 'left' | 'right' }>();
     const chosen = selectLabels(
-      placed
+      visible
         .filter((entry) => entry.marker.name)
         .map((entry) => ({
           id: entry.marker.id,
@@ -485,7 +526,7 @@ export function InteractiveMap({
     return new Map(chosen.map((entry) => [entry.id, { text: entry.text, side: entry.side }]));
     // The projection is a pure read of the view below, which is already in the list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed, labelAll, drawnWidth, focusedId, mode, width, base, view.cx, view.cy, view.scale]);
+  }, [visible, labelAll, drawnWidth, focusedId, mode, width, base, view.cx, view.cy, view.scale]);
 
   const ring = useMemo(() => {
     if (!base) return null;
@@ -515,10 +556,8 @@ export function InteractiveMap({
   const basemapDrawn = vector !== null && (basemapHealth === 'ready' || basemapHealth === 'degraded');
   const placedTiles = tiles && tiles.kind !== 'vector' ? tilesForViewport({ viewport, source: tiles, maxTiles: 48 }) : [];
   const centreGeo = viewport.unproject({ x: width / 2, y: height / 2 });
-  const hasRouteShape = connectors.some((c) => c.path && c.path.length > 1);
-  const hasStraightMeasured = connectors.some((c) => c.style.startsWith('measured') && !(c.path && c.path.length > 1));
-  /* The legend lists exactly the styles on the drawing — never a line nobody drew. */
-  const legend = legendFor(connectors.map((c) => c.style));
+  /* The legend lists exactly the lines as drawn — a timed leg with no road shape is the straight connection it is drawn as. */
+  const legend = legendForConnectors(connectors);
 
   function onKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
     const handled: Record<string, () => void> = {
@@ -634,7 +673,8 @@ export function InteractiveMap({
             ) : null}
 
             {connectors.map((connector) => {
-              const style = LEG_LINE_STYLE[connector.style];
+              const drawn = drawnLegStyle(connector);
+              const style = lineStyleOf(drawn);
               if (connector.path && connector.path.length > 1) {
                 const points = connector.path.map((p) => viewport.project(p)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
                 return (
@@ -643,9 +683,9 @@ export function InteractiveMap({
               }
               const from = viewport.project(connector.from);
               const to = viewport.project(connector.to);
-              /* A flight arcs, a boat rides a wave, everything else is the straight line it honestly is. */
+              /* A flight arcs, a boat rides a wave, everything else is the straight line it honestly is — thin and broken when nobody returned its shape. */
               return (
-                <path key={connector.id} d={legPath(connector.style, from, to)} fill="none" stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} opacity={style.opacity} strokeLinecap="round" strokeLinejoin="round" data-connector-style={connector.style} data-connector-shape={style.shape} />
+                <path key={connector.id} d={legPath(drawn, from, to)} fill="none" stroke={style.stroke} strokeWidth={style.width} strokeDasharray={style.dash} opacity={style.opacity} strokeLinecap={style.dash ? 'butt' : 'round'} strokeLinejoin="round" data-connector-style={connector.style} data-connector-drawn={drawn} data-connector-shape={style.shape} />
               );
             })}
 
@@ -669,18 +709,21 @@ export function InteractiveMap({
               </g>
             ) : null}
 
-            {placed.map(({ marker, x, y }) => {
+            {visible.map(({ marker, x, y }) => {
               const isFocused = marker.id === focusedId;
               const label = pinLabel ? pinLabel(marker) : defaultPinLabel(marker);
               const style = MARKER_STYLE[marker.kind];
-              const radius = (style.radius * (isFocused ? FOCUS_GROWTH : 1)) * (marker.kind === 'place' && marker.chosen ? 1.4 : 1);
+              const fill = dayFill(marker);
+              /* Drawn by day, every stop is the same size: the colour and the number carry it. */
+              const baseRadius = fill ? Math.max(style.radius, 7.5) : style.radius;
+              const radius = (baseRadius * (isFocused ? FOCUS_GROWTH : 1)) * (marker.kind === 'place' && marker.chosen ? 1.4 : 1);
               const stop = marker.kind === 'stop';
               return (
-                <g key={marker.id} data-marker={marker.id}>
+                <g key={marker.id} data-marker={marker.id} {...(marker.dayNumber !== undefined ? { 'data-day': marker.dayNumber } : {})}>
                   <circle
                     cx={x}
                     cy={y}
-                    r={14}
+                    r={hitRadius}
                     fill="transparent"
                     className="cursor-pointer"
                     onClick={() => {
@@ -721,7 +764,7 @@ export function InteractiveMap({
                       cx={x}
                       cy={y}
                       r={radius}
-                      fill={style.shape === 'ring' ? 'none' : marker.kind === 'place' && marker.chosen ? 'var(--color-accent)' : style.fill}
+                      fill={style.shape === 'ring' ? 'none' : fill ? fill : marker.kind === 'place' && marker.chosen ? 'var(--color-accent)' : style.fill}
                       stroke={isFocused ? 'var(--color-ink)' : style.stroke}
                       strokeWidth={style.shape === 'ring' ? 1.6 : isFocused ? 2.5 : 1}
                       strokeDasharray={style.shape === 'ring' ? '3 3' : undefined}
@@ -729,7 +772,11 @@ export function InteractiveMap({
                       data-marker-kind={marker.kind}
                     />
                   )}
-                  {stop && marker.order !== undefined ? (
+                  {fill && marker.dayNumber !== undefined ? (
+                    <text x={x} y={y + 3.2} textAnchor="middle" fontSize={9} fontWeight={600} fill="#ffffff" pointerEvents="none">
+                      {marker.dayNumber}
+                    </text>
+                  ) : stop && marker.order !== undefined ? (
                     <text x={x} y={y + 3.2} textAnchor="middle" fontSize={9} fontWeight={600} fill="var(--color-paper-raised)" pointerEvents="none">
                       {marker.order}
                     </text>
@@ -737,6 +784,28 @@ export function InteractiveMap({
                 </g>
               );
             })}
+
+            {/*
+              The clusters: one disc per group of marks that would print on top
+              of each other at this zoom, ringed by the colours of the days it
+              holds, with the count. Its <title> lists the names on hover; its
+              accessible name lists them for a screen reader; a press frames the
+              members, where they come apart.
+            */}
+            {grouping.clusters.map((group) => (
+              <ClusterMark
+                key={group.key}
+                cluster={group}
+                scale={drawnScale}
+                onExpand={() => {
+                  if (lastDragMoved.current) {
+                    lastDragMoved.current = false;
+                    return;
+                  }
+                  animateTo(fitView(group.members.map((m) => ({ lat: m.lat, lng: m.lng })), width, height, 0.6));
+                }}
+              />
+            ))}
 
             {baseAt ? (
               <g pointerEvents="none">
@@ -757,7 +826,7 @@ export function InteractiveMap({
             */}
             {labelAll ? (
               <g data-testid={`${testId}-labels`}>
-                {placed.map(({ marker, x, y }) => {
+                {visible.map(({ marker, x, y }) => {
                   if (marker.id === focusedId || !marker.name) return null;
                   const placement = labelPlacement.get(marker.id);
                   if (!placement) return null;
@@ -926,7 +995,27 @@ export function InteractiveMap({
             </span>
           ) : null}
           {faded.length > 0 ? <span>Faint marks are the rest of the trip.</span> : null}
-          {markers.some((m) => m.kind === 'stop') ? <span>Numbered in the order of the day.</span> : null}
+          {daysDrawn.length > 0 ? (
+            /* The day key: exactly the days drawn, in the colours they are drawn in, with the number each pin wears. */
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1" data-testid={`${testId}-day-key`}>
+              <span>Stops by day:</span>
+              {daysDrawn.map((n) => (
+                <span key={n} className="inline-flex items-center gap-1" data-legend-day={n}>
+                  <span aria-hidden="true" className="inline-grid h-3.5 w-3.5 place-items-center rounded-full text-[8px] font-semibold text-white" style={{ background: dayColour(n, 'paper') }}>
+                    {n}
+                  </span>
+                  <span className="sr-only">Day {n}</span>
+                </span>
+              ))}
+            </span>
+          ) : null}
+          {grouping.clusters.length > 0 ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="inline-grid h-3.5 w-3.5 place-items-center rounded-full border-2 border-ink bg-paper-raised text-[7px] font-semibold text-ink">3</span>
+              places close together — press to zoom in
+            </span>
+          ) : null}
+          {!byDay && markers.some((m) => m.kind === 'stop') ? <span>Numbered in the order of the day.</span> : null}
           {/*
             One entry per line style actually on the map, each with a sample of
             the line beside the words. It used to appear for any `place`
@@ -938,13 +1027,9 @@ export function InteractiveMap({
           {legend.map((entry) => (
             <span key={entry.style} className="inline-flex items-center gap-1.5" data-legend-style={entry.style} data-legend-basis={entry.basis}>
               <LegendSample style={entry.style} />
-              <span>
-                {entry.legend}
-                {entry.style.startsWith('measured') && hasStraightMeasured ? ' (straight where no road shape was recorded)' : ''}
-              </span>
+              <span>{entry.legend}</span>
             </span>
           ))}
-          {hasRouteShape ? <span>Curved lines follow the measured road.</span> : null}
           {caption}
         </figcaption>
         {/* Its own line, never in the scrolling row: attribution is a licence obligation. */}
@@ -991,9 +1076,70 @@ function MapButton({ label, onClick, children }: { label: string; onClick: () =>
   );
 }
 
+/** A cluster disc in the SVG figure: day-coloured ring arcs, the count, a 44 px press target, and the names. */
+function ClusterMark({ cluster, scale, onExpand }: { cluster: MarkerCluster; scale: number; onExpand: () => void }) {
+  const r = (cluster.members.length >= 10 ? 15 : cluster.members.length >= 5 ? 13.5 : 12) * Math.max(1, scale * 0.85);
+  const ring = r - 2.5 * Math.max(1, scale * 0.85);
+  const circumference = 2 * Math.PI * ring;
+  const counts = new Map<number | null, number>();
+  for (const member of cluster.members) counts.set(member.dayNumber ?? null, (counts.get(member.dayNumber ?? null) ?? 0) + 1);
+  const ordered = [...counts.entries()].sort(([a], [b]) => (a ?? Infinity) - (b ?? Infinity));
+  const arcs = ordered.reduce<{ day: number | null; length: number; offset: number }[]>((out, [day, count]) => {
+    const start = out.reduce((sum, arc) => sum + arc.length, 0);
+    return [...out, { day, length: (count / cluster.members.length) * circumference, offset: -start }];
+  }, []);
+  const label = clusterLabel(cluster);
+  return (
+    <g data-cluster={cluster.members.length} data-cluster-days={cluster.days.join(',')}>
+      <circle
+        cx={cluster.x}
+        cy={cluster.y}
+        r={Math.max(r, 22 * scale)}
+        fill="transparent"
+        className="cursor-pointer"
+        role="button"
+        tabIndex={0}
+        aria-label={label}
+        onClick={onExpand}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            onExpand();
+          }
+        }}
+      >
+        <title>{`${cluster.members.length} places${cluster.days.length ? ` · ${daysText(cluster.days)}` : ''}\n${cluster.members.map((m) => m.label).join('\n')}`}</title>
+      </circle>
+      <g pointerEvents="none">
+        <circle cx={cluster.x} cy={cluster.y} r={r} fill="var(--color-paper-raised)" stroke="var(--color-ink)" strokeWidth={1} />
+        {arcs.map(({ day, length, offset }) => {
+          return (
+            <circle
+              key={String(day)}
+              cx={cluster.x}
+              cy={cluster.y}
+              r={ring}
+              fill="none"
+              stroke={day === null ? 'var(--color-ink-faint)' : dayColour(day, 'paper')}
+              strokeWidth={3.5 * Math.max(1, scale * 0.85)}
+              strokeDasharray={`${length.toFixed(2)} ${circumference.toFixed(2)}`}
+              strokeDashoffset={offset.toFixed(2)}
+              transform={`rotate(-90 ${cluster.x} ${cluster.y})`}
+            />
+          );
+        })}
+        <text x={cluster.x} y={cluster.y + 3.6 * Math.max(1, scale * 0.85)} textAnchor="middle" fontSize={10 * Math.max(1, scale * 0.85)} fontWeight={700} fill="var(--color-ink)">
+          {cluster.members.length}
+        </text>
+      </g>
+    </g>
+  );
+}
+
 /** A sample of one line style, drawn exactly as the map draws it, for the legend. */
-function LegendSample({ style }: { style: MapConnectorStyle }) {
-  const line = LEG_LINE_STYLE[style];
+function LegendSample({ style }: { style: DrawnLegStyle }) {
+  const line = lineStyleOf(style);
   return (
     <svg viewBox="0 0 36 10" width={36} height={10} aria-hidden="true" className="shrink-0">
       <path d={legPath(style, { x: 2, y: 5 }, { x: 34, y: 5 })} fill="none" stroke={line.stroke} strokeWidth={Math.min(line.width, 2.5)} strokeDasharray={line.dash} opacity={line.opacity} strokeLinecap="round" />

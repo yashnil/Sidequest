@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEG_LINE_STYLE, arcPath, legPath, legendFor, wavePath } from './route-styles';
+import { LEG_LINE_STYLE, STRAIGHT_TIMED_STYLE, arcPath, drawnLegStyle, legPath, legendFor, legendForConnectors, wavePath } from './route-styles';
 
 describe('one line per way of moving', () => {
   it('draws road solid, rail long-dashed, boat short-dashed on a wave, flight as an arc, trail dotted', () => {
@@ -34,5 +34,29 @@ describe('one line per way of moving', () => {
     expect(wave.endsWith('L140.0 0.0')).toBe(true);
     expect(wave.split(' L').length).toBeGreaterThan(8);
     expect(legPath('measured_drive', { x: 1, y: 2 }, { x: 3, y: 4 })).toBe('M1.0 2.0 L3.0 4.0');
+  });
+});
+
+describe('route honesty: a straight line is never styled like a road', () => {
+  const at = { lat: 0, lng: 0 };
+  it('draws a timed leg solid only along its route shape', () => {
+    expect(drawnLegStyle({ style: 'measured_drive', path: [at, at] })).toBe('measured_drive');
+    expect(drawnLegStyle({ style: 'measured_drive' })).toBe('straight_timed');
+    expect(drawnLegStyle({ style: 'measured_transit', path: [] })).toBe('straight_timed');
+    expect(drawnLegStyle({ style: 'unmeasured' })).toBe('unmeasured');
+    expect(drawnLegStyle({ style: 'flight' })).toBe('flight');
+  });
+  it('makes every straight connection thinner than a road and broken', () => {
+    for (const style of [STRAIGHT_TIMED_STYLE, LEG_LINE_STYLE.estimated, LEG_LINE_STYLE.unmeasured]) {
+      expect(style.dash).toBeTruthy();
+      expect(style.width).toBeLessThan(LEG_LINE_STYLE.measured_drive.width / 1.5);
+    }
+  });
+  it('keys the drawn line, so the legend says "straight connection, not the road" for a shapeless timed leg', () => {
+    const legend = legendForConnectors([{ style: 'measured_drive' }, { style: 'measured_drive', path: [at, at] }, { style: 'estimated' }]);
+    expect(legend.map((entry) => entry.style)).toEqual(['measured_drive', 'straight_timed', 'estimated']);
+    expect(legend[1]!.legend).toMatch(/straight connection, not the road/i);
+    expect(legend[2]!.legend).toMatch(/straight connection, not the road/i);
+    expect(legendForConnectors([{ style: 'measured_drive' }]).map((entry) => entry.style)).toEqual(['straight_timed']);
   });
 });

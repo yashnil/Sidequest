@@ -147,6 +147,27 @@ export function cameraFrameFor(input: CameraInput): CameraFrame | NoFrame {
   return { ok: true, points, minSpanKm: SINGLE_POINT_SPAN_KM, basis: 'single_point_with_context' };
 }
 
+/**
+ * THE FLOOR UNDER A MAPLIBRE FIT, BY MODE AND BY HOW MANY PLACES ARE IN IT.
+ *
+ * The vector maps fitted whatever they were handed with a fixed 0.012° floor
+ * (about 1.3 km) and a zoom cap of 14.5, so a day with one placed stop — or a
+ * day whose stops all sit on one street — filled the frame with a car park.
+ * One distinct place gets the same 12 km of context `cameraFrameFor` gives the
+ * SVG figure; several places get a floor that suits the scale being read: a
+ * day is a few kilometres of town, a whole trip at least a valley.
+ */
+const FRAME_FLOOR_KM: Record<MapMode, number> = { day: 2.5, overview: 25, explore: 6 };
+
+export function frameFloorKm(mode: MapMode, points: readonly GeoPoint[]): number {
+  const distinct = new Set(points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)).map((p) => `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`));
+  if (distinct.size <= 1) return SINGLE_POINT_SPAN_KM;
+  return FRAME_FLOOR_KM[mode];
+}
+
+/** The closest any fit may come: a street, never a doorway. A traveller can still zoom further by hand. */
+export const FIT_MAX_ZOOM = 15;
+
 // ---------------------------------------------------------------------------
 // V11 §12 — labels
 // ---------------------------------------------------------------------------

@@ -98,8 +98,9 @@ test('the day explorer draws the day, shares selection with the timeline, and mo
     await leg.click();
     await expect(explorer.getByTestId('journey-leg')).toContainText(/route as measured|straight line, not the route|not drawn to its route/);
     await explorer.getByTestId('journey-key-toggle').click();
-    await expect(explorer.getByTestId('journey-key')).toContainText('Route as measured');
-    await expect(explorer.getByTestId('journey-key')).toContainText('not measured');
+    /* The key lists exactly the line kinds on screen: at least one, each in words that say whether it is the road. */
+    await expect(explorer.getByTestId('journey-key').locator('[data-key-line]').first()).toBeVisible();
+    await expect(explorer.getByTestId('journey-key')).toContainText(/Route as measured|straight connection, not the road/);
     await explorer.getByTestId('journey-key-toggle').click();
   });
 

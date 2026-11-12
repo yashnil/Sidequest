@@ -4,7 +4,9 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type Reac
 import type * as MapLibre from 'maplibre-gl';
 import { MAPLIBRE_MODULE_URL, ensureMaplibreStylesheet } from '../map-vendor';
 import { ATLAS_ATTRIBUTION, atlasStyle, type AtlasGround } from '../atlas/atlas-style';
-import { boundsOf, formatCoordinate, scaleBar } from '../atlas/atlas-model';
+import { boundsOf, boundsOfKm, formatCoordinate, scaleBar } from '../atlas/atlas-model';
+import { ClusterLayer } from '../map-cluster-layer';
+import { FIT_MAX_ZOOM } from '../map-camera';
 import { arcCoords, type JourneyLeg, type JourneyModeKind } from '@/lib/journey/model';
 import { cx } from '../ui';
 
@@ -35,10 +37,17 @@ export interface JourneyPin {
   mark: string;
   kind: 'base' | 'stop' | 'meal' | 'gateway' | 'context';
   dim?: boolean;
+  /** The day this pin belongs to: what a cluster says it holds. */
+  dayNumber?: number;
+  /** The pin's fill when it is drawn by day (the whole-trip view); the class colour otherwise. */
+  colour?: string;
+  /** Never grouped into a cluster: the day somebody is pointing at. */
+  standalone?: boolean;
 }
 
 export interface JourneyMapHandle {
-  fit: (points: readonly { lat: number; lng: number }[], options?: { duration?: number; padding?: Padding; pitch?: number; bearing?: number }) => void;
+  /** `minSpanKm` is the least ground the frame may cover (see `frameFloorKm`), so one stop never frames a car park. */
+  fit: (points: readonly { lat: number; lng: number }[], options?: { duration?: number; padding?: Padding; pitch?: number; bearing?: number; minSpanKm?: number }) => void;
   flyTo: (point: { lat: number; lng: number }, options?: { zoom?: number; duration?: number; padding?: Padding; pitch?: number; bearing?: number }) => void;
   follow: (point: { lat: number; lng: number }) => void;
   /** Replay: show the first `fraction` of one leg as the drawing head. Null clears it. */
@@ -80,8 +89,17 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
   testId?: string;
   coordinateBar?: boolean;
   onReady?: () => void;
+  /**
+   * Group pins that overlap at the current zoom into one cluster mark (the
+   * whole-trip and stay views). Bases and the selected pin are never grouped.
+   */
+  cluster?: boolean;
+  /** How many cluster marks are on screen now, whenever that changes — the key lists the cluster mark only when one is drawn. */
+  onClusters?: (count: number) => void;
+  /** The map's health, for an owner whose fallback says whether it is still loading or has given up. */
+  onHealth?: (health: 'loading' | 'ready' | 'failed') => void;
 }>(function JourneyMap(
-  { pins, legs, selectedId = null, activeLegId = null, onSelect, onLegSelect, ground = 'night', styleId, padding = 64, ariaLabel, fallback, className, testId = 'journey-map', coordinateBar = true, onReady },
+  { pins, legs, selectedId = null, activeLegId = null, onSelect, onLegSelect, ground = 'night', styleId, padding = 64, ariaLabel, fallback, className, testId = 'journey-map', coordinateBar = true, onReady, cluster = false, onClusters, onHealth },
   ref,
 ) {
   const container = useRef<HTMLDivElement | null>(null);
@@ -94,11 +112,16 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
   const [camera, setCamera] = useState<{ lat: number; lng: number; zoom: number; pitch: number; bearing: number } | null>(null);
   const reduced = useRef(false);
   /* The last framing asked for, re-applied when the frame changes size, so a fit computed against an unsized canvas never sticks. */
-  const lastFit = useRef<{ points: readonly { lat: number; lng: number }[]; padding?: Padding; pitch?: number; bearing?: number } | null>(null);
-  const latest = useRef({ pins, legs, onSelect, onLegSelect, selectedId, activeLegId, padding });
+  const lastFit = useRef<{ points: readonly { lat: number; lng: number }[]; padding?: Padding; pitch?: number; bearing?: number; minSpanKm?: number } | null>(null);
+  const clusters = useRef<ClusterLayer | null>(null);
+  const latest = useRef({ pins, legs, onSelect, onLegSelect, selectedId, activeLegId, padding, cluster, onClusters });
   useEffect(() => {
-    latest.current = { pins, legs, onSelect, onLegSelect, selectedId, activeLegId, padding };
+    latest.current = { pins, legs, onSelect, onLegSelect, selectedId, activeLegId, padding, cluster, onClusters };
   });
+  useEffect(() => {
+    onHealth?.(health);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [health]);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,11 +137,11 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
       ensureMaplibreStylesheet(document);
       if (cancelled || !container.current) return;
       lib.current = maplibre;
-      const bounds = boundsOf(latest.current.pins);
+      const bounds = boundsOfKm(latest.current.pins.filter((pin) => !pin.dim), 12) ?? boundsOf(latest.current.pins);
       const instance = new maplibre.Map({
         container: container.current,
         style: (styleId === 'sidequest:fixture' ? fixtureStyle() : atlasStyle(ground)) as unknown as MapLibre.StyleSpecification,
-        ...(bounds ? { bounds: [[bounds.west, bounds.south], [bounds.east, bounds.north]] as [[number, number], [number, number]], fitBoundsOptions: { padding: latest.current.padding, maxZoom: 14 } } : { center: [0, 20] as [number, number], zoom: 1.5 }),
+        ...(bounds ? { bounds: [[bounds.west, bounds.south], [bounds.east, bounds.north]] as [[number, number], [number, number]], fitBoundsOptions: { padding: latest.current.padding, maxZoom: FIT_MAX_ZOOM } } : { center: [0, 20] as [number, number], zoom: 1.5 }),
         attributionControl: false,
         fadeDuration: 0,
         maxZoom: 17,
@@ -154,8 +177,14 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
         const width = (base: number) => ['case', ['==', ['get', 'active'], true], base + 2, base] as unknown as MapLibre.ExpressionSpecification;
         instance.addLayer({ id: 'journey-halo', type: 'line', source: 'journey-legs', filter: ['==', ['get', 'shape'], 'routed'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ground === 'night' ? '#0d1a1f' : '#ffffff', 'line-width': width(8), 'line-opacity': ['case', ['==', ['get', 'dim'], true], 0.15, 0.6] as unknown as MapLibre.ExpressionSpecification } });
         instance.addLayer({ id: 'journey-routed', type: 'line', source: 'journey-legs', filter: ['all', ['==', ['get', 'shape'], 'routed'], ['!=', ['get', 'disconnected'], true]], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': colour, 'line-width': width(4), 'line-opacity': opacity } });
-        instance.addLayer({ id: 'journey-chord', type: 'line', source: 'journey-legs', filter: ['all', ['==', ['get', 'shape'], 'straight'], ['!=', ['get', 'time'], 'unknown'], ['!=', ['get', 'disconnected'], true]], layout: { 'line-cap': 'butt' }, paint: { 'line-color': colour, 'line-width': width(2.4), 'line-opacity': opacity, 'line-dasharray': [2.2, 1.6] } });
-        instance.addLayer({ id: 'journey-unknown', type: 'line', source: 'journey-legs', filter: ['all', ['==', ['get', 'time'], 'unknown'], ['!=', ['get', 'disconnected'], true]], layout: { 'line-cap': 'round' }, paint: { 'line-color': colour, 'line-width': width(2.2), 'line-opacity': opacity, 'line-dasharray': [0.2, 2.2] } });
+        /*
+         * A straight connection is never drawn like a road: no halo, about a
+         * third of the routed width, broken. Dashed when its time was measured
+         * or estimated; dotted when nobody knows it. The key says which is which.
+         */
+        const thin = ['case', ['==', ['get', 'dim'], true], 0.22, 0.85] as unknown as MapLibre.ExpressionSpecification;
+        instance.addLayer({ id: 'journey-chord', type: 'line', source: 'journey-legs', filter: ['all', ['==', ['get', 'shape'], 'straight'], ['!=', ['get', 'time'], 'unknown'], ['!=', ['get', 'disconnected'], true]], layout: { 'line-cap': 'butt' }, paint: { 'line-color': colour, 'line-width': width(1.6), 'line-opacity': thin, 'line-dasharray': [3, 2.5] } });
+        instance.addLayer({ id: 'journey-unknown', type: 'line', source: 'journey-legs', filter: ['all', ['==', ['get', 'time'], 'unknown'], ['!=', ['get', 'disconnected'], true]], layout: { 'line-cap': 'round' }, paint: { 'line-color': colour, 'line-width': width(1.6), 'line-opacity': thin, 'line-dasharray': [0.2, 2.4] } });
         instance.addLayer({ id: 'journey-arc', type: 'line', source: 'journey-legs', filter: ['==', ['get', 'disconnected'], true], layout: { 'line-cap': 'round' }, paint: { 'line-color': colour, 'line-width': width(2), 'line-opacity': opacity, 'line-dasharray': [4, 3] } });
         instance.addLayer({ id: 'journey-replay', type: 'line', source: 'journey-replay', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 6, 'line-opacity': 0.9, 'line-blur': 0.5 } });
         for (const layer of ['journey-routed', 'journey-chord', 'journey-unknown', 'journey-arc']) {
@@ -166,6 +195,7 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
           instance.on('mouseenter', layer, () => (instance.getCanvas().style.cursor = 'pointer'));
           instance.on('mouseleave', layer, () => (instance.getCanvas().style.cursor = ''));
         }
+        clusters.current = new ClusterLayer(instance, maplibre, { ground: ground === 'night' ? 'night' : 'survey', maxClusterZoom: 14, padding: latest.current.padding, reducedMotion: () => reduced.current, onCount: (n) => latest.current.onClusters?.(n) });
         setHealth('ready');
         report();
         syncMarkers();
@@ -194,6 +224,8 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
     const markerMap = markers.current;
     return () => {
       cancelled = true;
+      clusters.current?.destroy();
+      clusters.current = null;
       markerMap.forEach(({ marker }) => marker.remove());
       markerMap.clear();
       map.current?.remove();
@@ -224,31 +256,54 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
       entry.marker.setLngLat([pin.lng, pin.lat]);
       const { el } = entry;
       const selected = pin.id === latest.current.selectedId;
-      el.classList.add('atlas-pin');
+      el.classList.add('atlas-pin', ...PIN_HIT_AREA);
       el.dataset.state = pin.kind === 'base' || pin.kind === 'gateway' ? 'base' : pin.kind === 'meal' ? 'meal' : pin.kind === 'context' ? 'muted' : 'chosen';
       el.dataset.focused = String(selected);
       el.dataset.dim = String(Boolean(pin.dim));
       el.dataset.pointId = pin.id;
+      if (pin.dayNumber !== undefined) el.dataset.day = String(pin.dayNumber);
+      else delete el.dataset.day;
       el.textContent = pin.mark;
       el.setAttribute('aria-label', pin.label);
       el.setAttribute('aria-pressed', String(selected));
-      /* Stops above the bed: a stop at the base must still be pressable. */
-      el.style.zIndex = String(selected ? 1000 : pin.kind === 'base' ? 50 : pin.kind === 'context' ? 10 : 100 + index);
-      el.style.opacity = pin.dim ? '0.4' : '';
-      if (!latest.current.onSelect || pin.kind === 'context') el.tabIndex = -1;
+      /* Stops above the bed on a day: a stop at the base must still be pressable. On the whole trip the bed sits above the clusters (600), so where you sleep is always visible. The selected pin above everything. */
+      el.style.zIndex = String(selected ? 1000 : pin.kind === 'base' ? (latest.current.cluster ? 700 : 50) : pin.kind === 'context' ? 10 : 100 + index);
+      /* `filter`, not `opacity`: MapLibre rewrites a marker's opacity on every frame (its occlusion test), which silently undid the dimming. */
+      el.style.filter = pin.dim ? 'opacity(0.38) saturate(0.5)' : '';
+      /* Drawn by day on the whole trip: the day's colour, night ink, the day strip below is the key. */
+      el.style.background = pin.colour && pin.kind !== 'context' ? pin.colour : '';
+      el.style.borderColor = pin.colour && pin.kind !== 'context' ? '#0d1a1f' : '';
+      el.style.color = pin.colour && pin.kind !== 'context' ? '#0d1a1f' : '';
+      el.tabIndex = !latest.current.onSelect || pin.kind === 'context' ? -1 : 0;
     });
     for (const [id, entry] of markers.current) {
       if (seen.has(id)) continue;
       entry.marker.remove();
       markers.current.delete(id);
     }
+    regroup();
+  }
+
+  /** Hand the current pins to the cluster layer: everything but the beds and the selection may be grouped. */
+  function regroup() {
+    const layer = clusters.current;
+    if (!layer) return;
+    const { pins: current, selectedId: chosen, cluster: grouped, padding: pad } = latest.current;
+    layer.setOptions({ padding: pad });
+    layer.update(
+      current
+        .filter((pin) => pin.kind !== 'context')
+        .map((pin) => ({ id: pin.id, lat: pin.lat, lng: pin.lng, label: pin.label, dayNumber: pin.dayNumber, pinned: pin.kind === 'base' || pin.kind === 'gateway' || pin.id === chosen || pin.standalone === true })),
+      new Map([...markers.current].filter(([id]) => !id.startsWith('ctx:') || id.startsWith('ctx:base:'))),
+      grouped,
+    );
   }
 
   useEffect(() => {
     if (health !== 'ready') return;
     syncMarkers();
     (map.current?.getSource('journey-legs') as MapLibre.GeoJSONSource | undefined)?.setData(legsGeoJson(legs, activeLegId));
-  }, [health, pins, legs, selectedId, activeLegId]);
+  }, [health, pins, legs, selectedId, activeLegId, cluster]);
 
   /* The frame resizes (a sticky column settling, a phone rotating, a dialog opening). */
   useEffect(() => {
@@ -264,8 +319,8 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
       if (!instance) return;
       instance.resize();
       const fit = lastFit.current;
-      const bounds = fit ? boundsOf(fit.points) : null;
-      if (fit && bounds) instance.fitBounds([[bounds.west, bounds.south], [bounds.east, bounds.north]], { padding: fit.padding ?? latest.current.padding, maxZoom: 14.5, duration: 0, ...(fit.pitch !== undefined ? { pitch: fit.pitch } : {}) });
+      const bounds = fit ? boundsOfKm(fit.points, fit.minSpanKm ?? 1.3) : null;
+      if (fit && bounds) instance.fitBounds([[bounds.west, bounds.south], [bounds.east, bounds.north]], { padding: safePadding(fit.padding ?? latest.current.padding, instance), maxZoom: FIT_MAX_ZOOM, duration: 0, ...(fit.pitch !== undefined ? { pitch: fit.pitch } : {}) });
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -275,12 +330,12 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
     isReady: () => health === 'ready',
     fit(points, options = {}) {
       const instance = map.current;
-      const bounds = boundsOf(points);
+      const bounds = boundsOfKm(points, options.minSpanKm ?? 1.3);
       if (!instance || !bounds) return;
-      lastFit.current = { points, ...(options.padding !== undefined ? { padding: options.padding } : {}), ...(options.pitch !== undefined ? { pitch: options.pitch } : {}) };
+      lastFit.current = { points, ...(options.padding !== undefined ? { padding: options.padding } : {}), ...(options.pitch !== undefined ? { pitch: options.pitch } : {}), ...(options.minSpanKm !== undefined ? { minSpanKm: options.minSpanKm } : {}) };
       instance.fitBounds([[bounds.west, bounds.south], [bounds.east, bounds.north]], {
-        padding: options.padding ?? latest.current.padding,
-        maxZoom: 14.5,
+        padding: safePadding(options.padding ?? latest.current.padding, instance),
+        maxZoom: FIT_MAX_ZOOM,
         duration: reduced.current ? 0 : (options.duration ?? 1100),
         ...(options.pitch !== undefined ? { pitch: options.pitch } : {}),
         ...(options.bearing !== undefined ? { bearing: options.bearing } : {}),
@@ -375,6 +430,30 @@ export const JourneyMap = forwardRef<JourneyMapHandle, {
     </div>
   );
 });
+
+/**
+ * The 44 px hit area around a 26 px pin, without changing how it looks: an
+ * invisible ring on the button's own pseudo-element (MapLibre positions the
+ * marker absolutely, so the ring is anchored to it).
+ */
+const PIN_HIT_AREA = ['before:absolute', 'before:-inset-[9px]', 'before:rounded-full', "before:content-['']"];
+
+/**
+ * Padding the frame can actually hold. The explorer pads for its header and
+ * ribbon (140 + 190 px on the full view); on a short phone frame that left a
+ * negative box and MapLibre refused the fit, so the camera stayed wherever it
+ * was. Scaled down until at least a third of each axis is left for the places.
+ */
+function safePadding(padding: Padding, instance: MapLibre.Map): Padding {
+  const box = typeof padding === 'number' ? { top: padding, right: padding, bottom: padding, left: padding } : padding;
+  const canvas = instance.getCanvas();
+  const w = canvas.clientWidth || 0;
+  const h = canvas.clientHeight || 0;
+  if (w === 0 || h === 0) return box;
+  const sx = Math.min(1, (w * 0.66) / Math.max(1, box.left + box.right));
+  const sy = Math.min(1, (h * 0.66) / Math.max(1, box.top + box.bottom));
+  return { top: Math.round(box.top * sy), bottom: Math.round(box.bottom * sy), left: Math.round(box.left * sx), right: Math.round(box.right * sx) };
+}
 
 function webglAvailable(): boolean {
   try {

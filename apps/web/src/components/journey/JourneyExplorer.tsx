@@ -8,6 +8,10 @@ import { cx } from '../ui';
 import { JourneyMap, MODE_COLOUR, type JourneyMapHandle, type JourneyPin, type TerrainReport } from './JourneyMap';
 import { legLabel, type JourneyDay, type JourneyLeg, type JourneyModel, type JourneyStop } from '@/lib/journey/model';
 import { useReplay, type ReplayStep } from './useReplay';
+import { JourneyFallback } from './JourneyFallback';
+import { journeyKey, type JourneyLineKind, type JourneyMarkKind } from './journey-key';
+import { dayColour } from '../map-clusters';
+import { frameFloorKm } from '../map-camera';
 
 /**
  * THE JOURNEY EXPLORER — the itinerary as a place you can move through.
@@ -84,6 +88,10 @@ export function JourneyExplorer({
   /* The card over the map can be put away; choosing the same stop again brings it back. */
   const [dismissed, setDismissed] = useState<string | null>(null);
   const frame = useRef<HTMLDivElement | null>(null);
+  /* A day pointed at in the strip (hover or keyboard focus) on the whole trip: its stops come forward, the rest step back. */
+  const [highlightDay, setHighlightDay] = useState<number | null>(null);
+  const [clusterCount, setClusterCount] = useState(0);
+  const [mapHealth, setMapHealth] = useState<'loading' | 'ready' | 'failed'>('loading');
 
   const day = model.days.find((d) => d.dayNumber === dayNumber) ?? model.days[0] ?? null;
   const stay = useMemo(() => model.bases.find((b) => b.dayNumbers.includes(dayNumber)) ?? null, [model.bases, dayNumber]);
@@ -92,7 +100,7 @@ export function JourneyExplorer({
   const selectedId = selectedPlaceId !== undefined && selectedPlaceId !== null ? selectedPlaceId : ownSelected;
 
   /* What is drawn at each scale: the scope at full strength, the rest of the trip faint behind it. */
-  const { pins, legs, focusPoints } = useMemo(() => buildScene(model, scale, day, stay?.dayNumbers ?? []), [model, scale, day, stay]);
+  const { pins, legs, focusPoints } = useMemo(() => buildScene(model, scale, day, stay?.dayNumbers ?? [], scale === 'day' ? null : highlightDay), [model, scale, day, stay, highlightDay]);
 
   const changeDay = useCallback(
     (next: number) => {
@@ -110,8 +118,8 @@ export function JourneyExplorer({
     if (!ready || !handle.current) return;
     if (lastScope.current === scopeKey) return;
     lastScope.current = scopeKey;
-    handle.current.fit(focusPoints, { ...(terrain.on ? { pitch: 55 } : {}) });
-  }, [ready, scopeKey, focusPoints, terrain.on]);
+    handle.current.fit(focusPoints, { minSpanKm: frameFloorKm(scale === 'day' ? 'day' : 'overview', focusPoints), ...(terrain.on ? { pitch: 55 } : {}) });
+  }, [ready, scopeKey, focusPoints, terrain.on, scale]);
 
   /* A stop selected anywhere (a pin, a row, the ribbon) brings the camera to it. */
   const lastSelected = useRef<string | null>(null);
@@ -159,14 +167,13 @@ export function JourneyExplorer({
   const shownStop = replay.active ? replayStop : scale === 'day' && !(pickedLeg && detailFocus === 'leg') && selectedId !== dismissed ? selectedStop : null;
   /* A leg belongs to its day: at the trip or stay scale its card would describe a day no longer on screen. */
   const shownLeg = replay.active ? replayLeg : scale === 'day' && pickedLeg && (detailFocus === 'leg' || !selectedStop) ? pickedLeg : null;
-  const modesHere = [...new Set((day?.legs ?? []).map((l) => l.mode))];
+  /* The key is the scene's own: the line kinds and marks on screen now, and the modes of the lines drawn. */
+  const key = journeyKey({ legs, pins, clusters: scale === 'day' ? 0 : clusterCount });
+  const modesHere = [...new Set(legs.map((l) => l.mode))];
 
   if (!day) return null;
-  const fallback = (
-    <div className="flex h-full items-center justify-center p-8 text-center">
-      <p className="max-w-[34ch] text-sm text-bone/70">{ready ? '' : 'Drawing the journey…'}</p>
-    </div>
-  );
+  /* Never a blank frame: until the map draws (and instead of it, if it cannot), the same places at their real positions. */
+  const fallback = <JourneyFallback pins={pins} legs={legs} status={mapHealth === 'failed' ? 'failed' : 'loading'} cluster={scale !== 'day'} />;
 
   return (
     <div ref={frame} className={cx('relative h-full w-full overflow-hidden bg-night text-bone', className)} data-testid={testId} data-scale={scale} data-day={day.dayNumber} data-terrain={terrain.on ? '3d' : '2d'} data-replay={replay.active ? (replay.playing ? 'playing' : 'paused') : 'off'}>
@@ -187,6 +194,9 @@ export function JourneyExplorer({
         ariaLabel={scale === 'trip' ? `The whole trip: ${model.days.length} days, ${model.bases.length} ${model.bases.length === 1 ? 'base' : 'bases'}.` : `Day ${day.dayNumber}: ${day.stops.filter((s) => s.kind === 'stop').length} stops, numbered in the order of the day.`}
         fallback={fallback}
         onReady={() => setReady(true)}
+        onHealth={setMapHealth}
+        cluster={scale !== 'day'}
+        onClusters={setClusterCount}
         testId={`${testId}-map`}
       />
 
@@ -226,7 +236,7 @@ export function JourneyExplorer({
         <button type="button" onClick={() => setKeyOpen((o) => !o)} aria-expanded={keyOpen} className="inline-flex min-h-11 min-w-11 items-center justify-center border border-bone/25 bg-night/80 px-3 text-xs text-bone" data-testid="journey-key-toggle">
           Key
         </button>
-        {keyOpen ? <Key modes={modesHere} /> : null}
+        {keyOpen ? <Key lines={key.lines} marks={key.marks} modes={modesHere} /> : null}
         {terrain.report ? (
           <p className="max-w-[16rem] border border-bone/20 bg-night/90 px-3 py-2 text-right text-xs text-bone/80" role="status" data-testid="journey-terrain-status">
             {terrain.report.ok ? (terrain.report.minMetres !== null ? `Relief here: ${Math.max(0, terrain.report.minMetres).toLocaleString()}–${Math.max(0, terrain.report.maxMetres!).toLocaleString()} m above sea level.${terrain.report.maxMetres! - terrain.report.minMetres < 80 ? ' Flat ground — 3D adds little.' : ''}` : '') : `3D is unavailable: ${terrain.report.reason}`}
@@ -264,7 +274,21 @@ export function JourneyExplorer({
           setDetailFocus('leg');
         }} compact={variant === 'sticky'} />
       ) : null}
-      {scale !== 'day' ? <DayStrip model={model} scale={scale} stayDays={stay?.dayNumbers ?? []} current={day.dayNumber} onDay={(n) => { changeDay(n); setScale('day'); }} /> : null}
+      {scale !== 'day' ? (
+        <DayStrip
+          model={model}
+          scale={scale}
+          stayDays={stay?.dayNumbers ?? []}
+          current={day.dayNumber}
+          highlight={highlightDay}
+          onHighlight={setHighlightDay}
+          onDay={(n) => {
+            setHighlightDay(null);
+            changeDay(n);
+            setScale('day');
+          }}
+        />
+      ) : null}
 
       {/* REPLAY CONTROLS. */}
       {replay.active ? (
@@ -372,19 +396,38 @@ function LegCard({ leg, day }: { leg: JourneyLeg; day: JourneyDay }) {
   );
 }
 
-function Key({ modes }: { modes: readonly string[] }) {
+function Key({ lines, marks, modes }: { lines: readonly { kind: JourneyLineKind; text: string }[]; marks: readonly { kind: JourneyMarkKind; text: string }[]; modes: readonly string[] }) {
   return (
-    <div className="w-[15.5rem] border border-bone/20 bg-night/95 p-3 text-xs text-bone/85" data-testid="journey-key">
-      <p className="sheet-label text-bone/60">Lines</p>
-      <ul className="mt-2 space-y-1.5">
-        <li className="flex items-center gap-2"><Swatch dash="solid" />Route as measured</li>
-        <li className="flex items-center gap-2"><Swatch dash="dashed" />Straight line — time known or estimated</li>
-        <li className="flex items-center gap-2"><Swatch dash="dotted" />Straight line — not measured</li>
-        <li className="flex items-center gap-2"><Swatch dash="arc" />Flight or long crossing</li>
-      </ul>
+    <div className="w-[min(17rem,calc(100vw-1.5rem))] border border-bone/20 bg-night/95 p-3 text-xs text-bone/85" data-testid="journey-key">
+      {lines.length > 0 ? (
+        <>
+          <p className="sheet-label text-bone/60">Lines</p>
+          <ul className="mt-2 space-y-1.5">
+            {lines.map((line) => (
+              <li key={line.kind} className="flex items-start gap-2" data-key-line={line.kind}>
+                <Swatch kind={line.kind} />
+                <span>{line.text}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {marks.length > 0 ? (
+        <>
+          <p className={cx('sheet-label text-bone/60', lines.length > 0 && 'mt-3')}>Marks</p>
+          <ul className="mt-2 space-y-1.5">
+            {marks.map((mark) => (
+              <li key={mark.kind} className="flex items-center gap-2" data-key-mark={mark.kind}>
+                <MarkSwatch kind={mark.kind} />
+                <span>{mark.text}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {modes.length > 0 ? (
         <>
-          <p className="sheet-label mt-3 text-bone/60">Colour is how you move</p>
+          <p className="sheet-label mt-3 text-bone/60">Line colour is how you move</p>
           <ul className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
             {modes.map((mode) => (
               <li key={mode} className="flex items-center gap-1.5">
@@ -399,12 +442,26 @@ function Key({ modes }: { modes: readonly string[] }) {
   );
 }
 
+function MarkSwatch({ kind }: { kind: JourneyMarkKind }) {
+  if (kind === 'base') return <span aria-hidden="true" className="inline-grid h-4 w-4 shrink-0 place-items-center rounded-[2px] border border-night bg-bone text-[9px] text-night">⌂</span>;
+  if (kind === 'meal') return <span aria-hidden="true" className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-night bg-glacier" />;
+  if (kind === 'context') return <span aria-hidden="true" className="inline-block h-2 w-2 shrink-0 rounded-full border border-bone/60 opacity-60" />;
+  if (kind === 'cluster') return <span aria-hidden="true" className="inline-grid h-4 w-4 shrink-0 place-items-center rounded-full font-mono text-[8px] text-bone" style={{ background: 'conic-gradient(#7fd1e0 0 33%, #f2c14e 33% 66%, #b9a7ff 66%)', boxShadow: 'inset 0 0 0 3px transparent' }}><span className="grid h-2.5 w-2.5 place-items-center rounded-full bg-night">3</span></span>;
+  if (kind === 'stop_by_day') return <span aria-hidden="true" className="inline-flex shrink-0 gap-0.5">{[1, 2, 3].map((d) => <span key={d} className="inline-block h-3 w-3 rounded-full border border-night" style={{ background: dayColour(d) }} />)}</span>;
+  return <span aria-hidden="true" className="inline-grid h-4 w-4 shrink-0 place-items-center rounded-full border border-night bg-flare font-mono text-[8px] text-night">1</span>;
+}
+
 const MODE_WORD: Record<string, string> = { drive: 'Drive', walk: 'Walk', transit: 'Bus or shuttle', rail: 'Train', ferry: 'Ferry', flight: 'Flight', cycle: 'Bike', trail: 'Trail', transfer: 'Transfer', unknown: 'Not stated' };
 
-function Swatch({ dash }: { dash: 'solid' | 'dashed' | 'dotted' | 'arc' }) {
+/** A sample of the line exactly as the map draws it: width, break and cap. */
+function Swatch({ kind }: { kind: JourneyLineKind }) {
   return (
-    <svg aria-hidden="true" width="30" height="8" viewBox="0 0 30 8" className="shrink-0">
-      {dash === 'arc' ? <path d="M1 7 Q15 -3 29 7" fill="none" stroke="#d7c8ff" strokeWidth="2" strokeDasharray="4 3" /> : <line x1="1" y1="4" x2="29" y2="4" stroke="#ff5a1f" strokeWidth={dash === 'solid' ? 3.5 : 2.4} strokeDasharray={dash === 'dashed' ? '5 3.5' : dash === 'dotted' ? '0.5 4' : undefined} strokeLinecap={dash === 'dotted' ? 'round' : 'butt'} />}
+    <svg aria-hidden="true" width="30" height="10" viewBox="0 0 30 10" className="mt-0.5 shrink-0">
+      {kind === 'arc' ? (
+        <path d="M1 9 Q15 -3 29 9" fill="none" stroke="#d7c8ff" strokeWidth="2" strokeDasharray="4 3" />
+      ) : (
+        <line x1="1" y1="5" x2="29" y2="5" stroke="#ff5a1f" strokeWidth={kind === 'routed' ? 4 : 1.6} strokeDasharray={kind === 'straight_timed' ? '4.8 4' : kind === 'straight_unknown' ? '0.3 3.8' : undefined} strokeLinecap={kind === 'straight_unknown' || kind === 'routed' ? 'round' : 'butt'} opacity={kind === 'routed' ? 1 : 0.85} />
+      )}
     </svg>
   );
 }
@@ -442,7 +499,7 @@ function Ribbon({ day, selectedId, activeLeg, onStop, onLeg, compact }: { day: J
             <li key={entry.leg.id} className="flex shrink-0 items-center">
               <button type="button" onClick={() => onLeg(entry.leg)} aria-pressed={entry.leg.id === activeLeg} className="flex min-h-11 flex-col items-center justify-center px-1" title={legLabel(entry.leg, formatMinutes)} aria-label={legLabel(entry.leg, formatMinutes)} data-testid="journey-ribbon-leg">
                 <svg aria-hidden="true" width="44" height="6" viewBox="0 0 44 6">
-                  <line x1="0" y1="3" x2="44" y2="3" stroke={MODE_COLOUR[entry.leg.mode]} strokeWidth={entry.leg.id === activeLeg ? 4 : 2.5} strokeDasharray={entry.leg.shape === 'routed' && !entry.leg.disconnected ? undefined : entry.leg.time === 'unknown' ? '0.5 4' : '5 3.5'} strokeLinecap={entry.leg.time === 'unknown' ? 'round' : 'butt'} />
+                  <line x1="0" y1="3" x2="44" y2="3" stroke={MODE_COLOUR[entry.leg.mode]} strokeWidth={(entry.leg.shape === 'routed' && !entry.leg.disconnected ? 3 : 1.6) + (entry.leg.id === activeLeg ? 1.5 : 0)} strokeDasharray={entry.leg.shape === 'routed' && !entry.leg.disconnected ? undefined : entry.leg.time === 'unknown' ? '0.5 4' : '4 3.5'} strokeLinecap={entry.leg.time === 'unknown' ? 'round' : 'butt'} />
                 </svg>
                 <span className="coordbar mt-0.5 text-[9px] text-bone/55">{entry.leg.minutes === null ? '—' : `${entry.leg.time === 'estimated' ? '≈' : ''}${formatMinutes(entry.leg.minutes)}`}</span>
               </button>
@@ -454,25 +511,47 @@ function Ribbon({ day, selectedId, activeLeg, onStop, onLeg, compact }: { day: J
   );
 }
 
-function DayStrip({ model, scale, stayDays, current, onDay }: { model: JourneyModel; scale: JourneyScale; stayDays: readonly number[]; current: number; onDay: (n: number) => void }) {
+/**
+ * The days as a strip — and, on the whole trip, the key to the pins: each day
+ * carries the swatch its stops are drawn in. Pointing at a day (hover or
+ * keyboard focus) brings its stops forward on the map and steps the others
+ * back; pressing it goes down to the day.
+ */
+function DayStrip({ model, scale, stayDays, current, highlight, onHighlight, onDay }: { model: JourneyModel; scale: JourneyScale; stayDays: readonly number[]; current: number; highlight: number | null; onHighlight: (n: number | null) => void; onDay: (n: number) => void }) {
   const days = scale === 'stay' ? model.days.filter((d) => stayDays.includes(d.dayNumber)) : model.days;
   return (
-    <nav aria-label="Days" className="absolute inset-x-0 bottom-8 z-20 bg-gradient-to-t from-night via-night/90 to-transparent px-3 pt-8 pb-2" data-testid="journey-days">
+    <nav aria-label="Days — each colour is a day's stops on the map" className="absolute inset-x-0 bottom-8 z-20 bg-gradient-to-t from-night via-night/90 to-transparent px-3 pt-8 pb-2" data-testid="journey-days" onMouseLeave={() => onHighlight(null)}>
       <ol className="no-scrollbar flex overflow-x-auto">
-        {days.map((d) => (
-          <li key={d.dayNumber} className="min-w-[8.5rem] shrink-0 border-l border-bone/10 first:border-l-0">
-            <button type="button" onClick={() => onDay(d.dayNumber)} className={cx('block min-h-11 w-full px-3 py-1.5 text-left hover:bg-white/5', d.dayNumber === current && 'text-flare')} data-testid="journey-day">
-              <span className="block font-display text-xl leading-none font-light">{String(d.dayNumber).padStart(2, '0')}</span>
-              <span className="mt-1 block truncate text-[11px] text-bone/70">{d.theme}</span>
-            </button>
-          </li>
-        ))}
+        {days.map((d) => {
+          const stops = d.stops.filter((s) => s.kind === 'stop').length;
+          return (
+            <li key={d.dayNumber} className="min-w-[8.5rem] shrink-0 border-l border-bone/10 first:border-l-0 max-sm:min-w-[7rem]">
+              <button
+                type="button"
+                onClick={() => onDay(d.dayNumber)}
+                onMouseEnter={() => onHighlight(d.dayNumber)}
+                onFocus={() => onHighlight(d.dayNumber)}
+                onBlur={() => onHighlight(null)}
+                aria-label={`Day ${d.dayNumber}: ${d.theme}. ${stops} ${stops === 1 ? 'stop' : 'stops'}, drawn in this day's colour.`}
+                className={cx('block min-h-11 w-full px-3 py-1.5 text-left transition-colors hover:bg-white/5', d.dayNumber === current && 'text-flare', highlight === d.dayNumber && 'bg-white/[0.07]')}
+                data-testid="journey-day"
+                data-day-colour={dayColour(d.dayNumber)}
+              >
+                <span className="flex items-center gap-2">
+                  <span aria-hidden="true" className="inline-block h-3 w-3 shrink-0 rounded-full border border-night" style={{ background: dayColour(d.dayNumber) }} />
+                  <span className="font-display text-xl leading-none font-light">{String(d.dayNumber).padStart(2, '0')}</span>
+                </span>
+                <span className="mt-1 block truncate text-[11px] text-bone/70">{d.theme}</span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );
 }
 
-function buildScene(model: JourneyModel, scale: JourneyScale, day: JourneyDay | null, stayDays: readonly number[]) {
+function buildScene(model: JourneyModel, scale: JourneyScale, day: JourneyDay | null, stayDays: readonly number[], highlight: number | null = null) {
   const pins: JourneyPin[] = [];
   const legs: (JourneyLeg & { dim?: boolean })[] = [];
   const focusPoints: { lat: number; lng: number }[] = [];
@@ -494,6 +573,14 @@ function buildScene(model: JourneyModel, scale: JourneyScale, day: JourneyDay | 
         pins.push({ id: `ctx:${id}`, lat: stop.point.lat, lng: stop.point.lng, label: `${stop.title}, day ${d.dayNumber}`, mark: '', kind: 'context', dim: true });
         continue;
       }
+      /*
+       * ONE NUMBERING PER SCALE. On a day the pin wears the stop's number in
+       * the day's order (the ribbon and the timeline wear the same). On the
+       * whole trip a stop wears its *day* — colour and number — because
+       * eleven days of "1, 2, 3" says nothing about which 2 is which.
+       */
+      const byDay = scale !== 'day';
+      const stepsBack = byDay && highlight !== null && highlight !== d.dayNumber;
       pins.push({
         id,
         lat: stop.point.lat,
@@ -501,12 +588,15 @@ function buildScene(model: JourneyModel, scale: JourneyScale, day: JourneyDay | 
         label: scale === 'day' ? (stop.kind === 'meal' ? `Meal: ${stop.title}` : `Stop ${stop.number}: ${stop.title}`) : `Day ${d.dayNumber}: ${stop.title}`,
         mark: scale === 'day' ? (stop.kind === 'meal' ? '' : String(stop.number ?? '')) : String(d.dayNumber),
         kind: stop.kind === 'meal' ? 'meal' : 'stop',
-        dim: !scoped,
+        dim: !scoped || stepsBack,
+        dayNumber: d.dayNumber,
+        ...(byDay && stop.kind !== 'meal' ? { colour: dayColour(d.dayNumber) } : {}),
+        ...(byDay && highlight === d.dayNumber ? { standalone: true } : {}),
       });
       if (scoped) focusPoints.push(stop.point);
     }
     if (scale === 'day' && scoped) legs.push(...d.legs);
-    if (scale !== 'day' && scoped) legs.push(...d.legs.filter((l) => l.shape === 'routed' || l.disconnected).map((l) => ({ ...l, id: `d${d.dayNumber}:${l.id}` })));
+    if (scale !== 'day' && scoped) legs.push(...d.legs.filter((l) => l.shape === 'routed' || l.disconnected).map((l) => ({ ...l, id: `d${d.dayNumber}:${l.id}`, ...(highlight !== null && highlight !== d.dayNumber ? { dim: true } : {}) })));
   }
   if (scale !== 'day') legs.push(...model.moves);
   if (focusPoints.length === 0 && day) focusPoints.push(...day.stops.map((s) => s.point));

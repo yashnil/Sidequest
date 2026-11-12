@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { abbreviateLabel, cameraFrameFor, labelBudget, selectLabels, type MapMarker } from './map-camera';
+import { FIT_MAX_ZOOM, abbreviateLabel, cameraFrameFor, frameFloorKm, labelBudget, selectLabels, type MapMarker } from './map-camera';
 
 /**
  * V11 §11 §12 — the two map defects the founder screenshots showed, as tests
@@ -366,5 +366,23 @@ describe('V11 §N — a mark with no label of its own is still something a chip 
     expect(withoutBase[0]?.side).toBe('right');
     const withBase = selectLabels([signature], { max: 10, width: 1400, obstacles: [{ x: 541, y: 100, radius: 5.5 }] });
     expect(withBase[0]?.side).toBe('left');
+  });
+});
+
+describe('the floor under a vector-map fit', () => {
+  it('gives one place the context of its town and valley, whatever the mode', () => {
+    expect(frameFloorKm('day', [{ lat: 37.6, lng: -119 }])).toBe(12);
+    /* Two entries at one spot are one place. */
+    expect(frameFloorKm('overview', [{ lat: 37.6, lng: -119 }, { lat: 37.60001, lng: -119.00001 }])).toBe(12);
+    expect(frameFloorKm('day', [])).toBe(12);
+  });
+  it('lets a day of several stops frame a few kilometres of town and a whole trip at least a valley', () => {
+    const two = [{ lat: 37.6, lng: -119 }, { lat: 37.61, lng: -119.01 }];
+    expect(frameFloorKm('day', two)).toBeLessThan(frameFloorKm('overview', two));
+    expect(frameFloorKm('day', two)).toBeGreaterThanOrEqual(2);
+    expect(frameFloorKm('overview', two)).toBeGreaterThanOrEqual(20);
+  });
+  it('never fits closer than a street', () => {
+    expect(FIT_MAX_ZOOM).toBeLessThanOrEqual(15);
   });
 });

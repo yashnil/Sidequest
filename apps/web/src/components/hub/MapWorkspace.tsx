@@ -13,6 +13,7 @@ import { JourneyExplorer } from '../journey/JourneyExplorer';
 import type { JourneyModel } from '@/lib/journey/model';
 import type { DestinationImage as ImageRecord } from '@sidequest/core';
 import { revealTimelineRow, useTripSelection } from './TripSelection';
+import { dayColour } from '../map-clusters';
 
 /**
  * EXPERIENCE V2 — THE MAP VIEW IS A WORKSPACE, NOT A PICTURE.
@@ -263,6 +264,8 @@ export function MapWorkspace({
        */
       fitPoints={frame.ok ? frame.points : []}
       {...(frame.ok ? { minSpanKm: frame.minSpanKm } : {})}
+      /* The whole trip draws stops by day and groups the ones that overlap; a day draws its stops numbered, apart. */
+      cluster={view.mode !== 'day'}
       summary={drawn.summary}
       pinLabel={(marker) => `${marker.name}${'dayNumber' in marker ? `, day ${(marker as MapMarker & { dayNumber?: number }).dayNumber}` : ''}`}
       caption={
@@ -296,12 +299,22 @@ export function MapWorkspace({
             label: (mark) => ('dayNumber' in mark ? `${mark.name}, day ${(mark as MapMarker & { dayNumber?: number }).dayNumber}` : mark.name),
           });
           const faded = drawn.faded.map((mark) => ({ id: `faded-${mark.id}`, lat: mark.coordinates.lat, lng: mark.coordinates.lng, label: mark.name, state: 'muted' as const }));
+          /* On the whole trip a stop is drawn by its day (colour and day number), and overlapping stops group into clusters. */
+          const wholeTrip = view.mode !== 'day';
+          const dayOf = new Map(markers.map((marker) => [marker.id, marker.dayNumber]));
+          const points = active.points.map((point) => {
+            const dayNumber = dayOf.get(point.id);
+            if (dayNumber === undefined) return point;
+            if (!wholeTrip || point.state === 'base') return { ...point, dayNumber };
+            return { ...point, dayNumber, colour: dayColour(dayNumber), mark: String(dayNumber) };
+          });
           return (
             <AtlasMap
+              cluster={wholeTrip}
               className="absolute inset-0"
               testId="trip-map-atlas"
               ground="night"
-              points={[...faded, ...active.points]}
+              points={[...faded, ...points]}
               lines={view.mode === 'day' ? active.lines : active.lines.filter((line) => line.style !== 'estimated' && line.style !== 'unmeasured')}
               focusId={focusedId}
               {...(frame.ok && frame.minSpanKm ? { minSpanKm: frame.minSpanKm } : {})}
