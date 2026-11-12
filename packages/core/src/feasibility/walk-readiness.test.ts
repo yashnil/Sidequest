@@ -10,7 +10,7 @@ describe('one-way walks before "Ready"', () => {
     const report = buildFeasibilityReport({ itinerary: withNotes([{ dayNumber: 2, code: 'walk_luggage', note: 'Nakahechi ends at Chikatsuyu, by tonight’s bed: send your bags ahead from the last place you stayed, booked in advance.' }]) });
     const item = report.items.find((i) => i.area === 'booking' && i.dayNumber === 2);
     expect(item?.severity).toBe('dependency');
-    expect(report.status).not.toBe('feasible');
+    expect(report.verdict).not.toBe('feasible');
   });
 
   it('a way back to check is a caution, and an end beside the bed with no move is nothing', () => {
