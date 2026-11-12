@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { printPacketHref, printWithAppendixHref } from '@/components/hub/print-links';
+import { GuideExportChoice } from '@/components/guide/GuideExportChoice';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { PACKING_CATEGORY_LABELS, type PackingCategory } from '@sidequest/core';
@@ -116,16 +116,9 @@ export default async function TripPackPage({ params }: { params: Promise<{ id: s
           On paper
         </h2>
         <p className="mt-1 type-small text-ink-muted">
-          The packet prints from the trip itself: the route, the days, stays, getting around, what to book first, before-you-go, packing and the day backups — plus a last page of addresses, positions and the emergency number.
+          A printed guide laid out for paper, made from the trip itself. Choose the length that suits who it is for.
         </p>
-        <div className="mt-3 flex flex-wrap gap-2" data-print="never">
-          <Link href={printPacketHref(id)} className={buttonClass('secondary', 'sm')} data-testid="pack-pdf">
-            Print or save as PDF
-          </Link>
-          <Link href={printWithAppendixHref(id)} className={buttonClass('ghost', 'sm')}>
-            Print with the evidence appendix
-          </Link>
-        </div>
+        <GuideExportChoice tripId={id} />
       </section>
 
       <section className="mt-10 rule-top pt-6" aria-labelledby="pack-calendar">

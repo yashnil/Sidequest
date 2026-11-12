@@ -37,6 +37,10 @@ describe('the PDF is the browser’s print, and the copy says so', () => {
     expect(offenders).toEqual([]);
     /* The two print doors carry the honest label. */
     expect(readFileSync(join(root, 'components', 'PrintButton.tsx'), 'utf8')).toContain('Print or save as PDF');
-    expect(readFileSync(join(root, 'app', '(product)', 'trips', '[id]', 'pack', 'page.tsx'), 'utf8')).toContain('Print or save as PDF');
+    /* The guide's export says "Print or save as PDF" when it opens the print layout, and offers a file only when a renderer makes one. */
+    const guideExport = readFileSync(join(root, 'components', 'guide', 'GuideExportChoice.tsx'), 'utf8');
+    expect(guideExport).toContain('Print or save as PDF');
+    expect(guideExport).toContain('pdfRendererConfig() !== null');
+    expect(readFileSync(join(root, 'app', '(product)', 'trips', '[id]', 'pack', 'page.tsx'), 'utf8')).toContain('<GuideExportChoice');
   });
 });

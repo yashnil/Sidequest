@@ -1,13 +1,13 @@
 import { Fragment } from 'react';
 import {
   DESTINATION_KIND_LABELS,
-  imageryFallbackFor,
   WORLD_REGION_LABELS,
   type AdvisorPick,
   type AdvisorShortlist,
   type DestinationImage as ImageRecord,
 } from '@sidequest/core';
-import { DestinationImage } from '@/components/DestinationImage';
+import { MediaImage } from '@/components/media/MediaImage';
+import type { SelectedMedia } from '@/lib/media/select';
 import { cx } from '@/components/ui';
 import { comparedSentence, formatCount, provenanceOf, provenanceShort, sourceReference } from './advisor-copy';
 import { DataAttribution } from './DataAttribution';
@@ -97,37 +97,36 @@ function Sources({ pick }: { pick: AdvisorPick }) {
   );
 }
 
-function Locator({ pick }: { pick: AdvisorPick }) {
-  return (
-    <div className="survey-night relative flex aspect-[16/9] flex-col justify-between p-4 text-bone">
-      <WorldDots highlighted={[mark(pick)]} tone="night" className="absolute inset-0 m-auto h-full w-full p-3 opacity-90" label={`${pick.name} on a world map`} />
-      <p className="sheet-label relative text-bone/60">{WORLD_REGION_LABELS[pick.worldRegion]}</p>
-    </div>
-  );
-}
-
-function PickCard({ pick, index, image, sessionId }: { pick: AdvisorPick; index: number; image: ImageRecord | null; sessionId: string }) {
+/**
+ * A RECOMMENDATION, READ IN A GLANCE (2026-11 experience transformation).
+ *
+ * The card led with "5 of 11 checks could be made" and a dense table of eight
+ * facts; every card opened with the same "Strong on … in season in …". Now:
+ * the photograph, what kind of trip this place makes for this traveller, one
+ * reason that is about this place, three facts (when, how long, cost), the one
+ * catch that matters most — and everything else behind "More about it", where
+ * it stays available and checkable.
+ */
+function PickCard({ pick, index, media, sessionId }: { pick: AdvisorPick; index: number; media: SelectedMedia | null; sessionId: string }) {
   const kind = kindWords(pick);
   const editorial = pick.basis === 'editorial';
+  const [catchLine, ...moreCatches] = pick.tradeoffs;
   return (
-    <article data-testid="advisor-pick" className="fade-up flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-ink/15 bg-paper-raised" style={{ ['--d' as string]: `${index * 90}ms` }} aria-labelledby={`pick-${pick.id}`}>
-      {image ? (
-        <DestinationImage
-          image={image}
-          ratio="16 / 9"
-          fallback={imageryFallbackFor({ kind: 'destination', id: `advisor:${pick.id}`, name: pick.name, coordinates: pick.center })}
-        />
-      ) : (
-        <Locator pick={pick} />
-      )}
+    <article data-testid="advisor-pick" className="fade-up group flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-ink/15 bg-paper-raised transition-shadow duration-[var(--motion-base)] hover:shadow-[0_22px_40px_-30px_rgb(13_26_31/0.55)]" style={{ ['--d' as string]: `${index * 90}ms` }} aria-labelledby={`pick-${pick.id}`}>
+      {/* Image slot: a QID-tied photograph gated for a 3:2 card, or the cartographic plate (`components/media`). */}
+      <MediaImage
+        media={media}
+        context="card"
+        place={{ name: pick.name, lat: pick.center.lat, lng: pick.center.lng, radiusKm: pick.radiusKm }}
+        frameClassName="rounded-none"
+        className="[&_figcaption]:px-5 [&_figcaption]:sm:px-6"
+        eager={index === 0}
+      />
       <div className="flex min-w-0 flex-1 flex-col p-5 sm:p-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <p className="sheet-label text-accent">
-            <span className="font-semibold text-flare">{index + 1}</span> · {MATCH_WORDS[pick.match]}
-          </p>
-          <p className="type-meta text-ink-faint" title="How many of the things we score were measured for you">{coverageWords(pick)}</p>
-        </div>
-        <h3 id={`pick-${pick.id}`} className="mt-2 font-display text-[clamp(1.7rem,1.3rem+1.2vw,2.3rem)] leading-[1.02] font-[360] tracking-[-0.02em] [overflow-wrap:anywhere] text-ink">
+        <p className="sheet-label text-accent">
+          <span className="font-semibold text-flare">{index + 1}</span> · {MATCH_WORDS[pick.match]}
+        </p>
+        <h3 id={`pick-${pick.id}`} className="mt-2 font-display text-[clamp(1.7rem,1.3rem+1.2vw,2.3rem)] leading-[1.02] font-[360] tracking-[-0.02em] [overflow-wrap:anywhere] text-balance text-ink">
           {pick.name}
         </h3>
         <p className="mt-1 text-sm text-ink-muted">
@@ -135,74 +134,98 @@ function PickCard({ pick, index, image, sessionId }: { pick: AdvisorPick; index:
           {kind && pick.context ? ' · ' : null}
           {pick.context}
         </p>
-        <Provenance pick={pick} className="mt-2" />
+        {pick.feel ? (
+          <p data-testid="advisor-feel" className={cx('mt-3 inline-flex max-w-full items-center gap-2 self-start rounded-full px-3 py-1 text-sm', pick.feel.value >= 0.8 ? 'bg-pine-soft text-pine' : 'bg-amber-soft text-ink')}>
+            <span aria-hidden="true" className={cx('h-1.5 w-1.5 shrink-0 rounded-full', pick.feel.value >= 0.8 ? 'bg-pine' : 'bg-amber')} />
+            <span className="min-w-0 [overflow-wrap:anywhere]">{pick.feel.basis[0]!.toUpperCase() + pick.feel.basis.slice(1)}</span>
+          </p>
+        ) : null}
         <p className="mt-4 text-[1.02rem] leading-snug text-ink">{pick.why}</p>
         {pick.differsBy ? <p className="mt-2 text-sm text-ink-muted italic">{pick.differsBy}</p> : null}
 
-        <ul className="mt-4 space-y-1.5">
-          {pick.experiences.map((line) => (
-            <li key={line} className="flex gap-2 text-sm leading-snug text-ink">
-              <span aria-hidden="true" className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-flare" />
-              {line}
-            </li>
+        <dl className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-[var(--radius-control)] border border-ink/10 bg-ink/10">
+          {[
+            ['Best time', pick.window.label],
+            ['Stay', `About ${pick.nights.suggested} nights`],
+            ['Costs', pick.cost.label.replace(/ \(.*\)$/, '')],
+          ].map(([label, value]) => (
+            <div key={label} className="min-w-0 bg-paper-raised px-3 py-2.5">
+              <dt className="sheet-label text-ink-muted">{label}</dt>
+              <dd className="mt-1 text-sm leading-snug [overflow-wrap:anywhere] text-ink">{value}</dd>
+            </div>
           ))}
-        </ul>
-
-        <dl className="ruled mt-5 grid grid-cols-1 border-t border-ink/15 sm:grid-cols-2 sm:gap-x-5 [&>*+*]:border-t-0 sm:[&>*]:border-b sm:[&>*]:border-ink/10">
-          <Fact label="Best time" wide={Boolean(pick.seasonNote)}>
-            {pick.seasonNote ? (
-              <>
-                <span className="font-medium">{pick.window.label}</span>
-                {/* The season by activity: when it is good for what this traveller wants to do there. */}
-                <span data-testid="advisor-season" className="mt-1 block">
-                  {pick.seasonNote}
-                </span>
-              </>
-            ) : (
-              pick.window.label
-            )}
-          </Fact>
-          <Fact label="Trip length">
-            About {pick.nights.suggested} nights <span className="text-ink-muted">({pick.nights.min}–{pick.nights.max} works)</span>
-          </Fact>
-          <Fact label="Character">{pick.character}</Fact>
-          <Fact label="Costs">
-            {pick.cost.label}
-            {pick.cost.versusBudget ? <span className="text-ink-muted"> · {pick.cost.versusBudget.toLowerCase()}</span> : null}
-            {pick.cost.rooms ? <span className="mt-1 block text-ink-muted">{pick.cost.rooms}</span> : null}
-          </Fact>
-          <Fact label="Getting there">{pick.gettingThere}</Fact>
-          <Fact label="Getting around">{pick.gettingAround}</Fact>
-          <Fact label="Where you’d stay">{pick.bases.join(' · ')}</Fact>
-          <Fact label="Weather check">
-            <span className={cx(pick.climate.status === 'differs' && 'text-warning')}>{pick.climate.note}</span>
-          </Fact>
         </dl>
+        {pick.length ? (
+          <p data-testid="advisor-length" className="mt-2 text-sm leading-snug text-ink-muted">
+            {pick.length.note}
+          </p>
+        ) : null}
+        {pick.seasonNote ? (
+          <p data-testid="advisor-season" className="mt-2 text-[0.8125rem] leading-snug text-ink-muted">
+            {pick.seasonNote}
+          </p>
+        ) : null}
 
-        {pick.tradeoffs.length > 0 ? (
+        {catchLine ? (
           <div className="mt-5">
             <p className="sheet-label text-ink-muted">The catch</p>
-            <ul className="mt-1.5 space-y-1 text-sm text-ink">
-              {pick.tradeoffs.map((line) => (
+            <p className="mt-1.5 text-sm leading-snug text-ink">{catchLine}</p>
+          </div>
+        ) : null}
+
+        <details className="mt-4 border-t border-ink/10 pt-1 text-sm">
+          <summary className="min-h-11 cursor-pointer py-2.5 font-medium text-ink hover:text-accent">More about {pick.name}</summary>
+          {pick.experiences.length > 0 ? (
+            <ul className="mt-1 space-y-1.5">
+              {pick.experiences.map((line) => (
+                <li key={line} className="flex gap-2 leading-snug text-ink">
+                  <span aria-hidden="true" className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-flare" />
+                  {line}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <dl className="ruled mt-4 grid grid-cols-1 border-t border-ink/15 sm:grid-cols-2 sm:gap-x-5 [&>*+*]:border-t-0 sm:[&>*]:border-b sm:[&>*]:border-ink/10">
+            <Fact label="Length">
+              {pick.nights.min}–{pick.nights.max} nights works
+            </Fact>
+            <Fact label="Character">{pick.character}</Fact>
+            <Fact label="Costs">
+              {pick.cost.label}
+              {pick.cost.versusBudget ? <span className="text-ink-muted"> · {pick.cost.versusBudget.toLowerCase()}</span> : null}
+              {pick.cost.rooms ? <span className="mt-1 block text-ink-muted">{pick.cost.rooms}</span> : null}
+            </Fact>
+            <Fact label="Getting there">{pick.gettingThere}</Fact>
+            <Fact label="Getting around">{pick.gettingAround}</Fact>
+            <Fact label="Where you’d stay">{pick.bases.join(' · ')}</Fact>
+            <Fact label="Weather check" wide>
+              <span className={cx(pick.climate.status === 'differs' && 'text-warning')}>{pick.climate.note}</span>
+            </Fact>
+          </dl>
+          {moreCatches.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-ink">
+              {moreCatches.map((line) => (
                 <li key={line}>— {line}</li>
               ))}
             </ul>
-          </div>
-        ) : null}
-        <Sources pick={pick} />
-        <details className="mt-2 text-sm">
-          <summary className="min-h-11 cursor-pointer py-2 text-ink-muted hover:text-ink">Not checked yet</summary>
-          <ul className="mt-1 space-y-1 text-ink-muted">
-            {pick.unverified.map((line) => (
-              <li key={line}>· {line}</li>
-            ))}
-            <li>
-              ·{' '}
-              {editorial
-                ? 'Our reading of this place is editorial, written from the sources above.'
-                : 'Nobody at Sidequest has reviewed this place. What we say about it is worked out from the sources above.'}
-            </li>
-          </ul>
+          ) : null}
+          <Provenance pick={pick} className="mt-3" />
+          <Sources pick={pick} />
+          <details className="mt-2">
+            <summary className="min-h-11 cursor-pointer py-2 text-ink-muted hover:text-ink">Not checked yet</summary>
+            <ul className="mt-1 space-y-1 text-ink-muted">
+              {pick.unverified.map((line) => (
+                <li key={line}>· {line}</li>
+              ))}
+              <li>
+                ·{' '}
+                {editorial
+                  ? 'Our reading of this place is editorial, written from the sources above.'
+                  : 'Nobody at Sidequest has reviewed this place. What we say about it is worked out from the sources above.'}
+              </li>
+              <li>· {coverageWords(pick)}; anything you have not told us is left out rather than guessed.</li>
+            </ul>
+          </details>
         </details>
 
         <div className="mt-auto pt-6">
@@ -289,14 +312,17 @@ function CompareTable({ picks }: { picks: AdvisorPick[] }) {
 export function AdvisorShortlistView({
   sessionId,
   shortlist,
-  images,
+  media = {},
   dots,
   sampleComplete,
   summary,
 }: {
   sessionId: string;
   shortlist: AdvisorShortlist;
+  /** Legacy destination records; the cards now read `media`. Kept so callers need not change together. */
   images: Record<string, ImageRecord>;
+  /** Per-frame card photographs by Wikidata id (`lib/media/repository#selectedMediaFor`). */
+  media?: Record<string, SelectedMedia>;
   /** Path data for the header map: a server-thinned sample of real destination centres. */
   dots: string;
   /** True when the dots are every destination rather than a sample. */
@@ -327,9 +353,14 @@ export function AdvisorShortlistView({
           </h1>
           {readout.spread ? <p className="measure mt-4 type-body text-ink-muted">{readout.spread}</p> : null}
           {shortlist.changes.length > 0 ? (
-            <p role="status" className="mt-4 inline-block rounded-full bg-accent-soft px-3.5 py-1.5 text-sm text-accent-strong">
-              {shortlist.changes.join(' ')}
-            </p>
+            <div role="status" className="measure mt-4 rounded-[var(--radius-card)] bg-accent-soft px-4 py-3 text-sm text-accent-strong" data-testid="advisor-changes">
+              <p className="sheet-label">What changed</p>
+              <ul className="mt-1.5 space-y-1">
+                {shortlist.changes.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           {readout.relaxation ? <p className="measure mt-4 rounded-[var(--radius-card)] border border-warning/40 bg-amber-soft px-4 py-3 text-sm text-ink">{readout.relaxation}</p> : null}
         </div>
@@ -361,7 +392,7 @@ export function AdvisorShortlistView({
           </ul>
           {readout.assumptions.length > 0 ? (
             <p className="mt-3 text-sm text-ink-muted">
-              <span className="font-medium text-ink">Assumed: </span>
+              <span className="font-medium text-ink">How we read it: </span>
               {readout.assumptions.join(' ')}
             </p>
           ) : null}
@@ -381,7 +412,7 @@ export function AdvisorShortlistView({
 
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         {shortlist.picks.map((pick, index) => (
-          <PickCard key={pick.id} pick={pick} index={index} image={images[`advisor:${pick.id}`] ?? null} sessionId={sessionId} />
+          <PickCard key={pick.id} pick={pick} index={index} media={(pick.wikidataId && media[pick.wikidataId]) || null} sessionId={sessionId} />
         ))}
       </div>
 

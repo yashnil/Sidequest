@@ -84,6 +84,14 @@ vi.mock('@/lib/providers/wikimedia', async (original) => ({
   },
 }));
 
+/* The cards' media pass reaches Wikimedia; counted with the rest of the image work. */
+vi.mock('@/lib/media/fill', () => ({
+  fillMedia: async () => {
+    work.imagery += 1;
+    return { resolved: 0, selected: 0, calls: 0 };
+  },
+}));
+
 let dir: string;
 const researchChoice = process.env.SIDEQUEST_ADVISOR_RESEARCH;
 
@@ -296,7 +304,7 @@ describe('a decision session belongs to the browser that started it', () => {
     // With a list on disk, each remaining action gets past its guards to the work behind them.
     await withStoredShortlist(id);
     expect((await actions.resolveAdvisorImageryAction(id)).ok).toBe(true);
-    expect(work.imagery).toBe(1);
+    expect(work.imagery).toBe(2);
     await actions.widenAdvisorShortlistAction(id);
     expect(work.research).toBe(1);
     await actions.buildAdvisorShortlistAction(id);

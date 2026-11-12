@@ -1,4 +1,4 @@
-import type { BookingItem, Itinerary, TravelIntelligence } from '@sidequest/core';
+import { bookingComSearchUrl, type BookingItem, type Itinerary, type TravelIntelligence } from '@sidequest/core';
 
 /**
  * WHAT TO BOOK BEFORE YOU GO, WITH SOMEWHERE TO BOOK IT.
@@ -30,6 +30,12 @@ export interface SuggestedBooking {
   why?: string;
   status: 'open' | 'booked';
   links: BookingLink[];
+  /**
+   * A stay row's request for named places to stay (`itinerary/lodging-actions.ts`):
+   * the base, and where each day spent from it begins. Present only when the
+   * base has a position to search around; pressed by the traveller, never fetched on render.
+   */
+  lodging?: { baseId: string; dayStarts: { dayNumber: number; name: string; lat: number; lng: number }[] };
 }
 
 export interface BookingLinkInput {
@@ -39,6 +45,8 @@ export interface BookingLinkInput {
   children: number;
   /** Disambiguates a base name for a search engine ("Lake George" → "Lake George, New York"). */
   regionHint?: string;
+  /** Stop positions by place id, as the page already resolved them; lets a stay row say where its days start. */
+  coordinates?: Record<string, { lat: number; lng: number }>;
 }
 
 const OPERATOR_KINDS: ReadonlySet<string> = new Set(['vessel', 'trail_camp', 'camp']);
@@ -74,9 +82,8 @@ function searchPlace(name: string, hint: string | undefined): string {
 
 export function stayLinks(place: string, checkIn: string, checkOut: string, adults: number, children: number): BookingLink[] {
   const q = encodeURIComponent(place);
-  const kids = children > 0 ? `&group_children=${children}` : '';
   return [
-    { label: 'Booking.com', href: `https://www.booking.com/searchresults.html?ss=${q}&checkin=${checkIn}&checkout=${checkOut}&group_adults=${adults}${kids}&no_rooms=1` },
+    { label: 'Booking.com', href: bookingComSearchUrl({ query: place, checkIn, checkOut, adults, children }) },
     { label: 'Airbnb', href: `https://www.airbnb.com/s/${q}/homes?checkin=${checkIn}&checkout=${checkOut}&adults=${adults}${children > 0 ? `&children=${children}` : ''}` },
     /* Google Travel has no documented date parameters; it reads them from the query itself. */
     { label: 'Google Hotels', href: `https://www.google.com/travel/search?q=${encodeURIComponent(`hotels in ${place} ${shortDate(checkIn)} to ${shortDate(checkOut)}`)}` },
@@ -103,8 +110,21 @@ function ticketLinks(item: BookingItem, place: string): BookingLink[] {
   return links;
 }
 
+/** The first stop with a position on each day spent from this base: where a walking day starts. */
+function dayStartsFor(itinerary: Itinerary, baseId: string, coordinates: Record<string, { lat: number; lng: number }>): { dayNumber: number; name: string; lat: number; lng: number }[] {
+  const out: { dayNumber: number; name: string; lat: number; lng: number }[] = [];
+  for (const day of itinerary.days) {
+    if (day.baseId !== baseId) continue;
+    const first = day.items.find((item) => item.kind === 'activity' && item.placeId && coordinates[item.placeId]);
+    if (!first?.placeId) continue;
+    const point = coordinates[first.placeId]!;
+    out.push({ dayNumber: day.dayNumber, name: first.title.slice(0, 160), lat: point.lat, lng: point.lng });
+  }
+  return out.slice(0, 30);
+}
+
 export function suggestedBookings(input: BookingLinkInput): SuggestedBooking[] {
-  const { itinerary, intel, adults, children, regionHint } = input;
+  const { itinerary, intel, adults, children, regionHint, coordinates } = input;
   const items = intel?.bookings.items ?? [];
   const party = partyLabel(adults, children);
   const out: SuggestedBooking[] = [];
@@ -123,11 +143,12 @@ export function suggestedBookings(input: BookingLinkInput): SuggestedBooking[] {
     out.push({
       id: `stay:${base.id}`,
       kind: 'stay',
-      title: `Somewhere to stay in ${name}`,
+      title: `Stay in ${name}`,
       detail: `${dateRangeLabel(checkIn, cursor)} · ${nights} ${nights === 1 ? 'night' : 'nights'} · ${party}`,
       ...(base.area ? { why: `Stay around ${base.area}.` } : {}),
       status: need && (need.status === 'booked' || need.status === 'soft_hold') ? 'booked' : 'open',
       links: stayLinks(place, checkIn, cursor, adults, children),
+      ...(base.coordinates ? { lodging: { baseId: base.id, dayStarts: dayStartsFor(itinerary, base.id, coordinates ?? {}) } } : {}),
     });
   }
 

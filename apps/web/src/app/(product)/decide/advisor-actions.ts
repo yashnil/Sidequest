@@ -38,6 +38,8 @@ import { adviseFor, widenWithResearch } from '@/lib/destinations/advisor';
 import { advisorWorld } from '@/lib/atlas/world';
 import { advisorResearchChoice } from '@/lib/providers/switches';
 import { advisorImageSubjects } from '@/lib/destinations/advisor-images';
+import { advisorMediaSubjects } from '@/lib/destinations/advisor-media';
+import { fillMedia } from '@/lib/media/fill';
 import { decisionAnswersSchema, decisionAnswersToComposer, emptyDecisionAnswers, type DecisionAnswersInput } from '@/lib/destinations/decision-answers';
 import { DYNAMIC_REGION_ID } from '@/lib/region';
 import { imageryCache } from '@/lib/db/imagery-repository';
@@ -272,6 +274,8 @@ export async function resolveAdvisorImageryAction(id: string): Promise<AdvisorRe
   const session = getDecisionSession(id);
   if (!session?.advisor) return { ok: false };
   try {
+    /* The cards' photographs first (QID-tied, gated per frame — `lib/media`), then the older destination record other surfaces read. */
+    await fillMedia(advisorMediaSubjects(session.advisor), { contexts: ['card'] });
     await resolveImageryForSubjects(advisorImageSubjects(session.advisor), { cache: imageryCache(new Date()) });
   } catch (error) {
     console.error('Advisor imagery failed', { id, error });

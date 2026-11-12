@@ -114,6 +114,9 @@ export * from './food/discovery-rank';
 export * from './food/party-fit';
 export * from './food/identity';
 export * from './food/meal-rank';
+export * from './lodging/property';
+export * from './lodging/links';
+export * from './lodging/rank';
 export * from './preference/evidence';
 export * from './preference/extract';
 

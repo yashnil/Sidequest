@@ -12,6 +12,8 @@ import { advisorResearchChoice } from '@/lib/providers/switches';
 import { ownedDecisionSession } from '@/lib/net/decision-access';
 import { acceptedImagesFor } from '@/lib/db/imagery-repository';
 import { advisorImageSubjects } from '@/lib/destinations/advisor-images';
+import { advisorMediaSubjects } from '@/lib/destinations/advisor-media';
+import { selectedMediaFor, unresolvedMediaIds } from '@/lib/media/repository';
 
 /**
  * ONE DECISION: THE INTERVIEW UNTIL THERE IS A SHORTLIST, THEN THE SHORTLIST.
@@ -54,7 +56,10 @@ export default async function DecideSessionPage({
   if (session.advisor && !editing) {
     const subjects = advisorImageSubjects(session.advisor);
     const images = acceptedImagesFor(subjects);
-    const missing = subjects.filter((subject) => !images[subject.id]).length;
+    const mediaIds = advisorMediaSubjects(session.advisor).map((subject) => subject.wikidataId);
+    const media = selectedMediaFor(mediaIds, 'card');
+    /* Ask for photographs when either record is missing; the cards read the per-frame media record. */
+    const missing = subjects.filter((subject) => !images[subject.id]).length + unresolvedMediaIds(mediaIds, ['card']).length;
     /*
      * Whether one wider look is worth asking for: research is switched on, the
      * atlas is there to verify what comes back, this list has not been widened
@@ -72,6 +77,7 @@ export default async function DecideSessionPage({
           sessionId={id}
           shortlist={session.advisor}
           images={images}
+          media={media}
           dots={sample.dots}
           sampleComplete={sample.complete}
           summary={profileChips(session.answers).map((chip) => chip.label)}

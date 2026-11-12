@@ -459,6 +459,27 @@ export async function fetchSettlements(
 }
 
 /**
+ * Somewhere to sleep, and the public baths beside it — for the traveller-pressed
+ * "named places to stay" lookup (`providers/lodging/`), display only.
+ *
+ * Two groups: the lodging `tourism=*` values the research names, and
+ * `amenity=public_bath` so a hot-spring trip can be told that a public bath is
+ * a short walk from an inn the map has mapped. Its own `kind`, so it never
+ * shares a cache entry with another sweep.
+ */
+export const LODGING_SELECTORS: readonly { key: string; values: string[]; intent: string }[] = [
+  { key: 'tourism', values: ['hotel', 'guest_house', 'hostel', 'motel', 'apartment', 'chalet', 'alpine_hut', 'camp_site'], intent: 'lodging' },
+  { key: 'amenity', values: ['public_bath'], intent: 'bath' },
+];
+
+export async function fetchLodgingPois(
+  box: BoundingBox,
+  options: OverpassOptions = {},
+): Promise<OverpassResult> {
+  return fetchTagged(box, LODGING_SELECTORS, 'lodging', options);
+}
+
+/**
  * DISCOVERY SCAN FALLBACK — NOTABLE, MAPPED PLACES, ONE SELECTOR GROUP.
  *
  * The open-data proposal (`discovery-scan/open-data-proposal.ts`) asks for

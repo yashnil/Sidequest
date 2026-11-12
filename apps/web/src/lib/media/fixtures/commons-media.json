@@ -1,0 +1,3220 @@
+{
+ "Q19044": {
+  "claims": {
+   "entities": {
+    "Q19044": {
+     "id": "Q19044",
+     "claims": {
+      "P18": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "Svanetiskt torn.jpg"
+         }
+        }
+       }
+      ],
+      "P948": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "Ushguli (Svaneti, Georgia) banner.jpg"
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "info": {
+   "batchcomplete": "",
+   "query": {
+    "pages": {
+     "390151": {
+      "pageid": 390151,
+      "ns": 6,
+      "title": "File:Svanetiskt torn.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1993780,
+        "width": 1944,
+        "height": 2592,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Svanetiskt_torn.jpg/330px-Svanetiskt_torn.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 440,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Svanetiskt_torn.jpg/960px-Svanetiskt_torn.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Svanetiskt_torn.jpg/330px-Svanetiskt_torn.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 440,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/df/Svanetiskt_torn.jpg/960px-Svanetiskt_torn.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/df/Svanetiskt_torn.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Svanetiskt_torn.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=390151",
+        "extmetadata": {
+         "Categories": {
+          "value": "GFDL|Taken with Konica Revio KD-510Z|Files with no machine-readable author|Files with no machine-readable source|Svaneti|License migration completed|Svan towers|Media missing infobox template",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 3.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "http://creativecommons.org/licenses/by-sa/3.0/",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-3.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     "27562103": {
+      "pageid": 27562103,
+      "ns": 6,
+      "title": "File:Ushguli (Svaneti, Georgia) banner.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 326042,
+        "width": 2100,
+        "height": 300,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg/330px-Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 47,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg/960px-Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg/330px-Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 47,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg/960px-Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/42/Ushguli_%28Svaneti%2C_Georgia%29_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Ushguli_(Svaneti,_Georgia)_banner.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=27562103",
+        "extmetadata": {
+         "Categories": {
+          "value": "Wikivoyage banners of Georgia (country)|Taken with Nikon D80|Self-published work|Derivative versions|Uploaded with derivativeFX|Ushguli in 2010",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "This file was derived from:  <a href=\"//commons.wikimedia.org/wiki/File:Ushguli_Svaneti_Georgia.JPG\" title=\"File:Ushguli Svaneti Georgia.JPG\">Ushguli Svaneti Georgia.JPG</a>: <span typeof=\"mw:File\"><a href=\"//commons.wikimedia.org/wiki/File:Ushguli_Svaneti_Georgia.JPG\" class=\"mw-file-description\"><img src=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Ushguli_Svaneti_Georgia.JPG/60px-Ushguli_Svaneti_Georgia.JPG?utm_source=commons.wikimedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail\" decoding=\"async\" loading=\"lazy\" width=\"50\" height=\"33\" class=\"mw-file-element\" srcset=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Ushguli_Svaneti_Georgia.JPG/120px-Ushguli_Svaneti_Georgia.JPG?utm_source=commons.wikimedia.org&amp;utm_campaign=parser&amp;utm_content=thumbnail 2x\" data-file-width=\"3872\" data-file-height=\"2592\"></a></span><br>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<ul><li><a href=\"//commons.wikimedia.org/wiki/File:Ushguli_Svaneti_Georgia.JPG\" title=\"File:Ushguli Svaneti Georgia.JPG\">Ushguli_Svaneti_Georgia.JPG</a>: <a href=\"//commons.wikimedia.org/w/index.php?title=User:Bolbic&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Bolbic (page does not exist)\">Florian Pinel</a></li>\n<li>derivative work: <a href=\"//commons.wikimedia.org/wiki/User:Inkey\" title=\"User:Inkey\">Inkey</a></li></ul>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 3.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/3.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-3.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  },
+  "depicts": {
+   "batchcomplete": "",
+   "query": {
+    "pages": {
+     "106095978": {
+      "pageid": 106095978,
+      "ns": 6,
+      "title": "File:Svaneti, Georgia. 2018 117.jpg",
+      "index": 1,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 9217394,
+        "width": 5472,
+        "height": 3648,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/330px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/960px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/330px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/960px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Svaneti,_Georgia._2018_117.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=106095978",
+        "extmetadata": {
+         "Categories": {
+          "value": "Svaneti|Files with coordinates missing SDC location of creation|Flickr images reviewed by FlickreviewR 2",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<a rel=\"nofollow\" class=\"external free\" href=\"https://www.flickr.com/photos/20425995@N00/44274507061/\">https://www.flickr.com/photos/20425995@N00/44274507061/</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "hr.icio",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 2.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/2.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-2.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.914689,
+        "lon": 43.008248,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  }
+ },
+ "Q189": {
+  "claims": {
+   "entities": {
+    "Q189": {
+     "id": "Q189",
+     "claims": {
+      "P18": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "Cloud-free Iceland ESA22181280 (cropped).jpeg"
+         }
+        }
+       }
+      ],
+      "P948": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "2005-05-29 Jökulsárlón banner.jpg"
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "info": {
+   "batchcomplete": "",
+   "query": {
+    "pages": {
+     "26059451": {
+      "pageid": 26059451,
+      "ns": 6,
+      "title": "File:2005-05-29 Jökulsárlón banner.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 106011,
+        "width": 2100,
+        "height": 300,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg/330px-2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 47,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg/960px-2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg/330px-2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 47,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5c/2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg/960px-2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_banner.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=26059451",
+        "extmetadata": {
+         "Categories": {
+          "value": "Esjufjöll|Breiðamerkurjökull|Taken with Nikon Coolpix 8800|Wikivoyage banners of Iceland|Files with coordinates missing SDC location of creation|Panoramics of Jökulsárlón|Öræfajökull in 2005",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/File:2005-05-29_J%C3%B6kuls%C3%A1rl%C3%B3n_01.jpg\" title=\"File:2005-05-29 Jökulsárlón 01.jpg\">File:2005-05-29_Jökulsárlón_01.jpg</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Simisa\" title=\"User:Simisa\">Hansueli Krapf</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 3.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/3.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-3.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 64.06884444,
+        "lon": -16.18764722,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "161366013": {
+      "pageid": 161366013,
+      "ns": 6,
+      "title": "File:Cloud-free Iceland ESA22181280 (cropped).jpeg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1012520,
+        "width": 2000,
+        "height": 1331,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg/330px-Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg/960px-Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg/330px-Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg/960px-Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/42/Cloud-free_Iceland_ESA22181280_%28cropped%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Cloud-free_Iceland_ESA22181280_(cropped).jpeg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=161366013",
+        "extmetadata": {
+         "Categories": {
+          "value": "2020 in Iceland|CC-BY-SA-3.0-IGO|Extracted images|Content created by the European Space Agency|Sentinel-3 images|Attribution Copernicus|ESA files uploaded by OptimusPrimeBot|Satellite pictures of Iceland in 2020",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.esa.int/ESA_Multimedia/Images/2020/08/Cloud-free_Iceland\">Cloud-free Iceland</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "European Space Agency",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Attribution",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "Contains modified Copernicus Sentinel data 2020",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  },
+  "depicts": {
+   "batchcomplete": "",
+   "continue": {
+    "gsroffset": 12,
+    "continue": "gsroffset||"
+   },
+   "query": {
+    "pages": {
+     "141202680": {
+      "pageid": 141202680,
+      "ns": 6,
+      "title": "File:001 Volcano eruption of Litli-Hrútur in Iceland in 2023 Photo by Giles Laurent.jpg",
+      "index": 4,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 6118465,
+        "width": 3041,
+        "height": 2027,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg/330px-001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg/960px-001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg/330px-001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/04/001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg/960px-001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/04/001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:001_Volcano_eruption_of_Litli-Hr%C3%BAtur_in_Iceland_in_2023_Photo_by_Giles_Laurent.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=141202680",
+        "extmetadata": {
+         "Categories": {
+          "value": "Keilir|Taken with DJI FC3411|2023 Fagradalsfjall eruption|Self-published work|Featured pictures on Wikipedia, English|Commons featured widescreen desktop backgrounds|Lava dome fountains|Featured pictures on Wikipedia, Vietnamese|Volcanism of North America in 2023|Volcanism of Europe in 2023|Files with coordinates missing SDC location of creation|Featured pictures by Giles Laurent|Uploaded via Campaign:wsc-int|Iceland photographs taken on 2023-07-26|Images from Wiki Science Competition 2023 in the rest of the world|Wildlife and nature images from Wiki Science Competition 2023|Featured pictures of landscapes in Iceland|Awarded pictures by Giles Laurent|Photos by Giles Laurent|Aerial photographs of volcanic eruptions in Iceland|Featured pictures from unmanned aerial vehicles|Gas bubbles in lava lakes|Lava fountains in 2023|Pictures of the Year/2024 (finalist)|Featured pictures from Wiki Science Competition 2023|Featured pictures of volcanoes in Iceland",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>, from <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>, <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>, License CC BY-SA",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 63.916833,
+        "lon": -22.202111,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "142531276": {
+      "pageid": 142531276,
+      "ns": 6,
+      "title": "File:021 Wild smiling harbor seal at Jökulsárlón (Iceland) Photo by Giles Laurent.jpg",
+      "index": 5,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 6257505,
+        "width": 5014,
+        "height": 3345,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg/330px-021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg/960px-021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg/330px-021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg/960px-021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/63/021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_%28Iceland%29_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:021_Wild_smiling_harbor_seal_at_J%C3%B6kuls%C3%A1rl%C3%B3n_(Iceland)_Photo_by_Giles_Laurent.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=142531276",
+        "extmetadata": {
+         "Categories": {
+          "value": "Taken with Sony ILCE-7RM3|Self-published work|Commons featured desktop backgrounds|Iceland photographs taken on 2022-03-23|Files with coordinates missing SDC location of creation|Featured pictures by Giles Laurent|Uploaded via Campaign:wsc-int|Nature in March 2022|Images from Wiki Science Competition 2023 in the rest of the world|Wildlife and nature images from Wiki Science Competition 2023|Featured pictures of animals in Iceland|Photos by Giles Laurent|Featured pictures from Wiki Science Competition 2023|Phoca vitulina at Jökulsárlón|Featured pictures of Phocidae",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>, from <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "Giles Laurent",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>, <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>, License CC BY-SA",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 64.059045,
+        "lon": -16.177688,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "142942678": {
+      "pageid": 142942678,
+      "ns": 6,
+      "title": "File:026b Humpback whale jump and splash Photo by Giles Laurent.jpg",
+      "index": 6,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 9495817,
+        "width": 7785,
+        "height": 5190,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/79/026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg/330px-026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/79/026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg/960px-026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/79/026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg/330px-026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/79/026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg/960px-026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/79/026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:026b_Humpback_whale_jump_and_splash_Photo_by_Giles_Laurent.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=142942678",
+        "extmetadata": {
+         "Categories": {
+          "value": "Pages using multiple image with auto scaled images|Ísafjarðardjúp|Self-published work|Commons featured widescreen desktop backgrounds|Images with extracted images|Files with coordinates missing SDC location of creation|Featured pictures by Giles Laurent|Uploaded via Campaign:wsc-int|Megaptera novaeangliae in Iceland|Iceland photographs taken on 2023-08-01|Images from Wiki Science Competition 2023 in the rest of the world|Image sets from Wiki Science Competition 2023|Featured pictures of animals in Iceland|Photos by Giles Laurent|Megaptera novaeangliae breaching|Taken with Sony ILCE-1 and Sony FE 200-600mm F5.6-6.3 G OSS",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>, from <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>, <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>, License CC BY-SA",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 66.174028,
+        "lon": -23.089056,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "142988848": {
+      "pageid": 142988848,
+      "ns": 6,
+      "title": "File:027 Atlantic puffin in flight with mouth full of fishes Photo by Giles Laurent.jpg",
+      "index": 9,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 6317258,
+        "width": 4357,
+        "height": 2905,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg/330px-027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg/960px-027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg/330px-027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg/960px-027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/23/027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:027_Atlantic_puffin_in_flight_with_mouth_full_of_fishes_Photo_by_Giles_Laurent.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=142988848",
+        "extmetadata": {
+         "Categories": {
+          "value": "Self-published work|Commons featured desktop backgrounds|Fratercula arctica in Iceland|Files with coordinates missing SDC location of creation|Fratercula arctica in flight|Featured pictures by Giles Laurent|Uploaded via Campaign:wsc-int|Iceland photographs taken on 2023-08-03|Featured pictures of Fratercula arctica|Images from Wiki Science Competition 2023 in the rest of the world|Wildlife and nature images from Wiki Science Competition 2023|Photos by Giles Laurent|Fratercula arctica with fish|Featured pictures of birds in Iceland|Birds of Flatey|Taken with Sony ILCE-1 and Sony FE 200-600mm F5.6-6.3 G OSS|Featured pictures from Wiki Science Competition 2023",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>, from <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>, <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>, License CC BY-SA",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 65.378194,
+        "lon": -22.909111,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "142991561": {
+      "pageid": 142991561,
+      "ns": 6,
+      "title": "File:031 Humpback whale lobtailing Photo by Giles Laurent.jpg",
+      "index": 8,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 7656499,
+        "width": 5409,
+        "height": 3606,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg/330px-031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg/960px-031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg/330px-031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg/960px-031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:031_Humpback_whale_lobtailing_Photo_by_Giles_Laurent.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=142991561",
+        "extmetadata": {
+         "Categories": {
+          "value": "Ísafjarðardjúp|Self-published work|Commons featured widescreen desktop backgrounds|Whales with raised tail|Files with coordinates missing SDC location of creation|Featured pictures by Giles Laurent|Uploaded via Campaign:wsc-int|Megaptera novaeangliae in Iceland|Iceland photographs taken on 2023-08-01|Images from Wiki Science Competition 2023 in the rest of the world|Wildlife and nature images from Wiki Science Competition 2023|Featured pictures of animals in Iceland|Photos by Giles Laurent|Taken with Sony ILCE-1 and Sony FE 200-600mm F5.6-6.3 G OSS",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>, from <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>, <a rel=\"nofollow\" class=\"external text\" href=\"https://gileslaurent.com\">gileslaurent.com</a>, License CC BY-SA",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 66.174028,
+        "lon": -23.089056,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "180973167": {
+      "pageid": 180973167,
+      "ns": 6,
+      "title": "File:193 Herd of Reindeers running in Southern Iceland Photo by Giles Laurent.jpg",
+      "index": 7,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10206409,
+        "width": 5543,
+        "height": 3697,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg/330px-193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg/960px-193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg/330px-193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg/960px-193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/28/193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:193_Herd_of_Reindeers_running_in_Southern_Iceland_Photo_by_Giles_Laurent.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=180973167",
+        "extmetadata": {
+         "Categories": {
+          "value": "Vatnajökull National Park|Self-published work|Files with Assessments template missing SDC Commons quality assessment|Rangifer tarandus in Iceland|Featured pictures by Giles Laurent|Uploaded via Campaign:wsc-int|Featured pictures of animals in Iceland|Photos by Giles Laurent|Wildlife and nature images from Wiki Science Competition 2025|Images from Wiki Science Competition 2025 in the rest of the world",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Giles_Laurent\" title=\"User:Giles Laurent\">Giles Laurent</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     "93211400": {
+      "pageid": 93211400,
+      "ns": 6,
+      "title": "File:2016-11-13 02 Kjeungskjær Lighthouse, Sør-Trøndelag, Norway.jpg",
+      "index": 10,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 7397764,
+        "width": 5003,
+        "height": 3335,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg/330px-2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg/960px-2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg/330px-2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/34/2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg/960px-2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/34/2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse%2C_S%C3%B8r-Tr%C3%B8ndelag%2C_Norway.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:2016-11-13_02_Kjeungskj%C3%A6r_Lighthouse,_S%C3%B8r-Tr%C3%B8ndelag,_Norway.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=93211400",
+        "extmetadata": {
+         "Categories": {
+          "value": "Kjeungskjær fyr|Self-published work|Information field template with formatting|Files with coordinates missing SDC location of creation",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:GRDN711\" title=\"User:GRDN711\">Gordon Leggett</a>",
+          "source": "commons-desc-page"
+         },
+         "Attribution": {
+          "value": "Photo: <a href=\"//commons.wikimedia.org/wiki/User_talk:GRDN711\" title=\"User talk:GRDN711\">Gordon Leggett</a> / <a href=\"//commons.wikimedia.org/wiki/Main_Page\" title=\"Main Page\">Wikimedia Commons</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 63.726771,
+        "lon": 9.530937,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "103665878": {
+      "pageid": 103665878,
+      "ns": 6,
+      "title": "File:2019-08-15 01 BALDUR – IMO 7804962.jpg",
+      "index": 12,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 19823081,
+        "width": 11981,
+        "height": 3869,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg/330px-2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 107,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg/960px-2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg/330px-2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 107,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg/960px-2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/4b/2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:2019-08-15_01_BALDUR_%E2%80%93_IMO_7804962.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=103665878",
+        "extmetadata": {
+         "Categories": {
+          "value": "Taken with Nikon D750|Baldur (ship, 1979)|Brjánslækur|Self-published work|Information field template with formatting|Files with coordinates missing SDC location of creation|Iceland photographs taken on 2019-08-15|2352 (vessel number)|Jón Bóndi BA 7 (ship, 1983)|Ísöld BA 888 (ship, 1998)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:GRDN711\" title=\"User:GRDN711\">Gordon Leggett</a>",
+          "source": "commons-desc-page"
+         },
+         "Attribution": {
+          "value": "Photo: <a href=\"//commons.wikimedia.org/wiki/User_talk:GRDN711\" title=\"User talk:GRDN711\">Gordon Leggett</a> / <a href=\"//commons.wikimedia.org/wiki/Main_Page\" title=\"Main Page\">Wikimedia Commons</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 65.529963,
+        "lon": -23.192187,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "99287747": {
+      "pageid": 99287747,
+      "ns": 6,
+      "title": "File:2019-08-15 01 Klofningur Lighthouse (also called Klofningsviti) near Flatey Island, Iceland.jpg",
+      "index": 11,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 9323674,
+        "width": 5686,
+        "height": 3796,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg/330px-2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg/960px-2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg/330px-2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a2/2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg/960px-2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/a2/2019-08-15_01_Klofningur_Lighthouse_%28also_called_Klofningsviti%29_near_Flatey_Island%2C_Iceland.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:2019-08-15_01_Klofningur_Lighthouse_(also_called_Klofningsviti)_near_Flatey_Island,_Iceland.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=99287747",
+        "extmetadata": {
+         "Categories": {
+          "value": "Taken with Nikon D750|Self-published work|Information field template with formatting|Klofningsviti (Flatey)|Files with coordinates missing SDC location of creation|Iceland photographs taken on 2019-08-15",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:GRDN711\" title=\"User:GRDN711\">Gordon Leggett</a>",
+          "source": "commons-desc-page"
+         },
+         "Attribution": {
+          "value": "Photo: <a href=\"//commons.wikimedia.org/wiki/User_talk:GRDN711\" title=\"User talk:GRDN711\">Gordon Leggett</a> / <a href=\"//commons.wikimedia.org/wiki/Main_Page\" title=\"Main Page\">Wikimedia Commons</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 65.374352,
+        "lon": -22.94399,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "37348796": {
+      "pageid": 37348796,
+      "ns": 6,
+      "title": "File:Reynisfjara, Suðurland, Islandia, 2014-08-17, DD 164.JPG",
+      "index": 1,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 8839855,
+        "width": 5015,
+        "height": 2738,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG/330px-Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 180,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG/960px-Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG/330px-Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 180,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG/960px-Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/49/Reynisfjara%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-17%2C_DD_164.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Reynisfjara,_Su%C3%B0urland,_Islandia,_2014-08-17,_DD_164.JPG",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=37348796",
+        "extmetadata": {
+         "Categories": {
+          "value": "Volcanic plugs in Iceland|Arnardrangur|Images of Iceland by User:Poco a poco|Featured pictures of landscapes|Featured pictures by User:Poco a poco|Images by User:Poco a poco|Featured pictures of Iceland by User:Poco a poco|Featured pictures on Commons by User:Poco a poco|Featured pictures of nature by User:Poco a poco|Natural towers in Iceland|Iceland photographs taken on 2014-08-17|Featured pictures of landscapes in Iceland|Reynisdrangar, seen from Dyrhólaey|Reynisfjall, seen from Dyrhólaey|Reynisfjara, seen from Dyrhólaey|Images by User:Poco a poco taken in 2014|Featured pictures of Suðurland",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "Diego Delso",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     "37280199": {
+      "pageid": 37280199,
+      "ns": 6,
+      "title": "File:Roca de la Ley, Parque Nacional de Þingvellir, Suðurland, Islandia, 2014-08-16, DD 022.JPG",
+      "index": 2,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 7075988,
+        "width": 5368,
+        "height": 3579,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG/330px-Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG/960px-Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG/330px-Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG/960px-Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/81/Roca_de_la_Ley%2C_Parque_Nacional_de_%C3%9Eingvellir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_022.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Roca_de_la_Ley,_Parque_Nacional_de_%C3%9Eingvellir,_Su%C3%B0urland,_Islandia,_2014-08-16,_DD_022.JPG",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=37280199",
+        "extmetadata": {
+         "Categories": {
+          "value": "Hiking in Iceland|Ravines in Iceland|Images of Iceland by User:Poco a poco|Featured pictures by User:Poco a poco|Images by User:Poco a poco|Featured pictures of Iceland by User:Poco a poco|Featured pictures on Commons by User:Poco a poco|Featured pictures of nature by User:Poco a poco|Iceland photographs taken on 2014-08-16|Rockfall deposits in Iceland|Featured pictures of landscapes in Iceland|Images by User:Poco a poco taken in 2014|Almannagjá in 2014|Hiking trails in Þingvellir National Park|Featured pictures of Suðurland",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "Diego Delso",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     "37281529": {
+      "pageid": 37281529,
+      "ns": 6,
+      "title": "File:Strokkur, Área geotérmica de Geysir, Suðurland, Islandia, 2014-08-16, DD 085.JPG",
+      "index": 3,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 7406036,
+        "width": 3133,
+        "height": 4700,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG/330px-Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 495,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG/960px-Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG/330px-Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 495,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG/960px-Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Strokkur%2C_%C3%81rea_geot%C3%A9rmica_de_Geysir%2C_Su%C3%B0urland%2C_Islandia%2C_2014-08-16%2C_DD_085.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Strokkur,_%C3%81rea_geot%C3%A9rmica_de_Geysir,_Su%C3%B0urland,_Islandia,_2014-08-16,_DD_085.JPG",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=37281529",
+        "extmetadata": {
+         "Categories": {
+          "value": "Geotourism|Images of Iceland by User:Poco a poco|Featured pictures by User:Poco a poco|Images by User:Poco a poco|Featured pictures of Iceland by User:Poco a poco|Featured pictures on Commons by User:Poco a poco|Featured pictures of nature by User:Poco a poco|Iceland photographs taken on 2014-08-16|Featured pictures of geysers|Featured pictures of landscapes in Iceland|Strokkur (geyser) - gas and water bubbles before eruption|Images by User:Poco a poco taken in 2014|Strokkur in 2014|Geysir Geothermal Field in 2014|Featured pictures of Suðurland",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "Diego Delso",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  }
+ },
+ "Q16508549": {
+  "claims": {
+   "entities": {
+    "Q16508549": {
+     "id": "Q16508549",
+     "claims": {
+      "P18": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "\"Kazbegi\", Panoramic view of Mount Kazbek (Mqinvartsveri) range, Caucasus, Georgia.jpg"
+         }
+        }
+       }
+      ],
+      "P948": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "Kazbegi National Park banner.jpg"
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "info": {
+   "batchcomplete": "",
+   "query": {
+    "pages": {
+     "79913739": {
+      "pageid": 79913739,
+      "ns": 6,
+      "title": "File:\"Kazbegi\", Panoramic view of Mount Kazbek (Mqinvartsveri) range, Caucasus, Georgia.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 5812032,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg/330px-%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg/960px-%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg/330px-%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg/960px-%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8d/%22Kazbegi%22%2C_Panoramic_view_of_Mount_Kazbek_%28Mqinvartsveri%29_range%2C_Caucasus%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:%22Kazbegi%22,_Panoramic_view_of_Mount_Kazbek_(Mqinvartsveri)_range,_Caucasus,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=79913739",
+        "extmetadata": {
+         "Categories": {
+          "value": "Images from Wiki Loves Earth 2019 in Georgia|Kazbek|Photos by Vyacheslav Argenberg|Kazbegi National Park|Mountains of Mtskheta-Mtianeti|Self-published work|Mountains with clouds in Georgia (country)|Files with coordinates missing SDC location of creation|Images from Wiki Loves Earth 2019|Remote views of churches in Georgia (country)|Images from Wiki Loves Earth missing SDC location of creation|Churches in Georgia (country) photographed in 2014|Georgia (country) photographs taken on 2014-07-04|Uploaded via Campaign:wle-ge|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.658091,
+        "lon": 44.662833,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "126512875": {
+      "pageid": 126512875,
+      "ns": 6,
+      "title": "File:Kazbegi National Park banner.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 7603170,
+        "width": 5472,
+        "height": 782,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Kazbegi_National_Park_banner.jpg/330px-Kazbegi_National_Park_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 47,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Kazbegi_National_Park_banner.jpg/960px-Kazbegi_National_Park_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Kazbegi_National_Park_banner.jpg/330px-Kazbegi_National_Park_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 47,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Kazbegi_National_Park_banner.jpg/960px-Kazbegi_National_Park_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Kazbegi_National_Park_banner.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Kazbegi_National_Park_banner.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=126512875",
+        "extmetadata": {
+         "Categories": {
+          "value": "Wikivoyage banners of Georgia (country)|Images from Wiki Loves Earth 2018 in Georgia|Kazbegi National Park|Self-published work|Extracted images|Images from Wiki Loves Earth 2018|Images from Wiki Loves Earth missing SDC depicts|Images from Wiki Loves Earth missing SDC location of creation|Uploaded via Campaign:wle-ge|Wikivoyage banners by SHB",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Saba_sakhvadze&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Saba sakhvadze (page does not exist)\">Saba sakhvadze</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  },
+  "depicts": {
+   "batchcomplete": "",
+   "query": {
+    "pages": {
+     "116990377": {
+      "pageid": 116990377,
+      "ns": 6,
+      "title": "File:Alpine meadows, Grassland, Georgia.jpg",
+      "index": 9,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 14407027,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Alpine_meadows%2C_Grassland%2C_Georgia.jpg/330px-Alpine_meadows%2C_Grassland%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Alpine_meadows%2C_Grassland%2C_Georgia.jpg/960px-Alpine_meadows%2C_Grassland%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Alpine_meadows%2C_Grassland%2C_Georgia.jpg/330px-Alpine_meadows%2C_Grassland%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Alpine_meadows%2C_Grassland%2C_Georgia.jpg/960px-Alpine_meadows%2C_Grassland%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Alpine_meadows%2C_Grassland%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Alpine_meadows,_Grassland,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990377",
+        "extmetadata": {
+         "Categories": {
+          "value": "Kazbegi Municipality|Photos by Vyacheslav Argenberg|Self-published work|Mountain pastures in Georgia (country)|Grasslands in Georgia (country)|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Wild flowers in Georgia (country)|Nature of Mtskheta-Mtianeti|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.664855,
+        "lon": 44.611381,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990368": {
+      "pageid": 116990368,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Bell tower, Georgia.jpg",
+      "index": 11,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10679496,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/9/96/Gergeti_Trinity_Church%2C_Bell_tower%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Bell_tower,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990368",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Tourists in Georgia (country)|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Bell tower of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.662111,
+        "lon": 44.62029,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990367": {
+      "pageid": 116990367,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Bell tower 2, Georgia.jpg",
+      "index": 12,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10710744,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Gergeti_Trinity_Church%2C_Bell_tower_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Bell_tower_2,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990367",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Mountains with clouds in Georgia (country)|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Clouds and blue sky in Georgia (country)|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Bell tower of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.662351,
+        "lon": 44.620518,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990362": {
+      "pageid": 116990362,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Cathedral, Georgia.jpg",
+      "index": 7,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 12444159,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ee/Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Gergeti_Trinity_Church%2C_Cathedral%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Cathedral,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990362",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.661693,
+        "lon": 44.620742,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990376": {
+      "pageid": 116990376,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Clouds, Georgia.jpg",
+      "index": 2,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 7505830,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/82/Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Gergeti_Trinity_Church%2C_Clouds%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Clouds,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990376",
+        "extmetadata": {
+         "Categories": {
+          "value": "Khevi, Georgia|Photos by Vyacheslav Argenberg|Mountains of Mtskheta-Mtianeti|Self-published work|Dirt roads in Georgia (country)|Mountains with clouds in Georgia (country)|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.665421,
+        "lon": 44.613386,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990361": {
+      "pageid": 116990361,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Clouds 2, Georgia.jpg",
+      "index": 8,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 11863252,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/Gergeti_Trinity_Church%2C_Clouds_2%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Clouds_2,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990361",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Mountains with clouds in Georgia (country)|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.661473,
+        "lon": 44.621348,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990360": {
+      "pageid": 116990360,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Georgia.jpg",
+      "index": 6,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 9271391,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Gergeti_Trinity_Church%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Gergeti_Trinity_Church%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Gergeti_Trinity_Church%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Gergeti_Trinity_Church%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/5/58/Gergeti_Trinity_Church%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990360",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Clouds and blue sky in Georgia (country)|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.662631,
+        "lon": 44.621313,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990374": {
+      "pageid": 116990374,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Hiking, Georgia.jpg",
+      "index": 3,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10738310,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Gergeti_Trinity_Church%2C_Hiking%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Hiking,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990374",
+        "extmetadata": {
+         "Categories": {
+          "value": "Khevi, Georgia|Photos by Vyacheslav Argenberg|Self-published work|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Hiking in Georgia (country)|People resting on hikes|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.664911,
+        "lon": 44.611458,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990364": {
+      "pageid": 116990364,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Interior, Georgia.jpg",
+      "index": 5,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 9575890,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/e7/Gergeti_Trinity_Church%2C_Interior%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Interior,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990364",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Christian altars|Self-published work|Church doors in Georgia (country)|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Interior of the Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.662411,
+        "lon": 44.6204,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990370": {
+      "pageid": 116990370,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Khevi, Georgia.jpg",
+      "index": 10,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10503192,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/87/Gergeti_Trinity_Church%2C_Khevi%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Khevi,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990370",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.664915,
+        "lon": 44.611521,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990373": {
+      "pageid": 116990373,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Kuro Range, Georgia.jpg",
+      "index": 4,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 9991649,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/Gergeti_Trinity_Church%2C_Kuro_Range%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Kuro_Range,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990373",
+        "extmetadata": {
+         "Categories": {
+          "value": "Khevi, Georgia|Photos by Vyacheslav Argenberg|Mountains of Mtskheta-Mtianeti|Self-published work|Dirt roads in Georgia (country)|Files with coordinates missing SDC location of creation|Kuro Range|Georgia (country) photographs taken on 2014-07-02|Hiking in Georgia (country)|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.664976,
+        "lon": 44.611151,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     },
+     "116990383": {
+      "pageid": 116990383,
+      "ns": 6,
+      "title": "File:Gergeti Trinity Church, Mountain pasture, Georgia.jpg",
+      "index": 1,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 11575842,
+        "width": 4912,
+        "height": 3264,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 219,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg/330px-Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 219,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg/960px-Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Gergeti_Trinity_Church%2C_Mountain_pasture%2C_Georgia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Gergeti_Trinity_Church,_Mountain_pasture,_Georgia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116990383",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photos by Vyacheslav Argenberg|Self-published work|Dirt roads in Georgia (country)|Mountain pastures in Georgia (country)|Green landscapes|Files with coordinates missing SDC location of creation|Georgia (country) photographs taken on 2014-07-02|Photos by Vyacheslav Argenberg in 2014|Photos by Vyacheslav Argenberg in Georgia|Remote views of Gergeti Trinity Church|Gergeti Trinity Church in 2014",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "Attribution": {
+          "value": "© <a href=\"//commons.wikimedia.org/wiki/User:Argenberg\" title=\"User:Argenberg\">Vyacheslav Argenberg</a>",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.66604,
+        "lon": 44.61557,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  }
+ },
+ "Q1142561": {
+  "claims": {
+   "entities": {
+    "Q1142561": {
+     "id": "Q1142561",
+     "claims": {
+      "P18": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "Tusheti, kvavlo.jpg"
+         }
+        }
+       }
+      ],
+      "P948": [
+       {
+        "rank": "normal",
+        "mainsnak": {
+         "snaktype": "value",
+         "datavalue": {
+          "value": "Tusheti banner Khevsureti.png"
+         }
+        }
+       }
+      ]
+     }
+    }
+   }
+  },
+  "info": {
+   "batchcomplete": "",
+   "query": {
+    "pages": {
+     "2906484": {
+      "pageid": 2906484,
+      "ns": 6,
+      "title": "File:Tusheti, kvavlo.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 110651,
+        "width": 800,
+        "height": 533,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Tusheti%2C_kvavlo.jpg/330px-Tusheti%2C_kvavlo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 220,
+        "responsiveUrls": {
+         "2": "https://upload.wikimedia.org/wikipedia/commons/9/94/Tusheti%2C_kvavlo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/94/Tusheti%2C_kvavlo.jpg/330px-Tusheti%2C_kvavlo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 220,
+         "srcset": "https://upload.wikimedia.org/wikipedia/commons/9/94/Tusheti%2C_kvavlo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/9/94/Tusheti%2C_kvavlo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Tusheti,_kvavlo.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=2906484",
+        "extmetadata": {
+         "Categories": {
+          "value": "Files from Flickr with changed licenses|Flickr images reviewed by FlickreviewR|Kvavlo|Paata Vardanashvili's photos|Defense towers in Georgia (country)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<a rel=\"nofollow\" class=\"external free\" href=\"https://www.flickr.com/photos/paata/1113402725/\">https://www.flickr.com/photos/paata/1113402725/</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/28874153@N00\">Paata Vardanashvili</a> from Tbilisi, Georgia",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 2.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by/2.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-2.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     "108940641": {
+      "pageid": 108940641,
+      "ns": 6,
+      "title": "File:Tusheti banner Khevsureti.png",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1385400,
+        "width": 2100,
+        "height": 300,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Tusheti_banner_Khevsureti.png/330px-Tusheti_banner_Khevsureti.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 330,
+        "thumbheight": 47,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Tusheti_banner_Khevsureti.png/960px-Tusheti_banner_Khevsureti.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Tusheti_banner_Khevsureti.png/330px-Tusheti_banner_Khevsureti.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 330,
+         "height": 47,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0d/Tusheti_banner_Khevsureti.png/960px-Tusheti_banner_Khevsureti.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/0d/Tusheti_banner_Khevsureti.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Tusheti_banner_Khevsureti.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=108940641",
+        "extmetadata": {
+         "Categories": {
+          "value": "Wikivoyage banners of Georgia (country)|Mutso|Files with coordinates missing SDC location of creation",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Credit": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/File:2018_-_Mutso_Tower.jpg\" title=\"File:2018 - Mutso Tower.jpg\">File:2018 - Mutso Tower.jpg</a>",
+          "source": "commons-desc-page"
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Moahim\" title=\"User:Moahim\">Moahim</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "AttributionRequired": {
+          "value": "true",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "LicenseUrl": {
+          "value": "https://creativecommons.org/licenses/by-sa/4.0",
+          "source": "commons-desc-page"
+         },
+         "Restrictions": {
+          "value": "",
+          "source": "commons-desc-page",
+          "hidden": ""
+         },
+         "License": {
+          "value": "cc-by-sa-4.0",
+          "source": "commons-templates",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "coordinates": [
+       {
+        "lat": 42.607441,
+        "lon": 45.207917,
+        "primary": "",
+        "globe": "earth"
+       }
+      ]
+     }
+    }
+   },
+   "limits": {
+    "coordinates": 500
+   }
+  }
+ },
+ "unfiltered-depicts-Q19044": {
+  "batchcomplete": "",
+  "query": {
+   "pages": {
+    "144227644": {
+     "pageid": 144227644,
+     "ns": 6,
+     "title": "File:Georgian Empire Ethnic Map.png",
+     "index": 1,
+     "imagerepository": "local",
+     "imageinfo": [
+      {
+       "size": 716105,
+       "width": 4124,
+       "height": 2384,
+       "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Georgian_Empire_Ethnic_Map.png/960px-Georgian_Empire_Ethnic_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+       "thumbwidth": 960,
+       "thumbheight": 555,
+       "responsiveUrls": {
+        "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Georgian_Empire_Ethnic_Map.png/1920px-Georgian_Empire_Ethnic_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+       },
+       "thumbattribs": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Georgian_Empire_Ethnic_Map.png/960px-Georgian_Empire_Ethnic_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "decoding": "async",
+        "loading": "lazy",
+        "width": 960,
+        "height": 555,
+        "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Georgian_Empire_Ethnic_Map.png/1920px-Georgian_Empire_Ethnic_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+       },
+       "url": "https://upload.wikimedia.org/wikipedia/commons/1/1e/Georgian_Empire_Ethnic_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+       "descriptionurl": "https://commons.wikimedia.org/wiki/File:Georgian_Empire_Ethnic_Map.png",
+       "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=144227644",
+       "extmetadata": {
+        "ObjectName": {
+         "value": "Georgian Empire Ethnic Map",
+         "source": "mediawiki-metadata"
+        },
+        "Categories": {
+         "value": "Kingdom of Georgia|Maps of Dagestan|Svaneti|Mingrelia|Lazeti|Self-published work|Flag maps of Armenia|Information graphics of Chechnya|Information graphics of Ingushetia|Flag maps of Georgia (country)",
+         "source": "commons-categories",
+         "hidden": ""
+        },
+        "Credit": {
+         "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+         "source": "commons-desc-page"
+        },
+        "Artist": {
+         "value": "<a href=\"//commons.wikimedia.org/wiki/User:SkyleAndria\" title=\"User:SkyleAndria\">SkyleAndria</a>",
+         "source": "commons-desc-page"
+        },
+        "LicenseShortName": {
+         "value": "CC BY-SA 4.0",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "AttributionRequired": {
+         "value": "true",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "LicenseUrl": {
+         "value": "https://creativecommons.org/licenses/by-sa/4.0",
+         "source": "commons-desc-page"
+        },
+        "Restrictions": {
+         "value": "",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "License": {
+         "value": "cc-by-sa-4.0",
+         "source": "commons-templates",
+         "hidden": ""
+        }
+       },
+       "mime": "image/png"
+      }
+     ]
+    },
+    "144228324": {
+     "pageid": 144228324,
+     "ns": 6,
+     "title": "File:Historical Caucasus Regions Flag Map.png",
+     "index": 5,
+     "imagerepository": "local",
+     "imageinfo": [
+      {
+       "size": 652038,
+       "width": 2129,
+       "height": 1080,
+       "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Historical_Caucasus_Regions_Flag_Map.png/960px-Historical_Caucasus_Regions_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+       "thumbwidth": 960,
+       "thumbheight": 487,
+       "responsiveUrls": {
+        "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Historical_Caucasus_Regions_Flag_Map.png/1920px-Historical_Caucasus_Regions_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+       },
+       "thumbattribs": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Historical_Caucasus_Regions_Flag_Map.png/960px-Historical_Caucasus_Regions_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "decoding": "async",
+        "loading": "lazy",
+        "width": 960,
+        "height": 487,
+        "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/03/Historical_Caucasus_Regions_Flag_Map.png/1920px-Historical_Caucasus_Regions_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+       },
+       "url": "https://upload.wikimedia.org/wikipedia/commons/0/03/Historical_Caucasus_Regions_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+       "descriptionurl": "https://commons.wikimedia.org/wiki/File:Historical_Caucasus_Regions_Flag_Map.png",
+       "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=144228324",
+       "extmetadata": {
+        "ObjectName": {
+         "value": "Historical Caucasus Regions Flag Map",
+         "source": "mediawiki-metadata"
+        },
+        "Categories": {
+         "value": "Khevi, Georgia|Kingdom of Georgia|Maps of Kakheti|Principality of Mingrelia|Maps of Dagestan|Ardahan|Maps of Adjara|Khevsureti|Pshavi|Svaneti|Mtiuleti|Javakheti|Meskheti|Mingrelia|Racha|Lechkhumi|Lazeti|Circassia|Tao-Klarjeti|Maps of Guria|Maps of Imereti|Kingdom of Abkhazia|Kartli|Samtskhe-Saatabago|Maps of Hereti|Self-published work|Flag maps of Armenia|Flag maps of Azerbaijan|Information graphics of Chechnya|Information graphics of Ingushetia|Flag maps of Georgia (country)|Samtskhe|Odishi",
+         "source": "commons-categories",
+         "hidden": ""
+        },
+        "Credit": {
+         "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+         "source": "commons-desc-page"
+        },
+        "Artist": {
+         "value": "<a href=\"//commons.wikimedia.org/wiki/User:SkyleAndria\" title=\"User:SkyleAndria\">SkyleAndria</a>",
+         "source": "commons-desc-page"
+        },
+        "LicenseShortName": {
+         "value": "CC BY-SA 4.0",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "AttributionRequired": {
+         "value": "true",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "LicenseUrl": {
+         "value": "https://creativecommons.org/licenses/by-sa/4.0",
+         "source": "commons-desc-page"
+        },
+        "Restrictions": {
+         "value": "",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "License": {
+         "value": "cc-by-sa-4.0",
+         "source": "commons-templates",
+         "hidden": ""
+        }
+       },
+       "mime": "image/png"
+      }
+     ]
+    },
+    "144227971": {
+     "pageid": 144227971,
+     "ns": 6,
+     "title": "File:Indeginous Caucasian Groups Ethnic Flag Map.png",
+     "index": 2,
+     "imagerepository": "local",
+     "imageinfo": [
+      {
+       "size": 425196,
+       "width": 4124,
+       "height": 2384,
+       "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png/960px-Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+       "thumbwidth": 960,
+       "thumbheight": 555,
+       "responsiveUrls": {
+        "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png/1920px-Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+       },
+       "thumbattribs": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png/960px-Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "decoding": "async",
+        "loading": "lazy",
+        "width": 960,
+        "height": 555,
+        "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png/1920px-Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+       },
+       "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+       "descriptionurl": "https://commons.wikimedia.org/wiki/File:Indeginous_Caucasian_Groups_Ethnic_Flag_Map.png",
+       "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=144227971",
+       "extmetadata": {
+        "ObjectName": {
+         "value": "Indeginous Caucasian Groups Ethnic Flag Map",
+         "source": "mediawiki-metadata"
+        },
+        "Categories": {
+         "value": "Avar people (Caucasus)|Kingdom of Georgia|Svaneti|Mingrelia|Lazeti|Abazins|Circassia|Kabardinians|Lak people (Dagestan)|Dargin people|Self-published work|Maps incorporating flags|Flag maps of Georgia (country)",
+         "source": "commons-categories",
+         "hidden": ""
+        },
+        "Credit": {
+         "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+         "source": "commons-desc-page"
+        },
+        "Artist": {
+         "value": "<a href=\"//commons.wikimedia.org/wiki/User:SkyleAndria\" title=\"User:SkyleAndria\">SkyleAndria</a>",
+         "source": "commons-desc-page"
+        },
+        "LicenseShortName": {
+         "value": "CC BY-SA 4.0",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "AttributionRequired": {
+         "value": "true",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "LicenseUrl": {
+         "value": "https://creativecommons.org/licenses/by-sa/4.0",
+         "source": "commons-desc-page"
+        },
+        "Restrictions": {
+         "value": "",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "License": {
+         "value": "cc-by-sa-4.0",
+         "source": "commons-templates",
+         "hidden": ""
+        }
+       },
+       "mime": "image/png"
+      }
+     ]
+    },
+    "146043374": {
+     "pageid": 146043374,
+     "ns": 6,
+     "title": "File:Samegrelo-Zemo Svaneti Municipalities Flag-Map.png",
+     "index": 4,
+     "imagerepository": "local",
+     "imageinfo": [
+      {
+       "size": 318271,
+       "width": 1097,
+       "height": 1024,
+       "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png/960px-Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+       "thumbwidth": 960,
+       "thumbheight": 896,
+       "responsiveUrls": {
+        "2": "https://upload.wikimedia.org/wikipedia/commons/5/54/Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+       },
+       "thumbattribs": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png/960px-Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "decoding": "async",
+        "loading": "lazy",
+        "width": 960,
+        "height": 896,
+        "srcset": "https://upload.wikimedia.org/wikipedia/commons/5/54/Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled 2x"
+       },
+       "url": "https://upload.wikimedia.org/wikipedia/commons/5/54/Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+       "descriptionurl": "https://commons.wikimedia.org/wiki/File:Samegrelo-Zemo_Svaneti_Municipalities_Flag-Map.png",
+       "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=146043374",
+       "extmetadata": {
+        "ObjectName": {
+         "value": "Samegrelo-Zemo Svaneti Municipalities Flag-Map",
+         "source": "mediawiki-metadata"
+        },
+        "Categories": {
+         "value": "Poti, Georgia|Maps of Samegrelo-Zemo Svaneti|Self-published work|Flag maps of Georgia (country)",
+         "source": "commons-categories",
+         "hidden": ""
+        },
+        "Credit": {
+         "value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>",
+         "source": "commons-desc-page"
+        },
+        "Artist": {
+         "value": "<a href=\"//commons.wikimedia.org/wiki/User:SkyleAndria\" title=\"User:SkyleAndria\">SkyleAndria</a>",
+         "source": "commons-desc-page"
+        },
+        "LicenseShortName": {
+         "value": "CC BY 4.0",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "AttributionRequired": {
+         "value": "true",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "LicenseUrl": {
+         "value": "https://creativecommons.org/licenses/by/4.0",
+         "source": "commons-desc-page"
+        },
+        "Restrictions": {
+         "value": "",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "License": {
+         "value": "cc-by-4.0",
+         "source": "commons-templates",
+         "hidden": ""
+        }
+       },
+       "mime": "image/png"
+      }
+     ]
+    },
+    "106095978": {
+     "pageid": 106095978,
+     "ns": 6,
+     "title": "File:Svaneti, Georgia. 2018 117.jpg",
+     "index": 3,
+     "imagerepository": "local",
+     "imageinfo": [
+      {
+       "size": 9217394,
+       "width": 5472,
+       "height": 3648,
+       "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/960px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+       "thumbwidth": 960,
+       "thumbheight": 640,
+       "responsiveUrls": {
+        "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/1920px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+       },
+       "thumbattribs": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/960px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "decoding": "async",
+        "loading": "lazy",
+        "width": 960,
+        "height": 640,
+        "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bd/Svaneti%2C_Georgia._2018_117.jpg/1920px-Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+       },
+       "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Svaneti%2C_Georgia._2018_117.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+       "descriptionurl": "https://commons.wikimedia.org/wiki/File:Svaneti,_Georgia._2018_117.jpg",
+       "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=106095978",
+       "extmetadata": {
+        "ObjectName": {
+         "value": "Svaneti, Georgia. 2018 117",
+         "source": "mediawiki-metadata"
+        },
+        "Categories": {
+         "value": "Svaneti|Files with coordinates missing SDC location of creation|Flickr images reviewed by FlickreviewR 2",
+         "source": "commons-categories",
+         "hidden": ""
+        },
+        "Credit": {
+         "value": "<a rel=\"nofollow\" class=\"external free\" href=\"https://www.flickr.com/photos/20425995@N00/44274507061/\">https://www.flickr.com/photos/20425995@N00/44274507061/</a>",
+         "source": "commons-desc-page"
+        },
+        "Artist": {
+         "value": "hr.icio",
+         "source": "commons-desc-page"
+        },
+        "LicenseShortName": {
+         "value": "CC BY 2.0",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "AttributionRequired": {
+         "value": "true",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "LicenseUrl": {
+         "value": "https://creativecommons.org/licenses/by/2.0",
+         "source": "commons-desc-page"
+        },
+        "Restrictions": {
+         "value": "",
+         "source": "commons-desc-page",
+         "hidden": ""
+        },
+        "License": {
+         "value": "cc-by-2.0",
+         "source": "commons-templates",
+         "hidden": ""
+        }
+       },
+       "mime": "image/jpeg"
+      }
+     ]
+    }
+   }
+  }
+ }
+}

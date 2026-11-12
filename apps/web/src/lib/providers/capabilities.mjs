@@ -38,6 +38,7 @@ export const CONSUMERS = {
   'routing.global': 'providers/routing-composite.ts#createCompositeRouting ← planning/verification-providers.ts (local coverage → openrouteservice)',
   'lodging.area': 'core/intelligence/lodging.ts#buildLodgingIntelligence → TripHub StaysSection',
   'lodging.discovery': 'providers/discovery.ts#discoverStaysNear ← itinerary/actions.ts#discoverStaysAction (display only)',
+  'lodging.named': 'providers/lodging/discover.ts#discoverLodgingNear ← itinerary/lodging-actions.ts#recommendLodgingAction → core lodging/rank.ts (display only)',
   'lodging.live_price': null,
   'lodging.availability': null,
   'food.scan': 'discovery-scan/food.ts#groundScanFood ← discovery-scan/run.ts#scanFoodFor',
@@ -241,6 +242,10 @@ export function capabilityRegistry(env = process.env) {
 
   add('lodging.area', 'lodging', { configured: true, provider: 'sidequest', costClass: 'free', coverage: 'Area and base intelligence from the plan and the profile.', limitations: [] });
   add('lodging.discovery', 'lodging', { configured: google, provider: google ? 'google-places' : null, costClass: googleKey ? 'metered' : 'free', fixture: placesRecorded, freshness: 'medium', coverage: google ? 'Up to 3 real properties per base.' : '', limitations: google ? ['Properties are discovered, not quoted.'] : ['Areas only.'] });
+  /* Named places to stay from open place data (Overture always; OpenStreetMap where Overpass is on), ranked for the trip, on a traveller's press. */
+  const lodgingNamed = !eq(env, 'SIDEQUEST_LODGING_PROVIDER', 'off');
+  const lodgingFixture = fixtureCompiler || fixtureComposer;
+  add('lodging.named', 'lodging', { configured: lodgingNamed || lodgingFixture, provider: lodgingFixture ? 'fixture' : lodgingNamed ? (overpass ? 'overture+overpass' : 'overture') : null, costClass: 'free', fixture: lodgingFixture, freshness: 'medium', coverage: lodgingFixture ? 'Synthetic properties.' : lodgingNamed ? `Overture place files (lodging, confidence ≥ 0.7, open) around each base${overpass ? '; OpenStreetMap lodging with mapped amenities beside them, never merged' : ''}.` : '', limitations: ['Names, positions and recorded facts only; prices and availability are never checked.'] });
   add('lodging.live_price', 'lodging', { configured: false, available: false, provider: null, costClass: 'none', freshness: 'very_volatile', limitations: ['No accommodation inventory provider; prices are never shown.'] });
   add('lodging.availability', 'lodging', { configured: false, available: false, provider: null, costClass: 'none', freshness: 'very_volatile', limitations: ['No accommodation inventory provider; availability is never shown.'] });
 

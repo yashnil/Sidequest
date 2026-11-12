@@ -1,0 +1,16 @@
+{
+  "name": "sidequest-pdf-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prints Sidequest's dedicated guide layout to PDF with headless Chromium.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.62.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

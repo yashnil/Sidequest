@@ -1,0 +1,962 @@
+{
+ "recordedAt": "2026-11-12",
+ "base": {
+  "label": "Vík, Iceland",
+  "near": {
+   "lat": 63.4186,
+   "lng": -19.006
+  },
+  "radiusKm": 12
+ },
+ "overture": {
+  "candidates": [
+   {
+    "source": "overture",
+    "sourceId": "overture:f78b57f6-f720-4e11-be88-2fde4de798e6",
+    "name": "Hotel Katla",
+    "coordinates": {
+     "lat": 63.42656707763672,
+     "lng": -18.905417442321777
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Suðurland",
+    "confidence": 0.99,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1285f5e7-527d-491f-a9ed-2af6bbdbafd1",
+    "name": "Hótel Kría",
+    "coordinates": {
+     "lat": 63.418128967285156,
+     "lng": -18.99357509613037
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.hotelkria.is/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:18ebf48e-d213-489e-a3c0-9fd9548bf541",
+    "name": "Vik Camping",
+    "coordinates": {
+     "lat": 63.41931915283203,
+     "lng": -18.995494842529297
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.845,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:26c521bd-ad11-46fd-a5f7-49d363f15aac",
+    "name": "Tjaldstæðið Vík í Mýrdal - Campsite Vík",
+    "coordinates": {
+     "lat": 63.41946029663086,
+     "lng": -18.99521541595459
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vikcamping.is/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.973,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3d37adf2-55cb-4544-aef8-67fe6472db12",
+    "name": "Vík Apartments",
+    "coordinates": {
+     "lat": 63.41808319091797,
+     "lng": -18.999024391174316
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.stayinvik.is/accommodation",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.974,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5b808636-0cf4-451d-94cb-7e455eeba3fb",
+    "name": "Like Vik",
+    "coordinates": {
+     "lat": 63.421852111816406,
+     "lng": -19.00742244720459
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://likevik.is/",
+    "locality": "Vík í Mýrdal",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:28724d36-8d2c-48f4-bc41-0ce9aa535f8b",
+    "name": "Vík HI Hostel",
+    "coordinates": {
+     "lat": 63.42340850830078,
+     "lng": -19.00914478302002
+    },
+    "type": "hostel",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.hostel.is/hostels/Vik/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:229297b8-fa16-49cb-ad08-8195b9c6f4c7",
+    "name": "Arsalir Bed & Breakfast",
+    "coordinates": {
+     "lat": 63.421142578125,
+     "lng": -19.010432243347168
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.937,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:21c4cd85-cf7b-4b89-a5e0-fdef4ddeaaa2",
+    "name": "Guesthouse Galleri Vik",
+    "coordinates": {
+     "lat": 63.41937255859375,
+     "lng": -19.010382652282715
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.948,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a410ce06-11a2-40e4-9f9f-aeff77b122c5",
+    "name": "Guesthouse Carina",
+    "coordinates": {
+     "lat": 63.4206428527832,
+     "lng": -19.012232780456543
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://guesthousecarina.is/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.993,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6e86547a-f964-4b43-8a7a-66d813486639",
+    "name": "Dream guesthouse Vik",
+    "coordinates": {
+     "lat": 63.419071197509766,
+     "lng": -19.009570121765137
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.956,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c83747c9-f010-4281-8988-f4dfa3edf3a9",
+    "name": "Kósý Vík",
+    "coordinates": {
+     "lat": 63.42109680175781,
+     "lng": -19.006888389587402
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.kosyvik.is/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.898,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a520a508-1fba-411f-9e29-5ce368f45615",
+    "name": "Icelandair Hotel Vik Cottages",
+    "coordinates": {
+     "lat": 63.42180633544922,
+     "lng": -19.005440711975098
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.stayinvik.is/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f03c868e-7326-4fd3-9ecd-bbd5f6206398",
+    "name": "Hótel Vík",
+    "coordinates": {
+     "lat": 63.41930389404297,
+     "lng": -19.001330375671387
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://hoteledda.is/en",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.995,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d0692e97-5a6d-42e5-8a1b-bca7afa6301a",
+    "name": "Puffin Hotel Vik",
+    "coordinates": {
+     "lat": 63.416969299316406,
+     "lng": -19.01503849029541
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.puffinhotelvik.is/",
+    "locality": "Vík",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:099e152c-9843-459c-82fe-d3aebd23df62",
+    "name": "Prestshús 2",
+    "coordinates": {
+     "lat": 63.41543197631836,
+     "lng": -19.047009468078613
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.prestshus2.com/",
+    "locality": "Mýrdalshreppur",
+    "confidence": 0.982,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8b25b273-3d39-491a-afdc-3611f03e7bb3",
+    "name": "The Barn",
+    "coordinates": {
+     "lat": 63.43599319458008,
+     "lng": -19.06234836578369
+    },
+    "type": "hostel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://barnhostel.is/",
+    "locality": "Suðurland",
+    "confidence": 0.981,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ab0c9598-fee2-4168-bceb-ea55fd7168e6",
+    "name": "Guesthouse Reynir",
+    "coordinates": {
+     "lat": 63.42411422729492,
+     "lng": -19.050793647766113
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Suðurland",
+    "confidence": 0.871,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0dc8c5cd-5267-4a17-8938-2e4676e78064",
+    "name": "Gerði Guesthouse",
+    "coordinates": {
+     "lat": 63.41505813598633,
+     "lng": -19.047999382019043
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Skaftárhreppur",
+    "confidence": 0.718,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d8dc7f33-08e8-4c94-b41a-3c6808627cee",
+    "name": "Black Beach Suites",
+    "coordinates": {
+     "lat": 63.43598175048828,
+     "lng": -19.064047813415527
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://blackbeachsuites.is/",
+    "locality": "Suðurland",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:453fc2a9-e4ad-4fd3-8f8e-c5cf80b22b3b",
+    "name": "Götur Cottage",
+    "coordinates": {
+     "lat": 63.45512390136719,
+     "lng": -19.05922222137451
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Vík",
+    "confidence": 0.963,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b6756bd0-1895-4199-b209-44bdeadd648e",
+    "name": "Skammidalur Guesthouse",
+    "coordinates": {
+     "lat": 63.45108413696289,
+     "lng": -19.100727081298828
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://skammidalur.is/",
+    "locality": "Suðurland",
+    "confidence": 0.977,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cb370ce2-e5fc-4608-8e57-5db522affcb0",
+    "name": "Grand Guesthouse Gardakot",
+    "coordinates": {
+     "lat": 63.419193267822266,
+     "lng": -19.168557167053223
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Suðurland",
+    "confidence": 0.923,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3d347194-09c2-47e9-a28c-ecc81924f8b1",
+    "name": "Volcano Hotel",
+    "coordinates": {
+     "lat": 63.436767578125,
+     "lng": -19.163366317749023
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.volcanohotel.is/",
+    "locality": "Suðurland",
+    "confidence": 0.978,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1a856f1b-6496-4bbd-af73-af7f849ce21d",
+    "name": "Hvammból Guesthouse",
+    "coordinates": {
+     "lat": 63.43449401855469,
+     "lng": -19.175607681274414
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.hvammbolguesthouse.com/",
+    "locality": "Suðurland",
+    "confidence": 0.82,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:540fcc39-448c-40eb-846b-360656bbf469",
+    "name": "Hótel Dyrhólaey",
+    "coordinates": {
+     "lat": 63.447975158691406,
+     "lng": -19.14380168914795
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.dyrholaey.is/",
+    "locality": "Vík",
+    "confidence": 0.966,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:265e47d2-29fc-47d5-8f00-ddac30fa0e5b",
+    "name": "Farmhouse Lodge",
+    "coordinates": {
+     "lat": 63.437767028808594,
+     "lng": -19.18962574005127
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.farmhouse.is/",
+    "locality": "Suðurland",
+    "confidence": 0.98,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ec66e0be-084d-4407-82e7-9b4680cc8b25",
+    "name": "Mid-Hvoll Cottages",
+    "coordinates": {
+     "lat": 63.42890930175781,
+     "lng": -19.232563018798828
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.midhvoll.is/",
+    "locality": "Vik",
+    "confidence": 0.934,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:dd039ea5-eab1-41e0-9528-eeb8d30f52e5",
+    "name": "Hvoll Cottages",
+    "coordinates": {
+     "lat": 63.429588317871094,
+     "lng": -19.229866981506348
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.hvoll.com/",
+    "locality": "Suðurland",
+    "confidence": 0.826,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   }
+  ],
+  "hotSprings": []
+ },
+ "osm": {
+  "elements": [
+   {
+    "type": "node",
+    "id": 412438803,
+    "lat": 63.4233033,
+    "lon": -19.0091492,
+    "tags": {
+     "addr:housenumber": "5",
+     "addr:postcode": "870",
+     "addr:street": "Suðurvíkurvegur",
+     "contact:email": "vik@hostel.is",
+     "contact:mobile": "+354 867 2389",
+     "contact:phone": "+354 487 1106",
+     "contact:website": "https://www.hostel.is/hostels/vik-hi-hostel",
+     "name": "Hostel Vík",
+     "operator": "Hostelling International",
+     "tourism": "hostel"
+    }
+   },
+   {
+    "type": "node",
+    "id": 451956418,
+    "lat": 63.4266687,
+    "lon": -18.905439,
+    "tags": {
+     "check_date": "2024-10-06",
+     "internet_access": "wlan",
+     "name": "Hotel Katla",
+     "tourism": "hotel",
+     "website": "https://www.hotelkatla.is/",
+     "wikidata": "Q111409534"
+    }
+   },
+   {
+    "type": "node",
+    "id": 462660207,
+    "lat": 63.4552413,
+    "lon": -19.1793001,
+    "tags": {
+     "name": "Hótel Búrfell",
+     "tourism": "guest_house",
+     "wheelchair": "limited",
+     "wikidata": "Q112012989"
+    }
+   },
+   {
+    "type": "node",
+    "id": 474785523,
+    "lat": 63.4211576,
+    "lon": -19.0100832,
+    "tags": {
+     "name": "Ársalir",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 837950425,
+    "lat": 63.4194819,
+    "lon": -19.0012001,
+    "tags": {
+     "addr:city": "Vík í Mýrdal",
+     "addr:housenumber": "1-5",
+     "addr:postcode": "870",
+     "addr:street": "Klettsvegur",
+     "bar": "yes",
+     "email": "bookings@stayinvik.is",
+     "internet_access": "wlan",
+     "internet_access:fee": "no",
+     "name": "Hótel Vík í Mýrdal",
+     "phone": "+354 487 1480",
+     "rooms": "80",
+     "tourism": "hotel",
+     "website": "https://www.stayinvik.is/",
+     "wikidata": "Q111873629"
+    }
+   },
+   {
+    "type": "node",
+    "id": 1823040653,
+    "lat": 63.4482751,
+    "lon": -19.1425674,
+    "tags": {
+     "check_date": "2024-07-29",
+     "name": "Hótel Dyrhólaey",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "node",
+    "id": 1823217877,
+    "lat": 63.4565058,
+    "lon": -19.080762,
+    "tags": {
+     "internet_access": "yes",
+     "name": "Giljur gistihús",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 1827403204,
+    "lat": 63.43696,
+    "lon": -19.163469,
+    "tags": {
+     "name": "Hotel Volcano",
+     "tourism": "hotel",
+     "website": "https://www.volcanohotel.is/",
+     "wikidata": "Q111409533"
+    }
+   },
+   {
+    "type": "node",
+    "id": 3098051737,
+    "lat": 63.4238287,
+    "lon": -19.0507568,
+    "tags": {
+     "name": "Guesthouse Reynir",
+     "tourism": "motel"
+    }
+   },
+   {
+    "type": "node",
+    "id": 3994091160,
+    "lat": 63.437573,
+    "lon": -19.1898166,
+    "tags": {
+     "email": "farmhouse@farmhouse.is",
+     "internet_access": "wlan",
+     "internet_access:fee": "no",
+     "name": "Farmhouse Lodge",
+     "phone": "+354 571 5879",
+     "rooms": "7",
+     "tourism": "guest_house",
+     "website": "https://farmhouse.is/",
+     "wheelchair": "yes"
+    }
+   },
+   {
+    "type": "node",
+    "id": 4010267217,
+    "lat": 63.4192918,
+    "lon": -19.1676914,
+    "tags": {
+     "email": "gardakot@gmail.com",
+     "internet_access": "wlan",
+     "internet_access:fee": "no",
+     "name": "Garðakot",
+     "phone": "+354 487 1441",
+     "rooms": "4",
+     "tourism": "guest_house",
+     "website": "https://grandguesthouse.wix.com/gardakot"
+    }
+   },
+   {
+    "type": "node",
+    "id": 4188025696,
+    "lat": 63.4206424,
+    "lon": -19.0124184,
+    "tags": {
+     "addr:housenumber": "13",
+     "addr:postcode": "870",
+     "addr:street": "Mýrarbraut",
+     "internet_access": "wlan",
+     "name": "Guesthouse Carina",
+     "tourism": "guest_house",
+     "wikidata": "Q111873628"
+    }
+   },
+   {
+    "type": "node",
+    "id": 4951732840,
+    "lat": 63.4061945,
+    "lon": -19.0466232,
+    "tags": {
+     "addr:postcode": "871",
+     "addr:street": "Gardar, 871 Vik",
+     "description": "3 Cottages",
+     "internet_access": "wlan",
+     "name": "Gardar on Reynisfjara Beach",
+     "tourism": "guest_house",
+     "website": "https://www.reynisfjara-guesthouses.com"
+    }
+   },
+   {
+    "type": "node",
+    "id": 6364564376,
+    "lat": 63.4359177,
+    "lon": -19.0621547,
+    "tags": {
+     "name": "The Barn",
+     "phone": "+354 779 1166",
+     "tourism": "hostel",
+     "website": "https://barnhostel.is/"
+    }
+   },
+   {
+    "type": "node",
+    "id": 7864368136,
+    "lat": 63.4364889,
+    "lon": -19.0635518,
+    "tags": {
+     "name": "Black Beach Suites",
+     "phone": "+354 779 1166",
+     "tourism": "apartment",
+     "website": "https://blackbeachsuites.is/"
+    }
+   },
+   {
+    "type": "node",
+    "id": 11267192544,
+    "lat": 63.4550508,
+    "lon": -19.0594497,
+    "tags": {
+     "name": "Götur Cottage",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 14005184888,
+    "lat": 63.4180287,
+    "lon": -18.9993545,
+    "tags": {
+     "email": "bookings@stayinvik.is",
+     "internet_access": "wlan",
+     "internet_access:fee": "no",
+     "name": "Vík Apartments",
+     "phone": "+354 487 1480",
+     "tourism": "apartment",
+     "website": "https://www.vikapartments.is/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 301399077,
+    "center": {
+     "lat": 63.4180703,
+     "lon": -19.0132016
+    },
+    "tags": {
+     "addr:city": "Vík",
+     "addr:housenumber": "24a",
+     "addr:postcode": "870",
+     "addr:street": "Víkurbraut",
+     "building": "yes",
+     "name": "Puffin hostel",
+     "operator": "Welcome Hotels",
+     "tourism": "hostel",
+     "website": "http://vikhotel.is/puffinhostel/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 301399084,
+    "center": {
+     "lat": 63.4178334,
+     "lon": -19.0136998
+    },
+    "tags": {
+     "addr:city": "Vík",
+     "addr:housenumber": "26",
+     "addr:postcode": "870",
+     "addr:street": "Víkurbraut",
+     "building": "yes",
+     "name": "Vik Tröll Hotel",
+     "note": "Restaurant open 11-21; Café open 11-23; Breakfast 8-10",
+     "phone": "+354 5195544",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 517718144,
+    "center": {
+     "lat": 63.4551248,
+     "lon": -19.0589483
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "check_date": "2026-06-22",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 517718145,
+    "center": {
+     "lat": 63.4550541,
+     "lon": -19.0590939
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "check_date": "2026-06-22",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 517718172,
+    "center": {
+     "lat": 63.4512948,
+     "lon": -19.101065
+    },
+    "tags": {
+     "addr:city": "Vík",
+     "addr:housenumber": "2",
+     "addr:postcode": "871",
+     "addr:street": "Skammidalur",
+     "building": "yes",
+     "email": "info@skammidalur.is",
+     "guest_house": "guest_house",
+     "internet_access": "wlan",
+     "internet_access:fee": "no",
+     "name": "Skammidalur Guesthouse",
+     "phone": "+354 863 4310",
+     "ref:HNITNUM": "10004800",
+     "source:addr": "Staðfangaskrá",
+     "tourism": "guest_house",
+     "website": "https://skammidalur.is"
+    }
+   },
+   {
+    "type": "way",
+    "id": 762209242,
+    "center": {
+     "lat": 63.4180879,
+     "lon": -18.9934449
+    },
+    "tags": {
+     "addr:city": "Vík í Mýrdal",
+     "addr:housenumber": "12-14",
+     "addr:postcode": "870",
+     "addr:street": "Sléttuvegur",
+     "building": "hotel",
+     "building:levels": "2",
+     "internet_access": "yes",
+     "name": "Hotel Kría",
+     "phone": "+354 416 2100",
+     "roof:levels": "0",
+     "rooms": "73",
+     "tourism": "hotel",
+     "website": "https://www.hotelkria.is/",
+     "wikidata": "Q111409535"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1087978499,
+    "center": {
+     "lat": 63.4549912,
+     "lon": -19.0592601
+    },
+    "tags": {
+     "building": "yes",
+     "building:levels": "1",
+     "check_date": "2026-06-22",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1087978500,
+    "center": {
+     "lat": 63.4548035,
+     "lon": -19.0598614
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "check_date": "2026-06-22",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1087978501,
+    "center": {
+     "lat": 63.454744,
+     "lon": -19.060059
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "check_date": "2026-06-22",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1431495213,
+    "center": {
+     "lat": 63.4548666,
+     "lon": -19.0596517
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1431495214,
+    "center": {
+     "lat": 63.4549278,
+     "lon": -19.0594441
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1477393246,
+    "center": {
+     "lat": 63.4546823,
+     "lon": -19.0602596
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1477393247,
+    "center": {
+     "lat": 63.454625,
+     "lon": -19.0604702
+    },
+    "tags": {
+     "addr:street": "Suður-Götur",
+     "building": "yes",
+     "building:levels": "1",
+     "name": "Part of Paradise Cottage rentals",
+     "tourism": "chalet"
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,2203 @@
+{
+ "recordedAt": "2026-11-12",
+ "base": {
+  "label": "Portree, Scotland",
+  "near": {
+   "lat": 57.4125,
+   "lng": -6.196
+  },
+  "radiusKm": 12
+ },
+ "overture": {
+  "candidates": [
+   {
+    "source": "overture",
+    "sourceId": "overture:32d4df95-962a-41d9-8700-07e20df0f45b",
+    "name": "Skeabost View Pods",
+    "coordinates": {
+     "lat": 57.43724822998047,
+     "lng": -6.287194728851318
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.skeabostviewpodsskye.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.931,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:23282297-840f-42f9-8385-4820adb7fffc",
+    "name": "The Wee Skye Lodge",
+    "coordinates": {
+     "lat": 57.43399429321289,
+     "lng": -6.282803058624268
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Highland",
+    "confidence": 0.73,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:38f8582e-735e-44ba-a2c2-b2137cfed3b1",
+    "name": "Stoney Cottage",
+    "coordinates": {
+     "lat": 57.45123291015625,
+     "lng": -6.288325309753418
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.bedandbreakfast-skeabost.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.923,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:871e34a4-c6d8-45a4-900e-1c13916fd868",
+    "name": "Blacksmith B&B",
+    "coordinates": {
+     "lat": 57.45162582397461,
+     "lng": -6.288072109222412
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.737,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:dce75fa0-69a2-43d0-9c3f-428f819f7ecc",
+    "name": "Glenhaultin Luxury Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.47679901123047,
+     "lng": -6.288529396057129
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.glenhaultin.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.99,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ef93ae8e-2e8c-438f-9064-783fc202534f",
+    "name": "Dunn Cruinn Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.4765625,
+     "lng": -6.292219638824463
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:92e5b7ab-214a-451d-85cc-c59d2d42b5a3",
+    "name": "Skeabostview B & B",
+    "coordinates": {
+     "lat": 57.45868682861328,
+     "lng": -6.3029913902282715
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.913,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e48e5b6e-1ce3-4931-9ebd-653223e5418a",
+    "name": "Cruinn Bheinn",
+    "coordinates": {
+     "lat": 57.48981857299805,
+     "lng": -6.308822154998779
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.cruinnbheinn.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.913,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2431585a-651d-4eae-a9de-683c0d8cc14b",
+    "name": "Craigard Chalet",
+    "coordinates": {
+     "lat": 57.4915657043457,
+     "lng": -6.308460235595703
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.716,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:df70468d-3862-49f5-bd5e-faed47a5d205",
+    "name": "Loch Eyre House",
+    "coordinates": {
+     "lat": 57.48711395263672,
+     "lng": -6.308429718017578
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.isleofskyerooms.com/accommodation/loch-eyre-house/",
+    "locality": "Portree",
+    "confidence": 0.886,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9b1e33f4-1d7b-418c-ba0a-30010134d2b0",
+    "name": "Skeabost Country House Hotel & Golf Course",
+    "coordinates": {
+     "lat": 57.45457077026367,
+     "lng": -6.314507484436035
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://skeabosthotel.com/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c98e7acc-4ae3-40da-8b79-ed99d0a787f1",
+    "name": "Skeabost House Hotel",
+    "coordinates": {
+     "lat": 57.45450210571289,
+     "lng": -6.314569473266602
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://sonascollection.com/our-hotels/skeabost/",
+    "locality": "Portree",
+    "confidence": 0.993,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7be3c4e4-b695-48ba-9171-9351697d95b2",
+    "name": "Keeper's Cottage",
+    "coordinates": {
+     "lat": 57.454708099365234,
+     "lng": -6.314004421234131
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.keeperscottage-skye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b2fc4e43-ad2a-4917-9b30-cefd5992b094",
+    "name": "Corran House B&B - Isle Of Skye",
+    "coordinates": {
+     "lat": 57.49349594116211,
+     "lng": -6.3191351890563965
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://corranhouseskye.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.977,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0cf8903b-e710-49d3-aeff-c2b817ebe534",
+    "name": "Cuillin Hills Hotel",
+    "coordinates": {
+     "lat": 57.4906120300293,
+     "lng": -6.320924758911133
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.cuillinhills-hotel-skye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b01d8c3c-4571-49f6-839a-edb7f629be1c",
+    "name": "Skye Cabins",
+    "coordinates": {
+     "lat": 57.47032928466797,
+     "lng": -6.332156658172607
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.skyecabins.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.914,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f226d7ae-8950-4fb2-b236-db3e05526c4c",
+    "name": "The Spoons",
+    "coordinates": {
+     "lat": 57.48494338989258,
+     "lng": -6.337169647216797
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.thespoonsonskye.com/",
+    "locality": "Portree",
+    "confidence": 0.947,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:202d5fec-8803-4c0e-a50d-8a2d3c32f8e4",
+    "name": "Kiloran Bed and Breakfast",
+    "coordinates": {
+     "lat": 57.4859619140625,
+     "lng": -6.3390092849731445
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.kiloran-bedandbreakfast-skye.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.842,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6eaa4ff2-0d60-44b2-99db-57257d2d6886",
+    "name": "The Sabhal and Shepherds Hut",
+    "coordinates": {
+     "lat": 57.47179412841797,
+     "lng": -6.337416648864746
+    },
+    "type": "mountain_hut",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.757,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:74153044-0a7f-4fb1-9ebb-6323439726e0",
+    "name": "Romesdal Highland Cattle, Isle of Skye",
+    "coordinates": {
+     "lat": 57.511474609375,
+     "lng": -6.3509602546691895
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Edinburgh",
+    "confidence": 0.775,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5147e34e-9346-461e-a0f7-f91bc9e208e3",
+    "name": "Seacroft Cottage Bed And Breakfast",
+    "coordinates": {
+     "lat": 57.49644470214844,
+     "lng": -6.355174541473389
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.scottishcroftcottage.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ee03ced4-41c4-425f-9866-73109936d90d",
+    "name": "Isle of Skye Meadle Holiday Cottages",
+    "coordinates": {
+     "lat": 57.35029983520508,
+     "lng": -6.3902082443237305
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.self-catering-carbost-skye.co.uk/",
+    "locality": "Bracadale",
+    "confidence": 0.769,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:72db49cb-8b81-463e-b821-90339dac4d95",
+    "name": "Clachamish House Yurt and Yoga",
+    "coordinates": {
+     "lat": 57.493408203125,
+     "lng": -6.3686442375183105
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Highland",
+    "confidence": 0.801,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:39355ae2-a79b-4b56-9442-d9386840a1f8",
+    "name": "The Red Red Robin Cottage",
+    "coordinates": {
+     "lat": 57.42664337158203,
+     "lng": -6.269970417022705
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.booking.com/Share-2su0xm",
+    "locality": "Highland",
+    "confidence": 0.976,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0edd8f68-235f-4711-b31a-95b252015d86",
+    "name": "Garalapin House Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.4267578125,
+     "lng": -6.269860744476318
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.garalapinhouse.co.uk/",
+    "confidence": 0.944,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:318b7aa4-5bb6-46dc-8ee8-52f069295e37",
+    "name": "Cul Na Creagan B&B",
+    "coordinates": {
+     "lat": 57.42502975463867,
+     "lng": -6.268169403076172
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.culnacreagan.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9d027333-cb50-4e2b-8734-659a9ff83530",
+    "name": "Moorside Rooms, Portree, Isle of Skye",
+    "coordinates": {
+     "lat": 57.45035171508789,
+     "lng": -6.256560802459717
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.moorsideskye.com/",
+    "locality": "Portree",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a1e81a3e-fc50-4ee5-b1ca-12eb38b53550",
+    "name": "Antlers Rest",
+    "coordinates": {
+     "lat": 57.447898864746094,
+     "lng": -6.242475986480713
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.skyeholidayretreats.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.891,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9e922c46-366f-4033-abc5-007b1e8f5730",
+    "name": "Grasmhor Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.423301696777344,
+     "lng": -6.254918575286865
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.grasmhor.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.744,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:fc7c8832-10c1-4bb3-be74-cc78f199d2ac",
+    "name": "Dalriada Guest House",
+    "coordinates": {
+     "lat": 57.4326286315918,
+     "lng": -6.198129653930664
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6b37f64c-0200-4405-8b6e-78515edc0fa7",
+    "name": "Old Captain Guest House",
+    "coordinates": {
+     "lat": 57.416221618652344,
+     "lng": -6.196767807006836
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.795,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a5ad4ade-f4b4-4c77-9d9f-05c93f43516e",
+    "name": "Oronsay Bed And Breakfast",
+    "coordinates": {
+     "lat": 57.415611267089844,
+     "lng": -6.196583271026611
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.skyebedandbreakfast.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.881,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:84001a54-de7a-4c3b-996e-79ff712e069b",
+    "name": "Marmalade Hotel",
+    "coordinates": {
+     "lat": 57.41633987426758,
+     "lng": -6.198532581329346
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://perlehotels.com/marmalade",
+    "locality": "Portree",
+    "confidence": 0.995,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ae0eeda0-a179-460f-b4f9-f433795c3425",
+    "name": "Springfield Guest House",
+    "coordinates": {
+     "lat": 57.41498565673828,
+     "lng": -6.200890064239502
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.springfield-skye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.988,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7b7c9d1b-cbf1-45e3-9b66-3fb72c6d89fb",
+    "name": "Lealt Falls House",
+    "coordinates": {
+     "lat": 57.41536331176758,
+     "lng": -6.200422763824463
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://lealtfallshouse.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.793,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:bbe5f014-ebc7-4394-abb7-1edd54934280",
+    "name": "Home Farm Apartments",
+    "coordinates": {
+     "lat": 57.41703796386719,
+     "lng": -6.20012092590332
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.homefarmapartments.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.957,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:326e766d-7473-410c-82ce-71020520c27d",
+    "name": "Mable's Cottage-skye",
+    "coordinates": {
+     "lat": 57.41567611694336,
+     "lng": -6.200052261352539
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mablescottageskye.com/",
+    "locality": "Portree",
+    "confidence": 0.793,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8153545b-2d0a-431d-b6f5-142acb562f5f",
+    "name": "Taransay House",
+    "coordinates": {
+     "lat": 57.41064453125,
+     "lng": -6.19947624206543
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.taransayhouse.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.974,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:86762ee6-2d5d-4e3a-a067-4bc47f5b98e3",
+    "name": "Tarradale Holiday Cottage",
+    "coordinates": {
+     "lat": 57.409759521484375,
+     "lng": -6.199661731719971
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.ihcottages.com/property/?id=396650&startdate",
+    "locality": "Portree",
+    "confidence": 0.913,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4d086444-a250-4df1-b89c-a8cc3562095e",
+    "name": "Fishers Rock Holiday Home",
+    "coordinates": {
+     "lat": 57.40684509277344,
+     "lng": -6.20033073425293
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.704,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:40a74e8d-3694-4c29-b844-acb0438c5641",
+    "name": "Highfield Sky",
+    "coordinates": {
+     "lat": 57.410072326660156,
+     "lng": -6.200172424316406
+    },
+    "type": "other",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.highfieldsky.com/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1a3417ab-17b4-4c23-9363-5bbb4488c1b2",
+    "name": "Sgurr Alasdair",
+    "coordinates": {
+     "lat": 57.41094207763672,
+     "lng": -6.200163841247559
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.sgurralasdair.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.903,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2b610469-cddf-4354-aa61-367edd0f1708",
+    "name": "Meadowbank Bed and Breakfast",
+    "coordinates": {
+     "lat": 57.41072463989258,
+     "lng": -6.201354026794434
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.meadowbankguesthouse.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3f5124c2-c69f-417c-bd1d-c8f35e3a647d",
+    "name": "Ardchoille Self Catering",
+    "coordinates": {
+     "lat": 57.40813064575195,
+     "lng": -6.201222896575928
+    },
+    "type": "other",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://selfcatering-isleofskye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.769,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:57c51c5a-d447-4797-add7-eb0b19189d3d",
+    "name": "Woodlands Bed and Breakfast",
+    "coordinates": {
+     "lat": 57.40581512451172,
+     "lng": -6.201286792755127
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.woodlands-portree.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.957,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2f9cb20f-6aad-4059-85b2-a848ee4aae90",
+    "name": "Catherine Macleod",
+    "coordinates": {
+     "lat": 57.40679931640625,
+     "lng": -6.2008867263793945
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.portreebedandbreakfast.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:23ca8271-f4a0-4ef9-a405-23c3c05745f9",
+    "name": "An Airidh",
+    "coordinates": {
+     "lat": 57.40644073486328,
+     "lng": -6.201013088226318
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.portreebedandbreakfast.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:65d724a5-c123-4e60-8398-a33dfef88195",
+    "name": "Almondbank",
+    "coordinates": {
+     "lat": 57.406097412109375,
+     "lng": -6.200665473937988
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.isleofskye.com/accommodation/bed-breakfast/portree",
+    "locality": "Portree",
+    "confidence": 0.947,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:90548280-5169-4a35-9d84-2bf90b9a350a",
+    "name": "Cnoc Mhairi",
+    "coordinates": {
+     "lat": 57.399871826171875,
+     "lng": -6.200130462646484
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.portree-self-catering.net/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e0903cf3-7715-4538-a13a-25bc1d2498cb",
+    "name": "Ardchoille Self Catering",
+    "coordinates": {
+     "lat": 57.39999771118164,
+     "lng": -6.200000286102295
+    },
+    "type": "other",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://selfcatering-isleofskye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.762,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:452ca17e-164b-4331-91a0-e1266f221270",
+    "name": "Kerrysdale",
+    "coordinates": {
+     "lat": 57.40462875366211,
+     "lng": -6.200414657592773
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.kerrysdalebedandbreakfast.com/",
+    "locality": "Portree",
+    "confidence": 0.869,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:50386120-3e49-4dba-8dfa-631a14c50381",
+    "name": "Greenacres Guest House",
+    "coordinates": {
+     "lat": 57.40410614013672,
+     "lng": -6.197875022888184
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.greenacres-skye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.989,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:10457d6f-cd53-4781-894e-dd004e031f83",
+    "name": "Viewfield House",
+    "coordinates": {
+     "lat": 57.4041633605957,
+     "lng": -6.19777774810791
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.viewfieldhouse.com/",
+    "confidence": 0.984,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3f4e13ca-a86f-428d-b489-f320554e4271",
+    "name": "Air an Oir Self Catering",
+    "coordinates": {
+     "lat": 57.4033317565918,
+     "lng": -6.197398662567139
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://skye-self-catering.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.928,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:501e77ed-c633-42cf-ac36-46e42cd1b7a9",
+    "name": "Givendale Guest House",
+    "coordinates": {
+     "lat": 57.40639114379883,
+     "lng": -6.202513694763184
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.givendale.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.957,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:35fd4ede-c44b-4179-a01e-aa7979a70f90",
+    "name": "Heronfield",
+    "coordinates": {
+     "lat": 57.4061393737793,
+     "lng": -6.202230453491211
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.heronfield.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:fd54195e-401c-4f4d-a00b-42862490998a",
+    "name": "Taigh Duitseach",
+    "coordinates": {
+     "lat": 57.41053771972656,
+     "lng": -6.201997756958008
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.taighduitseach.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.908,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d16f1bdc-aed4-4534-ac5d-a29ac92b77f1",
+    "name": "Glendaruel Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.41035461425781,
+     "lng": -6.202393531799316
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://luxuryapartmentskye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.933,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3d56fc65-73ad-4f77-99f7-0194dc2d9195",
+    "name": "Duirinish Guest House",
+    "coordinates": {
+     "lat": 57.40998077392578,
+     "lng": -6.202541828155518
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.duirinish-bandb-skye.com/",
+    "locality": "Portree",
+    "confidence": 0.855,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:84bb17c4-bdc1-40e8-a4aa-808780e9541f",
+    "name": "The Croft",
+    "coordinates": {
+     "lat": 57.41075897216797,
+     "lng": -6.202892303466797
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.763,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d47c6f22-7e60-46af-9593-4399bd4c6882",
+    "name": "Skye Haven Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.40959167480469,
+     "lng": -6.2031569480896
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.skye-haven.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.968,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f7612606-c240-4209-a392-c9be4c16bd20",
+    "name": "Viewfield House Hotel",
+    "coordinates": {
+     "lat": 57.4078369140625,
+     "lng": -6.2035746574401855
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.viewfieldhouse.com/",
+    "locality": "Portree",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:23d91647-599b-4819-9bc5-6266cfa6fde9",
+    "name": "The Skye Inn",
+    "coordinates": {
+     "lat": 57.41572189331055,
+     "lng": -6.202126979827881
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.theskyeinn.com/",
+    "locality": "Portree",
+    "confidence": 1,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1af7b4f2-0977-4e90-8739-748e2a4e5b2d",
+    "name": "Creagory Skye",
+    "coordinates": {
+     "lat": 57.41507339477539,
+     "lng": -6.20678186416626
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.creagoryskye.com/",
+    "locality": "Portree",
+    "confidence": 0.991,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8161278c-94f5-43d9-9e22-fc82f048f69c",
+    "name": "Millpond House - Luxurious Island Home in Portree",
+    "coordinates": {
+     "lat": 57.41315460205078,
+     "lng": -6.209655284881592
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.airbnb.co.uk/rooms/50948805?guests=1&adults=1&s=67&unique_share_id=631cdfe1-4b10-4b9d-a2c0-4612e60e9178",
+    "locality": "Portree",
+    "confidence": 0.829,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cb3b1f77-70c9-434b-baaa-80f6393e70e1",
+    "name": "Dunalasdair",
+    "coordinates": {
+     "lat": 57.42072296142578,
+     "lng": -6.214705467224121
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.733,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cec6579a-550b-4a80-b3b1-d15fba603430",
+    "name": "Blà Bheinn Bed & Breakfast, Skye",
+    "coordinates": {
+     "lat": 57.30665969848633,
+     "lng": -6.2262725830078125
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Isle of Skye",
+    "confidence": 0.953,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:54b284e0-2bc4-403e-9bb7-8ad96488ffd3",
+    "name": "Cuillrigh",
+    "coordinates": {
+     "lat": 57.3939094543457,
+     "lng": -6.184642791748047
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.cuillrighonskye.co.uk/",
+    "locality": "Penifiler",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8d4fbf12-bfd2-4e51-9086-57040e76a383",
+    "name": "Cuillin Hills Hotel",
+    "coordinates": {
+     "lat": 57.41609573364258,
+     "lng": -6.184803485870361
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://twitter.com/#!/CuillinHillsHot",
+    "locality": "Portree",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1366d8ac-d015-446e-9ff7-f9ea66adc832",
+    "name": "Breton House",
+    "coordinates": {
+     "lat": 57.415828704833984,
+     "lng": -6.183708667755127
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.bretonhouse.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.756,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f918466c-1841-438f-8131-e0c36d8afe36",
+    "name": "Orchard House Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.41759490966797,
+     "lng": -6.185851097106934
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.orchardhouse.scot/",
+    "locality": "Portree",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9baf8f74-622e-4ae5-93ed-ec8e64d37e88",
+    "name": "The Roses B&B",
+    "coordinates": {
+     "lat": 57.42350387573242,
+     "lng": -6.189348220825195
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.therosesbb.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.976,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d9365ca4-1a48-4578-a528-80d94dbe895a",
+    "name": "Glean an Ronnaich",
+    "coordinates": {
+     "lat": 57.42049789428711,
+     "lng": -6.191040992736816
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.gleannanronnaichbandbskye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b6c502aa-2ef1-40c6-86d2-fd5f601eee7f",
+    "name": "High Beech House",
+    "coordinates": {
+     "lat": 57.41358184814453,
+     "lng": -6.190861225128174
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.highbeechhouse.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.835,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6c790397-d04f-4aa9-9833-442832495bc5",
+    "name": "Perle Hotels Limited",
+    "coordinates": {
+     "lat": 57.41305160522461,
+     "lng": -6.190815448760986
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://perlehotels.com/",
+    "locality": "Portree",
+    "confidence": 0.922,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b8ce9b4a-7aa0-4929-8b9a-20cac9e6d71b",
+    "name": "Coolin View Guest Rooms",
+    "coordinates": {
+     "lat": 57.41302490234375,
+     "lng": -6.19082498550415
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.coolinview.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:847090e0-3878-4be8-b55d-e265a0007d03",
+    "name": "Dunborrodale",
+    "coordinates": {
+     "lat": 57.415931701660156,
+     "lng": -6.18872594833374
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.dunborrodale.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.914,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:12afe706-6de3-43b7-a02f-9cc27f6f469d",
+    "name": "Quayside Apartment",
+    "coordinates": {
+     "lat": 57.411075592041016,
+     "lng": -6.191056728363037
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.quaysideapartment.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.851,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f8793a9b-ff78-44d4-94cd-bfc0815b87ed",
+    "name": "Taigh Scalpaigh",
+    "coordinates": {
+     "lat": 57.394710540771484,
+     "lng": -6.191256523132324
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://taighscalpaigh.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f2e4415f-f428-4a9c-80b1-71ac80bf9ca7",
+    "name": "Heatherfield House B&B - Skye",
+    "coordinates": {
+     "lat": 57.3957405090332,
+     "lng": -6.192322731018066
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.heatherfieldskye.com/",
+    "locality": "Highland",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:39f82f23-07a4-4ba0-9901-a39e9579f3cd",
+    "name": "Canowindra Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.38837814331055,
+     "lng": -6.193558692932129
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.canowindraskye.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.98,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6836ee48-3cb8-45b6-a48a-1fd3e9257916",
+    "name": "Skye Lodges",
+    "coordinates": {
+     "lat": 57.38011932373047,
+     "lng": -6.194090366363525
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Highland",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2f391a45-64c8-477e-83af-4b77d568a0af",
+    "name": "Isle of Skye Camping Pods",
+    "coordinates": {
+     "lat": 57.3802490234375,
+     "lng": -6.194071292877197
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Highland",
+    "confidence": 0.964,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9c82f0b6-5cc3-459b-8c91-4c512a057576",
+    "name": "Isle Of Skye Camping Pods - Superior Double Pod",
+    "coordinates": {
+     "lat": 57.379638671875,
+     "lng": -6.194870948791504
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.882,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c94b1fc6-9263-425c-8a0f-a2cd0b6f848a",
+    "name": "Peinmore House",
+    "coordinates": {
+     "lat": 57.388084411621094,
+     "lng": -6.194565773010254
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.peinmorehouse.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.913,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:be56b428-eca0-4106-bdb2-3509a2383f02",
+    "name": "Loch Portree View",
+    "coordinates": {
+     "lat": 57.41046905517578,
+     "lng": -6.1940717697143555
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.lochportreeview.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.811,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d02504fa-546c-43f4-bfa8-aa1e7b1817f7",
+    "name": "The Pink House Portree",
+    "coordinates": {
+     "lat": 57.41132736206055,
+     "lng": -6.191380500793457
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.pinkhouseportree.co.uk/",
+    "locality": "Portree",
+    "confidence": 1,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a30eb920-44f7-4157-8f13-82c556bd6338",
+    "name": "Pier Hotel",
+    "coordinates": {
+     "lat": 57.411476135253906,
+     "lng": -6.191570281982422
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.pier-hotel.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:66d77263-0832-4e76-b72b-fa148ff01b3e",
+    "name": "The Pier Hotel",
+    "coordinates": {
+     "lat": 57.41150665283203,
+     "lng": -6.191619396209717
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.pier-hotel.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.984,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:05187070-a64f-4538-907d-4aef478d8f9c",
+    "name": "Harbour Lodge",
+    "coordinates": {
+     "lat": 57.41164779663086,
+     "lng": -6.1919755935668945
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.harbour-lodge.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.872,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:362b070a-3ade-4eb5-a1ff-fed9f5ad8263",
+    "name": "The Portree Hotel",
+    "coordinates": {
+     "lat": 57.412933349609375,
+     "lng": -6.1937384605407715
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://theportreehotel.com/",
+    "locality": "Portree",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7027ff76-5126-4f75-935f-4162f87641c3",
+    "name": "Caledonian Hotel Portree",
+    "coordinates": {
+     "lat": 57.413021087646484,
+     "lng": -6.193169116973877
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://caledonianhotel-portree.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.994,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b2844441-ed22-4508-9f13-b6a83e6d315b",
+    "name": "Drumorell",
+    "coordinates": {
+     "lat": 57.41665267944336,
+     "lng": -6.192769527435303
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.skye1.co.uk/drumorell",
+    "locality": "Portree",
+    "confidence": 0.925,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:45a40925-9e29-4011-a59e-3aa7223c2fb4",
+    "name": "Mrs M K Montgomery",
+    "coordinates": {
+     "lat": 57.41476821899414,
+     "lng": -6.192823886871338
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.forelandbedandbreakfast.com/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8c045933-a282-4ea1-8a0f-aad6bec05909",
+    "name": "Stormy",
+    "coordinates": {
+     "lat": 57.41462326049805,
+     "lng": -6.192842483520508
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.828,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5620b904-b0bc-4d83-819c-6a3df7c8b52f",
+    "name": "Tongadale Hotel",
+    "coordinates": {
+     "lat": 57.412784576416016,
+     "lng": -6.192842960357666
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.tongadale-hotel-skye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:405094ba-9870-4cf9-8a5c-88641faa9dec",
+    "name": "Portree Accomodation",
+    "coordinates": {
+     "lat": 57.41298294067383,
+     "lng": -6.193049430847168
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://portreeaccommodation.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.973,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:790ce386-ac85-476e-b7db-006aedf7c406",
+    "name": "The Royal Hotel",
+    "coordinates": {
+     "lat": 57.4124755859375,
+     "lng": -6.192600727081299
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.royalhotel.scot/",
+    "locality": "Portree",
+    "confidence": 1,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:38a4b617-2824-421d-949a-17b5c72a6edc",
+    "name": "The Rosedale Hotel",
+    "coordinates": {
+     "lat": 57.41206741333008,
+     "lng": -6.19211483001709
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.rosedalehotelskye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.996,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ec6447c0-df60-4ae1-b9ef-6ae2f3fb3ea8",
+    "name": "Braeside Guest Rooms",
+    "coordinates": {
+     "lat": 57.41315460205078,
+     "lng": -6.192294120788574
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.braesideportree.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.969,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a0605caf-501e-4424-806a-03a456dc9f7e",
+    "name": "Kinloch Lodge, Isle of Skye",
+    "coordinates": {
+     "lat": 57.41290283203125,
+     "lng": -6.192357540130615
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.934,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f11b78f8-4637-4e09-9e83-e5c381e01cb8",
+    "name": "The Bosville Hotel",
+    "coordinates": {
+     "lat": 57.41299819946289,
+     "lng": -6.191869258880615
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://perlehotels.com/the-bosville/",
+    "locality": "Portree",
+    "confidence": 1,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:713e8f25-a974-48cf-8eca-183d6d39e604",
+    "name": "Marine House Holiday Home",
+    "coordinates": {
+     "lat": 57.41232681274414,
+     "lng": -6.191930294036865
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://marinehouseportree.com/",
+    "locality": "Portree",
+    "confidence": 0.891,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3c2583ef-af5b-4da3-8c32-6b125112c791",
+    "name": "Grenitote",
+    "coordinates": {
+     "lat": 57.4146614074707,
+     "lng": -6.19143533706665
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.grenitote.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.996,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cd2238eb-de82-4e32-836e-230881c753da",
+    "name": "Ballintoy B&B",
+    "coordinates": {
+     "lat": 57.42148971557617,
+     "lng": -6.191208362579346
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.ballintoy-skye.com/",
+    "locality": "Portree",
+    "confidence": 0.97,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:aac27b82-878d-4f26-a923-139b30bd843e",
+    "name": "Kiltaraglen House",
+    "coordinates": {
+     "lat": 57.420833587646484,
+     "lng": -6.193901538848877
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.kiltaraglen.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.954,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:bc2517bb-5b02-4d68-bf67-ac8c3a2e4ada",
+    "name": "Skye Holiday Apartments",
+    "coordinates": {
+     "lat": 57.4138298034668,
+     "lng": -6.19443941116333
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.skyeholidayapartments.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:39d44a68-86f2-47ae-8c58-6230ef38631c",
+    "name": "Foreland Self catering Apartment",
+    "coordinates": {
+     "lat": 57.41791915893555,
+     "lng": -6.194517612457275
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.89,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6d9626ff-e25a-452e-a643-b4b9689b1253",
+    "name": "Foreland Self catering Apartment",
+    "coordinates": {
+     "lat": 57.417930603027344,
+     "lng": -6.194513320922852
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.902,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4a180416-0806-47c4-854b-07776605acfa",
+    "name": "Portree Independent Hostel",
+    "coordinates": {
+     "lat": 57.41262435913086,
+     "lng": -6.195352554321289
+    },
+    "type": "hostel",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.hostelskye.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5cf5ae44-3e66-4f8a-b901-1164c40fd21a",
+    "name": "Portree Youth Hostel",
+    "coordinates": {
+     "lat": 57.41244888305664,
+     "lng": -6.195812702178955
+    },
+    "type": "hostel",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.skyehostel.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ad6b85bb-25cb-4819-a100-32140684f8c6",
+    "name": "Islands & Highlands Cottages",
+    "coordinates": {
+     "lat": 57.41265869140625,
+     "lng": -6.196345329284668
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.ihcottages.com/",
+    "locality": "Portree",
+    "confidence": 0.971,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f05bc12f-ee7b-41ab-bcab-e49a2a05b651",
+    "name": "Tor's place",
+    "coordinates": {
+     "lat": 57.418357849121094,
+     "lng": -6.196117401123047
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.806,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1662d008-6721-4da2-9bd7-07523096c8cc",
+    "name": "Air Leth Bed and Breakfast",
+    "coordinates": {
+     "lat": 57.418373107910156,
+     "lng": -6.195206642150879
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.airleth.scot/index.asp?pageid=674170",
+    "locality": "Portree",
+    "confidence": 0.976,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:361867f4-c51e-48f2-880c-bf79ffe94a6f",
+    "name": "Seafar Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.43061065673828,
+     "lng": -6.190480709075928
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.seafar.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.973,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1ce31b50-8a17-4710-948d-49c96851e7f0",
+    "name": "Dalriada Bed & Breakfast",
+    "coordinates": {
+     "lat": 57.4299201965332,
+     "lng": -6.187527656555176
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.991,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6acae90f-7cf1-4d97-bd95-5eddae17cc47",
+    "name": "Dunsgiath Apartments",
+    "coordinates": {
+     "lat": 57.46308517456055,
+     "lng": -6.184952259063721
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.dunsgiath.com/",
+    "locality": "Portree",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:dfa5f61c-f54d-4d60-914d-8503c9d807a4",
+    "name": "Torvaig Caravan and Camp Site",
+    "coordinates": {
+     "lat": 57.425926208496094,
+     "lng": -6.185113430023193
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.campingandcaravanningclub.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0206f000-35ae-4757-9ea0-541a87ad9826",
+    "name": "Wigwam® Holidays",
+    "coordinates": {
+     "lat": 57.4304084777832,
+     "lng": -6.184197902679443
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.wigwamholidays.com/portree-wigwams",
+    "locality": "Isle Of Skye",
+    "confidence": 0.993,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:25fcb238-0d74-455b-9e64-5a8dc389dfb9",
+    "name": "Tor View",
+    "coordinates": {
+     "lat": 57.42888641357422,
+     "lng": -6.1785383224487305
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.tor-view.com/",
+    "locality": "Highland",
+    "confidence": 0.954,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3e1b2ea5-a2cc-4b35-a46c-975d155e0b59",
+    "name": "Rowan Tree Cottage B&B",
+    "coordinates": {
+     "lat": 57.363895416259766,
+     "lng": -6.14813232421875
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Portree",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3ec2755e-ade8-4761-acde-015a0adee1ca",
+    "name": "The Crofter's House",
+    "coordinates": {
+     "lat": 57.37459945678711,
+     "lng": -6.1464524269104
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://thecroftershouse.com/",
+    "locality": "Portree",
+    "confidence": 0.868,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:98690e63-3d94-4997-855d-02e86f93d840",
+    "name": "Loch Aluinn B & B",
+    "coordinates": {
+     "lat": 57.3111686706543,
+     "lng": -6.112746715545654
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.holiday-accommodation-sconser.co.uk/",
+    "locality": "Isle Of Skye",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0fd10a34-9b63-42b2-a319-3f7300ea285f",
+    "name": "Loch Aluinn",
+    "coordinates": {
+     "lat": 57.30876541137695,
+     "lng": -6.12755823135376
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.holiday-accommodation-sconser.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.891,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6f99b3ea-f491-4d10-9c4b-097a255445df",
+    "name": "Sconser Lodge",
+    "coordinates": {
+     "lat": 57.313655853271484,
+     "lng": -6.100613594055176
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.sconserlodge.co.uk/",
+    "locality": "Isle of Skye",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c2c47ed8-04b9-4bab-b09f-1eb48d1b4d40",
+    "name": "Kyles View",
+    "coordinates": {
+     "lat": 57.33248519897461,
+     "lng": -6.109947681427002
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.kylesview.co.uk/",
+    "locality": "Portree",
+    "confidence": 0.716,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c08a19d0-bd12-4ba4-9577-a57e704019e4",
+    "name": "Taigh Uilleam Holiday Cottage",
+    "coordinates": {
+     "lat": 57.3331184387207,
+     "lng": -6.1101179122924805
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.taigh-uilleam.co.uk/",
+    "locality": "Highland",
+    "confidence": 0.91,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d9cb9608-eea3-4d9b-a589-66591dc14560",
+    "name": "Raasay House Hotel",
+    "coordinates": {
+     "lat": 57.35350036621094,
+     "lng": -6.079180717468262
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.raasay-house.co.uk/",
+    "locality": "Kyle",
+    "confidence": 1,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:80991fc3-2489-4397-a858-5a817fa2a9b8",
+    "name": "Oystercatcher House B&B",
+    "coordinates": {
+     "lat": 57.34861755371094,
+     "lng": -6.071247577667236
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.oystercatcherhousebandb.co.uk/",
+    "locality": "Kyle",
+    "confidence": 0.891,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:da2062b7-45ca-4f08-8927-202dffd5accb",
+    "name": "Allt Arais Bed and Breakfast",
+    "coordinates": {
+     "lat": 57.348426818847656,
+     "lng": -6.065258979797363
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.allt-arais.co.uk/",
+    "locality": "Kyle",
+    "confidence": 0.988,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   }
+  ],
+  "hotSprings": []
+ },
+ "osm": {
+  "elements": []
+ }
+}

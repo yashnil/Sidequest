@@ -1,5 +1,6 @@
 import { cx } from '../ui';
 import type { SuggestedBooking } from './booking-links';
+import { LodgingPicks } from './LodgingPicks';
 
 /**
  * 2026-11 — BOOK BEFORE YOU GO.
@@ -19,7 +20,7 @@ const KIND_GLYPH: Record<SuggestedBooking['kind'], string> = {
 
 const KIND_WORD: Record<SuggestedBooking['kind'], string> = { stay: 'Stay', car: 'Car', transfer: 'Transfer', ticket: 'Tickets' };
 
-export function BookingSuggestions({ items }: { items: readonly SuggestedBooking[] }) {
+export function BookingSuggestions({ items, tripId }: { items: readonly SuggestedBooking[]; tripId?: string }) {
   if (items.length === 0) return null;
   const open = items.filter((item) => item.status === 'open').length;
   return (
@@ -83,6 +84,7 @@ export function BookingSuggestions({ items }: { items: readonly SuggestedBooking
                 ))}
               </div>
             ) : null}
+            {item.status === 'open' && item.kind === 'stay' && item.lodging && tripId ? <LodgingPicks tripId={tripId} request={item.lodging} place={item.title.replace(/^Stay in /, '')} /> : null}
           </li>
         ))}
       </ol>

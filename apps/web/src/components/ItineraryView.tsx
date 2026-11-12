@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Fragment } from 'react';
-import { printWithAppendixHref } from './hub/print-links';
 import { planningLineFor } from './hub/planning-line';
 import {
   BOOKING_KIND_LABELS,
@@ -54,6 +53,7 @@ import { plannedOffByDay } from '../lib/planning/planned-off';
 import { tripDensityLine } from '../lib/planning/day-density';
 import {dayRouteLinks, mapModeFor} from '@/lib/maps';
 import { PrintButton } from './PrintButton';
+import { GuideExportChoice } from './guide/GuideExportChoice';
 import { HubShell, type HubViewId } from './hub/HubShell';
 import { DayRail } from './hub/DayRail';
 import { BaseCards, CautionsCard, CONVENIENCE_LABELS, CONVENIENCE_TONE, STRESS_LABELS, STRESS_TONE, TimingCard, TransportCard } from './hub/OverviewCards';
@@ -934,8 +934,9 @@ export function ItineraryView({
     adults: Math.max(1, party?.adults ?? intelligence?.budget.travellers ?? 2),
     children: party?.children ?? 0,
     ...(destinationName ? { regionHint: destinationName } : {}),
+    coordinates,
   });
-  const book = <BookViewLayout suggestions={<BookingSuggestions items={bookingSuggestions} />} {...(tripId ? { tripId } : {})} intel={intelligence} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={tripId ? pendingImports : []} />;
+  const book = <BookViewLayout suggestions={<BookingSuggestions items={bookingSuggestions} {...(tripId ? { tripId } : {})} />} {...(tripId ? { tripId } : {})} intel={intelligence} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} ledger={ledger} affected={affected} pendingImports={tripId ? pendingImports : []} />;
 
   const prepare = (
     <PrepareView preflight={preflight} intel={intelligence} {...(tripId ? { tripId } : {})} booked={booked} itinerary={itinerary} honored={bookedHonored} conflicts={bookedConflicts} resolutions={resolutions} readinessProfile={readinessProfile} checks={checks} recheck={recheck}>
@@ -1259,7 +1260,8 @@ export function ItineraryView({
                       Take it with you
                     </Link>
                   ) : null}
-                  <PrintButton />
+                  {/* The printed guide: a dedicated paper layout, compact or complete (see `components/guide`). */}
+                  <GuideExportChoice tripId={tripId} layout="menu" />
                   <a href={`/trips/${tripId}/itinerary/calendar`} download className={buttonClass('ghost', 'sm')}>
                     Calendar file (.ics)
                   </a>
@@ -1274,9 +1276,6 @@ export function ItineraryView({
                   </Link>
                   {itinerary.package ? <RegenerateButton tripId={tripId} {...(regeneration ? { copy: regeneration } : {})} /> : null}
                   <TripRefreshControl tripId={tripId} upgrade={planningUpgrade ?? null} />
-                  <a href={printWithAppendixHref(tripId)} className={buttonClass('ghost', 'sm')} data-testid="print-with-appendix">
-                    Print with evidence appendix
-                  </a>
                 </div>
               </DismissableDetails>
             ) : (

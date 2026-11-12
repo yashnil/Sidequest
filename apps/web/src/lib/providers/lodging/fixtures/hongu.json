@@ -1,0 +1,1502 @@
+{
+ "recordedAt": "2026-11-12",
+ "base": {
+  "label": "Hongū (Kumano), Japan",
+  "near": {
+   "lat": 33.8395,
+   "lng": 135.7737
+  },
+  "radiusKm": 4
+ },
+ "overture": {
+  "candidates": [
+   {
+    "source": "overture",
+    "sourceId": "overture:e158e0e4-697c-46b9-9b9e-3f120c5c94ac",
+    "name": "熊野 四季亭 - Kumano Shikitei",
+    "coordinates": {
+     "lat": 33.806684494018555,
+     "lng": 135.7424087524414
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://kumano.shikitei.info/",
+    "locality": "田辺市",
+    "confidence": 0.841,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9dab6bef-6a07-4865-be11-fb7de4d7d416",
+    "name": "湯の峯荘",
+    "coordinates": {
+     "lat": 33.82406044006348,
+     "lng": 135.75432586669922
+    },
+    "type": "inn",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.yunominesou.com/",
+    "locality": "田辺市",
+    "confidence": 0.995,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:77655f4d-6bae-48e0-be0f-b9c1eb56931c",
+    "name": "Ryokan Yunomineso",
+    "coordinates": {
+     "lat": 33.823904037475586,
+     "lng": 135.7545166015625
+    },
+    "type": "ryokan",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.yunominesou.com/",
+    "locality": "田辺市",
+    "confidence": 0.837,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4b405168-e7a9-4575-975d-ea63ee176fe1",
+    "name": "ゆのさと",
+    "coordinates": {
+     "lat": 33.822763442993164,
+     "lng": 135.75225067138672
+    },
+    "type": "hostel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www2.w-shokokai.or.jp/hongu/yunosato/yunosato.html",
+    "locality": "田辺市",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:988005d2-af91-4816-a3d3-f9b454ec4641",
+    "name": "民宿ゆの里",
+    "coordinates": {
+     "lat": 33.81943321228027,
+     "lng": 135.7550277709961
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.787,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3031738f-768d-4024-845a-76dd96029753",
+    "name": "民宿あづまや荘",
+    "coordinates": {
+     "lat": 33.82803916931152,
+     "lng": 135.75755310058594
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.adumaya.co.jp/",
+    "locality": "田辺市",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e3ae1e6d-9b87-45e1-a9f3-8053866a33e3",
+    "name": "旅館あづまや",
+    "coordinates": {
+     "lat": 33.82873725891113,
+     "lng": 135.75728607177734
+    },
+    "type": "ryokan",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.adumaya.co.jp/",
+    "locality": "田辺市",
+    "confidence": 0.996,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:fb3fe47d-bf02-4bf9-baf9-f9b8dca14657",
+    "name": "瀧よし",
+    "coordinates": {
+     "lat": 33.82813835144043,
+     "lng": 135.75716400146484
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.936,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c70430b5-6464-42b2-9146-ffd94b334817",
+    "name": "民宿てるてや",
+    "coordinates": {
+     "lat": 33.82829475402832,
+     "lng": 135.7575454711914
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://teruteya.com/",
+    "locality": "田辺市",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b0148b67-e35c-4805-aa87-0e05460e1839",
+    "name": "伊せや",
+    "coordinates": {
+     "lat": 33.82846641540527,
+     "lng": 135.75794982910156
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://iseya.hp.gogo.jp/pc/",
+    "locality": "田辺市",
+    "confidence": 0.996,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d44e3930-1895-439d-8703-fbe1ad5042c7",
+    "name": "民宿くらや",
+    "coordinates": {
+     "lat": 33.82882118225098,
+     "lng": 135.7577896118164
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.zc.ztv.ne.jp/kuraya-yunomine",
+    "locality": "田辺市",
+    "confidence": 0.954,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c5b1401f-dfd3-45b9-8388-c26a1f535f17",
+    "name": "よしのや旅館",
+    "coordinates": {
+     "lat": 33.82945442199707,
+     "lng": 135.75786590576172
+    },
+    "type": "ryokan",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://yunomine.com/",
+    "locality": "田辺市",
+    "confidence": 0.99,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0b92bfe2-e107-4f87-8f3c-db26b5b2f8c4",
+    "name": "Guest house and onsen Wadama",
+    "coordinates": {
+     "lat": 33.829599380493164,
+     "lng": 135.75811004638672
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [
+     {
+      "kind": "onsen",
+      "value": "yes",
+      "basis": "name"
+     }
+    ],
+    "website": "https://wadama-onsen.wixsite.com/home",
+    "locality": "田辺市",
+    "confidence": 0.982,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:66ab7681-3636-4fe5-b25b-182610acad6b",
+    "name": "民宿やまね",
+    "coordinates": {
+     "lat": 33.829776763916016,
+     "lng": 135.75800323486328
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.rifnet.or.jp/~o-yamane",
+    "locality": "田辺市",
+    "confidence": 0.98,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d73d9045-d3f2-45d4-930d-3e865730dccf",
+    "name": "民宿湯の谷荘",
+    "coordinates": {
+     "lat": 33.83024024963379,
+     "lng": 135.7580337524414
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:028b003e-bfa9-43ab-b69a-89d76b5e5365",
+    "name": "J-Hoppers Kumano Yunomine",
+    "coordinates": {
+     "lat": 33.82967185974121,
+     "lng": 135.7582550048828
+    },
+    "type": "hostel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://yunomine.j-hoppers.com/ja/",
+    "locality": "田辺市",
+    "confidence": 0.981,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8cb07482-854c-472a-b84b-23470e7c0011",
+    "name": "Guest House Okagesan",
+    "coordinates": {
+     "lat": 33.82134819030762,
+     "lng": 135.7622299194336
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://okagesankiitanabe.wixsite.com/kominkayado-okagesan",
+    "locality": "田辺市",
+    "confidence": 0.983,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2fc68510-a707-4892-bbca-8a2c097a10ca",
+    "name": "わたらせ温泉 ホテルやまゆり",
+    "coordinates": {
+     "lat": 33.8184757232666,
+     "lng": 135.76647186279297
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [
+     {
+      "kind": "onsen",
+      "value": "yes",
+      "basis": "name"
+     }
+    ],
+    "website": "http://www.watarase-onsen.jp/",
+    "locality": "田辺市",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:740059fc-8694-43f9-8b9d-227f42cbd31d",
+    "name": "山水館川湯きのくに",
+    "coordinates": {
+     "lat": 33.81282997131348,
+     "lng": 135.76949310302734
+    },
+    "type": "other",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.urashimachain.co.jp/kinokuni/",
+    "locality": "田辺市",
+    "confidence": 0.975,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4a251d74-f85d-42a3-ae0e-4a320525bf21",
+    "name": "川湯みどりや",
+    "coordinates": {
+     "lat": 33.813039779663086,
+     "lng": 135.77005767822266
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.urashimachain.co.jp/sansui/index2.htm",
+    "locality": "田辺市",
+    "confidence": 0.992,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:10ace4de-0569-47b8-b944-94fa874d2201",
+    "name": "こぶち",
+    "coordinates": {
+     "lat": 33.81317710876465,
+     "lng": 135.7706527709961
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.9,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6933b2fe-7019-42c9-b1bc-9385ee31d32a",
+    "name": "民宿こぶち",
+    "coordinates": {
+     "lat": 33.81308555603027,
+     "lng": 135.77062225341797
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.907,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:90255979-b3b3-42ae-9024-457193a92e1d",
+    "name": "温泉民宿大村屋",
+    "coordinates": {
+     "lat": 33.813276290893555,
+     "lng": 135.77112579345703
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [
+     {
+      "kind": "onsen",
+      "value": "yes",
+      "basis": "name"
+     }
+    ],
+    "website": "http://www.oomuraya.net/",
+    "locality": "田辺市",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d3b31a8d-62ce-4bf1-a7cf-310f656ad550",
+    "name": "大村屋 別館",
+    "coordinates": {
+     "lat": 33.81315803527832,
+     "lng": 135.77079010009766
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.939,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c0fb4d5d-53aa-4e52-a3c9-547443a91c11",
+    "name": "すみや民宿",
+    "coordinates": {
+     "lat": 33.81300926208496,
+     "lng": 135.77327728271484
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://kawayu-sumiya.com/",
+    "locality": "田辺市",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:101b5399-bdf3-4b4c-9343-1c200d2b8e81",
+    "name": "民宿 立石",
+    "coordinates": {
+     "lat": 33.8133544921875,
+     "lng": 135.77204132080078
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.za.ztv.ne.jp/tateishi",
+    "locality": "田辺市",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6e3c2429-d4db-4d63-8e7b-0c3d84f4319e",
+    "name": "立石民宿",
+    "coordinates": {
+     "lat": 33.8133602142334,
+     "lng": 135.77202606201172
+    },
+    "type": "minshuku",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.za.ztv.ne.jp/tateishi",
+    "locality": "田辺市",
+    "confidence": 0.982,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9185319a-b4c1-4601-9e9c-2d5d1bc0da7b",
+    "name": "世界遺産熊野古道 川湯温泉",
+    "coordinates": {
+     "lat": 33.814191818237305,
+     "lng": 135.7718276977539
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [
+     {
+      "kind": "onsen",
+      "value": "yes",
+      "basis": "name"
+     }
+    ],
+    "locality": "田辺市",
+    "confidence": 0.74,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:847840fa-bf39-4209-a9ad-b049b6dacb67",
+    "name": "世界遺産 熊野古道 【Kumano Kodo (World Heritage.) 】川湯温泉 冨士屋",
+    "coordinates": {
+     "lat": 33.81292152404785,
+     "lng": 135.7750473022461
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [
+     {
+      "kind": "onsen",
+      "value": "yes",
+      "basis": "name"
+     }
+    ],
+    "website": "http://www.fuziya.co.jp/",
+    "locality": "田辺市",
+    "confidence": 0.925,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0f10112e-2e32-427d-bae4-c8c073cdb8b8",
+    "name": "ペンションあしたの森",
+    "coordinates": {
+     "lat": 33.81279945373535,
+     "lng": 135.77436065673828
+    },
+    "type": "inn",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.za.ztv.ne.jp/ashitanomori-kawayu/",
+    "locality": "田辺市",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7e1e3ec3-54fe-4d75-97b7-d7c23c756cef",
+    "name": "川湯温泉 亀屋旅館 / Kameya Ryokan",
+    "coordinates": {
+     "lat": 33.812843322753906,
+     "lng": 135.77388763427734
+    },
+    "type": "ryokan",
+    "typeBasis": "name",
+    "amenities": [
+     {
+      "kind": "onsen",
+      "value": "yes",
+      "basis": "name"
+     }
+    ],
+    "website": "http://cameya.net/",
+    "locality": "田辺市",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c936f17f-38c8-4efb-93cf-9f37847cfb78",
+    "name": "Fujiya Ryokan",
+    "coordinates": {
+     "lat": 33.81292533874512,
+     "lng": 135.77509307861328
+    },
+    "type": "ryokan",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.fuziya.co.jp/",
+    "locality": "田辺市",
+    "confidence": 0.987,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7826c70b-4bf1-40e3-89d3-439bcacd5441",
+    "name": "川湯野営場木魂の里",
+    "coordinates": {
+     "lat": 33.81607246398926,
+     "lng": 135.7801284790039
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.ja-mikumano.or.jp/",
+    "locality": "田辺市",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0accc171-5fd1-4008-89b8-e4a75532e5eb",
+    "name": "川湯野営場木魂の里",
+    "coordinates": {
+     "lat": 33.81553077697754,
+     "lng": 135.78079986572266
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.ja-mikumano.or.jp/",
+    "locality": "田辺市",
+    "confidence": 0.989,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:08463865-0427-44a0-a46d-2e24e34e5a4d",
+    "name": "蒼空げすとはうす",
+    "coordinates": {
+     "lat": 33.83461570739746,
+     "lng": 135.7705307006836
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.kumano-guesthouse.com/",
+    "locality": "田辺市",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9db30692-0e08-42f9-8f56-aea21ec0753b",
+    "name": "ゲストハウス禮-rei-",
+    "coordinates": {
+     "lat": 33.83670234680176,
+     "lng": 135.77181243896484
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://yuihouse.net/",
+    "locality": "田辺市",
+    "confidence": 0.961,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7ec8ba92-934b-46a9-9b21-01176667466b",
+    "name": "熊野マインドフルハウス 星の時間",
+    "coordinates": {
+     "lat": 33.83648490905762,
+     "lng": 135.77376556396484
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "田辺市",
+    "confidence": 0.757,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   }
+  ],
+  "hotSprings": [
+   {
+    "name": "湯の峰温泉 つぼ湯",
+    "coordinates": {
+     "lat": 33.82922554016113,
+     "lng": 135.75769805908203
+    }
+   },
+   {
+    "name": "Yunomine Onsen - Japan",
+    "coordinates": {
+     "lat": 33.82828712463379,
+     "lng": 135.75763702392578
+    }
+   },
+   {
+    "name": "渡瀬温泉心の宿 わたらせ温泉",
+    "coordinates": {
+     "lat": 33.81770896911621,
+     "lng": 135.76483917236328
+    }
+   },
+   {
+    "name": "山水館川湯まつや",
+    "coordinates": {
+     "lat": 33.812692642211914,
+     "lng": 135.76898956298828
+    }
+   },
+   {
+    "name": "川湯温泉公衆浴場",
+    "coordinates": {
+     "lat": 33.81316947937012,
+     "lng": 135.77240753173828
+    }
+   },
+   {
+    "name": "川湯温泉(Kawayu Onsen)",
+    "coordinates": {
+     "lat": 33.813066482543945,
+     "lng": 135.77198028564453
+    }
+   },
+   {
+    "name": "湯治の庭 熊野川湯",
+    "coordinates": {
+     "lat": 33.81293869018555,
+     "lng": 135.77361297607422
+    }
+   },
+   {
+    "name": "川湯温泉仙人風呂",
+    "coordinates": {
+     "lat": 33.81268501281738,
+     "lng": 135.77489471435547
+    }
+   },
+   {
+    "name": "田辺川湯キャンプ場",
+    "coordinates": {
+     "lat": 33.8144588470459,
+     "lng": 135.7813949584961
+    }
+   },
+   {
+    "name": "和歌山県田辺市川湯温泉",
+    "coordinates": {
+     "lat": 33.82888984680176,
+     "lng": 135.78050994873047
+    }
+   }
+  ]
+ },
+ "osm": {
+  "elements": [
+   {
+    "type": "node",
+    "id": 6839130991,
+    "lat": 33.8227425,
+    "lon": 135.7522099,
+    "tags": {
+     "addr:housenumber": "287",
+     "addr:postcode": "647-1734",
+     "addr:street": "Shimoyukawa",
+     "name": "Yunosato",
+     "name:en": "Guesthouse Yunosato",
+     "name:ja": "民宿ゆの里",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 13093970001,
+    "lat": 33.8296502,
+    "lon": 135.7582022,
+    "tags": {
+     "addr:housenumber": "161",
+     "addr:postcode": "647-1732",
+     "addr:street": "hongucho yunomine",
+     "internet_access": "wlan",
+     "name": "j hoppers",
+     "tourism": "hotel",
+     "website": "https://yunomine.j-hoppers.com/"
+    }
+   },
+   {
+    "type": "node",
+    "id": 5104405372,
+    "lat": 33.8130073,
+    "lon": 135.7732516,
+    "tags": {
+     "name": "民宿すみや",
+     "name:en": "Minshuku Sumiya",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 6699999687,
+    "lat": 33.813115,
+    "lon": 135.7727183,
+    "tags": {
+     "name": "旅の宿 しば",
+     "name:en": "Tabinoyado Shiba",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 10892238599,
+    "lat": 33.8128214,
+    "lon": 135.7743552,
+    "tags": {
+     "name": "Ashita-no-Mori",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "node",
+    "id": 14285920933,
+    "lat": 33.8191589,
+    "lon": 135.7664928,
+    "tags": {
+     "addr:block_number": "76",
+     "addr:city": "田辺市",
+     "addr:country": "JP",
+     "addr:full": "和歌山県田辺市本宮町渡瀬76",
+     "addr:neighbourhood": "本宮町渡瀬",
+     "addr:postcode": "647-1733",
+     "addr:province": "和歌山県",
+     "name": "WATAZE OUTDOOR「おとなしの郷」",
+     "phone": "0735-42-1777",
+     "tourism": "camp_site",
+     "website": "https://hongu-otonashi.com/"
+    }
+   },
+   {
+    "type": "node",
+    "id": 6699996187,
+    "lat": 33.8133503,
+    "lon": 135.7720313,
+    "tags": {
+     "name": "民宿 立石",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "node",
+    "id": 5104407238,
+    "lat": 33.821407,
+    "lon": 135.7882402,
+    "tags": {
+     "level": "1",
+     "name": "黎明",
+     "name:en": "Reimei",
+     "tourism": "hostel"
+    }
+   },
+   {
+    "type": "node",
+    "id": 7595302589,
+    "lat": 33.8358923,
+    "lon": 135.7720702,
+    "tags": {
+     "internet_access": "wlan",
+     "name": "宿屋れもん",
+     "name:en": "Lemon guest house",
+     "phone": "09037047791",
+     "tourism": "guest_house",
+     "website": "https://abnb.me/3V2YADTow6"
+    }
+   },
+   {
+    "type": "node",
+    "id": 13143056108,
+    "lat": 33.83659,
+    "lon": 135.7717997,
+    "tags": {
+     "addr:housenumber": "619",
+     "addr:postcode": "647-1731",
+     "addr:street": "Hongucho Hongū",
+     "name": "ゲストハウス結",
+     "name:en": "Guesthouse Yui",
+     "phone": "+819025981284",
+     "tourism": "guest_house",
+     "website": "http://yuihouse.net/"
+    }
+   },
+   {
+    "type": "node",
+    "id": 14007548801,
+    "lat": 33.8373761,
+    "lon": 135.773036,
+    "tags": {
+     "check_date": "2026-07-13",
+     "name": "Guesthouse Trailhead",
+     "tourism": "guest_house",
+     "website": "https://trailhead590hongu.wixsite.com/home"
+    }
+   },
+   {
+    "type": "node",
+    "id": 11807104108,
+    "lat": 33.8396414,
+    "lon": 135.7752508,
+    "tags": {
+     "addr:city": "本宮",
+     "addr:country": "JP",
+     "addr:district": "田辺",
+     "addr:housenumber": "159-1",
+     "addr:postcode": "647-1731",
+     "addr:province": "和歌山県",
+     "name": "Kumano Backpackers",
+     "smoking": "no",
+     "tourism": "hostel",
+     "website": "https://kumano-experience.com/bb/",
+     "website:en": "https://kumano-experience.com/en/bb/"
+    }
+   },
+   {
+    "type": "node",
+    "id": 2430696718,
+    "lat": 33.854871,
+    "lon": 135.7645992,
+    "tags": {
+     "name": "Sangen jaya 三軒茶屋跡 〔熊野古道〕",
+     "name:en": "Sangen jaya",
+     "name:ja": "三軒茶屋跡 〔熊野古道〕",
+     "tourism": "alpine_hut"
+    }
+   },
+   {
+    "type": "node",
+    "id": 2430696719,
+    "lat": 33.8605018,
+    "lon": 135.7577757,
+    "tags": {
+     "name": "Fushiogami oji",
+     "name:es": "Fushiogami oji",
+     "name:ja": "Fushiogami oji",
+     "tourism": "alpine_hut"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1271634622,
+    "center": {
+     "lat": 33.8241064,
+     "lon": 135.7541998
+    },
+    "tags": {
+     "building": "yes",
+     "name": "旅館湯の峯荘;Yunomineso",
+     "name:en": "Yunomineso",
+     "name:ja": "旅館湯の峯荘",
+     "phone": "+81 735 42 1111",
+     "stars": "3",
+     "tourism": "hotel",
+     "website": "http://yunominesou.com/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1217287650,
+    "center": {
+     "lat": 33.8213511,
+     "lon": 135.7621185
+    },
+    "tags": {
+     "building": "yes",
+     "name": "玄峰老師ゆかりの宿 古民家ゲストハウス おかげさん",
+     "name:en": "Guesthouse Okagesan",
+     "tourism": "apartment"
+    }
+   },
+   {
+    "type": "way",
+    "id": 303934216,
+    "center": {
+     "lat": 33.8285823,
+     "lon": 135.7576818
+    },
+    "tags": {
+     "building": "hotel",
+     "building:levels": "2",
+     "name": "伊せや旅館;Iseya",
+     "name:en": "Iseya",
+     "name:es": "Iseya",
+     "name:ja": "伊せや旅館",
+     "roof:levels": "0",
+     "roof:shape": "gabled",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 416299012,
+    "center": {
+     "lat": 33.8288256,
+     "lon": 135.7573035
+    },
+    "tags": {
+     "building": "hotel",
+     "building:levels": "2",
+     "name": "旅館あづまや;Adsumaya",
+     "name:en": "Ryokan Adumaya",
+     "name:es": "Adumaya",
+     "name:ja": "旅館あづまや",
+     "phone": "+81 735 42 0012",
+     "roof:levels": "0",
+     "roof:shape": "many",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 416299016,
+    "center": {
+     "lat": 33.8281846,
+     "lon": 135.7571506
+    },
+    "tags": {
+     "building": "yes",
+     "name": "民宿瀧よし;Takiyoshi",
+     "name:en": "Takiyoshi",
+     "name:es": "Takiyoshi",
+     "name:ja": "民宿瀧よし",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 416299017,
+    "center": {
+     "lat": 33.8279532,
+     "lon": 135.7574858
+    },
+    "tags": {
+     "building": "hotel",
+     "name": "民宿あずまや荘;Azumaya",
+     "name:en": "Minshuku Azumayaso",
+     "name:es": "Minshuku Azumayaso",
+     "name:ja": "民宿あずまや荘",
+     "phone": "+81 735 42 0238",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 416299024,
+    "center": {
+     "lat": 33.8293355,
+     "lon": 135.7576092
+    },
+    "tags": {
+     "building": "yes",
+     "name": "民宿あたらしや;Atarashiya",
+     "name:en": "Minshuku Atarashiya",
+     "name:es": "Minshuku Atarashiya",
+     "name:ja": "民宿あたらしや",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 525314097,
+    "center": {
+     "lat": 33.8283348,
+     "lon": 135.7575112
+    },
+    "tags": {
+     "building": "yes",
+     "name": "民宿くらや;Kuraya",
+     "name:en": "Minshuku Kuraya",
+     "name:es": "Minshuku Kuraya",
+     "name:ja": "民宿くらや",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 546891095,
+    "center": {
+     "lat": 33.828161,
+     "lon": 135.757402
+    },
+    "tags": {
+     "building": "yes",
+     "name": "民宿まるや;Maruya",
+     "name:en": "Minshuku Maruya",
+     "name:es": "Minshuku Maruya",
+     "name:ja": "民宿まるや",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1271634628,
+    "center": {
+     "lat": 33.8281975,
+     "lon": 135.7576423
+    },
+    "tags": {
+     "building": "yes",
+     "name": "民宿てるてや;Teruteya",
+     "name:en": "Minshuku Teruteya",
+     "name:es": "Minshuku Teruteya",
+     "name:ja": "民宿てるてや",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 350355100,
+    "center": {
+     "lat": 33.8295636,
+     "lon": 135.7580857
+    },
+    "tags": {
+     "building": "house",
+     "name": "民宿わだま;Wadama",
+     "name:en": "Minshuku Wadama",
+     "name:es": "Minshuku Wadama",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 351248417,
+    "center": {
+     "lat": 33.8296621,
+     "lon": 135.758202
+    },
+    "tags": {
+     "building": "yes",
+     "check_date:internet_access": "2023-10-09",
+     "internet_access": "wlan",
+     "name": "ジェイホッパーズ熊野湯峰;J-Hoppers",
+     "name:en": "J-Hoppers Kumano Yunomine Guesthouse",
+     "name:es": "J-Hoppers GH",
+     "name:ja": "ジェイホッパーズ熊野湯峰ゲストハウス",
+     "tourism": "guest_house",
+     "wikidata": "Q111111223"
+    }
+   },
+   {
+    "type": "way",
+    "id": 351248419,
+    "center": {
+     "lat": 33.8297842,
+     "lon": 135.7579975
+    },
+    "tags": {
+     "bathing": "onsen",
+     "building": "house",
+     "internet_access": "no",
+     "internet_access:type": "yes",
+     "name": "民宿やまね;Yamane",
+     "name:en": "Minshuku Yamane",
+     "name:es": "Minshuku Yamane",
+     "name:ja": "民宿やまね",
+     "phone": "+81 735 42 0113",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1271634623,
+    "center": {
+     "lat": 33.8294937,
+     "lon": 135.7579177
+    },
+    "tags": {
+     "addr:housenumber": "359",
+     "addr:street": "Yunomine",
+     "building": "yes",
+     "internet_access": "wlan",
+     "name": "旅館よしのや;Yoshinoya",
+     "name:en": "Ryokan Yoshinoya",
+     "name:es": "Ryokan Yoshinoya",
+     "name:ja": "旅館よしのや",
+     "tourism": "hotel",
+     "website": "http://yunomine.com/english.html"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1271634624,
+    "center": {
+     "lat": 33.8302651,
+     "lon": 135.7579899
+    },
+    "tags": {
+     "addr:housenumber": "168-1",
+     "addr:postcode": "647-1732",
+     "building": "yes",
+     "internet_access": "wlan",
+     "name": "民宿湯の谷荘",
+     "name:en": "Minshuku Yunotaniso",
+     "name:es": "Minshuku Yunotaniso",
+     "tourism": "hostel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 551371686,
+    "center": {
+     "lat": 33.8122289,
+     "lon": 135.768819
+    },
+    "tags": {
+     "name": "山水館 川湯まつや",
+     "name:en": "Sansuikan Kawayu Matsuya",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 551371689,
+    "center": {
+     "lat": 33.8128545,
+     "lon": 135.7702178
+    },
+    "tags": {
+     "area": "yes",
+     "check_date": "2025-08-29",
+     "name": "山水館 川湯みどりや",
+     "name:en": "Sansuikan Kawayu Midoriya",
+     "tourism": "hotel",
+     "wikidata": "Q111866635"
+    }
+   },
+   {
+    "type": "way",
+    "id": 551371690,
+    "center": {
+     "lat": 33.8131113,
+     "lon": 135.7706745
+    },
+    "tags": {
+     "building": "yes",
+     "name": "民宿こぶち",
+     "name:en": "Minshuku Kobuchi",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 551314259,
+    "center": {
+     "lat": 33.8129052,
+     "lon": 135.7737187
+    },
+    "tags": {
+     "area": "yes",
+     "name": "亀屋旅館",
+     "name:en": "Kameya Ryokan",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 551314267,
+    "center": {
+     "lat": 33.8129487,
+     "lon": 135.7750804
+    },
+    "tags": {
+     "area": "yes",
+     "name": "冨士屋",
+     "name:en": "Fujiya ryokan",
+     "tourism": "hotel",
+     "wikidata": "Q111866634"
+    }
+   },
+   {
+    "type": "way",
+    "id": 712731569,
+    "center": {
+     "lat": 33.8132026,
+     "lon": 135.7711441
+    },
+    "tags": {
+     "building": "yes",
+     "name": "温泉民宿　大村",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 712731570,
+    "center": {
+     "lat": 33.8133324,
+     "lon": 135.7714952
+    },
+    "tags": {
+     "building": "yes",
+     "name": "温泉民宿　大村",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 713635062,
+    "center": {
+     "lat": 33.8133276,
+     "lon": 135.7711425
+    },
+    "tags": {
+     "building": "yes",
+     "name": "温泉民宿　大村",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1244531565,
+    "center": {
+     "lat": 33.81965,
+     "lon": 135.7650417
+    },
+    "tags": {
+     "addr:block_number": "45-1",
+     "addr:city": "田辺市",
+     "addr:country": "JP",
+     "addr:full": "和歌山県田辺市本宮町渡瀬45-1",
+     "addr:neighbourhood": "本宮町渡瀬",
+     "addr:postcode": "647-1733",
+     "addr:province": "和歌山県",
+     "alt_name:1:en": "Watase campsite",
+     "alt_name:2:en": "Wataze campsite",
+     "name": "渡瀬緑の広場キャンプ場",
+     "name:en": "Wataraze campsite",
+     "name:ja": "渡瀬緑の広場キャンプ場",
+     "opening_hours": "Fr-We 09:00-21:00; Mo-Su 09:00-21:00 \"Year end, golden week, obon\"",
+     "phone": "0735-42-1777",
+     "tourism": "camp_site",
+     "website": "https://hongu-otonashi.com/campsite/",
+     "website:en": "https://hongu-otonashi.com/campsite-en/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 717025543,
+    "center": {
+     "lat": 33.8162831,
+     "lon": 135.7800341
+    },
+    "tags": {
+     "addr:block_number": "1288",
+     "addr:city": "田辺市",
+     "addr:country": "JP",
+     "addr:full": "和歌山県田辺市本宮町川湯1288",
+     "addr:neighbourhood": "本宮町川湯",
+     "addr:postcode": "647-1717",
+     "addr:province": "和歌山県",
+     "alt_name": "Kodama-no-Sato",
+     "name": "川湯野営場木魂の里",
+     "name:en": "Kawayu Campground",
+     "name:ja": "川湯野営場木魂の里",
+     "phone": "0735-42-1168",
+     "tourism": "camp_site",
+     "website": "https://tanabe-kawayu-camp.com"
+    }
+   },
+   {
+    "type": "node",
+    "id": 5104538927,
+    "lat": 33.8288523,
+    "lon": 135.757569,
+    "tags": {
+     "amenity": "public_bath",
+     "bath:type": "foot_bath",
+     "name": "湯筒",
+     "name:en": "Yuzutsu",
+     "natural": "hot_spring"
+    }
+   },
+   {
+    "type": "node",
+    "id": 6699999686,
+    "lat": 33.8131727,
+    "lon": 135.7724247,
+    "tags": {
+     "amenity": "public_bath",
+     "bath:open_air": "no",
+     "bath:sand_bath": "no",
+     "bath:type": "onsen",
+     "name": "川湯温泉 公衆浴場",
+     "name:en": "Kawayuonsen Public Bath",
+     "opening_hours": "Mo-Su 06:30-20:00"
+    }
+   },
+   {
+    "type": "node",
+    "id": 6694784012,
+    "lat": 33.8382815,
+    "lon": 135.7720881,
+    "tags": {
+     "amenity": "public_bath",
+     "name": "本宮保険福祉総合センター;うらら館;蘇生の湯"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1217289307,
+    "center": {
+     "lat": 33.8183351,
+     "lon": 135.7646544
+    },
+    "tags": {
+     "amenity": "public_bath",
+     "area": "yes",
+     "bath:type": "onsen",
+     "name": "わたらせ温泉 大露天風呂",
+     "name:en": "Watarase Onsen",
+     "opening_hours": "Mo-Su 06:00-22:00"
+    }
+   },
+   {
+    "type": "way",
+    "id": 303934214,
+    "center": {
+     "lat": 33.8287974,
+     "lon": 135.7578211
+    },
+    "tags": {
+     "amenity": "public_bath",
+     "building": "yes",
+     "heritage": "1",
+     "name": "湯の峰温泉公衆浴場",
+     "name:en": "Yunomine Onsen Public Bath",
+     "name:es": "Baño público",
+     "natural": "hot_spring",
+     "opening_hours": "Mo-Su 06:00-22:00",
+     "wikidata": "Q11563414",
+     "wikipedia": "ja:湯の峰温泉"
+    }
+   },
+   {
+    "type": "way",
+    "id": 350355099,
+    "center": {
+     "lat": 33.8291897,
+     "lon": 135.7577217
+    },
+    "tags": {
+     "amenity": "public_bath",
+     "building": "yes",
+     "description": "Onsen to rent out privately",
+     "name": "つぼ湯",
+     "name:en": "Tsuboyu",
+     "name:es": "Tsuboyu",
+     "natural": "hot_spring",
+     "opening_hours": "Mo-Su 06:00-21:00"
+    }
+   },
+   {
+    "type": "way",
+    "id": 547420860,
+    "center": {
+     "lat": 33.8288019,
+     "lon": 135.7579167
+    },
+    "tags": {
+     "amenity": "public_bath",
+     "building": "yes",
+     "name": "薬湯",
+     "name:en": "Kusuriyu",
+     "name:es": "Kusuriyu",
+     "opening_hours": "Mo-Su 06:00-22:00"
+    }
+   },
+   {
+    "type": "way",
+    "id": 407989737,
+    "center": {
+     "lat": 33.8183476,
+     "lon": 135.7662865
+    },
+    "tags": {
+     "alt_name:1:en": "Watase onsen",
+     "alt_name:2:en": "Wataze onsen",
+     "amenity": "public_bath",
+     "bath:type": "onsen",
+     "building": "yes",
+     "name": "渡瀬温泉",
+     "name:en": "Watarase onsen",
+     "name:ja": "渡瀬温泉",
+     "wikidata": "Q11561949",
+     "wikipedia": "ja:渡瀬温泉"
+    }
+   },
+   {
+    "type": "way",
+    "id": 407989738,
+    "center": {
+     "lat": 33.8187212,
+     "lon": 135.7662577
+    },
+    "tags": {
+     "amenity": "public_bath",
+     "bath:type": "onsen",
+     "building": "yes",
+     "name": "クワハウス温泉",
+     "name:en": "kuwa house onsen",
+     "name:ja": "クワハウス温泉"
+    }
+   }
+  ]
+ }
+}

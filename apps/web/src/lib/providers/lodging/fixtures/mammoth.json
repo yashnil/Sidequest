@@ -1,0 +1,3644 @@
+{
+ "recordedAt": "2026-11-12",
+ "base": {
+  "label": "Mammoth Lakes, USA",
+  "near": {
+   "lat": 37.6485,
+   "lng": -118.9721
+  },
+  "radiusKm": 12
+ },
+ "overture": {
+  "candidates": [
+   {
+    "source": "overture",
+    "sourceId": "overture:2d704296-d9eb-495b-806e-dde44e0440de",
+    "name": "Coldwater Creek Campground",
+    "coordinates": {
+     "lat": 37.59316444396973,
+     "lng": -118.99189758300781
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.recreation.gov/camping/Coldwater_Campground/r/campgroundDetails.do?contractCode=NRSO&parkId=75150",
+    "confidence": 0.993,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a99588b2-a1cf-4892-aabb-9a140f1215f6",
+    "name": "Crystal Crag Lodge",
+    "coordinates": {
+     "lat": 37.598588943481445,
+     "lng": -119.00077819824219
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.crystalcrag.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.969,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3ba4e984-fe04-47f0-8e6d-f99b0c4aaf0c",
+    "name": "Coldwater Campground",
+    "coordinates": {
+     "lat": 37.59804344177246,
+     "lng": -118.99528503417969
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.968,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e7c1f395-476b-4e2c-a176-7edb6b8b28da",
+    "name": "Lake George Camp Ground, Mammoth Lakes, California",
+    "coordinates": {
+     "lat": 37.60251426696777,
+     "lng": -119.00971984863281
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.714,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f4ca5e8e-8965-40dc-acce-16a2ad6ade7d",
+    "name": "Woods Lodge",
+    "coordinates": {
+     "lat": 37.60333824157715,
+     "lng": -119.01365661621094
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.woodslodgemammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.96,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7844b367-f1d6-4295-ad86-05f52b77ce4d",
+    "name": "Lake Mary Campground",
+    "coordinates": {
+     "lat": 37.60747718811035,
+     "lng": -119.00670623779297
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.953,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1bec1800-aadb-4ef1-94cb-0563e53ae5eb",
+    "name": "Wildyrie Lodge",
+    "coordinates": {
+     "lat": 37.60986137390137,
+     "lng": -119.0091323852539
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.wildyrielodge.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.952,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:44a9f792-1d81-494c-bda3-a431e158f270",
+    "name": "Twin Lakes Campground",
+    "coordinates": {
+     "lat": 37.61627769470215,
+     "lng": -119.00995635986328
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.recreation.gov/camping/twin-lakes-campground/r/campgroundDetails.do?contractCode=NRSO&parkId=75193",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.892,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7283555a-d95e-471a-8229-430eeeb3d891",
+    "name": "Upper Twin Lakes Camp Ground, Mammoth Lakes, California",
+    "coordinates": {
+     "lat": 37.6160831451416,
+     "lng": -119.00951385498047
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.74,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b99d9c77-996a-4200-9032-a9ccd8048c63",
+    "name": "Tamarack Lodge & Resort",
+    "coordinates": {
+     "lat": 37.619611740112305,
+     "lng": -119.00691223144531
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.tamaracklodge.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:239257ac-4915-4408-a06a-f31255009015",
+    "name": "Reds Meadow Campground",
+    "coordinates": {
+     "lat": 37.61939239501953,
+     "lng": -119.07428741455078
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.fs.usda.gov/recarea/inyo/recreation/bicycling/recarea/?recid=20516&actid=26",
+    "locality": "Madera County",
+    "confidence": 0.807,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:589d8557-0d5c-4e73-b393-e129a0eb6cb4",
+    "name": "Pine Cliff Resort",
+    "coordinates": {
+     "lat": 37.62601661682129,
+     "lng": -118.9879150390625
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://pinecliff.net/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.97,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:66a41023-e6df-441f-a476-3d943ae28465",
+    "name": "White Horse Inn",
+    "coordinates": {
+     "lat": 37.62874412536621,
+     "lng": -118.98838806152344
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://whitehorse-inn.net/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cbdfb985-1545-4a54-a816-36a4ccc92c78",
+    "name": "Mammoth Mountain Summit 11,035ft",
+    "coordinates": {
+     "lat": 37.63075065612793,
+     "lng": -119.03340911865234
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ed67b1bb-ba7f-4494-9c66-9a77993729b5",
+    "name": "Chair 14: Mammoth Mountain",
+    "coordinates": {
+     "lat": 37.638139724731445,
+     "lng": -119.05429077148438
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.78,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c86551b0-7b61-49c8-902c-6c8e32aaa4d8",
+    "name": "SunstoneMammoth.com",
+    "coordinates": {
+     "lat": 37.635000228881836,
+     "lng": -118.99166107177734
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.sunstonemammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:37362bc9-ba88-4403-b21f-51615162c6fb",
+    "name": "Juniper Springs Lodge",
+    "coordinates": {
+     "lat": 37.63558769226074,
+     "lng": -118.99014282226562
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.juniperspringsmammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ddef4023-6723-49af-9bd8-1e1a890d2d35",
+    "name": "Elite Mammoth Condo",
+    "coordinates": {
+     "lat": 37.63556480407715,
+     "lng": -118.98873138427734
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vrbo.com/376497",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.753,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2f7d2a12-e5ed-4378-a0c9-5884a98878dc",
+    "name": "Eagle Lodge",
+    "coordinates": {
+     "lat": 37.63640785217285,
+     "lng": -118.98995208740234
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/winter/mountain-information/mountain-information/base-lodges",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:94b9b00b-8191-4b8d-b93f-d370b5f16bf7",
+    "name": "Summit by Grand Mammoth Resorts",
+    "coordinates": {
+     "lat": 37.636356353759766,
+     "lng": -118.98815155029297
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://summit-by-grand-mammoth-resorts.hotelsinyosemitenationalpark.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:38603d5d-3361-4c61-a432-325942252c54",
+    "name": "Bridges 203",
+    "coordinates": {
+     "lat": 37.638526916503906,
+     "lng": -118.99713134765625
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.843,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d04abd81-3a5d-4b88-955a-e8e49cbe558d",
+    "name": "Camp High Sierra",
+    "coordinates": {
+     "lat": 37.64000129699707,
+     "lng": -118.99250793457031
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.mammothmountain.com/plan-your-trip/camp-high-sierra",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.969,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d9af0190-1d2b-476c-ba29-5cb8a3f45879",
+    "name": "Mammoth House",
+    "coordinates": {
+     "lat": 37.64120864868164,
+     "lng": -118.99164581298828
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vacationrentals.com/vacation-rentals/383.html",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3d13b5e8-2537-4ff4-bb0d-6e554d884dcb",
+    "name": "Discovery 4 Condominiums",
+    "coordinates": {
+     "lat": 37.642616271972656,
+     "lng": -118.99430084228516
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.discovery4rentals.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.946,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:caed471e-2132-420a-a410-aaf0ad4d4219",
+    "name": "19 Davison St. Guest House",
+    "coordinates": {
+     "lat": 37.6431941986084,
+     "lng": -118.99285125732422
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:dac6744b-2551-4c5b-b80a-da29c0040c2a",
+    "name": "Mammoth Mountain Gondola",
+    "coordinates": {
+     "lat": 37.641883850097656,
+     "lng": -119.03094482421875
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.874,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:bda76e0c-e5af-4e1d-b45d-bd11d94a6809",
+    "name": "Mammoth Mountain Gondola",
+    "coordinates": {
+     "lat": 37.646902084350586,
+     "lng": -119.03426361083984
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.874,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a96f9524-ca12-42ec-9042-d4e13ca3bb12",
+    "name": "Chair 16 - Canyon Express",
+    "coordinates": {
+     "lat": 37.6445426940918,
+     "lng": -119.00270080566406
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.75,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cd73ff57-5727-40c5-a566-1a212465cc4e",
+    "name": "Canyon Lodge",
+    "coordinates": {
+     "lat": 37.64472007751465,
+     "lng": -119.00204467773438
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/winter/mountain-information/mountain-information/base-lodges",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ac7982cf-9f02-4f9f-a9c7-9abdb47255ef",
+    "name": "1849 Mountain Rentals",
+    "coordinates": {
+     "lat": 37.6445255279541,
+     "lng": -118.9996109008789
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.youtube.com/@MountainRentals",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.947,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2c1060e1-961d-4f17-b20c-26b4bbb70eb9",
+    "name": "Sonenalp at Canyon Lodge",
+    "coordinates": {
+     "lat": 37.644203186035156,
+     "lng": -118.99706268310547
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://sonenalp.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:fce4652b-9932-4617-9e7d-453cf6579f1d",
+    "name": "Mountainback at Mammoth",
+    "coordinates": {
+     "lat": 37.64390182495117,
+     "lng": -118.9931640625
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mountainbackrentals.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.936,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6e6fbac2-558f-4281-a6e7-d87d2c86ae3a",
+    "name": "Bigwood 70",
+    "coordinates": {
+     "lat": 37.64398956298828,
+     "lng": -118.98697662353516
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.airbnb.com/rooms/29637477",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.814,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:96ed2140-7aef-4311-9d77-72b54339f5ec",
+    "name": "Seasons 4 Condominium Rentals",
+    "coordinates": {
+     "lat": 37.645002365112305,
+     "lng": -118.9902114868164
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://seasons4.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 1,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f97183c7-a255-496a-b207-4c0b0bbde2d5",
+    "name": "Courchevel",
+    "coordinates": {
+     "lat": 37.64613914489746,
+     "lng": -118.99784851074219
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothlakes4rent.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ea80f143-d35f-4c02-a796-f5ea770bacfe",
+    "name": "Snowbird 106: Upgraded, Steps to Canyon Lodge",
+    "coordinates": {
+     "lat": 37.645925521850586,
+     "lng": -119.00011444091797
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.abetterstay.com/propertydetail.aspx?c=4328",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.879,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:32d2f5ef-2e2a-49ae-ad9b-1419eacdf6e1",
+    "name": "Canyon Lodge Rentals",
+    "coordinates": {
+     "lat": 37.64575004577637,
+     "lng": -119.0002212524414
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:fb2cccb2-b09a-4c05-8129-5370e6f4ed0c",
+    "name": "Mammoth Lakes Accommodation",
+    "coordinates": {
+     "lat": 37.64585876464844,
+     "lng": -118.99896240234375
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://rentals-mammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8fa3fa6e-9e2d-4ef8-9294-f740bb1309bc",
+    "name": "Apogee Mammoth",
+    "coordinates": {
+     "lat": 37.645246505737305,
+     "lng": -118.99977111816406
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.adventurerefined.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:74a3a33e-ec55-40dd-98d7-f46c7e04d268",
+    "name": "St Anton Condos 2",
+    "coordinates": {
+     "lat": 37.64717102050781,
+     "lng": -119.00000762939453
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://stantoncondos.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.987,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:537d7ef1-492f-4edd-9f30-f237ce693f3b",
+    "name": "Mammoth West Condos & Rentals",
+    "coordinates": {
+     "lat": 37.64769172668457,
+     "lng": -118.99828338623047
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothwest.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.99,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a350c6e5-5f51-49a3-a740-ac95c5b73549",
+    "name": "Rainbow Villas 1 condo",
+    "coordinates": {
+     "lat": 37.647077560424805,
+     "lng": -118.99707794189453
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:bb829809-7ef3-4eca-bd37-e9665cbac9c3",
+    "name": "Chamonix Mammoth Condos",
+    "coordinates": {
+     "lat": 37.64664077758789,
+     "lng": -118.99884796142578
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mammothlakes.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5659ee0a-06df-4bd3-aae6-7c5cd6a043ff",
+    "name": "Western Slopes Villas",
+    "coordinates": {
+     "lat": 37.6467342376709,
+     "lng": -118.99690246582031
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothreservations.com/rooms/byComplex/complex.cfm?ID=46",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.916,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ee0ee935-250e-4d5b-91f3-b5da6129a453",
+    "name": "Limelight Mammoth",
+    "coordinates": {
+     "lat": 37.647512435913086,
+     "lng": -118.98507690429688
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.limelighthotels.com/mammoth",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.988,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:94bf48e9-8062-4d22-9720-0fda2a864fbf",
+    "name": "Tamarack Lodge & Resort",
+    "coordinates": {
+     "lat": 37.647098541259766,
+     "lng": -118.99238586425781
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.tamaracklodge.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:772f69eb-a991-4f93-8417-c197ade92aa6",
+    "name": "Mammoth Estates",
+    "coordinates": {
+     "lat": 37.6485538482666,
+     "lng": -118.98829650878906
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.973,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:151d5593-3f2e-4f11-bc68-477580965e92",
+    "name": "Helios S 5",
+    "coordinates": {
+     "lat": 37.64871025085449,
+     "lng": -118.98686981201172
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.naturalretreats.com/mammoth-lakes-vacation-rentals/accommodation/helios-11n",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.965,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cb5b56c0-3f05-4273-ab13-bcb18ea5e96e",
+    "name": "Mammoth Ski & Racquet Club",
+    "coordinates": {
+     "lat": 37.64883804321289,
+     "lng": -118.99925994873047
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothdirect.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.992,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:83c2875c-a576-46ec-b6f0-36df2fad1355",
+    "name": "Mammoth Lakes Condo",
+    "coordinates": {
+     "lat": 37.64821243286133,
+     "lng": -118.99783325195312
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammoth23.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:491aa9c0-f47c-4cb8-89ea-139d9532944a",
+    "name": "Mammoth West Condominiums",
+    "coordinates": {
+     "lat": 37.64776611328125,
+     "lng": -118.9995346069336
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothwest.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.977,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:25be05d2-9660-4c6c-90fb-b5399a3babb6",
+    "name": "The Roller Coaster",
+    "coordinates": {
+     "lat": 37.64716339111328,
+     "lng": -119.0113754272461
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.728,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:df81934d-381e-49b4-bc8b-4c5824708ca9",
+    "name": "Stump Alley Express",
+    "coordinates": {
+     "lat": 37.6512336730957,
+     "lng": -119.02741241455078
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:96bf7947-e8ba-440b-a60a-7a5f3134877b",
+    "name": "Mammoth Mountain Resort",
+    "coordinates": {
+     "lat": 37.651119232177734,
+     "lng": -119.02680206298828
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://en.wikipedia.org/wiki/Mammoth_Mountain_Ski_Area",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.954,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:751ae460-c6ce-4316-9eaa-1eab2e367523",
+    "name": "Westin Monache - King Studio with Sofa Bed",
+    "coordinates": {
+     "lat": 37.64915084838867,
+     "lng": -118.9861831665039
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.marriott.com/en-us/hotels/mmhwi-the-westin-monache-resort-mammoth/overview/?scid=d2406702-e8ea-4b45-bb9b-69cddaaef03d",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5a450d7c-ba63-44e0-b349-3fc899f0d4e6",
+    "name": "Mammoth Village Gondola",
+    "coordinates": {
+     "lat": 37.650041580200195,
+     "lng": -118.98524475097656
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.813,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:244995e7-858e-48ed-921c-de46bd4844ed",
+    "name": "Village Gondola",
+    "coordinates": {
+     "lat": 37.650041580200195,
+     "lng": -118.98524475097656
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/.../adventure-center/scenic-gondola-rides",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.781,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:562cd420-6219-46ec-9c4f-42bed37690ce",
+    "name": "Mammoth Mountain Sales",
+    "coordinates": {
+     "lat": 37.65032768249512,
+     "lng": -118.986083984375
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://villageatmammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:fac37d7e-a9bd-4859-9a6b-6ae9b566e5dc",
+    "name": "The Village Lodge at Mammoth - Tesla",
+    "coordinates": {
+     "lat": 37.65070152282715,
+     "lng": -118.98518371582031
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.thevillagelodgemammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.816,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0e04b5ff-6051-4f54-84c2-96ea8a9c4657",
+    "name": "Camp VZ Mammoth",
+    "coordinates": {
+     "lat": 37.65127754211426,
+     "lng": -118.98638153076172
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.airbnb.com/h/campvzmammoth",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ed7b9a8c-df51-4fdb-9450-c52c03fdeb59",
+    "name": "Mammoth Village Reservations",
+    "coordinates": {
+     "lat": 37.6511287689209,
+     "lng": -118.98641204833984
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.houfy.com/15372",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9d580bd9-b8f3-49c8-9804-576a9df7e94f",
+    "name": "The Village at Mammoth",
+    "coordinates": {
+     "lat": 37.65131187438965,
+     "lng": -118.9860610961914
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mammothvillageresort.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b31167dc-def8-4632-96f2-20620c912dbb",
+    "name": "Grand Sierra Lodge by Mammoth Sierra Reservations",
+    "coordinates": {
+     "lat": 37.65134620666504,
+     "lng": -118.98609161376953
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/Lodging/TheVillageLodge/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a5779177-4096-4d23-b9a5-577867d572f8",
+    "name": "Woolly's Tube Park and Snow Play",
+    "coordinates": {
+     "lat": 37.65110397338867,
+     "lng": -119.00772857666016
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/winter/things-to-do/winter-activities/woolly's-tube-park",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.983,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:696b50de-b5f9-45d5-bde8-4a36265a8709",
+    "name": "WESTIN Monache Resort, Mammoth",
+    "coordinates": {
+     "lat": 37.65190124511719,
+     "lng": -118.9908676147461
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.westinmammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.721,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6a3715af-3796-457b-b6ef-2c3fcd53ac8b",
+    "name": "Mammoth Mountain Main Lodge Area, Mammoth Lakes, California",
+    "coordinates": {
+     "lat": 37.652048110961914,
+     "lng": -119.03639221191406
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.871,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:bc0d27e2-8bfa-4cbf-ab0d-e5bbcf83fdf7",
+    "name": "The Fort - Main Lodge",
+    "coordinates": {
+     "lat": 37.651336669921875,
+     "lng": -119.0364990234375
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.mammothmountain.com/fort",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.763,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e943d408-60c3-4be0-91cd-2a65645ecba3",
+    "name": "Mammoth Mountain Chalets",
+    "coordinates": {
+     "lat": 37.65104866027832,
+     "lng": -119.04096984863281
+    },
+    "type": "cottage",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mmchalets.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.89,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:73fbad68-68d6-49eb-b72b-c01d62eca860",
+    "name": "Mammoth Mountain Ski Area",
+    "coordinates": {
+     "lat": 37.65104866027832,
+     "lng": -119.03717803955078
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/jobs",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:179f20f3-eba9-4440-bfc4-bb7bda5c5731",
+    "name": "Chair 14: Mammoth Mountain",
+    "coordinates": {
+     "lat": 37.65082359313965,
+     "lng": -119.03694152832031
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:38de7715-d8b6-4201-b0ab-d87a9d7df654",
+    "name": "Mammoth Mountain Inn",
+    "coordinates": {
+     "lat": 37.650983810424805,
+     "lng": -119.04545593261719
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.themammothmountaininn.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c7e1ba6f-6632-4bf7-884a-3e1ec0577880",
+    "name": "Glass Creek Campground",
+    "coordinates": {
+     "lat": 37.751909255981445,
+     "lng": -118.99024963378906
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.fs.usda.gov/recarea/inyo/recreation/camping-cabins/recarea/?recid=20588&actid=29",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e1a9d914-7c00-489f-a5f4-96c35d50721c",
+    "name": "Lower Deadman Campground",
+    "coordinates": {
+     "lat": 37.720354080200195,
+     "lng": -119.00975036621094
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mono County",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:df9eeb6b-06de-4e4b-a159-eb18cf9a9241",
+    "name": "Inyo Craters",
+    "coordinates": {
+     "lat": 37.6926212310791,
+     "lng": -119.01255798339844
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://geonames.usgs.gov/pls/gnispublic/f?p=132%3A3%3A6764055613093380%3A%3ANO%3A3%3AP3_FID%2CP3_TITLE%3A261796%2CInyo+Crater+Lakes+www.geonames.org%2F5359608%2Finyo-crater-lakes.html",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:2ccee0bc-38ab-4bf6-94ba-a1ccd50bd84c",
+    "name": "Crowley Lake Campland",
+    "coordinates": {
+     "lat": 37.6670036315918,
+     "lng": -118.93470001220703
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.blm.gov/ca/st/en/fo/bishop/camping/crowley.html",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.751,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:666fab0a-adbb-44c8-b74a-e877b21823b0",
+    "name": "City Concierge",
+    "coordinates": {
+     "lat": 37.65497398376465,
+     "lng": -118.96019744873047
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.cityconcierge.com/",
+    "locality": "Los Angeles",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7e332eb5-fa04-43ba-844e-07045cff39b6",
+    "name": "Crowley Lake Campland",
+    "coordinates": {
+     "lat": 37.65889930725098,
+     "lng": -118.92300415039062
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.blm.gov/ca/st/en/fo/bishop/camping/crowley.html",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.751,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:bdf8a58a-46ce-4374-a3e4-891bbd30e93f",
+    "name": "Innsbruck Lodge",
+    "coordinates": {
+     "lat": 37.65151405334473,
+     "lng": -118.98217010498047
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ded73dee-8728-4cde-92fd-c8608c634d37",
+    "name": "Alpenhof Lodge",
+    "coordinates": {
+     "lat": 37.649898529052734,
+     "lng": -118.9837417602539
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.alpenhof-lodge.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5222365f-db9d-403a-97f4-16703c099da7",
+    "name": "Viewpoint 151",
+    "coordinates": {
+     "lat": 37.64945030212402,
+     "lng": -118.98152923583984
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.701,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1cc2cc25-5e1d-4f08-b0e7-9c033f1a58a6",
+    "name": "Travelodge by Wyndham Mammoth Lakes",
+    "coordinates": {
+     "lat": 37.64929008483887,
+     "lng": -118.9742660522461
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.wyndhamhotels.com/travelodge/mammoth-lakes-california/mammoth-lakes-travelodge/overview?CID=LC:TL::BING:RIO:National:14213&iata=00093796",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:30c6229b-1ce8-4cbd-92d2-adb3fe10c17d",
+    "name": "SureStay Plus",
+    "coordinates": {
+     "lat": 37.64938735961914,
+     "lng": -118.97431945800781
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.bestwestern.com/en_US/book/hotel-rooms.52126.html?iata=90000018&ssob=BLSSH0003G&cid=BLSSH0003G%3Ayext%3Awebsite%3A52126",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a9edeaef-347a-4f6b-b041-259c7746acd7",
+    "name": "New Shady Rest Campground",
+    "coordinates": {
+     "lat": 37.6500186920166,
+     "lng": -118.95916748046875
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://shady-rest-park-mammoth-lakes-usa.placestars.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.963,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:51d84fc1-bae7-42f7-805a-b0a838f2f87c",
+    "name": "Old Shady Rest Campground",
+    "coordinates": {
+     "lat": 37.648799896240234,
+     "lng": -118.96391296386719
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.recreation.gov/camping/campgrounds/233860",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.964,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:a821749b-3e6f-41dc-9fcc-4ed3e0b6c86b",
+    "name": "Holiday Inn",
+    "coordinates": {
+     "lat": 37.648088455200195,
+     "lng": -118.96981048583984
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.ichotelsgroup.com/redirect?path=hd&brandcode=hi",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0f2899f4-7f3a-4e36-bc59-307e05cf61af",
+    "name": "Empeiria High Sierra Hotel",
+    "coordinates": {
+     "lat": 37.648752212524414,
+     "lng": -118.96915435791016
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.empeiriahighsierrahotel.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d91d59f6-4563-43ca-82d2-88f035b9dca1",
+    "name": "Best Western Plus High Sierra Hotel",
+    "coordinates": {
+     "lat": 37.64876937866211,
+     "lng": -118.96923065185547
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.bestwestern.com/en_US/book/hotel-rooms.05691.html?iata=00171890&ssob=BLBWI0003G",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e80da09e-7aeb-4259-90c3-a406866c7a5d",
+    "name": "Motel 6 Mammoth Lakes",
+    "coordinates": {
+     "lat": 37.649003982543945,
+     "lng": -118.9725112915039
+    },
+    "type": "motel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.motel6.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:17affd84-2d42-4731-983a-60b48a3b7ab6",
+    "name": "Sierra Lodge",
+    "coordinates": {
+     "lat": 37.648664474487305,
+     "lng": -118.97486114501953
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.845,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b370f45c-f32a-4c47-bfd7-a480e059cba3",
+    "name": "Mammoth Lakes, CA, 93546",
+    "coordinates": {
+     "lat": 37.64851188659668,
+     "lng": -118.9778823852539
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5a7c4bfc-e369-4766-9b01-3d080a1a858f",
+    "name": "Viewpoint 131 - One-Bedroom Apartment",
+    "coordinates": {
+     "lat": 37.648996353149414,
+     "lng": -118.98104095458984
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://viewpointcondos.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.905,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e62fde42-7645-4c38-b874-9e377fbc5d10",
+    "name": "A Great Stay - Mammoth",
+    "coordinates": {
+     "lat": 37.64901924133301,
+     "lng": -118.98448944091797
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.agreatstay.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.836,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:85cfdb64-88e6-4003-8ebf-49d562453a31",
+    "name": "Fireside at the Village #314",
+    "coordinates": {
+     "lat": 37.64901161193848,
+     "lng": -118.98462677001953
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.airbnb.com/rooms/1643055747538510361",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.91,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:1c704bf9-6280-4824-a091-b6f034f6508c",
+    "name": "Mammoth Treehouse Vacation Rentals",
+    "coordinates": {
+     "lat": 37.64882469177246,
+     "lng": -118.98429870605469
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothtreehouse.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.909,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:06f73dbd-31a1-49c7-b4c7-c6c37ae2ed97",
+    "name": "Holiday Haus",
+    "coordinates": {
+     "lat": 37.64816856384277,
+     "lng": -118.98153686523438
+    },
+    "type": "motel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://holidayhausmotelandhostel.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.976,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:95372675-09c0-476e-b5b8-f63c1fc10ad7",
+    "name": "Moderne Hostel",
+    "coordinates": {
+     "lat": 37.64837837219238,
+     "lng": -118.98136138916016
+    },
+    "type": "hostel",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.bedandbreakfast.eu/bed-and-breakfast/mammoth-lakes/moderne-hostel/1032584",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.987,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3ef2e019-2325-49d4-952c-475d96c691c4",
+    "name": "Quality Inn",
+    "coordinates": {
+     "lat": 37.6483154296875,
+     "lng": -118.97515869140625
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.qualityinn.com/hotel-mammoth_lakes-california-CA076",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6a3847b3-6c98-4411-a1a1-67b08e0b34b8",
+    "name": "The Mammoth Inn",
+    "coordinates": {
+     "lat": 37.64742088317871,
+     "lng": -118.97676849365234
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.themammothinn.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.99,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4a7b8786-9ff1-4ba3-9096-183aa29d4cfa",
+    "name": "Cinnamon Bear Inn",
+    "coordinates": {
+     "lat": 37.64699172973633,
+     "lng": -118.97191619873047
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.cinnamonbearinn.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9a2ca624-166a-4d8a-9c71-9a030e25fee5",
+    "name": "Shilo Inns Suites",
+    "coordinates": {
+     "lat": 37.64639091491699,
+     "lng": -118.96487426757812
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.shiloinns.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.998,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7eb87c45-7870-44d4-809f-0b03e3e40309",
+    "name": "McGee Creek RV Park",
+    "coordinates": {
+     "lat": 37.64447593688965,
+     "lng": -118.96414184570312
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mcgeecreekrv-campground.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.741,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:676dd13e-2425-42bd-841d-51c8ff2d85a5",
+    "name": "Outbound Mammoth",
+    "coordinates": {
+     "lat": 37.64363479614258,
+     "lng": -118.96668243408203
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://bit.ly/3kDALae",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.997,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:93731e14-681b-4015-a3a7-09b5757abd7c",
+    "name": "Mammoth Mountain RV Park",
+    "coordinates": {
+     "lat": 37.64605712890625,
+     "lng": -118.95964050292969
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothrv.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:47c89971-e67b-4051-a5e2-fb8f080a54c5",
+    "name": "Cinnamon Bear Inn",
+    "coordinates": {
+     "lat": 37.642168045043945,
+     "lng": -118.95015716552734
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.cinnamonbearinn.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:88afab4e-87d8-4a24-b7a9-93f1e4ae2380",
+    "name": "East Fork",
+    "coordinates": {
+     "lat": 37.642168045043945,
+     "lng": -118.95015716552734
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.recreation.gov/camping/east-fork-california/r/campgrounddetails.do?contractcode=nrso&parkid=70804",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:39c468da-612e-441e-9adb-0a5ea0596ecb",
+    "name": "Sierra Manors",
+    "coordinates": {
+     "lat": 37.64348030090332,
+     "lng": -118.96587371826172
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.remax-mammoth.com/property-search/detail/1/210576/165-old-mammoth-rd-3-mammoth-lakes-ca-93546",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.981,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:385b1758-6bc0-49f3-a133-f227596462d6",
+    "name": "Guest Room - Mammoth",
+    "coordinates": {
+     "lat": 37.64265060424805,
+     "lng": -118.97183990478516
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://outboundhotels.com/mammoth",
+    "locality": "Carson City",
+    "confidence": 0.77,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d855b987-63fd-48b1-8a55-e475c125a3d3",
+    "name": "Obsidian Residence Club",
+    "coordinates": {
+     "lat": 37.64187431335449,
+     "lng": -118.9780044555664
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://obsidianrc.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.971,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:0fafa0b4-8bce-4154-81ba-b593aa609b69",
+    "name": "Sierra Park Villas 04",
+    "coordinates": {
+     "lat": 37.6415901184082,
+     "lng": -118.96662902832031
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.sierraparkvillas.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.993,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:24f241d4-f3ad-4303-871d-2380e243814e",
+    "name": "Mammoth Hütte",
+    "coordinates": {
+     "lat": 37.641489028930664,
+     "lng": -118.96609497070312
+    },
+    "type": "mountain_hut",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.mammothhutte.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.9,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d9b1e1eb-6b33-4542-b24d-7be89935ed3d",
+    "name": "The Village at Mammoth",
+    "coordinates": {
+     "lat": 37.64048957824707,
+     "lng": -118.96514892578125
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://villageatmammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.921,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8eef6760-07cc-496d-95bb-5b7e0f07b663",
+    "name": "Grand Havens",
+    "coordinates": {
+     "lat": 37.64052772521973,
+     "lng": -118.965087890625
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.grandhavens.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.958,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:253da2f6-0eb5-4108-923f-ae63bb21d128",
+    "name": "Horizons 4 Condominiums - Mammoth Lakes, CA",
+    "coordinates": {
+     "lat": 37.63961219787598,
+     "lng": -118.97017669677734
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.vrbo.com/vacation-rentals/usa/california/gold-country-high-sierra/mammoth-mountain/mammoth-lakes/horizons-4",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.916,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:876f9106-f736-4fe4-8d2a-5bf2b18f89cd",
+    "name": "Horizons 4 #180",
+    "coordinates": {
+     "lat": 37.63961219787598,
+     "lng": -118.97017669677734
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vrbo.com/580411",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.966,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:28d993bc-5126-4ab5-a15a-0eb6642f2d9c",
+    "name": "Sunshine Village",
+    "coordinates": {
+     "lat": 37.64003372192383,
+     "lng": -118.97245788574219
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothsunshinevillage.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.974,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:695676c1-086f-45f5-a3f2-c01dafae72d9",
+    "name": "St. Moritz Villas",
+    "coordinates": {
+     "lat": 37.640390396118164,
+     "lng": -118.9724349975586
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.nomadnessrentals.com/properties-rentals/520/charming-studio-in-mammoth",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.888,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9e08b0e0-020b-4217-a177-7dd6f9e288c2",
+    "name": "St.Moritz Stay",
+    "coordinates": {
+     "lat": 37.64046287536621,
+     "lng": -118.97235870361328
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.nomadnessrentals.com/properties-rentals/520/charming-studio-in-mammoth",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ba78c10d-523c-4538-ad84-8f1b0e333463",
+    "name": "Winterset Condominiums",
+    "coordinates": {
+     "lat": 37.64061737060547,
+     "lng": -118.96910095214844
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vrbo.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.951,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:af26c62d-1d4d-4c58-b7c9-8a4058741188",
+    "name": "Mammoth Vacation Rental - Sherwin Villas",
+    "coordinates": {
+     "lat": 37.64064979553223,
+     "lng": -118.96797180175781
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.mammothrentalbyowner.com/properties-rentals/297/spacious-newly-updated-in-center-of-town-steps-from-shuttle",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4e91b950-634a-4bd0-99a3-5c692dbfeffc",
+    "name": "The Timbers at Sierra Star",
+    "coordinates": {
+     "lat": 37.6385383605957,
+     "lng": -118.98172760009766
+    },
+    "type": "other",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.89,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8166f02f-40a6-4b91-9734-94ba36b5650b",
+    "name": "Timbers 2 townhouse",
+    "coordinates": {
+     "lat": 37.63846778869629,
+     "lng": -118.9818344116211
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.89,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:440f8aa3-dec4-4590-8d1e-ddb4695a12cd",
+    "name": "Upper Soda Springs Campground",
+    "coordinates": {
+     "lat": 37.63913154602051,
+     "lng": -118.96495056152344
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.724,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3eaf1319-0488-4ae9-aebe-9e38f9f0cbc5",
+    "name": "Grand Mammoth Resorts",
+    "coordinates": {
+     "lat": 37.63762092590332,
+     "lng": -118.96595001220703
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.1888mammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.963,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9ad4de2f-0313-4840-abc8-bc9d70efc63a",
+    "name": "Main Lodge, Mammoth, Ca",
+    "coordinates": {
+     "lat": 37.63688659667969,
+     "lng": -118.9695053100586
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/MountainActivities/MountainInformation/Main/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.737,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f8ee9dda-e74e-4736-a728-0c9869046662",
+    "name": "Chateau Sans Nom",
+    "coordinates": {
+     "lat": 37.63694953918457,
+     "lng": -118.97203826904297
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothpremiere.com/properties/chateausansnom/index.shtml",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b7c55773-bb89-4794-938e-288079e8d7c6",
+    "name": "Woodlands 34",
+    "coordinates": {
+     "lat": 37.637794494628906,
+     "lng": -118.97222137451172
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothrentalhome.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:078c51e0-d750-4c45-aeda-c03eee785d63",
+    "name": "Mammoth Mountain Canyon Lodge",
+    "coordinates": {
+     "lat": 37.636898040771484,
+     "lng": -118.97900390625
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothmountain.com/winter/mountain-information/mountain-information/base-lodges/canyon-lodge",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.739,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e51fdfda-71c6-49b2-a7f4-736a94d33603",
+    "name": "Mammoth Lakes Resort Reservations",
+    "coordinates": {
+     "lat": 37.635650634765625,
+     "lng": -118.98135375976562
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://mammothrentals.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.914,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:975bab1c-76eb-4654-bdd0-ad1a955ee83e",
+    "name": "La Vista Blanc 21",
+    "coordinates": {
+     "lat": 37.635738372802734,
+     "lng": -118.96930694580078
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vrbo.com/387996",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.81,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4f0f12da-8d8b-4c2d-aba7-e1cfc68bc019",
+    "name": "La Vista Blanc 59",
+    "coordinates": {
+     "lat": 37.636070251464844,
+     "lng": -118.96904754638672
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vrbo.com/387996",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.915,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:332d9568-0108-4b43-90bf-6e3cb405c880",
+    "name": "Chateau De Montagne 4",
+    "coordinates": {
+     "lat": 37.63681602478027,
+     "lng": -118.96913146972656
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.vrbo.com/506250",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.975,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5ab7ddd6-f0c4-4969-a62a-d0c6a71074a6",
+    "name": "Chateau Blanc 13",
+    "coordinates": {
+     "lat": 37.63640213012695,
+     "lng": -118.96881866455078
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7c89d968-2941-4569-a303-84ed2e7e5479",
+    "name": "The Mammoth Creek Inn",
+    "coordinates": {
+     "lat": 37.63649559020996,
+     "lng": -118.9660873413086
+    },
+    "type": "inn",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.themammothcreek.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.999,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:74e3af52-4b2a-45e9-aac4-6232ef1efe82",
+    "name": "Mammoth Resorts",
+    "coordinates": {
+     "lat": 37.63472366333008,
+     "lng": -118.96957397460938
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothresorts.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.854,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:52e899f3-eb9d-4a26-9281-1c3141f7cab8",
+    "name": "Mammoth Creek 36",
+    "coordinates": {
+     "lat": 37.63472366333008,
+     "lng": -118.96957397460938
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mammothcreek.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.976,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7765393d-a53c-4fb3-af0c-c1607b1b0194",
+    "name": "Sunrise at Mammoth",
+    "coordinates": {
+     "lat": 37.6353874206543,
+     "lng": -118.97078704833984
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://mammothlakes.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.886,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f0ecd89a-5182-4f21-afe0-19d8e716e468",
+    "name": "Snowflower",
+    "coordinates": {
+     "lat": 37.63539695739746,
+     "lng": -118.97240447998047
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.airbnb.com/rooms/50242784",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.9,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8479a3a9-3aae-417d-b8bf-2e93e1be80c6",
+    "name": "Meadow Ridge Condos",
+    "coordinates": {
+     "lat": 37.63520622253418,
+     "lng": -118.98104858398438
+    },
+    "type": "resort",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.mammothslopeslodging.com/rentals/meadowridge-townhomes-at-little-eagle-lodge",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.932,
+    "licence": "Apache-2.0",
+    "attribution": "Overture Maps Foundation · includes Foursquare data (Apache-2.0)"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7adc1fa2-fd65-4101-ac54-71cedf71351a",
+    "name": "The Mammoth Lodge",
+    "coordinates": {
+     "lat": 37.63442420959473,
+     "lng": -118.98017120361328
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://themammothlodge.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:531ce3c4-a511-4f07-b8cd-47bb413e967e",
+    "name": "Snowcreek Resort",
+    "coordinates": {
+     "lat": 37.63290214538574,
+     "lng": -118.97161865234375
+    },
+    "type": "holiday_rental",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.snowcreekresort.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.988,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b95e2fe6-9301-4f12-be4a-20538067ee4f",
+    "name": "Sierra Meadows Ranch - Crowley Cabin Sierra Meadows Ranch",
+    "coordinates": {
+     "lat": 37.633596420288086,
+     "lng": -118.96431732177734
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.sierrameadowsranch.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.978,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f3dc3e9a-bbff-454e-a50e-7db48af6667c",
+    "name": "Snowcreek Resort",
+    "coordinates": {
+     "lat": 37.632150650024414,
+     "lng": -118.97757720947266
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.snowcreekresort.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.979,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3027adeb-5395-43c4-8b21-827ea0a2aebc",
+    "name": "Swiss Chalet Inn Bed and Breakfast",
+    "coordinates": {
+     "lat": 37.62933349609375,
+     "lng": -118.98475646972656
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.swisschalet-mammoth.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.901,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:17d771c6-68d8-4c32-9a2b-0732f54c108e",
+    "name": "Edelweiss Lodge",
+    "coordinates": {
+     "lat": 37.62906074523926,
+     "lng": -118.98307800292969
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://edelweiss-lodge.com/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.994,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ccc8c6ff-74fc-4f6a-9357-11cd476a3dea",
+    "name": "Sherwin Creek Campground",
+    "coordinates": {
+     "lat": 37.629690170288086,
+     "lng": -118.93736267089844
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.recreation.gov/camping/Sherwin_Creek_Ca/r/campgroundDetails.do?contractCode=NRSO&parkId=70567&topTabIndex=CampingSpot",
+    "locality": "Mono County",
+    "confidence": 0.972,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:72b79654-7b74-4722-926a-cdd0a97da1ba",
+    "name": "Snowcreek, Mammoth Lakes, California",
+    "coordinates": {
+     "lat": 37.625301361083984,
+     "lng": -118.97706604003906
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.819,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:33a4e60f-5ee4-453e-b978-406078262443",
+    "name": "M Resort, Mammoth Lakes, CA",
+    "coordinates": {
+     "lat": 37.62464714050293,
+     "lng": -118.98151397705078
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.774,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:cbe1653e-bbc0-4ec8-ab22-b69d33f7996a",
+    "name": "Convict Lake Campground",
+    "coordinates": {
+     "lat": 37.60573196411133,
+     "lng": -118.8498764038086
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://camprrm.com/parks/convict-lake-campground/",
+    "locality": "Mammoth Lakes",
+    "confidence": 0.967,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9a57be4f-c71e-4993-b138-e8f40a19546c",
+    "name": "Convict Lake Campground",
+    "coordinates": {
+     "lat": 37.59414863586426,
+     "lng": -118.8486557006836
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Mammoth Lakes",
+    "confidence": 0.92,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   }
+  ],
+  "hotSprings": []
+ },
+ "osm": {
+  "elements": [
+   {
+    "type": "node",
+    "id": 2606436618,
+    "lat": 37.6476414,
+    "lon": -118.987715,
+    "tags": {
+     "check_date": "2014-01-03",
+     "description": "condo rental",
+     "name": "Our Peace of Mammoth",
+     "tourism": "apartment",
+     "website": "http://www.ourpeaceofmammoth.com"
+    }
+   },
+   {
+    "type": "node",
+    "id": 3055633856,
+    "lat": 37.6444182,
+    "lon": -118.9676914,
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "137",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Laurel Mountain Road",
+     "contact:phone": "+1-760-934-2669",
+     "contact:website": "http://kvehoa.com/",
+     "name": "Krystal Villa East Rentals",
+     "tourism": "apartment"
+    }
+   },
+   {
+    "type": "node",
+    "id": 3059338380,
+    "lat": 37.6387959,
+    "lon": -118.9642718,
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "437",
+     "addr:street": "Old Mammmoth Road",
+     "contact:website": "http://www.101greatescapes.com/Mammoth/",
+     "name": "101 Great Escapes",
+     "office": "rental",
+     "tourism": "apartment"
+    }
+   },
+   {
+    "type": "node",
+    "id": 12032258269,
+    "lat": 37.6432192,
+    "lon": -118.9928356,
+    "tags": {
+     "addr:housenumber": "19",
+     "addr:postcode": "93564",
+     "addr:street": "Davison",
+     "internet_access": "wlan",
+     "name": "Davison St Guest House",
+     "tourism": "hostel"
+    }
+   },
+   {
+    "type": "node",
+    "id": 12109341738,
+    "lat": 37.68994,
+    "lon": -118.84245,
+    "tags": {
+     "amenity": "public_bath",
+     "bath:open_air": "yes",
+     "bath:type": "hot_spring",
+     "name": "Little Creek Hot Springs",
+     "natural": "hot_spring",
+     "nudism": "customary"
+    }
+   },
+   {
+    "type": "node",
+    "id": 12863698665,
+    "lat": 37.6453435,
+    "lon": -118.9887868,
+    "tags": {
+     "currency:XBT": "yes",
+     "name": "Mammoth Condo",
+     "payment:lightning": "yes",
+     "payment:onchain": "yes",
+     "survey:date": "2025-05-26",
+     "tourism": "apartment",
+     "website": "https://airbtc.online/properties/mammoth-condo/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42186581,
+    "center": {
+     "lat": 37.628782,
+     "lon": -118.9883871
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "ele": "8011.792",
+     "guest_house": "bed_and_breakfast",
+     "name": "White Horse Inn",
+     "tourism": "guest_house"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42186764,
+    "center": {
+     "lat": 37.6356161,
+     "lon": -118.9901624
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes City",
+     "addr:housenumber": "4000",
+     "addr:street": "Meridian",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "5",
+     "ele:ft": "8121.075",
+     "name": "Juniper Springs Resort",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42187357,
+    "center": {
+     "lat": 37.6475207,
+     "lon": -119.0001202
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "924",
+     "addr:postcode": "93546",
+     "addr:street": "Canyon Boulevard",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "2",
+     "ele": "8331.77",
+     "name": "Austria Hof Lodge",
+     "phone": "+1-760-934-2764",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42187536,
+    "center": {
+     "lat": 37.6448134,
+     "lon": -119.0019083
+    },
+    "tags": {
+     "addr:state": "CA",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "ele": "2539",
+     "gnis:feature_id": "1812824",
+     "name": "Canyon Lodge",
+     "ski_resort": "ski_base",
+     "source": "USGS Geonames",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42188390,
+    "center": {
+     "lat": 37.6486445,
+     "lon": -118.9693227
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "3228",
+     "addr:street": "Main Street",
+     "attribution": "Mono County GIS",
+     "brand": "Best Western Plus",
+     "brand:wikidata": "Q38623383",
+     "building": "yes",
+     "contact:website": "http://www.bestwestern.com/",
+     "ele": "7874.68",
+     "name": "Best Western Plus High Sierra Hotel",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42188701,
+    "center": {
+     "lat": 37.6346302,
+     "lon": -118.9688451
+    },
+    "tags": {
+     "DriveID": "33",
+     "addr:city": "Mammoth Lakes City",
+     "addr:country": "US",
+     "addr:housename": "Mammoth Crek",
+     "addr:housenumber": "96",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Meadow",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "2",
+     "ele:ft": "7883.617",
+     "name": "Mammoth Creek",
+     "tourism": "apartment"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42188725,
+    "center": {
+     "lat": 37.6460864,
+     "lon": -118.9648921
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "2963",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Main Street",
+     "attribution": "Mono County GIS",
+     "brand": "Shilo Inns",
+     "brand:wikidata": "Q7496689",
+     "building": "yes",
+     "building:levels": "4",
+     "ele": "7820.952",
+     "internet_access": "wlan",
+     "name": "Shilo Inns Mammoth Lakes",
+     "phone": "+1-760-965-0544",
+     "tourism": "hotel",
+     "website": "https://www.shiloinns.com/shilo-inns-mammoth-lakes"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42189282,
+    "center": {
+     "lat": 37.6098103,
+     "lon": -119.0090763
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "4071",
+     "addr:street": "Lake Mary Road",
+     "building": "yes",
+     "name": "Wildyrie Lodge",
+     "tourism": "guest_house",
+     "website": "http://www.wildyrielodge.com"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42189384,
+    "center": {
+     "lat": 37.6432166,
+     "lon": -118.9670886
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "164",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Old Mammmoth Road",
+     "attribution": "Mono County GIS",
+     "brand": "Springboard Hospitality",
+     "building": "yes",
+     "building:levels": "2",
+     "ele": "7864.988",
+     "email": "info@outboundmammoth.com",
+     "internet_access": "wlan",
+     "internet_access:fee": "no",
+     "name": "Outbound Mammoth",
+     "phone": "+1-760-934-2515",
+     "rooms": "180",
+     "tourism": "hotel",
+     "website": "https://www.outboundhotels.com/mammoth/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42189491,
+    "center": {
+     "lat": 37.6189852,
+     "lon": -119.0067521
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:street": "Twin Lakes Road",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "ele": "8619.004",
+     "name": "Tamarack Lodge & Resort",
+     "tourism": "hotel",
+     "website": "https://www.tamaracklodge.com/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42192067,
+    "center": {
+     "lat": 37.6291694,
+     "lon": -118.9830625
+    },
+    "tags": {
+     "addr:state": "CA",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "3",
+     "ele": "7955.148",
+     "name": "Edelweiss Lodge",
+     "tourism": "hotel",
+     "wikidata": "Q111887643"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42192124,
+    "center": {
+     "lat": 37.6492124,
+     "lon": -118.9747674
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "3540",
+     "addr:street": "Main Street",
+     "building": "yes",
+     "contact:website": "http://www.sierralodge.com/",
+     "name": "Sierra Lodge",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42192133,
+    "center": {
+     "lat": 37.6493998,
+     "lon": -118.9741793
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "54",
+     "addr:street": "Sierra Boulevard",
+     "brand": "Travelodge",
+     "brand:wikidata": "Q7836087",
+     "building": "hotel",
+     "contact:website": "http://www.travelodge.com",
+     "name": "Travelodge Mammoth Lakes",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42192135,
+    "center": {
+     "lat": 37.646901,
+     "lon": -118.9719062
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "113",
+     "addr:postcode": "93546",
+     "addr:street": "Center Street",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "ele": "7872.549",
+     "guest_house": "bed_and_breakfast",
+     "internet_access": "wlan",
+     "name": "Cinnamon Bear Inn",
+     "phone": "+1 760 934 2873",
+     "tourism": "guest_house",
+     "website": "https://www.cinnamonbearinn.com/"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42192292,
+    "center": {
+     "lat": 37.6365198,
+     "lon": -118.9660986
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "663",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Old Mammoth Road",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "ele": "7863.679",
+     "name": "The Mammoth Creek Inn Hotel & Spa",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42193413,
+    "center": {
+     "lat": 37.6493404,
+     "lon": -118.9764916
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "3626",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Main Street",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "2",
+     "ele": "7957.014",
+     "name": "Ventura Grand Inn",
+     "tourism": "motel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42193415,
+    "center": {
+     "lat": 37.6499084,
+     "lon": -118.9770203
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "2",
+     "ele": "7957.219",
+     "name": "Mammoth Five Star Lodging",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42193422,
+    "center": {
+     "lat": 37.6490887,
+     "lon": -118.9724867
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "3372",
+     "addr:street": "Main Street",
+     "attribution": "Mono County GIS",
+     "brand": "Motel 6",
+     "brand:wikidata": "Q2188884",
+     "building": "yes",
+     "building:levels": "2",
+     "check_date": "2024-07-05",
+     "contact:website": "http://www.motel6.com",
+     "ele": "7905.465",
+     "name": "Motel 6 Mammoth Lakes, CA",
+     "tourism": "motel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42193431,
+    "center": {
+     "lat": 37.6482239,
+     "lon": -118.9752357
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "3537",
+     "addr:street": "Main Street",
+     "air_conditioning": "no",
+     "attribution": "Mono County GIS",
+     "brand": "Quality Inn",
+     "brand:wikidata": "Q113152195",
+     "building": "yes",
+     "building:levels": "2",
+     "contact:website": "http://qualityinnmammothlakes.com/",
+     "ele": "7918.721",
+     "name": "Quality Inn Near Mammoth Mountain Ski Resort",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42193451,
+    "center": {
+     "lat": 37.6512076,
+     "lon": -118.9821687
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "2",
+     "ele": "8079.684",
+     "name": "Innsbruck Lodge",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42193463,
+    "center": {
+     "lat": 37.6500434,
+     "lon": -118.9835564
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "ele": "8058.525",
+     "name": "Alpenhof Lodge",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42194269,
+    "center": {
+     "lat": 37.647425,
+     "lon": -118.976797
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "75",
+     "addr:street": "Joaquin Road",
+     "building": "yes",
+     "name": "The Mammoth Inn",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42194499,
+    "center": {
+     "lat": 37.6354029,
+     "lon": -118.9915331
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:country": "US",
+     "addr:housenumber": "201",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Juniper Springs Drive",
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "building:levels": "3",
+     "ele:ft": "8140.828",
+     "internet_access": "wlan",
+     "name": "Sunstone Lodge",
+     "tourism": "apartment"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42194920,
+    "center": {
+     "lat": 37.6517937,
+     "lon": -119.0388143
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "building": "yes",
+     "check_date": "2025-07-30",
+     "name": "Mammoth Mountain Inn",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42194980,
+    "center": {
+     "lat": 37.6491594,
+     "lon": -118.9862845
+    },
+    "tags": {
+     "addr:city": "Mammoth Lakes",
+     "addr:housenumber": "50",
+     "addr:postcode": "93546",
+     "addr:state": "CA",
+     "addr:street": "Hillside Drive",
+     "attribution": "Mono County GIS",
+     "brand": "Westin",
+     "brand:wikidata": "Q1969162",
+     "building": "yes",
+     "name": "The Westin Monache Resort, Mammoth",
+     "tourism": "hotel",
+     "wikidata": "Q111393231"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486195,
+    "center": {
+     "lat": 37.7512014,
+     "lon": -118.9899586
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "capacity": "66",
+     "caravans": "yes",
+     "drinking_water": "no",
+     "fee": "no",
+     "name": "Glass Creek Campground",
+     "power_supply": "no",
+     "reservation": "no",
+     "shower": "no",
+     "tents": "yes",
+     "toilets": "yes",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recarea/?recid=20588"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486209,
+    "center": {
+     "lat": 37.6026365,
+     "lon": -119.0097624
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "name": "Lake George Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486211,
+    "center": {
+     "lat": 37.7211138,
+     "lon": -119.0092035
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "capacity": "15",
+     "fee": "no",
+     "name": "Lower Deadman Campground",
+     "reservation": "no",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recarea/?recid=20592"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486212,
+    "center": {
+     "lat": 37.7321886,
+     "lon": -119.0172985
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "fee": "yes",
+     "group_only": "yes",
+     "name": "Obsidian Flat Group Campground",
+     "reservation": "yes",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recarea/?recid=20594"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486218,
+    "center": {
+     "lat": 37.721029,
+     "lon": -119.0111425
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "capacity": "15",
+     "fee": "no",
+     "name": "Upper Deadman Campground",
+     "reservation": "no",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recarea/?recid=20598"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486219,
+    "center": {
+     "lat": 37.6070447,
+     "lon": -119.0069663
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "name": "Lake Mary Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486224,
+    "center": {
+     "lat": 37.6168459,
+     "lon": -119.0051435
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "name": "Twin Lakes Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486230,
+    "center": {
+     "lat": 37.5975115,
+     "lon": -118.848594
+    },
+    "tags": {
+     "addr:city": "Crowley Lake",
+     "addr:postcode": "93546",
+     "attribution": "Mono County GIS",
+     "capacity": "85",
+     "caravans": "yes",
+     "fee": "yes",
+     "name": "Convict Lake Campground",
+     "phone": "+1-760-924-5771",
+     "reservation": "recommended",
+     "tents": "yes",
+     "tourism": "camp_site",
+     "website": "https://www.recreation.gov/camping/campgrounds/234311"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486233,
+    "center": {
+     "lat": 37.5957181,
+     "lon": -118.9936723
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "caravans": "yes",
+     "name": "Coldwater Campground",
+     "tents": "yes",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486241,
+    "center": {
+     "lat": 37.7488615,
+     "lon": -118.9398978
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "capacity": "26",
+     "caravans": "yes",
+     "drinking_water": "no",
+     "fee": "no",
+     "name": "Big Springs Campground",
+     "power_supply": "no",
+     "sanitary_dump_station": "no",
+     "shower": "no",
+     "tents": "yes",
+     "toilets": "yes",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recreation/recarea/?recid=20590&actid=29"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486311,
+    "center": {
+     "lat": 37.6042402,
+     "lon": -119.000102
+    },
+    "tags": {
+     "addr:street": "Lake Mary Loop Road",
+     "attribution": "Mono County GIS",
+     "name": "Pine City CG",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486325,
+    "center": {
+     "lat": 37.616055,
+     "lon": -119.0094325
+    },
+    "tags": {
+     "addr:street": "Twin Lakes Road",
+     "attribution": "Mono County GIS",
+     "name": "Twin Lakes Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486409,
+    "center": {
+     "lat": 37.6824351,
+     "lon": -119.0914533
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "fee": "yes",
+     "name": "Agnew Meadows Horse Campground",
+     "reservation": "recommended",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recarea/?recid=20508"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486413,
+    "center": {
+     "lat": 37.6489464,
+     "lon": -118.9607053
+    },
+    "tags": {
+     "addr:street": "Sawmill Cutoff",
+     "attribution": "Mono County GIS",
+     "name": "New Shady Rest Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486427,
+    "center": {
+     "lat": 37.6496181,
+     "lon": -118.9646262
+    },
+    "tags": {
+     "addr:street": "Sawmill Cutoff",
+     "attribution": "Mono County GIS",
+     "name": "Old Shady Rest Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486435,
+    "center": {
+     "lat": 37.6488334,
+     "lon": -118.9567597
+    },
+    "tags": {
+     "addr:street": "Sawmill Cutoff",
+     "attribution": "Mono County GIS",
+     "group_only": "yes",
+     "name": "Pine Glen Group Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486436,
+    "center": {
+     "lat": 37.6301493,
+     "lon": -118.9359811
+    },
+    "tags": {
+     "addr:street": "Sherwin Creek",
+     "attribution": "Mono County GIS",
+     "name": "Sherwin Creek Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486437,
+    "center": {
+     "lat": 37.6197918,
+     "lon": -119.0750919
+    },
+    "tags": {
+     "HostOnSite": "Yes",
+     "addr:street": "203",
+     "attribution": "Mono County GIS",
+     "name": "Reds Meadow Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486438,
+    "center": {
+     "lat": 37.6396781,
+     "lon": -119.0836977
+    },
+    "tags": {
+     "HostOnSite": "Yes",
+     "addr:street": "203",
+     "attribution": "Mono County GIS",
+     "name": "Minaret Falls Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486441,
+    "center": {
+     "lat": 37.6447577,
+     "lon": -119.0739203
+    },
+    "tags": {
+     "HostOnSite": "Yes",
+     "addr:street": "203",
+     "attribution": "Mono County GIS",
+     "name": "Pumice Flat Campground",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 42486447,
+    "center": {
+     "lat": 37.6863563,
+     "lon": -119.0950196
+    },
+    "tags": {
+     "attribution": "Mono County GIS",
+     "fee": "yes",
+     "group_only": "yes",
+     "name": "Agnew Meadows Group Campground",
+     "reservation": "recommended",
+     "tourism": "camp_site",
+     "website": "https://www.fs.usda.gov/recarea/inyo/recarea/?recid=20508"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343522,
+    "center": {
+     "lat": 37.6387096,
+     "lon": -118.9929514
+    },
+    "tags": {
+     "cabins": "10",
+     "name": "Camp High Sierra",
+     "operator": "City of Los Angeles",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343525,
+    "center": {
+     "lat": 37.5986834,
+     "lon": -119.001468
+    },
+    "tags": {
+     "cabins": "20",
+     "name": "Crystal Crag Lodge",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343532,
+    "center": {
+     "lat": 37.5990104,
+     "lon": -119.0107269
+    },
+    "tags": {
+     "cabins": "10",
+     "name": "Lake George Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343536,
+    "center": {
+     "lat": 37.5997694,
+     "lon": -119.0037156
+    },
+    "tags": {
+     "cabins": "8",
+     "name": "Lake Mary Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343537,
+    "center": {
+     "lat": 37.6146194,
+     "lon": -119.0139778
+    },
+    "tags": {
+     "cabins": "13",
+     "name": "Lower Falls Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343542,
+    "center": {
+     "lat": 37.6215705,
+     "lon": -118.9938192
+    },
+    "tags": {
+     "cabins": "14",
+     "name": "Mill City Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343549,
+    "center": {
+     "lat": 37.6195822,
+     "lon": -119.0060964
+    },
+    "tags": {
+     "cabins": "24",
+     "name": "Tamarack Lodge",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343552,
+    "center": {
+     "lat": 37.616775,
+     "lon": -119.0070651
+    },
+    "tags": {
+     "capacity": "32",
+     "name": "Twin Lakes",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343554,
+    "center": {
+     "lat": 37.6137399,
+     "lon": -119.0099579
+    },
+    "tags": {
+     "cabins": "4",
+     "name": "Twin Lakes Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343557,
+    "center": {
+     "lat": 37.6129993,
+     "lon": -119.0068659
+    },
+    "tags": {
+     "cabins": "18",
+     "name": "Twin Lakes Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343562,
+    "center": {
+     "lat": 37.5975007,
+     "lon": -118.9976242
+    },
+    "tags": {
+     "cabins": "23",
+     "name": "Upper Lake Mary Tract",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343567,
+    "center": {
+     "lat": 37.6089451,
+     "lon": -119.0088653
+    },
+    "tags": {
+     "cabins": "11",
+     "name": "Wildyrie Lodge",
+     "tourism": "camp_site"
+    }
+   },
+   {
+    "type": "way",
+    "id": 139343579,
+    "center": {
+     "lat": 37.6036047,
+     "lon": -119.0128403
+    },
+    "tags": {
+     "cabins": "24",
+     "fee": "yes",
+     "name": "Woods Lodge",
+     "payment:cash": "yes",
+     "payment:cheque": "yes",
+     "tourism": "camp_site",
+     "website": "https://woodslodgemammoth.com"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1552362492,
+    "center": {
+     "lat": 37.6486422,
+     "lon": -118.9851946
+    },
+    "tags": {
+     "building": "yes",
+     "building:levels": "9",
+     "name": "Limelight Hotel",
+     "tourism": "hotel"
+    }
+   },
+   {
+    "type": "way",
+    "id": 1562929891,
+    "center": {
+     "lat": 37.6106286,
+     "lon": -119.008345
+    },
+    "tags": {
+     "cabins": "10",
+     "name": "Upper Falls Tract",
+     "tourism": "camp_site"
+    }
+   }
+  ]
+ }
+}

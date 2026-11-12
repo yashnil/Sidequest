@@ -1,0 +1,829 @@
+{
+ "recordedAt": "2026-11-12",
+ "base": {
+  "label": "Karatu, Tanzania",
+  "near": {
+   "lat": -3.341,
+   "lng": 35.672
+  },
+  "radiusKm": 12
+ },
+ "overture": {
+  "candidates": [
+   {
+    "source": "overture",
+    "sourceId": "overture:f7419024-96c1-41f8-82f3-0a419923ea6c",
+    "name": "Ngorongoro Farm House",
+    "coordinates": {
+     "lat": -3.3390586376190186,
+     "lng": 35.59498405456543
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.tanganyikawildernesscamps.com/camps/ngorongorofarmhouse/",
+    "locality": "Northern Zone",
+    "confidence": 0.829,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:894637a9-7d93-478d-9127-a22b773648b3",
+    "name": "Wellworth Ngorongoro Oldeani Mountain Lodge",
+    "coordinates": {
+     "lat": -3.368799924850464,
+     "lng": 35.59158134460449
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.ngorongoromountainlodge.com/",
+    "locality": "Oldeani",
+    "confidence": 0.971,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f45b293b-e3f3-455b-a381-a524665fcac9",
+    "name": "Tanganyika Wilderness Resort",
+    "coordinates": {
+     "lat": -3.343414306640625,
+     "lng": 35.58859062194824
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "confidence": 0.752,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:ec2f270f-bb35-4b48-8122-0ccea344e15a",
+    "name": "Neptune Ngorongoro Luxury Lodge",
+    "coordinates": {
+     "lat": -3.3049068450927734,
+     "lng": 35.59078407287598
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.neptunehotels.com/en/hotels/neptune-ngorongoro-luxury-lodge",
+    "locality": "Ngorongoro",
+    "confidence": 0.97,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7864da96-b99c-46ee-b625-fe9ab2230481",
+    "name": "Hhando Coffee Lodge",
+    "coordinates": {
+     "lat": -3.3045156002044678,
+     "lng": 35.59714317321777
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.hhandocoffeelodge.com/",
+    "locality": "Northern Zone",
+    "confidence": 0.947,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:521c6de9-f2c4-4476-9fa7-0bb4195777a6",
+    "name": "Ngorongoro Lodge member of Meliá Collection",
+    "coordinates": {
+     "lat": -3.299126625061035,
+     "lng": 35.63909721374512
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.melia.com/es/hoteles/tanzania/area-de-conservacion-ngorongoro/ngorongoro-lodge-melia-collection",
+    "locality": "Ngorongoro",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5a4a05ac-cc14-417c-bd20-6662dc76dbd7",
+    "name": "The Manor at Ngorongoro",
+    "coordinates": {
+     "lat": -3.3023343086242676,
+     "lng": 35.64074897766113
+    },
+    "type": "bed_and_breakfast",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.themanorngorongoro.com/",
+    "locality": "Ngorongoro",
+    "confidence": 0.938,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c6daea74-6f52-4679-80e3-f52e350fee33",
+    "name": "The Plantation Lodge",
+    "coordinates": {
+     "lat": -3.3280558586120605,
+     "lng": 35.63455581665039
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "confidence": 0.877,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:026c90b5-bf45-4e16-9124-5cb7425a423b",
+    "name": "Bashay Rift Lodge",
+    "coordinates": {
+     "lat": -3.371884822845459,
+     "lng": 35.62316703796387
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.bashay-rift-lodge.com/",
+    "confidence": 0.73,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:43c98b68-693d-4199-8e9b-91477b23b194",
+    "name": "St Catherine Monastery Guest House Oldeani",
+    "coordinates": {
+     "lat": -3.3276703357696533,
+     "lng": 35.605844497680664
+    },
+    "type": "guesthouse",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Oldeani",
+    "confidence": 0.7,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9c2ae6ac-c6c5-4d47-bf18-4682e67cbfff",
+    "name": "Flamingo Safari Lodge",
+    "coordinates": {
+     "lat": -3.336160898208618,
+     "lng": 35.68300819396973
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://flamingolodge.co.tz/",
+    "locality": "Northern Zone",
+    "confidence": 0.824,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:873e2c35-c9e1-4904-9b29-f3c77a72be73",
+    "name": "Ngorongoro Camp and Lodge",
+    "coordinates": {
+     "lat": -3.338240146636963,
+     "lng": 35.67791938781738
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Northern Zone",
+    "confidence": 0.957,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8825d893-a848-4934-9165-e3ec13f7d631",
+    "name": "Karatu Hill Top Tourist Hotel",
+    "coordinates": {
+     "lat": -3.3387272357940674,
+     "lng": 35.6760139465332
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://karatuhilltoptouristhotel.co.tz/",
+    "locality": "Karatu",
+    "confidence": 0.945,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d7a01290-5928-4aae-a474-2f8142a65bf9",
+    "name": "Karatu Town",
+    "coordinates": {
+     "lat": -3.339729070663452,
+     "lng": 35.67411994934082
+    },
+    "type": "other",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Karatu",
+    "confidence": 0.747,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:4daea3c1-65cd-4967-9c27-c61161979a09",
+    "name": "Omega View Hotel",
+    "coordinates": {
+     "lat": -3.342902660369873,
+     "lng": 35.67407417297363
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.omegaviewhotel.co.tz/",
+    "locality": "Karatu",
+    "confidence": 0.84,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6d949eca-2b81-4dcf-97c1-7b3c5e033623",
+    "name": "Peak Hotel",
+    "coordinates": {
+     "lat": -3.34031081199646,
+     "lng": 35.67304992675781
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://www.peakhotelkaratu.com/",
+    "locality": "Northern Zone",
+    "confidence": 0.937,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f2db9606-5262-4724-98d0-d68cb78f4c9d",
+    "name": "Karatu safari lodge hostel",
+    "coordinates": {
+     "lat": -3.3390707969665527,
+     "lng": 35.67286491394043
+    },
+    "type": "hostel",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.karatusafaricamp-tz.com/",
+    "locality": "Karatu",
+    "confidence": 0.717,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:56ca5be2-8495-4740-a2b8-99667fabf6c4",
+    "name": "Ngorongoro Forest Tented Lodge",
+    "coordinates": {
+     "lat": -3.3390707969665527,
+     "lng": 35.67286491394043
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.wildlandscampsandlodges.com/",
+    "locality": "Karatu",
+    "confidence": 0.703,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3f78ca77-0049-4ffd-ac10-6389e05e5a6c",
+    "name": "Crater Rim Hotel",
+    "coordinates": {
+     "lat": -3.341834545135498,
+     "lng": 35.67282676696777
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "locality": "Northern Zone",
+    "confidence": 0.715,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:5c2fdb57-5bde-47c7-b85a-2df4f18fa505",
+    "name": "Kudu Lodge and Campsite",
+    "coordinates": {
+     "lat": -3.348193645477295,
+     "lng": 35.66928482055664
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Karatu",
+    "confidence": 0.772,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b17e1fb3-78e7-4679-9ba3-9c7485419349",
+    "name": "Farm of Dreams Lodge",
+    "coordinates": {
+     "lat": -3.3583977222442627,
+     "lng": 35.668779373168945
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.farmofdreamslodge.com/",
+    "locality": "Northern Zone",
+    "confidence": 0.933,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:98e2be26-6fb5-4e66-aeea-214110c433f4",
+    "name": "Eileen's Trees Inn",
+    "coordinates": {
+     "lat": -3.3452765941619873,
+     "lng": 35.668622970581055
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://eileenstreeinn.com/",
+    "locality": "Karatu",
+    "confidence": 0.956,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7e512df8-c911-4985-871e-77a76ade892a",
+    "name": "Patamu Restaurant & Lodge",
+    "coordinates": {
+     "lat": -3.337087392807007,
+     "lng": 35.66676139831543
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.patamurestaurants.com/",
+    "locality": "Karatu",
+    "confidence": 0.971,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d5a2afea-ddf9-4082-82b1-3f0aa38e9f11",
+    "name": "Enyati Lodge TZ",
+    "coordinates": {
+     "lat": -3.3333301544189453,
+     "lng": 35.66666793823242
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.enyatilodgetz.com/",
+    "locality": "Karatu",
+    "confidence": 0.773,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:d6e3781a-57a8-4875-bc7f-cfb978503b63",
+    "name": "Ngorongoro Castle",
+    "coordinates": {
+     "lat": -3.3333301544189453,
+     "lng": 35.66670227050781
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.ngorongorocastle.com/",
+    "locality": "Karatu",
+    "confidence": 0.91,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8778ef65-1c02-4d26-af7f-3a31aa3621eb",
+    "name": "Octagon Lodge",
+    "coordinates": {
+     "lat": -3.3447928428649902,
+     "lng": 35.66538429260254
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://octagonlodge.com/",
+    "locality": "Karatu",
+    "confidence": 0.95,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:aa7d6907-5f61-42b7-956a-cdc323b5c2bd",
+    "name": "Country lodge Karatu",
+    "coordinates": {
+     "lat": -3.3379440307617188,
+     "lng": 35.659955978393555
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.countrylodgekaratu.com/",
+    "locality": "Karatu",
+    "confidence": 0.893,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8e0debb3-ce25-4ac2-8d9b-1f720367059e",
+    "name": "Highview Hotel",
+    "coordinates": {
+     "lat": -3.3229660987854004,
+     "lng": 35.65945243835449
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.highviewhotel.com/",
+    "locality": "Karatu",
+    "confidence": 0.961,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:c9b0b4e0-92f9-4bff-a002-1d31ad7d8cfc",
+    "name": "Bougainvilla Lodge",
+    "coordinates": {
+     "lat": -3.3377108573913574,
+     "lng": 35.65914726257324
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "confidence": 0.988,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:8dae9d08-b508-48d3-8196-831bb3092de5",
+    "name": "Maasai Living",
+    "coordinates": {
+     "lat": -3.335214614868164,
+     "lng": 35.65435028076172
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.maasailiving.com/",
+    "locality": "Ngorongoro",
+    "confidence": 0.831,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:e525785b-409b-462b-93a8-d3e2974876a2",
+    "name": "Acacia Farm Lodge",
+    "coordinates": {
+     "lat": -3.3358254432678223,
+     "lng": 35.654130935668945
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Northern Zone",
+    "confidence": 0.982,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:37fded92-50cd-4367-aca0-bac5df84aee7",
+    "name": "Endoro Lodge",
+    "coordinates": {
+     "lat": -3.2965087890625,
+     "lng": 35.66262435913086
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://tranquilsafari.com/",
+    "locality": "Ngorongoro",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:b2fa724d-d62b-4bf0-8173-8cb8e80ab620",
+    "name": "Gibb's Farm - Ngorongoro Crater",
+    "coordinates": {
+     "lat": -3.296881675720215,
+     "lng": 35.663320541381836
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.gibbsfarm.com/",
+    "locality": "Karatu",
+    "confidence": 0.987,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:3a645165-aa65-4be7-8de6-b6a18153d851",
+    "name": "Tloma Lodge",
+    "coordinates": {
+     "lat": -3.308720827102661,
+     "lng": 35.66447639465332
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Karatu",
+    "confidence": 0.917,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:9a17b67c-cec7-44e1-9c9f-b39f62541e65",
+    "name": "The Retreat at Ngorongoro - Tanzania",
+    "coordinates": {
+     "lat": -3.297074317932129,
+     "lng": 35.66415214538574
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://theretreatatngorongoro.co.tz/",
+    "locality": "Karatu",
+    "confidence": 0.813,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:74b2e447-29bf-4109-b2c5-fc1e4cdd5c94",
+    "name": "Kitela Lodge",
+    "coordinates": {
+     "lat": -3.303973913192749,
+     "lng": 35.66681098937988
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "confidence": 0.821,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:06141511-ddc3-453f-b8f7-198b63624656",
+    "name": "Endoro Lodge",
+    "coordinates": {
+     "lat": -3.2977211475372314,
+     "lng": 35.671640396118164
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "http://www.endorolodge.com/",
+    "locality": "Ngorongoro",
+    "confidence": 0.85,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:41b200f0-395e-4da2-a324-51fdd4ab3b16",
+    "name": "Tranquil Kilimanjaro",
+    "coordinates": {
+     "lat": -3.297492265701294,
+     "lng": 35.67138862609863
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "https://uhurupoint.com/",
+    "locality": "Old Moshi",
+    "confidence": 0.844,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:dc4fc121-ec67-432b-a7d9-5c0a173d3d33",
+    "name": "The Retreat at Ngorongoro",
+    "coordinates": {
+     "lat": -3.2987112998962402,
+     "lng": 35.671037673950195
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.theretreatatngorongoro.com/",
+    "locality": "Northern Zone",
+    "confidence": 0.945,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:91c21cda-e335-4a59-b330-1f7d6aa8e48d",
+    "name": "Foresight Eco-Lodge",
+    "coordinates": {
+     "lat": -3.3009068965911865,
+     "lng": 35.68406105041504
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://foresight-lodge.com/",
+    "locality": "Karatu",
+    "confidence": 0.912,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:417ab685-cc2d-4d7d-928c-664faf0043c9",
+    "name": "Ngorongoro Castle",
+    "coordinates": {
+     "lat": -3.298931360244751,
+     "lng": 35.68903350830078
+    },
+    "type": "lodge",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.ngorongorocastle.com/",
+    "locality": "Karatu",
+    "confidence": 0.915,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:80b6ee74-b21c-4918-8534-a5f8531dea56",
+    "name": "Ngorongoro Forest Tented Lodge",
+    "coordinates": {
+     "lat": -3.303194284439087,
+     "lng": 35.701345443725586
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "locality": "Northern Zone",
+    "confidence": 0.757,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:f56e255d-c6aa-4ae4-adf8-88b7cf87c30c",
+    "name": "Karatu Forest Tented Camp",
+    "coordinates": {
+     "lat": -3.3035950660705566,
+     "lng": 35.701467514038086
+    },
+    "type": "campsite",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.karatuforesttentedcamp.com/",
+    "confidence": 0.749,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:89d7f66d-6198-4cf9-a12e-456eb28fa643",
+    "name": "Olea Africana Safari Lodge",
+    "coordinates": {
+     "lat": -3.3144595623016357,
+     "lng": 35.70424270629883
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "confidence": 0.885,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:7609013f-a9e3-43f9-b0ec-cbea19835a39",
+    "name": "Pamoja Africa",
+    "coordinates": {
+     "lat": -3.3145499229431152,
+     "lng": 35.70431900024414
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.pamojaafricatz.com/",
+    "locality": "Karatu",
+    "confidence": 0.908,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:711bb842-be02-4fcc-b9d1-8c0a317a7b5f",
+    "name": "Pembeni Rhotia",
+    "coordinates": {
+     "lat": -3.2979228496551514,
+     "lng": 35.70831489562988
+    },
+    "type": "hotel",
+    "typeBasis": "category",
+    "amenities": [],
+    "website": "http://www.pembeniafrica.com/",
+    "locality": "Northern Zone",
+    "confidence": 0.884,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:6c7c1d83-2553-4e36-99d0-a6d6a4b64f48",
+    "name": "Rhotia Valley Tented Lodge",
+    "coordinates": {
+     "lat": -3.286774158477783,
+     "lng": 35.7142276763916
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://www.rhotiavalley.com/",
+    "locality": "Karatu",
+    "confidence": 0.939,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:297b83cc-1c53-44a7-bf3d-0f5981d50665",
+    "name": "Marera Village Resort",
+    "coordinates": {
+     "lat": -3.323542356491089,
+     "lng": 35.71029853820801
+    },
+    "type": "resort",
+    "typeBasis": "name",
+    "amenities": [],
+    "confidence": 0.785,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   },
+   {
+    "source": "overture",
+    "sourceId": "overture:05a167f8-8787-4b7e-b527-702289323f7e",
+    "name": "Karatu Tented Lodge",
+    "coordinates": {
+     "lat": -3.3152248859405518,
+     "lng": 35.75075149536133
+    },
+    "type": "lodge",
+    "typeBasis": "name",
+    "amenities": [],
+    "website": "https://karatulodge.com/",
+    "confidence": 0.86,
+    "licence": "CDLA-Permissive-2.0",
+    "attribution": "Overture Maps Foundation"
+   }
+  ],
+  "hotSprings": []
+ },
+ "osm": {
+  "elements": []
+ }
+}
