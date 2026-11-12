@@ -1,1 +1,11 @@
 lisbon 96221aa9-ad38-48f9-8918-a9518e39875d
+iceland-ring-road c3963251-e576-45a8-868c-a07505efae5b
+iceland-ring-road d2e6fb08-92cd-48fa-9fb4-b9eec1071fca
+tanzania dc717033-0669-4225-9f57-a39e543642b1
+scotland-highlands dbd60c48-3a89-4b96-a90a-0315a373b4f3
+japan-linear ba5eff04-9a70-43f4-aead-04ab8bdaacc3
+tenerife d7d74305-fe23-46ef-b7a8-caaf8161de9a
+iceland-ring-road 38483475-afdb-4880-b49b-40b872e6944f
+iceland-ring-road 37dc663c-69b9-4e0f-a173-a8465ad2222c
+tanzania e724d363-cb35-42d8-a191-9688cdad122f
+japan-linear d61c5297-f776-4ce7-8daa-7486d5d94ee1

@@ -207,8 +207,8 @@ const MOVE_DAY_LOOP_MINUTES = 45;
 const MOVE_DAY_ROADSIDE_MINUTES = 15;
 /**
  * …or this share of the move, whichever is more. Staging acceptance (2026-11):
- * a live Iceland ring road drove Vík → Höfn (230 estimated minutes) past
- * Jökulsárlón without stopping, because Vík → lagoon (180) + lagoon → Höfn (80)
+ * a live ring road drove a 230-minute estimated move past the glacier lagoon
+ * on its road without stopping, because start → lagoon (180) + lagoon → end (80)
  * came to 30 minutes over the direct figure — estimated legs are not additive
  * (a longer leg is estimated faster), so the place most squarely on the road
  * read as a detour. The error grows with the leg; so does this allowance.

@@ -7,3 +7,4 @@
 {"at":"2026-11-10T19:42:00.528Z","kind":"trip","label":"lisbon-city-break","destination":"Lisbon, Portugal","start":"2027-05-13","end":"2027-05-16","tripId":"e698fe86-7cfd-4319-8114-f3227a59f4d4","seconds":150}
 {"at":"2026-11-10T19:42:45.415Z","kind":"decide","request":"Remote monasteries and high passes in October.","url":"http://127.0.0.1:4320/decide/d1dc31bb-ce17-421f-901c-47bf8bfbf040","seconds":41}
 {"at":"2026-11-10T19:43:32.573Z","kind":"decide","request":"Somewhere beautiful and relaxing.","url":"http://127.0.0.1:4320/decide/d0130eeb-85ca-4234-bc1b-b742d596e6c7","seconds":47}
+{"at":"2026-11-12T02:27:51.959Z","kind":"trip","label":"iceland-road-trip","destination":"Iceland Ring Road","start":"2027-06-14","end":"2027-06-22","tripId":"16622b8c-72b3-42b7-9281-9a1623066e0f","seconds":181}
