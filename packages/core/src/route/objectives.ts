@@ -1,6 +1,7 @@
 import type { DestinationConcept } from '../destinations/semantics';
 import { isAreaType } from '../destinations/semantics';
 import type { TravelerProfile } from '../schemas/profile';
+import type { RouteShapeKind } from '../destinations/route-shape';
 
 /**
  * V10 §11 — WHAT THIS ROUTE HAS TO ACHIEVE, STATED RATHER THAN INFERRED.
@@ -21,6 +22,8 @@ export function routeObjectivesFor(input: {
   nights: number;
   /** Core zones the decomposition found, for the coverage objective. */
   coreZones?: number;
+  /** The traveller asked for a journey (`destinations/route-shape.ts`): the route is the trip, not a region to take a corner of. */
+  route?: RouteShapeKind | null;
 }): string[] {
   const { profile, nights } = input;
   const out: string[] = [];
@@ -34,8 +37,16 @@ export function routeObjectivesFor(input: {
     .map((key) => String(key).replace(/_/g, ' '));
   if (ranked.length > 0) out.push(`Put ${ranked.join(', ')} at the centre of the route, not around its edges.`);
 
-  /* How much of a broad destination the days can honestly hold. */
-  if (input.concept && isAreaType(input.concept.type) && (input.concept.scale === 'region' || input.concept.scale === 'subregion' || input.concept.scale === 'country')) {
+  /* A journey the traveller named: follow it end to end (round, for a loop), in day-sized legs. */
+  if (input.route) {
+    out.push(
+      input.route === 'loop'
+        ? 'Follow the whole loop in one direction and end where it began, with each base a day of driving or less from the next; if the nights cannot hold all of it, say which stretch is cut and why.'
+        : input.route === 'linear'
+          ? 'Follow the route from one end to the other in one direction, with each base a day of travel or less from the next; if the nights cannot hold all of it, say which stretch is cut and why.'
+          : 'Follow the route rather than staying in one corner of it, with each base a day of travel or less from the next.',
+    );
+  } else if (input.concept && isAreaType(input.concept.type) && (input.concept.scale === 'region' || input.concept.scale === 'subregion' || input.concept.scale === 'country')) {
     const zones = input.coreZones ?? 0;
     out.push(
       zones > 0 && nights < zones * 2

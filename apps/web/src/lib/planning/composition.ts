@@ -114,6 +114,13 @@ export interface DestinationEnvelope {
    * terms. Explicit objectives rather than left to be inferred from a name.
    */
   routeObjectives?: readonly string[];
+  /**
+   * The traveller asked for a journey, not a place (`readRouteShape`): a ring
+   * road, a road trip, "A to B". The scan's proposal is asked to cover the
+   * whole route with bases in travel order, and the stay choice treats those
+   * bases as the traveller's intent.
+   */
+  route?: { kind: 'loop' | 'linear' | 'touring'; cue: string; stops?: readonly string[]; description: string };
 }
 
 /**

@@ -1,5 +1,5 @@
 import 'server-only';
-import { countNights, countryFacts, decomposeDestination, needsDecomposition, routeObjectivesFor, type DestinationCandidate, type Trip, type TravelerProfile } from '@sidequest/core';
+import { countNights, countryFacts, decomposeDestination, describeRouteShape, needsDecomposition, readRouteShape, routeObjectivesFor, type DestinationCandidate, type RouteShape, type Trip, type TravelerProfile } from '@sidequest/core';
 import type { getIntent } from '../db/compiler-repository';
 import type { RegionContext } from '../region';
 import { accessConstraintsFor } from '../providers/access-constraints';
@@ -24,6 +24,8 @@ export interface DestinationEnvelopeResult {
   conceptGateways: { label: string; coordinates?: { lat: number; lng: number } }[];
   decomposition: ReturnType<typeof decomposeDestination> | null;
   resolvedName: string;
+  /** The traveller asked for a journey rather than a place (`readRouteShape`), or null. */
+  routeShape: RouteShape | null;
   rawDestinationPhrase: string;
   destinationName: string;
 }
@@ -91,15 +93,18 @@ export function destinationEnvelopeFor(input: {
     })
     .slice(0, 10)
     .map((c) => `${c.travellerNote} (${c.sourceName})`);
+  const rawDestinationPhrase = (storedIntent?.rawText || intent?.destinationQuery || composer?.destinationQuery || trip.basics.destinationInput || '').trim();
+  /* A ring road, a road trip, "A to B": read from the traveller's own words, refined by what the destination resolved to. Never a destination name. */
+  const routeShape = readRouteShape({ phrase: rawDestinationPhrase, concept: concept ? { type: concept.type, scale: concept.scale } : candidate ? { scale: candidate.breadth } : null });
   /* V10 §11 — the route's objectives, derived from the traveller's own answers and the destination's own shape. */
   const routeObjectives = routeObjectivesFor({
+    route: routeShape?.kind ?? null,
     concept,
     profile,
     nights: countNights(trip.basics.startDate, trip.basics.endDate),
     ...(decomposition ? { coreZones: decomposition.zones.filter((z) => z.role === 'core').length } : {}),
   });
   const resolvedName = candidate?.displayName ?? region?.region.name ?? trip.basics.destinationInput;
-  const rawDestinationPhrase = (storedIntent?.rawText || intent?.destinationQuery || composer?.destinationQuery || trip.basics.destinationInput || '').trim();
   const destinationName = storedIntent?.interpretedLabel || resolvedName;
   const referenceTimeZone = (() => {
     const codes = [...(intent?.destinationIntent?.graph?.countries ?? []), ...(candidate?.countryCode ? [candidate.countryCode] : [])];
@@ -138,6 +143,7 @@ export function destinationEnvelopeFor(input: {
     ...(conceptGateways.length > 0 ? { gateways: conceptGateways.map((g) => g.label) } : {}),
     ...(accessFacts.length > 0 ? { accessFacts } : {}),
     ...(routeObjectives.length > 0 ? { routeObjectives } : {}),
+    ...(routeShape ? { route: { kind: routeShape.kind, cue: routeShape.cue, ...(routeShape.stops ? { stops: routeShape.stops } : {}), description: describeRouteShape(routeShape) } } : {}),
   };
-  return { envelope, storedIntent, concept, conceptCountries, divisions, conceptGateways, decomposition, resolvedName, rawDestinationPhrase, destinationName };
+  return { envelope, storedIntent, concept, conceptCountries, divisions, conceptGateways, decomposition, resolvedName, routeShape, rawDestinationPhrase, destinationName };
 }

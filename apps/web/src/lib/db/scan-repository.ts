@@ -199,6 +199,19 @@ export interface ScanDiagnostics {
   /** The open-data proposal's own account: box, groups refused, elements read, Wikidata answers, what was kept. */
   openData?: { source: string; boxHalfKm: number; groups: number; failedGroups: string[]; elements: number; usable: number; sitelinksAsked: number; sitelinksAnswered: number; settlements: number; kept: number; bases: number };
   envelope: { scale: string | null; reachKm: number; center: { lat: number; lng: number } };
+  /**
+   * The traveller asked for a journey (`readRouteShape`): its kind and the words
+   * that said so, and whether the placed proposal covered the route before and
+   * after the one supplement (`routeCoverage`). Absent on a trip that is not a route.
+   */
+  route?: {
+    kind: 'loop' | 'linear' | 'touring';
+    cue: string;
+    before?: { checked: boolean; basis: string; covered: boolean; uncovered: string[]; note: string };
+    after?: { checked: boolean; basis: string; covered: boolean; uncovered: string[]; note: string };
+    /** Places to sleep the supplement added along the uncovered stretch. */
+    basesAdded?: number;
+  };
   placement: {
     attempted: number;
     unplaced: { name: string; locality: string; category: string; isBase: boolean; outcome: string; attempts: { provider: string; query: string; outcome: string }[] }[];
