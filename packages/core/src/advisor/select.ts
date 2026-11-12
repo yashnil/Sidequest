@@ -32,6 +32,8 @@ export const STRETCH_FLOOR = 0.3;
 const NAMED_ABOUT = 0.45;
 /** A guide can mention a gorilla in a zoo; the place still has to be good at the wider thing. */
 const NAMED_MIN_FIT = 0.3;
+/** How well a primary must suit the kind of trip, when the kind of trip leads the request (`concept.ts#vacationFit`). */
+const VACATION_FLOOR = 0.75;
 /**
  * Calibration on the lead (Steck 2018, in miniature): once the traveller has
  * said what the trip must be brilliant at, every *primary* pick has to be good
@@ -112,6 +114,20 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
    */
   const about = (candidate: ScoredDestination) => (candidate.destination.namedMention ?? 0) >= NAMED_ABOUT && Math.max(0, ...candidate.interestFit.map((fit) => fit.value)) >= NAMED_MIN_FIT;
   const named = profile.named.length > 0 && ranked.filter(about).filter((candidate, index, list) => !list.slice(0, index).some((other) => overlap(candidate.destination, other.destination) >= 1)).length >= 2;
+  /*
+   * When the kind of trip is what the request is mostly about (rest, wellness,
+   * family, luxury), the primaries must suit it, the way they must serve a
+   * stated lead: a city break is not offered as a restful outdoor family trip
+   * for being different from the others. Only while enough places qualify.
+   */
+  const vacationOf = (candidate: ScoredDestination) => {
+    const factor = candidate.factors.find((entry) => entry.id === 'vacation');
+    return factor && factor.measure.kind === 'measured' ? factor.measure.value : null;
+  };
+  /* Only when no activity leads: a stated lead ("a family ski week") decides the primaries, and the kind of trip ranks within it. */
+  const conceptLed = !profile.leadStated && profile.concept.length > 0 && ranked.slice(0, 40).some((candidate) => (candidate.factors.find((entry) => entry.id === 'vacation')?.weight ?? 0) >= 0.1);
+  const conceptOk = (candidate: ScoredDestination) => !conceptLed || (vacationOf(candidate) ?? 1) >= VACATION_FLOOR;
+  const conceptCount = conceptLed ? ranked.slice(0, 60).filter(conceptOk).length : 0;
   const servesLead = ranked.filter(leadOk);
   const top = (servesLead[0] ?? ranked[0])?.score ?? 0;
   const floor = Math.max(FLOOR_ABSOLUTE, top - FLOOR_GAP);
@@ -166,6 +182,9 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     if (remaining.length === 0) break;
     /* Primaries come from the places that serve the lead while any are left. */
     let eligible = chosen.length < size && remaining.some(leadOk) ? remaining.filter(leadOk) : remaining;
+    /* Alternates too, when there are enough that fit: an alternate is still an answer to the same trip. */
+    const conceptSlots = conceptCount >= size + alternates ? size + alternates : size;
+    if (chosen.length < conceptSlots && conceptCount >= size && eligible.some(conceptOk)) eligible = eligible.filter(conceptOk);
     if (named && chosen.length < size && remaining.some(about)) eligible = remaining.filter(about);
     /* Nothing left serves the lead: the closest to it comes next, and being different is no qualification. */
     if (chosen.length < size && profile.leadStated && !remaining.some(leadOk)) {

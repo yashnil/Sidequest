@@ -116,6 +116,19 @@ export const OBJECTIVE_WEIGHTS = {
   chosenLift: 1.15,
 } as const;
 
+/**
+ * THE VALUE OF FREE TIME (2026-11 experience transformation).
+ *
+ * Without it every stop worth more than its drive was added, so an eleven-day
+ * board of 37 places became a plan of 29 — the days filled because they could,
+ * not because the fifth shrine was worth a morning. Each minute spent at a
+ * stop now costs this much, scaled by pace (travel is already priced by α): a stop has to be
+ * worth the time it takes from rest, not merely the drive to it. With ρ that
+ * is a real marginal-value test — the third museum of a slow trip no longer
+ * clears it, the third of a fast one still does.
+ */
+export const TIME_VALUE: Record<'slow' | 'balanced' | 'fast', number> = { slow: 0.12, balanced: 0.08, fast: 0.04 };
+
 export interface StructureObjective {
   mustsPlaced: number;
   pinnedHeld: number;
@@ -130,6 +143,8 @@ export interface StructureObjective {
     overpack: number;
     overflowMinutes: number;
     emptyDays: number;
+    /** Minutes the plan spends at its stops, each costing the value of free time. */
+    timeMinutes: number;
   };
   stops: number;
 }
@@ -169,6 +184,8 @@ interface RowFacts {
   overflowMinutes: number;
   kinds: [string, number][];
   strenuous: boolean;
+  /** Minutes the day spends at its stops. */
+  activityMinutes: number;
 }
 
 /*
@@ -228,6 +245,7 @@ function rowFacts(kernel: PlannerKernel, index: number, row: readonly PlannerCan
     overflowMinutes: Math.max(0, used - day.capacityMinutes),
     kinds,
     strenuous: row.some((s) => s.intensity === 'strenuous'),
+    activityMinutes: metrics.activityMinutes,
   };
   cache.set(row, facts);
   bySet.set(index, facts);
@@ -245,6 +263,7 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
   let overpack = 0;
   let overflowMinutes = 0;
   let emptyDays = 0;
+  let activity = 0;
   const loads: number[] = [];
   const byKind = new Map<string, number[]>();
   state.forEach((row, index) => {
@@ -258,6 +277,7 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
     overpack += f.overpack;
     overflowMinutes += f.overflowMinutes;
     if (f.empty) emptyDays += 1;
+    activity += f.activityMinutes;
     if (f.load !== null) loads.push(f.load);
     for (const [key, v] of f.kinds) {
       const list = byKind.get(key);
@@ -272,8 +292,10 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
   }
   const mean = loads.length > 0 ? loads.reduce((a, b) => a + b, 0) / loads.length : 0;
   const imbalance = loads.reduce((n, l) => n + (l - mean) ** 2, 0);
-  const score = value - W.alpha * travelMinutes - W.beta * zoneSwitches - W.alpha * weather - W.gamma * imbalance - W.delta * overpack - W.zeta * overflowMinutes - W.epsilon * emptyDays;
-  return { mustsPlaced, pinnedHeld, score, parts: { value, travelMinutes, zoneSwitches, weatherPenalty: weather, imbalance, overpack, overflowMinutes, emptyDays }, stops };
+  const tau = TIME_VALUE[kernel.input.pace];
+  const timeMinutes = activity;
+  const score = value - W.alpha * travelMinutes - W.beta * zoneSwitches - W.alpha * weather - W.gamma * imbalance - W.delta * overpack - W.zeta * overflowMinutes - W.epsilon * emptyDays - tau * timeMinutes;
+  return { mustsPlaced, pinnedHeld, score, parts: { value, travelMinutes, zoneSwitches, weatherPenalty: weather, imbalance, overpack, overflowMinutes, emptyDays, timeMinutes }, stops };
 }
 
 /**
@@ -287,6 +309,7 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
  */
 function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: ReadonlyMap<number, readonly PlannerCandidate[]>, sameSet?: boolean) => StructureObjective {
   const W = OBJECTIVE_WEIGHTS;
+  const tau = TIME_VALUE[kernel.input.pace];
   const facts = state.map((row, i) => rowFacts(kernel, i, row));
   let musts = 0;
   let pinned = 0;
@@ -297,6 +320,7 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
   let overpack = 0;
   let overflow = 0;
   let empty = 0;
+  let activity = 0;
   let loadSum = 0;
   let loadSq = 0;
   let loadN = 0;
@@ -311,6 +335,7 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
     overpack += f.overpack;
     overflow += f.overflowMinutes;
     empty += f.empty ? 1 : 0;
+    activity += f.activityMinutes;
     if (f.load !== null) {
       loadSum += f.load;
       loadSq += f.load * f.load;
@@ -336,6 +361,7 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
     let dOverpack = 0;
     let dOverflow = 0;
     let dEmpty = 0;
+    let dActivity = 0;
     let sum = loadSum;
     let sq = loadSq;
     const touched = new Map<string, number[]>();
@@ -351,6 +377,7 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
       dOverpack += after.overpack - before.overpack;
       dOverflow += after.overflowMinutes - before.overflowMinutes;
       dEmpty += (after.empty ? 1 : 0) - (before.empty ? 1 : 0);
+      dActivity += after.activityMinutes - before.activityMinutes;
       if (before.load !== null && after.load !== null) {
         sum += after.load - before.load;
         sq += after.load * after.load - before.load * before.load;
@@ -375,8 +402,9 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
     for (const [key, list] of touched) value += contributionOfSorted(list) - (kindValue.get(key) ?? 0);
     const t = { travel: travel + dTravel, zones: zones + dZones, weather: weather + dWeather, overpack: overpack + dOverpack, overflow: overflow + dOverflow, empty: empty + dEmpty };
     const imbalance = loadN > 0 ? Math.max(0, sq - (sum * sum) / loadN) : 0;
-    const score = value - W.alpha * t.travel - W.beta * t.zones - W.alpha * t.weather - W.gamma * imbalance - W.delta * t.overpack - W.zeta * t.overflow - W.epsilon * t.empty;
-    return { mustsPlaced: musts + dMusts, pinnedHeld: pinned + dPinned, score, parts: { value, travelMinutes: t.travel, zoneSwitches: t.zones, weatherPenalty: t.weather, imbalance, overpack: t.overpack, overflowMinutes: t.overflow, emptyDays: t.empty }, stops: stopCount + dStops };
+    const timeMinutes = activity + dActivity;
+    const score = value - W.alpha * t.travel - W.beta * t.zones - W.alpha * t.weather - W.gamma * imbalance - W.delta * t.overpack - W.zeta * t.overflow - W.epsilon * t.empty - tau * timeMinutes;
+    return { mustsPlaced: musts + dMusts, pinnedHeld: pinned + dPinned, score, parts: { value, travelMinutes: t.travel, zoneSwitches: t.zones, weatherPenalty: t.weather, imbalance, overpack: t.overpack, overflowMinutes: t.overflow, emptyDays: t.empty, timeMinutes }, stops: stopCount + dStops };
   };
 }
 

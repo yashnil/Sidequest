@@ -2,6 +2,7 @@ import { CONTINENT_OF, EXPERIENCES, type CatalogDestination, type Experience } f
 import type { AdvisorProfile, FactorId, AdvisorInterest } from './profile';
 import { advisorKm } from './origin';
 import { asDestination, type Destination } from './destination';
+import { vacationFit } from './concept';
 import { LIMIT_WORDS, climateFromEditorial, seasonModel, travellerSeason, type Limit, type MonthFit, type SeasonModel } from '../atlas/seasonality';
 
 /**
@@ -80,6 +81,8 @@ export const FACTOR_WEIGHTS: Record<FactorId, number> = {
   crowds: 0.04,
   novelty: 0.06,
   group: 0.03,
+  /* The whole trip against the kind of trip asked for; drops out when the request said nothing about it. */
+  vacation: 0.18,
   similar: 0.14,
 };
 
@@ -682,6 +685,8 @@ export function scoreDestination(input: CatalogDestination | Destination, profil
   const group = groupMeasure(destination, profile);
   exclude(group.exclusion);
   add('group', group.measure);
+  const vacation = vacationFit(destination, profile.concept, { nights: profile.nights ? profile.nights.max : null, kids: profile.kids, adventure: profile.adventure, focused: profile.focus.length > 0 });
+  if (vacation) add('vacation', measured(destination.basis.logistics === 'estimated' ? shrink(vacation.value, 0.7, 0.6) : vacation.value, vacation.basis), vacation.importance);
   const similar = similarMeasure(destination, profile, context.similarTarget ? asDestination(context.similarTarget) : null);
   if (similar) add('similar', similar);
 

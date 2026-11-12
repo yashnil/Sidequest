@@ -4,7 +4,9 @@ import { ADVISOR_INTEREST_LABELS, type FocusKey, type InterestKey } from './answ
 import { arrayWorld, type Destination, type DestinationWorld } from './destination';
 import { profileFrom, type AdvisorProfile, type FactorId } from './profile';
 import { GOOD_MONTH, compareScored, monthWord, scoreDestination, seasonModelFor, type AdvisorExclusion, type ScoredDestination } from './score';
-import { selectShortlist, similarity } from './select';
+import { overlap, selectShortlist, similarity } from './select';
+import { durationVerdict, staysNeeded, vacationFit, type VacationFit } from './concept';
+import { advisorKm } from './origin';
 import { travellerSeason, type Activity } from '../atlas/seasonality';
 import { ADVISOR_SHORTLIST_VERSION, type AdvisorPick, type AdvisorShortlist } from './shortlist-schema';
 
@@ -30,6 +32,7 @@ export const FACTOR_LABELS: Record<FactorId, string> = {
   crowds: 'Crowds',
   novelty: 'Classic or unusual',
   group: 'Your group',
+  vacation: 'How the trip would feel',
   similar: 'Like the one you picked',
 };
 
@@ -221,7 +224,43 @@ function nightsFor(destination: Destination, profile: AdvisorProfile): AdvisorPi
   const { min, ideal, max } = destination.nights;
   if (!profile.nights) return { suggested: ideal, min, max };
   const suggested = Math.min(Math.max(ideal, profile.nights.min), Math.max(min, profile.nights.max));
-  return { suggested: Math.min(suggested, Math.max(max, profile.nights.max)), min, max };
+  /*
+   * Never more than the place carries. Ten nights used to be suggested for a
+   * region whose own range topped out at six; the rest of the time belongs to a
+   * pairing (`lengthFor`), not to more days of the same.
+   */
+  return { suggested: Math.min(suggested, max), min, max };
+}
+
+/**
+ * The trip is longer than this place deserves: say so, and name the best
+ * nearby place to spend the rest on — same country, a different kind of place
+ * (not overlapping ground), close enough to pair (great-circle, never a drive
+ * time), and good for the traveller in its own right.
+ */
+function lengthFor(scored: ScoredDestination, profile: AdvisorProfile, pool: readonly ScoredDestination[]): AdvisorPick['length'] {
+  const nights = profile.nights?.max ?? null;
+  const d = scored.destination;
+  const verdict = durationVerdict(d, nights);
+  if (!verdict.overlong || nights === null) return null;
+  const rest = nights - verdict.best.max;
+  const partner = pool
+    .filter((other) => other.destination.id !== d.id && !other.exclusion)
+    .filter((other) => other.destination.countries.some((code) => d.countries.includes(code)))
+    .filter((other) => overlap(other.destination, d) < 0.2 && !other.destination.parents.includes(d.id) && !d.parents.includes(other.destination.id))
+    .filter((other) => other.destination.kind !== 'country' && other.destination.nights.min <= Math.max(2, rest))
+    .map((other) => ({ other, km: Math.round(advisorKm(d.center, other.destination.center)) }))
+    .filter(({ km }) => km >= 40 && km <= 700)
+    .sort((a, b) => b.other.score - a.other.score)[0];
+  const range = verdict.best.min === verdict.best.max ? `${verdict.best.max} nights` : `${verdict.best.min}–${verdict.best.max} nights`;
+  const note = partner
+    ? `Best for ${range}. With ${nights}, spend the rest in ${partner.other.destination.name} (about ${roundKm(partner.km)} km away).`
+    : `Best for ${range}. With ${nights}, consider pairing it with another region.`;
+  return { note, best: verdict.best, pairWith: partner ? { id: partner.other.destination.id, name: partner.other.destination.name, km: partner.km } : null };
+}
+
+function roundKm(km: number): number {
+  return km < 100 ? Math.round(km / 10) * 10 : Math.round(km / 50) * 50;
 }
 
 function interestLabel(key: InterestKey): string {
@@ -233,30 +272,55 @@ function joinWords(words: readonly string[]): string {
   return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
 }
 
-function whyFor(scored: ScoredDestination, profile: AdvisorProfile, windowLabel: string): string {
+function whyFor(scored: ScoredDestination, profile: AdvisorProfile, windowLabel: string, feel: VacationFit | null): string {
   const strong = scored.interestFit.filter((fit) => fit.value >= 0.6).map((fit) => interestLabel(fit.key));
   const weak = scored.interestFit.filter((fit) => fit.value < 0.4).map((fit) => interestLabel(fit.key));
-  const parts: string[] = [];
-  if (strong.length > 0) parts.push(`Strong on ${joinWords(strong)}`);
-  else {
-    const best = Object.entries(scored.destination.experiences)
-      .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-      .slice(0, 2)
-      .map(([experience]) => EXPERIENCE_LABELS[experience as Experience].toLowerCase());
-    parts.push(`Best for ${joinWords(best)}`);
+  const signature = Object.entries(scored.destination.experiences)
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+    .slice(0, 2)
+    .map(([experience]) => EXPERIENCE_LABELS[experience as Experience].toLowerCase());
+  /*
+   * Led by what this place is — its own signature and what carries the kind of
+   * trip asked for — so six cards do not open with the same "Strong on …".
+   */
+  let sentence: string;
+  if (feel && feel.carries.length > 0) {
+    /* What carries the kind of trip, then how the trip would run: the verdict itself is the card's own line (`feel.basis`). */
+    sentence = `${capitalise(joinWords(feel.carries.slice(0, 3)))}; ${logisticsOf(scored.destination)}`;
+  } else if (strong.length > 0) {
+    sentence = `${capitalise(joinWords(signature))}; strong on ${joinWords(strong)}`;
+  } else {
+    sentence = `Best for ${joinWords(signature)}`;
   }
-  if (profile.months) parts.push(`in season ${windowLabel === 'Any time of year' ? 'all year' : `in ${windowLabel}`}`);
-  const adventure = scored.factors.find((factor) => factor.id === 'adventure');
-  if (adventure?.measure.kind === 'measured' && adventure.measure.value >= 0.9) parts.push('at the level of adventure you want');
-  const budget = scored.factors.find((factor) => factor.id === 'budget');
-  if (budget?.measure.kind === 'measured' && budget.measure.value >= 0.99 && profile.budget !== null) parts.push('within budget');
-  let sentence = parts.join(', ');
-  if (weak.length > 0 && strong.length > 0) sentence += `; lighter on ${joinWords(weak)}`;
+  const season = scored.factors.find((factor) => factor.id === 'season');
+  if (profile.months && season?.measure.kind === 'measured' && season.measure.value < 0.8) {
+    sentence += `, though only partly in season ${windowLabel === 'Any time of year' ? '' : `in ${windowLabel}`}`.trimEnd();
+  }
+  if (weak.length > 0 && (strong.length > 0 || feel)) sentence += `; lighter on ${joinWords(weak)}`;
   return `${sentence}.`;
 }
 
-function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile): string[] {
-  const out: string[] = [];
+/** How the trip would run, in words: where to sleep and whether a car is needed. */
+function logisticsOf(d: Destination): string {
+  const needed = staysNeeded(d);
+  const names = d.bases.slice(0, 2);
+  const stays =
+    names.length === 0
+      ? needed === 1 ? 'one base' : `${needed} places to stay`
+      : needed === 1
+        ? names.length > 1 ? `one base in ${names[0]} or ${names[1]}` : `one base in ${names[0]}`
+        : `split between ${joinWords(d.bases.slice(0, Math.min(needed, 3)))}`;
+  const car = d.access.car === 'essential' ? 'you will want a car' : d.access.car === 'helpful' ? 'easier with a car' : d.access.car === 'unnecessary' ? 'no car needed' : null;
+  return car ? `${stays}, ${car}` : stays;
+}
+
+function capitalise(text: string): string {
+  return text ? `${text[0]!.toUpperCase()}${text.slice(1)}` : text;
+}
+
+function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile, feel: VacationFit | null = null): string[] {
+  /* What works against the kind of trip asked for comes first: it is the trade-off the traveller most needs to see. */
+  const out: string[] = [...(feel?.against ?? []).slice(0, 2)];
   for (const factor of scored.factors) {
     if (factor.measure.kind !== 'measured' || factor.measure.value >= 0.6) continue;
     switch (factor.id) {
@@ -399,8 +463,9 @@ function gettingThere(scored: ScoredDestination, profile: AdvisorProfile): strin
   return `${hops}${airports ? ` (${airports})` : ''}${distance}.`;
 }
 
-export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, role: AdvisorPick['role'], earlier: readonly ScoredDestination[]): AdvisorPick {
+export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, role: AdvisorPick['role'], earlier: readonly ScoredDestination[], pool: readonly ScoredDestination[] = []): AdvisorPick {
   const d = scored.destination;
+  const feel = vacationFit(d, profile.concept, { nights: profile.nights ? profile.nights.max : null, kids: profile.kids, adventure: profile.adventure, focused: profile.focus.length > 0 });
   const monthValue = (month: number) => scored.seasonMonths[month - 1]?.value ?? 0;
   const peak = Math.max(0, ...scored.bestMonths.map(monthValue));
   const windowMonths = scored.bestMonths.filter((month) => monthValue(month) >= (peak >= 0.85 ? 0.85 : GOOD_MONTH)).sort((a, b) => a - b);
@@ -425,7 +490,7 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     coverage: Math.round(scored.coverage * 100) / 100,
     match: matchOf(scored),
     pitch: d.pitch,
-    why: whyFor(scored, profile, windowLabel),
+    why: whyFor(scored, profile, windowLabel, feel),
     experiences: relevantHighlights(d, profile.focus),
     strongFor: scored.interestFit.filter((fit) => fit.value >= 0.6).map((fit) => ADVISOR_INTEREST_LABELS[fit.key]),
     window: { months: windowMonths.length > 0 ? windowMonths : scored.bestMonths, label: windowLabel },
@@ -435,7 +500,7 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     gettingAround: d.access.note,
     cost: { level: costLevel, label: `${COST_LABELS[costLevel]!}${d.basis.cost !== 'estimated' ? '' : d.costEvidence ? ' (estimated)' : ' (estimated from national price levels)'}`, versusBudget, rooms: roomsLine(d) },
     bases: [...d.bases],
-    tradeoffs: tradeoffsFor(scored, profile),
+    tradeoffs: tradeoffsFor(scored, profile, feel),
     unverified: unverifiedFor(scored, profile),
     differsBy: role === 'primary' || earlier.length > 0 ? differsBy(scored, earlier) : null,
     distanceKm: scored.distanceKm,
@@ -452,6 +517,8 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     basis: d.origin === 'editorial' ? 'editorial' : d.origin === 'research' ? 'research' : 'open_data',
     confidence: Math.round(d.confidence * 100) / 100,
     seasonNote: seasonNoteFor(scored, profile),
+    length: lengthFor(scored, profile, pool),
+    feel: feel ? { value: feel.value, basis: feel.basis, carries: feel.carries, against: feel.against } : null,
     measured: d.measured !== null,
     suggested: false,
   };
@@ -591,12 +658,12 @@ export function buildAdvisorShortlist(input: BuildInput): AdvisorShortlist {
   const earlier: ScoredDestination[] = [];
   const signatures = signaturesOf(selection.picks, profile);
   const picks = selection.picks.map((scored, index) => {
-    const pick = { ...pickFrom(scored, profile, 'primary', earlier), signature: signatures[index] || null, suggested: proposed.has(scored.destination.id) };
+    const pick = { ...pickFrom(scored, profile, 'primary', earlier, ranked), signature: signatures[index] || null, suggested: proposed.has(scored.destination.id) };
     earlier.push(scored);
     return pick;
   });
   const alternateSignatures = signaturesOf([...selection.picks, ...selection.alternates], profile).slice(selection.picks.length);
-  const alternates = selection.alternates.map((scored, index) => ({ ...pickFrom(scored, profile, 'alternate', selection.picks), signature: alternateSignatures[index] || null, suggested: proposed.has(scored.destination.id) }));
+  const alternates = selection.alternates.map((scored, index) => ({ ...pickFrom(scored, profile, 'alternate', selection.picks, ranked), signature: alternateSignatures[index] || null, suggested: proposed.has(scored.destination.id) }));
 
   const excludedCounts: Record<string, number> = {};
   for (const entry of excluded) excludedCounts[entry.exclusion!.code] = (excludedCounts[entry.exclusion!.code] ?? 0) + 1;
@@ -628,9 +695,27 @@ export function buildAdvisorShortlist(input: BuildInput): AdvisorShortlist {
   const previousIds = input.previous ? input.previous.picks.map((pick) => pick.id) : [];
   const changes: string[] = [];
   if (input.previous) {
-    const added = picks.filter((pick) => !previousIds.includes(pick.id)).map((pick) => pick.name);
+    /*
+     * Each change with its reason, read from the new scoring of the same world:
+     * a place that arrived says what now fits, a place that left says what
+     * ruled it out or held it back. The whole world is re-read on every answer,
+     * so new places can appear that were never on the earlier list.
+     */
+    const reasonIn = (pick: AdvisorPick) => (pick.feel && pick.feel.value >= 0.75 ? pick.feel.basis : pick.why.replace(/\.$/, '').toLowerCase());
+    const added = picks.filter((pick) => !previousIds.includes(pick.id));
     const kept = picks.filter((pick) => previousIds.includes(pick.id)).map((pick) => pick.name);
-    if (added.length > 0) changes.push(`New: ${joinWords(added)}.`);
+    for (const pick of added.slice(0, 3)) changes.push(`New: ${pick.name} — ${reasonIn(pick)}.`);
+    const nowIds = new Set([...picks, ...alternates].map((pick) => pick.id));
+    for (const old of input.previous.picks.filter((pick) => !nowIds.has(pick.id)).slice(0, 3)) {
+      const out = excluded.find((entry) => entry.destination.id === old.id);
+      const still = ranked.find((entry) => entry.destination.id === old.id);
+      const weakest = still?.factors
+        .filter((factor) => factor.measure.kind === 'measured')
+        .sort((a, b) => a.weight * (1 - (a.measure as { value: number }).value) - b.weight * (1 - (b.measure as { value: number }).value))
+        .pop();
+      const why = out?.exclusion?.message.replace(/\.$/, '') ?? (weakest && weakest.measure.kind === 'measured' ? `${FACTOR_LABELS[weakest.id].toLowerCase()}: ${weakest.measure.basis}` : 'others now fit better');
+      changes.push(`Dropped: ${old.name} — ${why}.`);
+    }
     if (kept.length > 0) changes.push(`Still here: ${joinWords(kept)}.`);
     if (added.length === 0) changes.push('Nothing better fits that change — the list held.');
   }

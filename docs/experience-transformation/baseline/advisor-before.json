@@ -1,0 +1,280 @@
+[
+  {
+    "text": "I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.",
+    "discovery": {
+      "focus": [],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [],
+      "request": "I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.",
+      "pursuits": [
+        "wellness"
+      ],
+      "terms": [
+        "retreat",
+        "feel",
+        "because",
+        "life",
+        "stressful",
+        "recently"
+      ],
+      "phrase": "retreat feel because life stressful recently"
+    },
+    "picks": [
+      {
+        "name": "Tongariro & Rotorua",
+        "why": "Strong on spa and wellness, in season in March.",
+        "nights": {
+          "suggested": 10,
+          "min": 3,
+          "max": 10
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Arenal & Monteverde",
+        "why": "Strong on spa and wellness, in season in March.",
+        "nights": {
+          "suggested": 10,
+          "min": 3,
+          "max": 8
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Maldives",
+        "why": "Strong on spa and wellness, in season in March.",
+        "nights": {
+          "suggested": 10,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong"
+      }
+    ],
+    "alternates": [
+      "Kumano Kodo",
+      "Pucón & Chile’s Lake District",
+      "Bali"
+    ]
+  },
+  {
+    "text": "Two weeks of trekking in July, anywhere in the world, moderate budget.",
+    "discovery": {
+      "focus": [
+        "mountains",
+        "hiking"
+      ],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [
+        "region"
+      ],
+      "request": "Two weeks of trekking in July, anywhere in the world, moderate budget.",
+      "focusRanked": false
+    },
+    "picks": [
+      {
+        "name": "Cordillera Blanca",
+        "why": "Strong on mountains and trekking and hiking, in season in July, within budget.",
+        "nights": {
+          "suggested": 14,
+          "min": 6,
+          "max": 18
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Madeira",
+        "why": "Strong on mountains and trekking and hiking, in season in July, within budget.",
+        "nights": {
+          "suggested": 14,
+          "min": 4,
+          "max": 12
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Issyk-Kul & Karakol",
+        "why": "Strong on mountains and trekking and hiking, in season in July, within budget.",
+        "nights": {
+          "suggested": 14,
+          "min": 4,
+          "max": 12
+        },
+        "match": "strong"
+      }
+    ],
+    "alternates": [
+      "Réunion",
+      "West MacDonnell Ranges",
+      "Transylvania & the Carpathians"
+    ]
+  },
+  {
+    "text": "A gentle week of nature with my parents, no car.",
+    "discovery": {
+      "focus": [],
+      "assumptions": [
+        "No activity named, so we looked for beautiful scenery. Tell us what you’d like to do."
+      ],
+      "refinements": [],
+      "excluded": [],
+      "asked": [],
+      "request": "A gentle week of nature with my parents, no car.",
+      "moods": [
+        "scenic"
+      ],
+      "adventure": "comfortable",
+      "terms": [
+        "gentle"
+      ],
+      "phrase": "gentle"
+    },
+    "picks": [
+      {
+        "name": "Bernese Oberland",
+        "why": "Strong on beautiful scenery, at the level of adventure you want.",
+        "nights": {
+          "suggested": 6,
+          "min": 3,
+          "max": 12
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Sydney & the Blue Mountains",
+        "why": "Strong on beautiful scenery, at the level of adventure you want.",
+        "nights": {
+          "suggested": 7,
+          "min": 4,
+          "max": 12
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Amalfi Coast",
+        "why": "Strong on beautiful scenery, at the level of adventure you want.",
+        "nights": {
+          "suggested": 5,
+          "min": 3,
+          "max": 9
+        },
+        "match": "strong"
+      }
+    ],
+    "alternates": [
+      "Khao Sok",
+      "Rio de Janeiro & Costa Verde",
+      "Queenstown & Wānaka"
+    ]
+  },
+  {
+    "text": "Warm beaches and snorkelling over Christmas, from London, with the kids.",
+    "discovery": {
+      "focus": [
+        "beaches"
+      ],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [
+        "party"
+      ],
+      "request": "Warm beaches and snorkelling over Christmas, from London, with the kids.",
+      "focusRanked": true,
+      "swimStyle": "snorkel"
+    },
+    "picks": [
+      {
+        "name": "Turks & Caicos",
+        "why": "Strong on beaches and coast, in season in December–January.",
+        "nights": {
+          "suggested": 7,
+          "min": 4,
+          "max": 10
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Zanzibar",
+        "why": "Strong on beaches and coast, in season in January.",
+        "nights": {
+          "suggested": 6,
+          "min": 3,
+          "max": 10
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Krabi & the Andaman Coast",
+        "why": "Strong on beaches and coast, in season in December–January.",
+        "nights": {
+          "suggested": 8,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong"
+      }
+    ],
+    "alternates": [
+      "Guadeloupe",
+      "Yucatán & the Riviera Maya",
+      "Maldives"
+    ]
+  },
+  {
+    "text": "Ten days in October, culture and food, I love walking cities.",
+    "discovery": {
+      "focus": [
+        "culture_food",
+        "cities"
+      ],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [],
+      "request": "Ten days in October, culture and food, I love walking cities.",
+      "focusRanked": true
+    },
+    "picks": [
+      {
+        "name": "Kyoto & Nara",
+        "why": "Strong on culture and food and cities, in season in October.",
+        "nights": {
+          "suggested": 9,
+          "min": 3,
+          "max": 9
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Québec City & Charlevoix",
+        "why": "Strong on culture and food and cities, in season in October.",
+        "nights": {
+          "suggested": 9,
+          "min": 3,
+          "max": 9
+        },
+        "match": "strong"
+      },
+      {
+        "name": "Tuscany",
+        "why": "Strong on culture and food and cities, in season in October.",
+        "nights": {
+          "suggested": 9,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong"
+      }
+    ],
+    "alternates": [
+      "Buenos Aires",
+      "Istanbul",
+      "Marrakech"
+    ]
+  }
+]

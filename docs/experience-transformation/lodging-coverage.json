@@ -1,0 +1,195 @@
+{
+  "measuredAt": "2026-11-12T16:16:55.049Z",
+  "report": [
+    {
+      "base": "Hongū (Kumano), Japan",
+      "radiusKm": 4,
+      "overture": {
+        "named": 36,
+        "withWebsite": 28,
+        "onsenByName": 6,
+        "within3km": 36,
+        "hotSprings": 10,
+        "bytes": 4065413,
+        "ms": 2808
+      },
+      "osm": {
+        "named": 39,
+        "withWebsite": 10,
+        "onsenMapped": 0,
+        "parkingMapped": 0,
+        "stars": 1,
+        "within3km": 38,
+        "ms": 68998
+      },
+      "sampleNames": {
+        "overture": [
+          "湯の峯荘",
+          "Ryokan Yunomineso",
+          "ゆのさと",
+          "民宿ゆの里",
+          "民宿あづまや荘",
+          "旅館あづまや"
+        ],
+        "osm": [
+          "Yunosato",
+          "j hoppers",
+          "民宿すみや",
+          "旅の宿 しば",
+          "Ashita-no-Mori",
+          "WATAZE OUTDOOR「おとなしの郷」"
+        ]
+      }
+    },
+    {
+      "base": "Vík, Iceland",
+      "radiusKm": 12,
+      "overture": {
+        "named": 29,
+        "withWebsite": 20,
+        "onsenByName": 0,
+        "within3km": 17,
+        "hotSprings": 0,
+        "bytes": 3991684,
+        "ms": 1308
+      },
+      "osm": {
+        "named": 30,
+        "withWebsite": 13,
+        "onsenMapped": 0,
+        "parkingMapped": 0,
+        "stars": 0,
+        "within3km": 10,
+        "ms": 34293,
+        "error": "The map data service is busy. (client); answered by one direct request"
+      },
+      "sampleNames": {
+        "overture": [
+          "Hotel Katla",
+          "Hótel Kría",
+          "Vik Camping",
+          "Tjaldstæðið Vík í Mýrdal - Campsite Vík",
+          "Vík Apartments",
+          "Like Vik"
+        ],
+        "osm": [
+          "Hostel Vík",
+          "Hotel Katla",
+          "Hótel Búrfell",
+          "Ársalir",
+          "Hótel Vík í Mýrdal",
+          "Hótel Dyrhólaey"
+        ]
+      }
+    },
+    {
+      "base": "Karatu, Tanzania",
+      "radiusKm": 12,
+      "overture": {
+        "named": 49,
+        "withWebsite": 35,
+        "onsenByName": 0,
+        "within3km": 21,
+        "hotSprings": 0,
+        "bytes": 3300295,
+        "ms": 1259
+      },
+      "osm": {
+        "named": 0,
+        "withWebsite": 0,
+        "onsenMapped": 0,
+        "parkingMapped": 0,
+        "stars": 0,
+        "within3km": 0,
+        "ms": 497,
+        "error": "The map data service is busy.; direct request failed: HTTP 502"
+      },
+      "sampleNames": {
+        "overture": [
+          "Ngorongoro Farm House",
+          "Wellworth Ngorongoro Oldeani Mountain Lodge",
+          "Tanganyika Wilderness Resort",
+          "Neptune Ngorongoro Luxury Lodge",
+          "Hhando Coffee Lodge",
+          "Ngorongoro Lodge member of Meliá Collection"
+        ],
+        "osm": []
+      }
+    },
+    {
+      "base": "Portree, Scotland",
+      "radiusKm": 12,
+      "overture": {
+        "named": 123,
+        "withWebsite": 101,
+        "onsenByName": 0,
+        "within3km": 86,
+        "hotSprings": 0,
+        "bytes": 1826264,
+        "ms": 927
+      },
+      "osm": {
+        "named": 0,
+        "withWebsite": 0,
+        "onsenMapped": 0,
+        "parkingMapped": 0,
+        "stars": 0,
+        "within3km": 0,
+        "ms": 187,
+        "error": "The map data service is busy.; direct request failed: HTTP 502"
+      },
+      "sampleNames": {
+        "overture": [
+          "Skeabost View Pods",
+          "The Wee Skye Lodge",
+          "Stoney Cottage",
+          "Blacksmith B&B",
+          "Glenhaultin Luxury Bed & Breakfast",
+          "Dunn Cruinn Bed & Breakfast"
+        ],
+        "osm": []
+      }
+    },
+    {
+      "base": "Mammoth Lakes, USA",
+      "radiusKm": 12,
+      "overture": {
+        "named": 148,
+        "withWebsite": 121,
+        "onsenByName": 0,
+        "within3km": 116,
+        "hotSprings": 0,
+        "bytes": 5640057,
+        "ms": 2712
+      },
+      "osm": {
+        "named": 65,
+        "withWebsite": 22,
+        "onsenMapped": 0,
+        "parkingMapped": 0,
+        "stars": 0,
+        "within3km": 32,
+        "ms": 38290,
+        "error": "The map data service is busy. (client); answered by one direct request"
+      },
+      "sampleNames": {
+        "overture": [
+          "Coldwater Creek Campground",
+          "Crystal Crag Lodge",
+          "Coldwater Campground",
+          "Lake George Camp Ground, Mammoth Lakes, California",
+          "Woods Lodge",
+          "Lake Mary Campground"
+        ],
+        "osm": [
+          "Our Peace of Mammoth",
+          "Krystal Villa East Rentals",
+          "101 Great Escapes",
+          "Davison St Guest House",
+          "Mammoth Condo",
+          "White Horse Inn"
+        ]
+      }
+    }
+  ]
+}

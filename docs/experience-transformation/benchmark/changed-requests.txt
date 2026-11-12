@@ -1,0 +1,25 @@
+spring-hiking-no-snow | NEW: {'daily highs ≥ 14 °C'} | FIXED: set()
+     Hiking in April without snow on the trails, warm days, somewhere in Europe.
+     before ['Crete', 'Tenerife & La Gomera', 'Madeira']
+     after  ['Crete', 'Tenerife & La Gomera', 'Saxon & Bohemian Switzerland']
+pacific-islands | NEW: set() | FIXED: {'inside the named area'}
+     A South Pacific island escape in June, lagoons and snorkelling, somewhere less developed than Bora B
+     before ['Ningaloo Coast', 'Taveuni & Vanua Levu', 'Great Barrier Reef & Daintree']
+     after  ['Great Barrier Reef & Daintree', 'Vanuatu: Efate, Tanna & Santo', 'Society Islands']
+whales | NEW: {'offers marine_wildlife'} | FIXED: set()
+     Where can I see whales in August and also do some hiking?
+     before ['The Azores', 'Kaikōura', 'Maui']
+     after  ['The Azores', 'Kaikōura', 'Olympic Peninsula']
+cheap-anywhere-warm-feb | NEW: {'feasible (beach) by climate normals'} | FIXED: set()
+     Somewhere warm and really cheap in February for three weeks, beaches and good food.
+     before ['Malaysia', 'Yucatán & the Riviera Maya', 'Maharashtra']
+     after  ['Malaysia', 'Yucatán & the Riviera Maya', 'Rajasthan']
+rc-vague-scenery-cheap | NEW: set() | FIXED: {'price level ≤ 0.85'}
+     Good scenery, not too expensive.
+     before ['Crete', 'Wind River Range', 'High Atlas']
+     after  ['Crete', 'Khao Sok', 'Ladakh']
+rc-vague-recharge-february | NEW: set() | FIXED: {'daily highs ≥ 22 °C'}
+     I am burnt out and need to switch off for ten days in February, somewhere warm and peaceful.
+     before ['Jamaica', 'Tongariro & Rotorua', 'Maldives']
+     after  ['Jamaica', 'Palawan: El Nido & Coron', 'Pucón & Chile’s Lake District']
+net 0

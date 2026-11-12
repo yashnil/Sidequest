@@ -6,7 +6,7 @@ export default defineConfig({
   resolve: base.resolve,
   oxc: base.oxc,
   test: {
-    include: ['apps/web/src/lib/destinations/advisor-compare.harness.ts', 'packages/core/src/advisor/eval/benchmark/*.harness.ts', 'apps/web/src/lib/atlas/*.harness.ts', 'packages/atlas/build/*.harness.ts', 'packages/atlas/src/*.harness.ts', 'apps/web/src/lib/planning/evaluation/*.harness.ts'],
+    include: ['apps/web/src/lib/destinations/advisor-compare.harness.ts', 'apps/web/src/lib/destinations/advisor-requests.harness.ts', 'packages/core/src/advisor/eval/benchmark/*.harness.ts', 'apps/web/src/lib/atlas/*.harness.ts', 'packages/atlas/build/*.harness.ts', 'packages/atlas/src/*.harness.ts', 'apps/web/src/lib/planning/evaluation/*.harness.ts'],
     environment: 'node',
     passWithNoTests: false,
   },

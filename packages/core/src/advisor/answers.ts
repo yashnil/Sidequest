@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { WORLD_REGIONS, type Experience } from './catalog/schema';
+import { CONCEPT_KEYS } from './concept';
 
 /**
  * WHAT THE DESTINATION ADVISOR LEARNS THAT THE COMPOSER DID NOT ALREADY HOLD.
@@ -224,6 +225,14 @@ export const advisorAnswersSchema = z.object({
   moods: z.array(z.enum(MOOD_KEYS)).max(MOOD_KEYS.length).optional(),
   /** What the traveller typed, verbatim, so a reading can always be checked against it. */
   request: z.string().max(600).optional(),
+  /**
+   * What kind of vacation the request describes (restorative, a pilgrimage, a
+   * family beach week …), weighted, read from the traveller's words. Scored as
+   * the whole trip against the concept's shape (`concept.ts#vacationFit`).
+   */
+  concept: z.array(z.object({ key: z.enum(CONCEPT_KEYS), weight: z.number().min(0).max(1) })).max(5).optional(),
+  /** How the concept was read, in words the traveller can correct. */
+  conceptNotes: z.array(z.string().min(1).max(200)).max(3).optional(),
   /** What Sidequest took as given without being told, in words, so it can be corrected. */
   assumptions: z.array(z.string().min(1).max(160)).max(12).default([]),
   refinements: z.array(z.enum(REFINEMENTS)).max(20).default([]),

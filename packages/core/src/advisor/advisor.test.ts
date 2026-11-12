@@ -118,7 +118,8 @@ describe('reading what somebody typed', () => {
     /* The word is a leaning, shown back as an assumption — never a stated interest. */
     expect(parsed.answers.discovery?.moods).toEqual(['scenic']);
     expect(parsed.answers.discovery?.pursuits).toBeUndefined();
-    expect(parsed.assumptions.join(' ')).toMatch(/No activity named/);
+    /* Said back as the concept reading (2026-11): outdoors as easy time in nature, correctable. */
+    expect(parsed.assumptions.join(' ')).toMatch(/“outdoors” as easy time in nature/);
   });
 
   it('reads a request with no activity in it as leanings, not as arbitrary words to look up', () => {

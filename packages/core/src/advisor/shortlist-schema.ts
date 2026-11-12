@@ -74,6 +74,20 @@ export const advisorPickSchema = z.object({
   confidence: z.number().default(0.9),
   /** When it is good, by activity, in words — "The high trails: usually July–September". */
   seasonNote: z.string().nullable().default(null),
+  /**
+   * When the trip is longer than this place deserves: the honest length, and a
+   * nearby place to spend the rest on. Distance is great-circle, never a drive.
+   */
+  length: z
+    .object({
+      note: z.string(),
+      best: z.object({ min: z.number(), max: z.number() }),
+      pairWith: z.object({ id: z.string(), name: z.string(), km: z.number() }).nullable(),
+    })
+    .nullable()
+    .default(null),
+  /** What kind of trip this place makes for the traveller, when the request described one ("suits a restful trip"). */
+  feel: z.object({ value: z.number(), basis: z.string(), carries: z.array(z.string()), against: z.array(z.string()) }).nullable().default(null),
   /** True when the climate behind the season reading is measured normals rather than an editorial estimate. */
   measured: z.boolean().default(false),
   /** True when a research model proposed this place for the request; it was then found in the atlas and ranked like any other. */

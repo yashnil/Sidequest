@@ -100,6 +100,18 @@ describe('defaultProfileFor', () => {
     expect(composed.transport.willDrive).toBe(false);
     expect(composed.dailyIntensity).toBe('light');
   });
+  it('starts a restful trip chosen in "Help me choose" slow and light, without overriding what the traveller said', () => {
+    const base = { schemaVersion: 1, themes: [], adults: 2, children: 0, travelerNeeds: [], mustDoDecisions: [], skipped: [], updatedAt: '2026-08-01T00:00:00.000Z' };
+    const restful = { ...base, discovery: { focus: [], assumptions: [], refinements: [], excluded: [], asked: [], concept: [{ key: 'restoration', weight: 0.6 }, { key: 'family_bonding', weight: 0.4 }] } };
+    const fromConcept = defaultProfileFor(TRIP, restful as never);
+    expect(fromConcept.pace).toBe('slow');
+    expect(fromConcept.dailyIntensity).toBe('light');
+    /* The traveller's own answer wins over the concept. */
+    expect(defaultProfileFor(TRIP, { ...restful, pace: 'packed' } as never).pace).toBe('fast');
+    /* A trekking trip is not slowed down by the concept reading. */
+    const trek = { ...base, discovery: { ...restful.discovery, concept: [{ key: 'trekking', weight: 1 }] } };
+    expect(defaultProfileFor(TRIP, trek as never).pace).toBe('balanced');
+  });
 });
 
 describe('the composition call is told the traveller and the trip, never the POI universe', () => {

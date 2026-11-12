@@ -12,6 +12,7 @@ import {
   type Refinement,
 } from './answers';
 import { originPointFromText, type OriginPoint } from './origin';
+import { conceptMoods, type ConceptWeight } from './concept';
 
 /**
  * ONE READING OF EVERYTHING THE TRAVELLER SAID, IN THE TERMS THE SCORER USES.
@@ -56,6 +57,8 @@ export interface AdvisorProfile {
   /** Countries in scope (a "domestic" trip). Null = any. */
   countries: string[] | null;
   kids: boolean;
+  /** What kind of vacation the request describes, weighted. Empty when the words said nothing about it. */
+  concept: ConceptWeight[];
   olderTravellers: boolean;
   limitedMobility: boolean;
   altitudeSensitive: boolean;
@@ -117,6 +120,7 @@ export const FACTOR_IDS = [
   'crowds',
   'novelty',
   'group',
+  'vacation',
   'similar',
 ] as const;
 export type FactorId = (typeof FACTOR_IDS)[number];
@@ -229,6 +233,17 @@ function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAns
   for (const key of discovery?.pursuits ?? []) interests.push({ key, weight: 1, mapping: PURSUIT_EXPERIENCES[key] });
   /* A mood speaks only while nothing more specific has been said. */
   if (interests.length === 0) for (const key of discovery?.moods ?? []) interests.push({ key, weight: 1, mapping: MOOD_EXPERIENCES[key], any: true });
+  /*
+   * The kind of trip widens what is looked for, at a lower weight than anything
+   * named: "a retreat, outdoors stuff" keeps spa as its stated interest and adds
+   * gentle nature and rest, instead of dropping "outdoors" because an activity
+   * was named.
+   */
+  /* Only while no broad activity was named: "a family ski week" is a ski trip, and "family" must not bring beaches into it. */
+  for (const { mood, weight } of focus.length > 0 ? [] : conceptMoods(discovery?.concept ?? [])) {
+    if (interests.some((interest) => interest.key === mood)) continue;
+    interests.push({ key: mood, weight: Math.min(0.7, 0.35 + weight), mapping: MOOD_EXPERIENCES[mood], any: true });
+  }
   return interests;
 }
 
@@ -378,6 +393,7 @@ export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
     regions: discovery?.regions?.length ? [...discovery.regions] : null,
     countries: answers.tripScope === 'domestic' && origin?.countryCode ? [origin.countryCode] : discovery?.countries?.length ? [...discovery.countries] : null,
     kids: answers.children > 0 || needs.has('kids_under_12'),
+    concept: [...(discovery?.concept ?? [])],
     olderTravellers: needs.has('seniors_in_group'),
     limitedMobility: needs.has('mobility_limited'),
     altitudeSensitive: needs.has('altitude_sensitive'),

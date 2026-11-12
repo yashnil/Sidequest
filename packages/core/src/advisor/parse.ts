@@ -5,6 +5,7 @@ import { originPointFromText } from './origin';
 import { REGION_GROUPS, REGION_GROUP_LABELS, type QuestionId } from './questions';
 import { monthsLabel } from './advise';
 import { seasonMonthsForTraveller } from './profile';
+import { conceptPhrase, readConcept } from './concept';
 import type { PlaceMention } from '../atlas/atlas';
 import { atlasTokens } from '../atlas/lexical';
 
@@ -63,7 +64,8 @@ const FOCUS_PATTERNS: [RegExp, FocusKey[]][] = [
 const PURSUIT_PATTERNS: [RegExp, PursuitKey][] = [
   [/\b(stargaz\w+|star[- ]gaz\w+|dark sk(y|ies)|night sk(y|ies)|milky way|astro(nomy|photography|tourism)|meteor showers?|see the stars|starry (sk(y|ies)|nights?)|sleep(ing)? under the stars)\b/, 'stargazing'],
   [/\b(hot springs?|onsens?|thermal (baths?|springs?|pools?|spas?|waters?)|geothermal (baths?|pools?|lagoons?|spas?)|hot pools?|natural hot tubs?)\b/, 'hot_springs'],
-  [/\b(spas?|wellness|yoga|retreats?|detox|pamper\w*|massages?)\b/, 'wellness'],
+  /* "Retreat" alone is a kind of trip — somewhere restful — read by `concept.ts`, not a spa booking: "a nice retreat" ranked on spa strength found an alpine crossing. "Yoga retreat" is still read through "yoga". */
+  [/\b(spas?|wellness|yoga|detox|pamper\w*|massages?)\b/, 'wellness'],
   [/\b(kayak\w*|canoe\w*|paddl\w+|(white[- ]?water )?raft(ing)?|sail(ing)?|boat(ing| trips?| tours?)|packraft\w*|houseboats?)\b/, 'paddling'],
 ];
 const FOOD_WORDS = /\b(food|foodie|eat(ing)?|cuisine|culinary|gastronom\w+|street food|restaurants?|wine|wineries|vineyards?|tapas|seafood|cooking|coffee|breweries|craft beer|whisky|tastings?)\b/;
@@ -299,7 +301,8 @@ export interface RequestPlaces {
  * "fishing villages" — and those are looked for in the travel guides.
  */
 const REQUEST_FILLER = new Set(
-  'want wanna wanting looking look find finding somewhere anywhere someplace trip trips travel travelling traveling holiday holidays vacation vacations break getaway escape week weeks weekend weekends night nights month months day days people friend friends family families kid kids child children toddler teenager teenagers parent parents couple solo honeymoon budget cheap cheaper expensive inexpensive affordable money cost costs price flight flights flying fly drive driving car rent rental train trains happy fine okay basic love like enjoy prefer need plus maybe possible possibly really quite bit lot lots something anything everything thing things stuff good better great amazing beautiful incredible stunning spectacular nice cool fun interesting lovely pretty gorgeous dramatic less more fewer crowded crowd crowds touristy tourist tourists quiet quieter busy remote underrated hidden gem gems famous popular known unknown season weather warm hot cold cool sunny mild january february march april may june july august september october november december summer winter spring autumn fall early late mid year years time first next last far near close short long world place places destination destinations country region area stay staying hotel hotels lodge lodges guesthouse guesthouses hostel hostels resort resorts moderate comfortable luxury luxurious easy hard fit adventurous adventure adventures experience experiences sensible realistic worth still enough without with also rather instead other another usual type kind style big small little lively relaxed relaxing few many old new possible ideally prefer preferably mostly mainly including include especially particularly along away around about trying try tried done been seen visit visited visiting see seeing going go get getting take taking day-trips daytrips option options idea ideas recommend recommendation suggestions suggest help choose decide where when what which who how why this that these those there here from into onto over under between during after before again only just even ever never always often sometimes already yet soon now thanks thank please hello cheers regards sorry help then than too very much such both either neither each every all any some most least own same different similar alternative alternatives version equivalent unusual class world-class level minimum maximum total per person adults adult aged ages age using use used via within outside inside across through throughout north south east west northern southern eastern western central one two three four five six seven eight nine ten eleven twelve fourteen couple half quarter whole entire lively atmospheric cosy cozy reliable proper real true wild truly completely totally fully mostly partly kind sort mix mixed variety various several nothing anyone everyone someone nobody happy glad keen able unable unforgettable memorable lifetime epic special extraordinary incredible wow relax unwind unwinding chill chilled restful rest peaceful tranquil recharge calm lazy leisurely scenery scenic picturesque breathtaking photogenic romantic romance anniversary proposal birthday graduation celebrate celebrating celebration retirement retired mates buddies pals lads girls guys bachelor bachelorette stag hen party wheelchair wheelchairs user users accessible accessibility disabled disability mobility pregnant elderly senior seniors grandparents grandma grandpa mum mom dad wife husband partner girlfriend boyfriend baby babies toddlers teen teens stroller pushchair difficult difficulty strenuous demanding challenging tough exciting excitement thrill thrilling adrenaline active explore exploring exploration outdoorsy memories focused focus centred centered themed weekender difficult works work suit suits suitable'.split(
+  /* The first words describe the kind of trip or how somebody feels: they are read as a concept (`concept.ts`), never matched as place text. */
+  'stress stressed stressful burnt burned exhausted overwhelmed frazzled tough rough recently lately life because feel feeling feels better rested restore restorative rejuvenate retreat retreats reset decompress outdoor outdoors nature fresh air want wanna wanting looking look find finding somewhere anywhere someplace trip trips travel travelling traveling holiday holidays vacation vacations break getaway escape week weeks weekend weekends night nights month months day days people friend friends family families kid kids child children toddler teenager teenagers parent parents couple solo honeymoon budget cheap cheaper expensive inexpensive affordable money cost costs price flight flights flying fly drive driving car rent rental train trains happy fine okay basic love like enjoy prefer need plus maybe possible possibly really quite bit lot lots something anything everything thing things stuff good better great amazing beautiful incredible stunning spectacular nice cool fun interesting lovely pretty gorgeous dramatic less more fewer crowded crowd crowds touristy tourist tourists quiet quieter busy remote underrated hidden gem gems famous popular known unknown season weather warm hot cold cool sunny mild january february march april may june july august september october november december summer winter spring autumn fall early late mid year years time first next last far near close short long world place places destination destinations country region area stay staying hotel hotels lodge lodges guesthouse guesthouses hostel hostels resort resorts moderate comfortable luxury luxurious easy hard fit adventurous adventure adventures experience experiences sensible realistic worth still enough without with also rather instead other another usual type kind style big small little lively relaxed relaxing few many old new possible ideally prefer preferably mostly mainly including include especially particularly along away around about trying try tried done been seen visit visited visiting see seeing going go get getting take taking day-trips daytrips option options idea ideas recommend recommendation suggestions suggest help choose decide where when what which who how why this that these those there here from into onto over under between during after before again only just even ever never always often sometimes already yet soon now thanks thank please hello cheers regards sorry help then than too very much such both either neither each every all any some most least own same different similar alternative alternatives version equivalent unusual class world-class level minimum maximum total per person adults adult aged ages age using use used via within outside inside across through throughout north south east west northern southern eastern western central one two three four five six seven eight nine ten eleven twelve fourteen couple half quarter whole entire lively atmospheric cosy cozy reliable proper real true wild truly completely totally fully mostly partly kind sort mix mixed variety various several nothing anyone everyone someone nobody happy glad keen able unable unforgettable memorable lifetime epic special extraordinary incredible wow relax unwind unwinding chill chilled restful rest peaceful tranquil recharge calm lazy leisurely scenery scenic picturesque breathtaking photogenic romantic romance anniversary proposal birthday graduation celebrate celebrating celebration retirement retired mates buddies pals lads girls guys bachelor bachelorette stag hen party wheelchair wheelchairs user users accessible accessibility disabled disability mobility pregnant elderly senior seniors grandparents grandma grandpa mum mom dad wife husband partner girlfriend boyfriend baby babies toddlers teen teens stroller pushchair difficult difficulty strenuous demanding challenging tough exciting excitement thrill thrilling adrenaline active explore exploring exploration outdoorsy memories focused focus centred centered themed weekender difficult works work suit suits suitable'.split(
     /\s+/,
   ),
 );
@@ -536,10 +539,25 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
       const kept = moods.slice(0, 3);
       patchDiscovery({ moods: kept });
       for (const key of kept) readings.push({ kind: 'focus', label: MOOD_LABELS[key] });
-      assumptions.push(`No activity named, so we looked for ${kept.map((key) => MOOD_LABELS[key].toLowerCase()).join(' and ')}. Tell us what you’d like to do.`.slice(0, 160));
+      /* The concept read-back says how a request like this was read; this line would only repeat it less precisely. */
+      if (!readConcept(raw, (pattern) => saysYes(pattern, t)).concept.length) assumptions.push(`No activity named, so we looked for ${kept.map((key) => MOOD_LABELS[key].toLowerCase()).join(' and ')}. Tell us what you’d like to do.`.slice(0, 160));
       vague.push('interests');
     }
     if (/\b(outdoors?|outside|nature)\b/.test(t)) vague.push('outdoors');
+  }
+  /*
+   * What kind of vacation this is, beside what to do there: rest, a pilgrimage,
+   * a family beach week. Read from the same words, negations respected, and
+   * said back so it can be corrected. Emotional context reads only as a travel
+   * preference (`concept.ts`).
+   */
+  const reading = readConcept(raw, (pattern) => saysYes(pattern, t));
+  if (reading.concept.length > 0) {
+    patchDiscovery({ concept: reading.concept, ...(reading.notes.length > 0 ? { conceptNotes: reading.notes } : {}) });
+    /* Said back where every reading is said back, so it can be corrected like any other assumption. */
+    for (const note of reading.notes) if (!assumptions.includes(note)) assumptions.push(note);
+    const phrase = conceptPhrase(reading.concept);
+    if (phrase) readings.push({ kind: 'focus', label: phrase.length > 60 ? `${phrase.slice(0, 57)}…` : phrase });
   }
   if (focus.includes('snow') && saysYes(/\b(ski(s|ing|ers?)?|snowboard(s|ing|ers?)?|lift pass|pistes?|powder)\b/, t)) patchDiscovery({ skiing: true });
   if (saysYes(/\bsafari\b/, t)) patchDiscovery({ wildlifeKind: 'safari' });
@@ -547,6 +565,8 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
   if (saysYes(/\b(glaciers?|icebergs?|ice ?(fields?|caps?))\b/, t) && !saysYes(/\b(trek(s|king)?|climb(ing)?|mountaineering|hut[- ]to[- ]hut)\b/, t)) patchDiscovery({ mountainStyle: 'glaciers' });
   else if (saysYes(/\b(high[- ]altitude|high and wild|above \d{4} ?m|base camp)\b/, t)) patchDiscovery({ mountainStyle: 'high_altitude' });
   else if (saysYes(/\b(hut[- ]to[- ]hut|multi[- ]day|thru[- ]hike|long[- ]distance (trail|walk|hike)s?)\b/, t)) patchDiscovery({ mountainStyle: 'hut_to_hut' });
+  /* A bare "trek" in the mountains is a walk of several days, not a day hike: it reads as one (a jungle or camel trek never reaches here, it is not a mountain focus). */
+  else if (focus.includes('mountains') && saysYes(/\b(?<!(jungle|rainforest|forest|gorilla|chimp|chimpanzee|orangutan|desert|camel|village|elephant)\s)trek(s|king)?\b/, t)) patchDiscovery({ mountainStyle: 'hut_to_hut' });
   else if (saysYes(/\bday hikes?\b/, t) && focus.includes('mountains')) patchDiscovery({ mountainStyle: 'base_day_hikes' });
   /* What kind of sea trip: for a diver the reef is the destination and the sand is incidental. */
   const diveSaid = occurrences(/\b(scuba|div(e|es|ing|ers?)|liveaboards?|dive sites?|wreck div\w+)\b/, t).positive;
@@ -601,6 +621,14 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
     answers = { ...answers, children: Math.min(12, Math.max(count, answers.children, 1)) };
     readings.push({ kind: 'party', label: count > 1 ? `With ${count} children` : 'With children' });
     asked.add('party');
+  }
+  /*
+   * "With my family" says who is coming without saying how old they are: a
+   * family reading, and the party question still asked, rather than inventing
+   * children or ignoring the family altogether (it used to fall through).
+   */
+  else if (/\b(with (my|our|the) (family|families)|my family|our family|family (trip|holiday|vacation|getaway|break|retreat))\b/.test(t) && !isNegated(t, t.search(/\bfamil/))) {
+    readings.push({ kind: 'party', label: 'With family' });
   }
   if (/\b(parents|grandparents|elderly|older (relatives|travellers|travelers)|multi[- ]generation(al)?|grandma|grandpa)\b/.test(t)) {
     needs.add('seniors_in_group');

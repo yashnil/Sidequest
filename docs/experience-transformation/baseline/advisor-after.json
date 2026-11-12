@@ -1,0 +1,640 @@
+[
+  {
+    "text": "I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.",
+    "discovery": {
+      "focus": [],
+      "assumptions": [
+        "You want to come back rested, so rest and ease count for more than challenge.",
+        "Read “retreat” as somewhere restful with comfortable places to stay, not only a spa.",
+        "Read “outdoors” as easy time in nature unless you ask for something harder."
+      ],
+      "refinements": [],
+      "excluded": [],
+      "asked": [],
+      "request": "I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.",
+      "moods": [
+        "scenic"
+      ],
+      "concept": [
+        {
+          "key": "restoration",
+          "weight": 0.414
+        },
+        {
+          "key": "family_bonding",
+          "weight": 0.31
+        },
+        {
+          "key": "scenic_nature",
+          "weight": 0.276
+        }
+      ],
+      "conceptNotes": [
+        "You want to come back rested, so rest and ease count for more than challenge.",
+        "Read “retreat” as somewhere restful with comfortable places to stay, not only a spa.",
+        "Read “outdoors” as easy time in nature unless you ask for something harder."
+      ]
+    },
+    "readout": {
+      "drivers": [
+        "Being in season in March",
+        "Trip length: 10 nights"
+      ],
+      "assumptions": [
+        "You want to come back rested, so rest and ease count for more than challenge.",
+        "Read “retreat” as somewhere restful with comfortable places to stay, not only a spa.",
+        "Read “outdoors” as easy time in nature unless you ask for something harder."
+      ],
+      "openQuestions": [
+        "How adventurous you want it",
+        "Your budget",
+        "Where you’re starting from"
+      ],
+      "spread": "Three different answers — Jamaica for food and villages and culture; Tongariro & Rotorua for hot springs and day hiking; Palawan: El Nido & Coron for coastal scenery and beaches and swimming.",
+      "relaxation": null,
+      "closeCalls": [
+        "Lake Atitlán & Antigua"
+      ]
+    },
+    "picks": [
+      {
+        "name": "Jamaica",
+        "why": "Beaches and swimming and easy for a family; one base in Port Antonio or Treasure Beach, easier with a car.",
+        "feel": {
+          "value": 0.928,
+          "basis": "suits a restful trip",
+          "carries": [
+            "beaches and swimming",
+            "easy for a family"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 10,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "All-inclusive enclaves can feel cut off from the island",
+          "Slow, winding roads",
+          "Persistent touts in tourist areas"
+        ]
+      },
+      {
+        "name": "Tongariro & Rotorua",
+        "why": "Hot springs, easy for a family and day hiking; one base in Rotorua or Taupō, easier with a car.",
+        "feel": {
+          "value": 0.93,
+          "basis": "suits a restful trip",
+          "carries": [
+            "hot springs",
+            "easy for a family",
+            "day hiking"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 10,
+          "min": 3,
+          "max": 10
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "The Crossing is crowded on fine summer days",
+          "Rotorua smells of sulphur",
+          "Mountain weather cancels the Crossing often"
+        ]
+      },
+      {
+        "name": "Palawan: El Nido & Coron",
+        "why": "Beaches and swimming and coastal scenery; split between El Nido and Coron, no car needed.",
+        "feel": {
+          "value": 0.938,
+          "basis": "suits a restful trip",
+          "carries": [
+            "beaches and swimming",
+            "coastal scenery"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 10,
+          "min": 5,
+          "max": 14
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Takes several connections to reach.",
+          "Popular lagoons get crowded at midday",
+          "Ferry crossings can be rough"
+        ]
+      }
+    ],
+    "alternates": [
+      "Bariloche & the Seven Lakes",
+      "Taroko & the East Coast",
+      "Sydney & the Blue Mountains"
+    ]
+  },
+  {
+    "text": "Two weeks of trekking in July, anywhere in the world, moderate budget.",
+    "discovery": {
+      "focus": [
+        "mountains",
+        "hiking"
+      ],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [
+        "region"
+      ],
+      "request": "Two weeks of trekking in July, anywhere in the world, moderate budget.",
+      "focusRanked": false,
+      "concept": [
+        {
+          "key": "trekking",
+          "weight": 1
+        }
+      ],
+      "mountainStyle": "hut_to_hut"
+    },
+    "readout": {
+      "drivers": [
+        "What you want to do: mountains and trekking and hiking",
+        "Being in season in July",
+        "Budget: moderate",
+        "Trip length: 14 nights"
+      ],
+      "assumptions": [],
+      "openQuestions": [
+        "How adventurous you want it",
+        "Where you’re starting from"
+      ],
+      "spread": "Three different answers — Cordillera Blanca for high mountains and multi-day trekking; West MacDonnell Ranges for multi-day trekking and day hiking; Madeira for day hiking and high mountains.",
+      "relaxation": null,
+      "closeCalls": [
+        "Avenue of the Volcanoes",
+        "Sacred Valley & Machu Picchu",
+        "Kaçkar Mountains"
+      ]
+    },
+    "picks": [
+      {
+        "name": "Cordillera Blanca",
+        "why": "Day hiking and multi-day trekking; strong on mountains and trekking and hiking.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a multi-day trek",
+          "carries": [],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 14,
+          "min": 6,
+          "max": 18
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Takes several connections to reach.",
+          "Everything starts above 3,000 m",
+          "Facilities are basic outside Huaraz"
+        ]
+      },
+      {
+        "name": "West MacDonnell Ranges",
+        "why": "Multi-day trekking and day hiking; strong on mountains and trekking and hiking.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a multi-day trek",
+          "carries": [],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 14,
+          "min": 3,
+          "max": 16
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Takes several connections to reach.",
+          "Too hot to trek from November to March",
+          "Water on the Larapinta must be planned section by section"
+        ]
+      },
+      {
+        "name": "Madeira",
+        "why": "Day hiking and coastal scenery; strong on mountains and trekking and hiking.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a multi-day trek",
+          "carries": [],
+          "against": []
+        },
+        "length": {
+          "note": "Best for 4–12 nights. With 14, consider pairing it with another region.",
+          "best": {
+            "min": 4,
+            "max": 12
+          },
+          "pairWith": null
+        },
+        "nights": {
+          "suggested": 12,
+          "min": 4,
+          "max": 12
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Few sandy beaches",
+          "Popular levadas are busy",
+          "Mountains are often in cloud"
+        ]
+      }
+    ],
+    "alternates": [
+      "Réunion",
+      "Issyk-Kul & Karakol",
+      "Transylvania & the Carpathians"
+    ]
+  },
+  {
+    "text": "A gentle week of nature with my parents, no car.",
+    "discovery": {
+      "focus": [],
+      "assumptions": [
+        "Read “outdoors” as easy time in nature unless you ask for something harder."
+      ],
+      "refinements": [],
+      "excluded": [],
+      "asked": [],
+      "request": "A gentle week of nature with my parents, no car.",
+      "moods": [
+        "scenic"
+      ],
+      "concept": [
+        {
+          "key": "family_bonding",
+          "weight": 0.529
+        },
+        {
+          "key": "scenic_nature",
+          "weight": 0.471
+        }
+      ],
+      "conceptNotes": [
+        "Read “outdoors” as easy time in nature unless you ask for something harder."
+      ],
+      "adventure": "comfortable",
+      "terms": [
+        "gentle"
+      ],
+      "phrase": "gentle"
+    },
+    "readout": {
+      "drivers": [
+        "Adventure: comfortable",
+        "No car needed"
+      ],
+      "assumptions": [
+        "Read “outdoors” as easy time in nature unless you ask for something harder."
+      ],
+      "openQuestions": [
+        "When you can go",
+        "Your budget",
+        "Where you’re starting from",
+        "How long you have"
+      ],
+      "spread": "Three different answers — Bernese Oberland for high mountains and lakes; Krabi & the Andaman Coast for coastal scenery and beaches and swimming; Oaxaca City & Valleys for city life and villages and culture.",
+      "relaxation": null,
+      "closeCalls": [
+        "The Italian Lakes",
+        "Dalmatian Coast & Islands",
+        "Tyrolean Alps"
+      ]
+    },
+    "picks": [
+      {
+        "name": "Bernese Oberland",
+        "why": "Easy for a family, day hiking and high mountains; one base in Grindelwald or Wengen, no car needed.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a family trip",
+          "carries": [
+            "easy for a family",
+            "day hiking",
+            "high mountains"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 6,
+          "min": 3,
+          "max": 12
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Very expensive, especially the high railways",
+          "Crowded viewpoints in summer",
+          "Lifts close for maintenance in April–May and November"
+        ]
+      },
+      {
+        "name": "Krabi & the Andaman Coast",
+        "why": "Easy for a family and coastal scenery; one base in Railay or Ao Nang, no car needed.",
+        "feel": {
+          "value": 0.929,
+          "basis": "suits a family trip",
+          "carries": [
+            "easy for a family",
+            "coastal scenery"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 8,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Phi Phi and Railay are very busy",
+          "Rainy season makes seas rough and services thin",
+          "Ao Nang is heavily developed"
+        ]
+      },
+      {
+        "name": "Oaxaca City & Valleys",
+        "why": "Food and villages and culture; strong on beautiful scenery and easy family time.",
+        "feel": {
+          "value": 0.788,
+          "basis": "partly suits a family trip",
+          "carries": [],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 6,
+          "min": 3,
+          "max": 12
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Day of the Dead week is crowded and expensive",
+          "Rainy-season afternoons from June to September",
+          "The city is at 1,550 m and nights can be cool"
+        ]
+      }
+    ],
+    "alternates": [
+      "Kenai Peninsula",
+      "Crete",
+      "The Azores"
+    ]
+  },
+  {
+    "text": "Warm beaches and snorkelling over Christmas, from London, with the kids.",
+    "discovery": {
+      "focus": [
+        "beaches"
+      ],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [
+        "party"
+      ],
+      "request": "Warm beaches and snorkelling over Christmas, from London, with the kids.",
+      "focusRanked": true,
+      "concept": [
+        {
+          "key": "beach_resort",
+          "weight": 0.5
+        },
+        {
+          "key": "family_bonding",
+          "weight": 0.5
+        }
+      ],
+      "swimStyle": "snorkel"
+    },
+    "readout": {
+      "drivers": [
+        "What you want to do: beaches and coast",
+        "Being in season in December–January",
+        "Distance from London",
+        "Travelling with children"
+      ],
+      "assumptions": [],
+      "openQuestions": [
+        "How adventurous you want it",
+        "Your budget",
+        "How long you have"
+      ],
+      "spread": "Three different answers — Turks & Caicos for snorkelling and diving and beaches and swimming; Zanzibar for beaches and swimming and snorkelling and diving; Krabi & the Andaman Coast for coastal scenery and beaches and swimming.",
+      "relaxation": null,
+      "closeCalls": [
+        "Jamaica"
+      ]
+    },
+    "picks": [
+      {
+        "name": "Turks & Caicos",
+        "why": "Easy with children; one base in Providenciales or Grand Turk, easier with a car.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a beach holiday",
+          "carries": [
+            "easy with children"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 7,
+          "min": 4,
+          "max": 10
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Very expensive",
+          "Flat, scrubby islands with little hiking or culture",
+          "Eating out costs resort prices"
+        ]
+      },
+      {
+        "name": "Zanzibar",
+        "why": "Easy with children; one base in Stone Town or Nungwi, no car needed.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a beach holiday",
+          "carries": [
+            "easy with children"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 6,
+          "min": 3,
+          "max": 10
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "East-coast tides retreat a long way, limiting swimming at low tide",
+          "The northern beaches are heavily developed"
+        ]
+      },
+      {
+        "name": "Krabi & the Andaman Coast",
+        "why": "Easy with children; one base in Railay or Ao Nang, no car needed.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a beach holiday",
+          "carries": [
+            "easy with children"
+          ],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 8,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Phi Phi and Railay are very busy",
+          "Rainy season makes seas rough and services thin",
+          "Ao Nang is heavily developed"
+        ]
+      }
+    ],
+    "alternates": [
+      "Yucatán & the Riviera Maya",
+      "Guadeloupe",
+      "Sri Lanka South Coast"
+    ]
+  },
+  {
+    "text": "Ten days in October, culture and food, I love walking cities.",
+    "discovery": {
+      "focus": [
+        "culture_food",
+        "cities"
+      ],
+      "assumptions": [],
+      "refinements": [],
+      "excluded": [],
+      "asked": [],
+      "request": "Ten days in October, culture and food, I love walking cities.",
+      "focusRanked": true,
+      "concept": [
+        {
+          "key": "culture",
+          "weight": 1
+        }
+      ]
+    },
+    "readout": {
+      "drivers": [
+        "What you want to do: culture and food and cities, culture and food first",
+        "Being in season in October",
+        "Trip length: 9 nights"
+      ],
+      "assumptions": [],
+      "openQuestions": [
+        "How adventurous you want it",
+        "Your budget",
+        "Where you’re starting from"
+      ],
+      "spread": "Three different answers — Kyoto & Nara for villages and culture and food; Québec City & Charlevoix for villages and culture and food; Tuscany for villages and culture and food.",
+      "relaxation": null,
+      "closeCalls": [
+        "New York City",
+        "Andalusia",
+        "Porto & the Douro Valley"
+      ]
+    },
+    "picks": [
+      {
+        "name": "Kyoto & Nara",
+        "why": "Villages and culture and food; strong on culture and food and cities.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a culture trip",
+          "carries": [],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 9,
+          "min": 3,
+          "max": 9
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Very crowded in cherry-blossom and maple seasons",
+          "Hot and humid summers",
+          "Rooms are expensive at peak"
+        ]
+      },
+      {
+        "name": "Québec City & Charlevoix",
+        "why": "Villages and culture and food; strong on culture and food and cities.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a culture trip",
+          "carries": [],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 9,
+          "min": 3,
+          "max": 9
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Winter cold snaps reach −25 °C",
+          "The Old Town is hilly with many stairs",
+          "Summer and Carnival lodging is pricey"
+        ]
+      },
+      {
+        "name": "Tuscany",
+        "why": "Villages and culture and food; strong on culture and food and cities.",
+        "feel": {
+          "value": 1,
+          "basis": "suits a culture trip",
+          "carries": [],
+          "against": []
+        },
+        "length": null,
+        "nights": {
+          "suggested": 9,
+          "min": 4,
+          "max": 14
+        },
+        "match": "strong",
+        "tradeoffs": [
+          "Florence is crowded most of the year",
+          "July and August are very hot"
+        ]
+      }
+    ],
+    "alternates": [
+      "Buenos Aires",
+      "Istanbul",
+      "Cape Town & the Winelands"
+    ]
+  }
+]
