@@ -17,7 +17,7 @@ import type { DestinationEnvelope } from '../planning/composition';
  * one again on the way back.
  */
 
-export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-11.1';
+export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-12.1';
 export const SCAN_JSON_TAG = 'scan_proposal';
 
 /** How many candidates to ask for: enough to choose from, never so many the answer runs long. */
@@ -37,7 +37,7 @@ What a strong pool looks like:
 4. Weather and season. Mark exposure honestly and include several "rainyDayOk" options. If something is closed or impractical in the trip's months, either leave it out or give its openMonths and a seasonalNote.
 5. One place per candidate. Never combine several stops into one candidate ("X to Y to Z"), and never list the same place twice under different names. A day trip is a candidate named by its town ("Kamakura", kind small_town) with the highlights in "why".
 6. Real names only. Every candidate and base must be a real, specific, findable place with its proper name and the town or district it is in ("locality"). Never invent a venue. If you are unsure a place exists or is open, leave it out. Where the place's own name is written in another language or script locally, give that name too as "localName" (for example the name on the sign at the entrance); maps in that country often know only it.
-7. Honest attributes. durationMinutes is time on site, not travel. intensity is physical effort (none, easy, moderate, strenuous). costLevel is 0 free, 1 cheap, 2 moderate, 3 expensive. booking is "required" only when entry genuinely needs advance booking.
+7. Honest attributes. durationMinutes is time on site, not travel. For a walk or hike (kind day_hike, easy_walk or national_park), add "walk": {"shape": "loop" | "out_and_back" | "point_to_point"}; a point_to_point walk also gives "endName" and "endLocality" — the real town, bus stop or trailhead where it ends — and, only where you know them, "km" (the whole walk) and "ascentM". Name a trail stage by its start and end. Never invent an end point; if you are unsure of the shape, omit "walk". intensity is physical effort (none, easy, moderate, strenuous). costLevel is 0 free, 1 cheap, 2 moderate, 3 expensive. booking is "required" only when entry genuinely needs advance booking.
 8. Bases. Propose 1 to 5 places to sleep (up to 6 when the task says the trip is a route, spaced along all of it), in the order a traveller arriving would reach them, each with a nightsHint (your suggestion; Sidequest re-allocates nights from what is near each base) and why. A single dense city is usually one base. Respect how willing they are to change hotels.
 9. "why" is one sentence about why THIS traveller would want it, grounded in what they told you. No hype words.
 10. "skipped": up to 6 famous things you deliberately left out because they do not fit this traveller, each with a one-line reason.
@@ -55,11 +55,11 @@ Closed vocabularies (use exactly these strings):
 
 Output contract: reply with ONE JSON object (if asked to wrap it, inside <${SCAN_JSON_TAG}>…</${SCAN_JSON_TAG}>) and nothing else. Shape:
 {"bases":[{"name","locality","nightsHint","why","lodgingArea"}],
- "candidates":[{"name","localName","locality","zone","kind","tier","durationMinutes","intensity","costLevel","exposure","bestTime","crowd","openMonths","seasonalNote","booking","rainyDayOk","interests","why","caution"}],
+ "candidates":[{"name","localName","locality","zone","kind","tier","durationMinutes","intensity","costLevel","exposure","bestTime","crowd","openMonths","seasonalNote","booking","rainyDayOk","interests","why","caution","walk"}],
  "foodAreas":[{"name","locality","specialty","why"}],
  "skipped":[{"name","reason"}],
  "package":{"transportSummary","transportNotes":[],"beforeYouGo":[],"packing":[],"foodStrategy":[],"bookingPriorities":[]}}
-Omit optional fields (zone, openMonths, seasonalNote, caution, lodgingArea) rather than writing null. Keep every string short.`;
+Omit optional fields (zone, openMonths, seasonalNote, caution, lodgingArea, walk) rather than writing null. Keep every string short.`;
 
 /** The shape described to the transport. Loose on purpose: the normaliser, not the provider, holds the vocabularies to account. */
 export const scanProposalWireSchema = z.object({
@@ -85,6 +85,7 @@ export const scanProposalWireSchema = z.object({
       interests: z.array(z.string()),
       why: z.string(),
       caution: z.string().optional(),
+      walk: z.object({ shape: z.string(), endName: z.string().optional(), endLocality: z.string().optional(), km: z.number().optional(), ascentM: z.number().optional() }).optional(),
     }),
   ),
   foodAreas: z.array(z.object({ name: z.string(), locality: z.string(), specialty: z.string(), why: z.string() })),

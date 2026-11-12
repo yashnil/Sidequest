@@ -647,6 +647,33 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
      * query, run while the matrix is measured; a failure is simply no links.
      */
     const linking = fixtureScan() || openData ? Promise.resolve(new Map<string, string>()) : linkScanIdentities(proposal, placement.positions);
+    /*
+     * Where one-way walks end (2026-11): each point-to-point walk's end is a
+     * real place the proposal named, placed by the same geocoder as a small
+     * batch of its own — never more than six — while the matrix is measured.
+     * An end that cannot be placed, or lands implausibly far from the start,
+     * leaves the walk planned as before (back where it started).
+     */
+    const placedNow = placement.positions;
+    const walkEnds = proposal.candidates.filter((c) => c.walk?.shape === 'point_to_point' && c.walk.endName && placedNow.get(c.key)).slice(0, 6);
+    const ending: Promise<Map<string, ResolvedPosition | null>> =
+      walkEnds.length === 0 || openData || fixtureScan() || !isGeocoderEnabled()
+        ? Promise.resolve(new Map())
+        : placeScanProposal(
+            { ...proposal, candidates: [], bases: walkEnds.map((c) => ({ key: `${c.key}#end`, name: c.walk!.endName!, locality: c.walk!.endLocality ?? c.locality, nightsHint: 0, why: '' })) },
+            {
+              center: envelope.center,
+              maxDistanceKm: reach,
+              ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
+              ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+              placesBudget: 0,
+              namedByTraveller: [],
+              priorities,
+              deadline: () => false,
+            },
+          )
+            .then((result) => result.positions)
+            .catch(() => new Map());
     const timed = fixtureScan()
       ? { matrix: estimatedScanMatrix(plan.points, mode), source: 'distance estimates', measuredPairs: 0, totalPairs: plan.points.length * (plan.points.length - 1) }
       : await withinBudget(
@@ -666,6 +693,12 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         const position = positions.get(key);
         if (position && !position.wikidataId) positions.set(key, { ...position, wikidataId });
       }
+      placement = { ...placement, positions };
+    }
+    const ends = await withinBudget(ending, TIMING_STAGE_BUDGET_MS, new Map<string, ResolvedPosition | null>(), 'walk ends');
+    if (ends.size > 0) {
+      const positions = new Map(placement.positions);
+      for (const [key, position] of ends) if (position && !position.approximate) positions.set(key, position);
       placement = { ...placement, positions };
     }
     const food = await scanFoodFor({ regionId, destinationName: envelope.name, points: plan.points, proposal, envelope: { center: envelope.center, countryCode: envelope.countryCode ?? null, countryName: envelope.countryName ?? null }, reach });

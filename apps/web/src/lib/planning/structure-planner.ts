@@ -64,6 +64,13 @@ export interface PlannerCandidate {
   blocked?: string;
   /** The board's code for that blocker (`scoring/fit.ts#BlockerCode`), so the plan can say which change would fix it. */
   blockedCode?: string;
+  /**
+   * A one-way walk's end (2026-11): the walk starts at `coordinates` and ends
+   * here. Every leg out of it is routed from the end — with the return to a
+   * car left at the start added on a driving trip — by the composer's minutes
+   * function, so the validator and the tour already count it.
+   */
+  walkEnd?: { lat: number; lng: number; name?: string };
 }
 
 export interface PlannerBase {

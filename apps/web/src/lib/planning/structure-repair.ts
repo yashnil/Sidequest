@@ -26,7 +26,7 @@ import type { PlanState, PlannerCandidate, PlannerKernel } from './structure-pla
  * Pure and deterministic: fixed orders over days and ids, no clock.
  */
 
-export type DayNoteCode = 'transfer_over_limit' | 'travel_over_limit' | 'day_overfull' | 'edge_day_heavy' | 'hard_days_together' | 'open_day';
+export type DayNoteCode = 'transfer_over_limit' | 'travel_over_limit' | 'day_overfull' | 'edge_day_heavy' | 'hard_days_together' | 'open_day' | 'walk_return' | 'walk_luggage';
 
 export interface DayNote {
   dayNumber: number;

@@ -17,7 +17,7 @@ import type { FoodDataset } from '../schemas/food';
 import type { WeatherLocation } from '../schemas/weather';
 import type { Region } from '../schemas/region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
-import { SCAN_KIND_PROFILES, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
+import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
 import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller } from './stay-objective';
 import type { RouteShapeKind } from '../destinations/route-shape';
@@ -499,6 +499,45 @@ function monthsOf(dates: readonly string[]): number[] {
   return [...new Set(dates.map((d) => Number(d.slice(5, 7))))].sort((a, b) => a - b);
 }
 
+/**
+ * A walk's shape on the place, as tags the board and planner read
+ * (`walk:point_to_point`, `walk-end:lat,lng`, `walk-end-name:…`, `walk-km:…`).
+ * A point-to-point end counts only when it was placed precisely and lies a
+ * plausible walk from the start (≤ 40 km great-circle); otherwise the walk is
+ * planned as returning where it began, as before.
+ */
+export function walkTags(c: ScanCandidateProposal, start: ResolvedPosition, end: ResolvedPosition | null | undefined): string[] {
+  if (!c.walk) return [];
+  const tags = [`walk:${c.walk.shape}`];
+  if (c.walk.km !== undefined) tags.push(`walk-km:${c.walk.km}`);
+  if (c.walk.ascentM !== undefined) tags.push(`walk-ascent:${c.walk.ascentM}`);
+  if (c.walk.shape === 'point_to_point') {
+    const ok = end && !end.approximate && greatCircleKm(start.coordinates, end.coordinates) <= 40 && greatCircleKm(start.coordinates, end.coordinates) >= 0.5;
+    if (!ok) return [`walk:point_to_point_unplaced`, ...tags.slice(1)];
+    tags.push(`walk-end:${end.coordinates.lat.toFixed(5)},${end.coordinates.lng.toFixed(5)}`);
+    if (c.walk.endName) tags.push(`walk-end-name:${c.walk.endName}`);
+  }
+  return tags;
+}
+
+function greatCircleKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = Math.PI / 180;
+  const h = Math.sin(((b.lat - a.lat) * rad) / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(((b.lng - a.lng) * rad) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/**
+ * How long a walk takes. The model's figure, unless the trail's own distance
+ * says it is implausibly short — then the walking-time estimate from distance
+ * and ascent (`walkingMinutes`), because a 13 km stage is not a 90-minute stop.
+ */
+export function walkDuration(c: ScanCandidateProposal): number {
+  const stated = Math.max(15, Math.min(600, c.durationMinutes));
+  if (!c.walk?.km) return stated;
+  const estimate = walkingMinutes(c.walk.km, c.walk.ascentM ?? 0);
+  return stated < estimate * 0.75 ? Math.min(600, estimate) : stated;
+}
+
 export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly {
   const { proposal, positions, plan, matrix } = input;
   const nights = Math.max(0, input.dates.length - 1);
@@ -646,7 +685,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       ...(position.wikidataId && /^Q\d+$/.test(position.wikidataId) ? { wikidataId: position.wikidataId } : {}),
       shortDescription: c.why.slice(0, 280),
       coordinates: position.coordinates,
-      tags: [`kind:${c.kind}`, `tier:${c.tier}`, ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
+      tags: [...walkTags(c, position, positionOf(`${c.key}#end`)), `kind:${c.kind}`, `tier:${c.tier}`, ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
       source: {
         name: sourceName,
         kind: position.method === 'places' && position.provider.includes('google') ? 'google_places' : 'osm',
@@ -661,7 +700,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       durationBasis: 'category_estimate',
       estimatedDefaults: ['access', 'seasonal_access', 'physical_intensity', 'crowd_level', 'cost_level'],
       interests: c.interests.length > 0 ? c.interests : [...profile.interests],
-      typicalDurationMinutes: Math.max(15, Math.min(600, c.durationMinutes)),
+      typicalDurationMinutes: walkDuration(c),
       costLevel: c.costLevel,
       physicalIntensity: c.intensity,
       crowdLevel: c.crowd,

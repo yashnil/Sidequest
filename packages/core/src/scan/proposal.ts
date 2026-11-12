@@ -114,6 +114,42 @@ export const SCAN_KIND_PROFILES: Record<ScanKind, KindProfile> = {
   theme_park: { category: 'historic_site', label: 'Theme park', interests: ['architecture_and_landmarks'], hours: 'gated', visibilityDependent: false },
 };
 
+/**
+ * THE SHAPE OF A WALK (2026-11 experience transformation).
+ *
+ * A one-way walk is not a stop with a visit duration: it starts in one place
+ * and ends in another, and the day has to get the walker back — to a car left
+ * at the trailhead, or to the bed — or move their bed (and bags) to the end.
+ * The eleven-day Kumano plan treated each stage as a stop and drove back to
+ * the start. The proposal now says which kind of walk it is; a point-to-point
+ * walk names where it ends (a real town, stop or trailhead, placed like any
+ * other place) and, where the model knows it, its distance and ascent.
+ */
+export const WALK_SHAPES = ['loop', 'out_and_back', 'point_to_point'] as const;
+export type WalkShape = (typeof WALK_SHAPES)[number];
+export interface ScanWalk {
+  shape: WalkShape;
+  /** Where a point-to-point walk ends: a real place name, placed by the geocoder like any other. */
+  endName?: string;
+  endLocality?: string;
+  /** Trail distance in km and total ascent in m, when the model gave them. Inputs to the walking-time estimate, never shown as measured. */
+  km?: number;
+  ascentM?: number;
+}
+
+/** The kinds a walk shape applies to. */
+export const WALK_KINDS: ReadonlySet<ScanKind> = new Set(['day_hike', 'easy_walk', 'national_park']);
+
+/**
+ * Walking time from distance and ascent, labelled an estimate wherever it is
+ * shown: 4.5 km/h on the flat plus an hour per 600 m climbed (Naismith's rule,
+ * slowed from 5 km/h for mixed trail). For an out-and-back the distance given
+ * is the whole walk.
+ */
+export function walkingMinutes(km: number, ascentM = 0): number {
+  return Math.round((km / 4.5) * 60 + (Math.max(0, ascentM) / 600) * 60);
+}
+
 export interface ScanCandidateProposal {
   /** Stable within one proposal; the model's own index, never trusted as an identity. */
   key: string;
@@ -146,6 +182,7 @@ export interface ScanCandidateProposal {
   interests: Interest[];
   why: string;
   caution?: string;
+  walk?: ScanWalk;
 }
 
 export interface ScanBaseProposal {
@@ -231,6 +268,30 @@ function int(value: unknown, min: number, max: number): number | null {
  * path is recorded, so a proposal that quietly drifted off-vocabulary is
  * visible in the scan's diagnostics rather than in a strange card.
  */
+/**
+ * A walk's shape, only for walking kinds. A point-to-point walk with no end
+ * named is dropped to no shape rather than guessed (calling it an out-and-back
+ * would invent a fact); the planner then treats it as before.
+ */
+function walkOf(raw: unknown, kind: ScanKind, coerced: string[], path: string): { walk?: ScanWalk } {
+  if (!raw || typeof raw !== 'object' || !WALK_KINDS.has(kind)) return {};
+  const w = raw as Record<string, unknown>;
+  const shape = typeof w.shape === 'string' ? (w.shape.trim().toLowerCase().replace(/[\s-]+/g, '_') as WalkShape) : null;
+  if (!shape || !(WALK_SHAPES as readonly string[]).includes(shape)) {
+    coerced.push(`${path}.walk.shape`);
+    return {};
+  }
+  const km = typeof w.km === 'number' && Number.isFinite(w.km) && w.km > 0 && w.km <= 60 ? Math.round(w.km * 10) / 10 : undefined;
+  const ascentM = typeof w.ascentM === 'number' && Number.isFinite(w.ascentM) && w.ascentM >= 0 && w.ascentM <= 4000 ? Math.round(w.ascentM) : undefined;
+  const endName = text(w.endName, 80);
+  const endLocality = text(w.endLocality, 60);
+  if (shape === 'point_to_point' && !endName) {
+    coerced.push(`${path}.walk.endName`);
+    return {};
+  }
+  return { walk: { shape, ...(shape === 'point_to_point' && endName ? { endName, ...(endLocality ? { endLocality } : {}) } : {}), ...(km !== undefined ? { km } : {}), ...(ascentM !== undefined ? { ascentM } : {}) } };
+}
+
 export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
   if (!raw || typeof raw !== 'object') return { ok: false, reason: 'The proposal was not an object.' };
   const record = raw as Record<string, unknown>;
@@ -289,6 +350,7 @@ export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
       interests: interests.length > 0 ? interests : [...SCAN_KIND_PROFILES[kind].interests],
       why: why ?? `${SCAN_KIND_PROFILES[kind].label} in ${locality}.`,
       ...(caution ? { caution } : {}),
+      ...walkOf(c.walk, kind, coerced, path),
     });
   });
 

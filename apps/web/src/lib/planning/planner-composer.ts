@@ -123,6 +123,63 @@ export function plannerImproveEnabled(env: Record<string, string | undefined> = 
   return env.SIDEQUEST_PLANNER_IMPROVE?.trim().toLowerCase() !== 'off';
 }
 
+/** A one-way walk's end, from the scan's tags (`scan/assemble.ts#walkTags`). */
+export function walkEndOf(tags: readonly string[]): { walkEnd?: { lat: number; lng: number; name?: string } } {
+  const at = tags.find((tag) => tag.startsWith('walk-end:'))?.slice('walk-end:'.length);
+  if (!at) return {};
+  const [lat, lng] = at.split(',').map(Number);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return {};
+  const name = tags.find((tag) => tag.startsWith('walk-end-name:'))?.slice('walk-end-name:'.length);
+  return { walkEnd: { lat: lat!, lng: lng!, ...(name ? { name } : {}) } };
+}
+
+/** Within this of a bed, a walk that ends there needs no return: that night is spent at its end. */
+const WALK_ENDS_AT_BED_KM = 3;
+
+/**
+ * What a one-way walk leaves the traveller to arrange, said on its day
+ * (2026-11). Ending beside that night's bed on a move day: the bags must go
+ * ahead. Ending anywhere else: the way back — to the car, or to the bed — with
+ * an estimated time and the honest instruction to check the last departure.
+ * Never a timetable or a promise: Sidequest has none to give.
+ */
+export function walkNotes(args: { plan: StructurePlan; bases: readonly PlannerBase[]; carAvailable: boolean }): { dayNumber: number; code: 'walk_return' | 'walk_luggage'; note: string }[] {
+  const notes: { dayNumber: number; code: 'walk_return' | 'walk_luggage'; note: string }[] = [];
+  for (const day of args.plan.days) {
+    const bed = args.bases.find((b) => b.id === day.baseId);
+    for (const stop of day.stops) {
+      const c = stop.candidate;
+      if (!c.walkEnd) continue;
+      const endName = c.walkEnd.name ?? 'the end of the walk';
+      const toBed = bed ? haversineKm(c.walkEnd, bed.coordinates) : null;
+      if (toBed !== null && toBed <= WALK_ENDS_AT_BED_KM && !args.carAvailable) {
+        notes.push({
+          dayNumber: day.dayNumber,
+          code: 'walk_luggage',
+          note: day.relocation
+            ? `${c.name} ends at ${endName}, by tonight's bed in ${bed!.name}: send your bags ahead from the last place you stayed, booked in advance — luggage services need notice and do not run everywhere every day.`
+            : `${c.name} ends at ${endName}, close to your bed in ${bed!.name} — no transfer back needed.`,
+        });
+        continue;
+      }
+      const back = args.carAvailable
+        ? estimateLegMinutes({ from: c.walkEnd, to: c.coordinates, mode: 'drive' })?.minutes
+        : bed
+          ? estimateLegMinutes({ from: c.walkEnd, to: bed.coordinates, mode: 'rail' })?.minutes
+          : undefined;
+      const time = back !== undefined ? ` (about ${Math.max(10, Math.round(back / 5) * 5)} min by road, estimated)` : '';
+      notes.push({
+        dayNumber: day.dayNumber,
+        code: 'walk_return',
+        note: args.carAvailable
+          ? `${c.name} is one-way: it ends at ${endName}, away from where you park at the start. Arrange a taxi or bus back to the car${time}, and check the last departure before you set off.`
+          : `${c.name} is one-way: it ends at ${endName}. Take the bus or a taxi back to ${bed?.name ?? 'your base'}${time}; check the last departure before you start walking.`,
+      });
+    }
+  }
+  return notes;
+}
+
 export function composeWithPlanner(input: PlannerComposeInput): PlannerComposition {
   const { trip, profile, region } = input;
   const compiled = region.compiled;
@@ -178,6 +235,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
       ...(lockedDay.has(place.id) ? { pinnedDay: lockedDay.get(place.id)! } : {}),
       ...(closedDatesOf(board).length > 0 ? { closedDates: closedDatesOf(board) } : {}),
       ...(board.fit.blockers.length > 0 ? { blocked: board.fit.blockers[0]!.message, blockedCode: board.fit.blockers[0]!.code } : {}),
+      ...walkEndOf(place.tags),
     };
     pool.push(candidate);
     provenanceOf.set(place.id, status);
@@ -189,11 +247,35 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
   // --- travel minutes: the matrix, with transit estimated for a car-free trip --------------------
   const coordinates = new Map<string, { lat: number; lng: number }>();
   for (const c of pool) coordinates.set(c.id, c.coordinates);
+  const walkEnds = new Map(pool.filter((c) => c.walkEnd).map((c) => [c.id, c.walkEnd!] as const));
   for (const b of bases) coordinates.set(b.id, b.coordinates);
   const matrix = region.matrix as unknown as { ids: string[]; minutes: number[][] };
   const index = new Map(matrix.ids.map((id: string, i: number) => [id, i]));
   const placeToRouting = new Map(compiled.places.map((p) => [p.id, p.id]));
+  /*
+   * Out of a one-way walk, the traveller is at its end, not its start. Without
+   * a car the next leg starts there; with one, they first get back to the car
+   * at the start (a taxi or bus, estimated by road) and drive on from there.
+   * Unknown is never zero: an end with no estimate falls back to the start's
+   * leg plus nothing only when no estimate exists at all.
+   */
   const minutes = (from: string, to: string): number | null => {
+    const end = walkEnds.get(from);
+    if (end && from !== to) {
+      const startPoint = coordinates.get(from);
+      const target = coordinates.get(to);
+      if (startPoint && target) {
+        if (input.carAvailable) {
+          const back = estimateLegMinutes({ from: end, to: startPoint, mode: 'drive' })?.minutes;
+          const onward = baseMinutes(from, to);
+          return back !== undefined && onward !== null ? back + onward : onward;
+        }
+        return haversineKm(end, target) <= 1.6 ? estimateLegMinutes({ from: end, to: target, mode: 'walk' })?.minutes ?? null : estimateLegMinutes({ from: end, to: target, mode: 'rail' })?.minutes ?? null;
+      }
+    }
+    return baseMinutes(from, to);
+  };
+  const baseMinutes = (from: string, to: string): number | null => {
     if (from === to) return 0;
     const a = index.get(placeToRouting.get(from) ?? from);
     const b = index.get(placeToRouting.get(to) ?? to);
@@ -257,6 +339,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     improve: plannerImproveEnabled(),
   };
   const plan = planStructure(plannerInput);
+  plan.dayNotes.push(...walkNotes({ plan, bases, carAvailable: input.carAvailable }));
 
   const seasonalNotes = new Map(compiled.places.filter((p) => p.seasonalAccess.closureRisk !== 'none' && p.seasonalAccess.note).map((p) => [p.id, p.seasonalAccess.note!] as const));
   const draft = draftFromPlan({ plan, bases, input, windows, poolSize: pool.length, minutes, coordinates, seasonalNotes });
