@@ -192,7 +192,7 @@ function PickCard({ pick, index, media, sessionId }: { pick: AdvisorPick; index:
               {pick.nights.min}–{pick.nights.max} nights works
             </Fact>
             <Fact label="Character">{pick.character}</Fact>
-            <Fact label="Costs">
+            <Fact label="What it costs">
               {pick.cost.label}
               {pick.cost.versusBudget ? <span className="text-ink-muted"> · {pick.cost.versusBudget.toLowerCase()}</span> : null}
               {pick.cost.rooms ? <span className="mt-1 block text-ink-muted">{pick.cost.rooms}</span> : null}

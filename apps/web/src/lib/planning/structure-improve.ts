@@ -116,18 +116,13 @@ export const OBJECTIVE_WEIGHTS = {
   chosenLift: 1.15,
 } as const;
 
-/**
- * THE VALUE OF FREE TIME (2026-11 experience transformation).
- *
- * Without it every stop worth more than its drive was added, so an eleven-day
- * board of 37 places became a plan of 29 — the days filled because they could,
- * not because the fifth shrine was worth a morning. Each minute spent at a
- * stop now costs this much, scaled by pace (travel is already priced by α): a stop has to be
- * worth the time it takes from rest, not merely the drive to it. With ρ that
- * is a real marginal-value test — the third museum of a slow trip no longer
- * clears it, the third of a fast one still does.
+/*
+ * A per-minute "value of free time" was tried here (2026-11) and removed: a
+ * stop's worth does not grow with its length, so charging each minute at a
+ * stop favoured three short stops over one long hike — the opposite of fewer,
+ * better experiences — and its measured effect on the evaluation was nil.
+ * Slow trips are kept slow by the travel price below and the daily ceiling.
  */
-export const TIME_VALUE: Record<'slow' | 'balanced' | 'fast', number> = { slow: 0.12, balanced: 0.08, fast: 0.04 };
 
 /**
  * What a minute on the road costs, by pace (2026-11). α was one figure for
@@ -301,10 +296,9 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
   }
   const mean = loads.length > 0 ? loads.reduce((a, b) => a + b, 0) / loads.length : 0;
   const imbalance = loads.reduce((n, l) => n + (l - mean) ** 2, 0);
-  const tau = TIME_VALUE[kernel.input.pace];
   const timeMinutes = activity;
   const alpha = TRAVEL_COST[kernel.input.pace];
-  const score = value - alpha * travelMinutes - W.beta * zoneSwitches - W.alpha * weather - W.gamma * imbalance - W.delta * overpack - W.zeta * overflowMinutes - W.epsilon * emptyDays - tau * timeMinutes;
+  const score = value - alpha * travelMinutes - W.beta * zoneSwitches - W.alpha * weather - W.gamma * imbalance - W.delta * overpack - W.zeta * overflowMinutes - W.epsilon * emptyDays;
   return { mustsPlaced, pinnedHeld, score, parts: { value, travelMinutes, zoneSwitches, weatherPenalty: weather, imbalance, overpack, overflowMinutes, emptyDays, timeMinutes }, stops };
 }
 
@@ -319,7 +313,6 @@ export function evaluateObjective(kernel: PlannerKernel, state: PlanState): Stru
  */
 function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: ReadonlyMap<number, readonly PlannerCandidate[]>, sameSet?: boolean) => StructureObjective {
   const W = OBJECTIVE_WEIGHTS;
-  const tau = TIME_VALUE[kernel.input.pace];
   const alpha = TRAVEL_COST[kernel.input.pace];
   const facts = state.map((row, i) => rowFacts(kernel, i, row));
   let musts = 0;
@@ -414,7 +407,7 @@ function neighbourEvaluator(kernel: PlannerKernel, state: PlanState): (rows: Rea
     const t = { travel: travel + dTravel, zones: zones + dZones, weather: weather + dWeather, overpack: overpack + dOverpack, overflow: overflow + dOverflow, empty: empty + dEmpty };
     const imbalance = loadN > 0 ? Math.max(0, sq - (sum * sum) / loadN) : 0;
     const timeMinutes = activity + dActivity;
-    const score = value - alpha * t.travel - W.beta * t.zones - W.alpha * t.weather - W.gamma * imbalance - W.delta * t.overpack - W.zeta * t.overflow - W.epsilon * t.empty - tau * timeMinutes;
+    const score = value - alpha * t.travel - W.beta * t.zones - W.alpha * t.weather - W.gamma * imbalance - W.delta * t.overpack - W.zeta * t.overflow - W.epsilon * t.empty;
     return { mustsPlaced: musts + dMusts, pinnedHeld: pinned + dPinned, score, parts: { value, travelMinutes: t.travel, zoneSwitches: t.zones, weatherPenalty: t.weather, imbalance, overpack: t.overpack, overflowMinutes: t.overflow, emptyDays: t.empty, timeMinutes }, stops: stopCount + dStops };
   };
 }
