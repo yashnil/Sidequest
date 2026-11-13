@@ -381,8 +381,16 @@ function refineTour(baseId: string, start: readonly string[], m: (a: string, b: 
   return { order, total };
 }
 
+/**
+ * Eval v2: a Lisbon castle was "best at sunrise" in the proposal and the plan
+ * sent a couple there at 06:15, hours before its gates open. Dawn is a slot only
+ * for places under an open sky; a museum, a historic site with a gate, a
+ * neighbourhood or a spa keeps ordinary daytime hours whatever the proposal said.
+ */
+const DAWN_CATEGORIES: ReadonlySet<string> = new Set(['viewpoint', 'nature', 'hike', 'water', 'scenic_drive', 'geothermal', 'wildlife', 'landmark', 'beach']);
+
 export function slotOf(candidate: PlannerCandidate): PlannedStop['slot'] {
-  if (candidate.bestTime === 'sunrise') return 'sunrise';
+  if (candidate.bestTime === 'sunrise') return DAWN_CATEGORIES.has(candidate.category) ? 'sunrise' : 'day';
   if (candidate.bestTime === 'sunset') return 'sunset';
   if (candidate.bestTime === 'night') return 'night';
   return 'day';
@@ -626,6 +634,8 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
        */
       if (!user && (input.pace === 'slow' || input.dailyIntensity === 'light')) return fail('capacity', 'A pre-dawn start is more than a restful trip asked for.');
       if (day.isFirst || day.relocation || stops.some((o) => o !== s && slotOf(o) === 'sunrise')) return fail('capacity', 'No free sunrise.');
+      /* Never a pre-dawn start on the way home, unless the traveller picked this sunrise themselves. */
+      if (day.isLast && !user) return fail('capacity', 'A pre-dawn start on the day you leave is more than the trip needs.');
       /* A 5:30 start is a treat once. Two in a row is a schedule, unless the traveller asked for this stop or travels fast. */
       const dawn = (i: number) => i >= 0 && i < days.length && stopsOf(i).some((o) => slotOf(o) === 'sunrise');
       if (!user && input.pace !== 'fast' && (dawn(day.index - 1) || dawn(day.index + 1))) return fail('capacity', 'Two sunrise starts back to back is more than you asked for.');

@@ -188,6 +188,18 @@ describe('structure planner — time of day and geography', () => {
     expect(scheduledIds(planStructure(input(pool('recommended'))))).toContain('dawn-lake');
   });
 
+  /* Eval v2: a castle "best at sunrise" was visited at 06:15, hours before its gates open, and a departure day began at 05:30. */
+  it('dawn is a slot only under an open sky, and never on the day home unless the traveller picked it', () => {
+    const castle = c('castle', { bestTime: 'sunrise', category: 'historic', coordinates: at(0.02, 0) });
+    const plan = planStructure(input([castle, ...Array.from({ length: 4 }, (_, i) => c(`d${i}`, { coordinates: at(0.003 * i, 0.003) }))]));
+    for (const day of plan.days) for (const stop of day.stops) if (stop.candidate.id === 'castle') expect(stop.slot).toBe('day');
+    const dawnOnly = (status: PlannerCandidate['status']) => planStructure(input([c('dawn-lake', { bestTime: 'sunrise', coordinates: at(0.02, 0), status })]));
+    for (const status of ['recommended', 'maybe'] as const) {
+      const last = dawnOnly(status).days.at(-1)!;
+      expect(last.stops.some((s) => s.slot === 'sunrise')).toBe(false);
+    }
+  });
+
   it('groups nearby stops onto the same day rather than zig-zagging', () => {
     const east = Array.from({ length: 3 }, (_, i) => c(`east-${i}`, { coordinates: at(0, 0.3 + 0.01 * i) }));
     const west = Array.from({ length: 3 }, (_, i) => c(`west-${i}`, { coordinates: at(0, -0.3 - 0.01 * i) }));

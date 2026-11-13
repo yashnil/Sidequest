@@ -1277,7 +1277,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   };
   const windows: PlannedDay[] = buildDailyWindows(context.basics, context.profile, config).map((day, index, all) => {
     const isLastDay = index === all.length - 1;
-    const early = index === 0 ? null : earliestFor(day.dayNumber);
+    /* Not the arrival day, and not the day home unless the traveller asked for that sunrise by name. */
+    const early = index === 0 ? null : index === all.length - 1 ? (((draft.days.find((entry) => entry.dayNumber === day.dayNumber)?.anchors ?? []).some((anchor) => anchor.timeOfDay === 'sunrise' && askedFor.has(normalizeName(anchor.name)))) ? DAWN_START : null) : earliestFor(day.dayNumber);
     if (early !== null && early < day.window.startMinute) {
       day = {
         ...day,
