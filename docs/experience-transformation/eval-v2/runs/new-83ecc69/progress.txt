@@ -1,0 +1,4 @@
+run 1 exit=1   2 failed   8 passed (1.2h) 
+run 2 exit=1   1 failed   9 passed (51.9m) 
+run 3 exit=0   10 passed (37.7m) 
+DONE

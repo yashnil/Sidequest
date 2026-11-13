@@ -1,0 +1,4 @@
+run 1 exit=1   2 failed   8 passed (1.1h) 
+run 2 exit=1   10 failed 
+run 3 exit=1   10 failed 
+DONE
