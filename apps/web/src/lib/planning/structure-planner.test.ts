@@ -355,3 +355,16 @@ describe('a place on the road of a long move is a stop, not a detour (staging Ic
     expect(kernel.checkDay(moveIndex, [beach, lagoon], () => [])).toEqual({ ok: true });
   });
 });
+
+describe('a distant area is gathered rather than revisited (eval v2: the island far side on three separate days)', () => {
+  const farDays = (plan: ReturnType<typeof planStructure>) => new Set(plan.days.filter((d) => d.stops.some((s) => s.candidate.id.startsWith('west-'))).map((d) => d.dayNumber)).size;
+  const near = Array.from({ length: 8 }, (_, i) => c(`near-${i}`, { coordinates: at(0.01 * (i % 3), 0.012 * Math.floor(i / 3)), fit: 70 }));
+  const west = Array.from({ length: 5 }, (_, i) => c(`west-${i}`, { coordinates: at(0.008 * i, -0.97), durationMinutes: 60, fit: 82, significance: 0.75 }));
+  it('greedy construction drives out twice; the whole-trip search makes it one long day out and keeps most of the area', () => {
+    const greedyPlan = planStructure({ ...input([...near, ...west]), improve: false });
+    const improvedPlan = planStructure({ ...input([...near, ...west]), improve: true });
+    expect(farDays(greedyPlan)).toBe(2);
+    expect(farDays(improvedPlan)).toBe(1);
+    expect(scheduledIds(improvedPlan).filter((id) => id.startsWith('west-')).length).toBeGreaterThanOrEqual(3);
+  });
+});

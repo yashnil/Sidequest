@@ -437,6 +437,11 @@ export function compareObjective(a: StructureObjective, b: StructureObjective): 
   return Math.abs(d) <= EPSILON ? 0 : d;
 }
 
+/** A stop this far (minutes) from the day's bed belongs to a distant area. */
+export const CONSOLIDATE_FAR_MINUTES = 60;
+/** Distant stops within this many minutes of each other are one area. */
+export const CONSOLIDATE_AREA_HOP = 50;
+
 export function improveStructure(kernel: PlannerKernel, seed: PlanState, options: ImproveOptions = {}): PlanState {
   const { maxIterations, maxNoImprove } = { ...DEFAULT_OPTIONS, ...options };
   const { input, days } = kernel;
@@ -725,10 +730,67 @@ export function improveStructure(kernel: PlannerKernel, seed: PlanState, options
     return null;
   }
 
+  // --- 6. consolidate a distant area onto one day ----------------------------------------------
+  /*
+   * Eval v2: an island trip drove to the far side on two or three separate
+   * days because each move above shifts one stop at a time, and an area whose
+   * stops together overflow one day can never be gathered that way. This move
+   * takes every distant stop of one area (more than `CONSOLIDATE_FAR_MINUTES`
+   * from that day's bed, grouped by hops of at most `CONSOLIDATE_AREA_HOP`)
+   * spread over several days and tries each of those days as the area's one
+   * day — dropping the area's lowest-value stops, never an include, until the
+   * day stands. The whole-trip objective decides: travel saved against value
+   * given up. Freed days refill from nearer places through `insert`. The daily
+   * limits are not touched.
+   */
+  function consolidate(state: PlanState, z: StructureObjective): Step | null {
+    const far: { day: number; stop: PlannerCandidate }[] = [];
+    state.forEach((row, i) => {
+      for (const stop of row) {
+        if (!movable(stop) || kernel.slotOf(stop) !== 'day') continue;
+        if ((input.minutes(days[i]!.baseId, stop.id) ?? 0) > CONSOLIDATE_FAR_MINUTES) far.push({ day: i, stop });
+      }
+    });
+    if (far.length < 2) return null;
+    /* Areas: distant stops joined by short hops. */
+    const parent = far.map((_, k) => k);
+    const find = (k: number): number => (parent[k] === k ? k : (parent[k] = find(parent[k]!)));
+    for (let a = 0; a < far.length; a += 1) {
+      for (let b = a + 1; b < far.length; b += 1) {
+        const hop = input.minutes(far[a]!.stop.id, far[b]!.stop.id);
+        if (hop !== null && hop <= CONSOLIDATE_AREA_HOP) parent[find(a)] = find(b);
+      }
+    }
+    const areas = new Map<number, { day: number; stop: PlannerCandidate }[]>();
+    far.forEach((entry, k) => areas.set(find(k), [...(areas.get(find(k)) ?? []), entry]));
+    for (const area of areas.values()) {
+      const areaDays = [...new Set(area.map((e) => e.day))];
+      if (areaDays.length < 2) continue;
+      for (const target of areaDays) {
+        if (days[target]!.isFirst || days[target]!.isLast || days[target]!.relocation) continue;
+        const moving = area.filter((e) => e.day !== target);
+        const rows = new Map<number, PlannerCandidate[]>();
+        for (const { day, stop } of moving) rows.set(day, (rows.get(day) ?? state[day]!).filter((x) => x !== stop));
+        let targetRow = [...state[target]!, ...moving.map((e) => e.stop)];
+        /* Drop the area's least valuable stops until the day stands; never an include. */
+        const droppable = [...area.map((e) => e.stop)].filter((x) => x.status !== 'must').sort((a, b) => experienceValue(kernel, a) - experienceValue(kernel, b));
+        for (let drops = 0; drops <= Math.min(3, droppable.length); drops += 1) {
+          if (drops > 0) targetRow = targetRow.filter((x) => x !== droppable[drops - 1]);
+          const next = withRows(state, new Map([...rows, [target, targetRow]]));
+          if (!valid(next, [...new Set([...rows.keys(), target])])) continue;
+          const nz = evaluateObjective(kernel, next);
+          if (compareObjective(nz, z) > 0) return { state: next, z: nz };
+          break;
+        }
+      }
+    }
+    return null;
+  }
+
   function localSearch(start: PlanState): Step {
     let cur: Step = { state: start, z: evaluateObjective(kernel, start) };
     for (let guard = 0; guard < LOCAL_SEARCH_GUARD; guard += 1) {
-      const next = insert(cur.state, cur.z) ?? relocate(cur.state, cur.z) ?? swap(cur.state, cur.z) ?? replace(cur.state, cur.z) ?? makeRoom(cur.state, cur.z);
+      const next = insert(cur.state, cur.z) ?? relocate(cur.state, cur.z) ?? swap(cur.state, cur.z) ?? replace(cur.state, cur.z) ?? makeRoom(cur.state, cur.z) ?? consolidate(cur.state, cur.z);
       if (!next) break;
       cur = next;
     }
