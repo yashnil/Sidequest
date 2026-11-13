@@ -212,6 +212,44 @@ function sameName(a: string | undefined, b: string): boolean {
   return Boolean(a) && fold(a!) === fold(b);
 }
 
+/**
+ * A PLACE THE PROPOSAL SAID IS IN ONE NAMED PART, PLACED IN ANOTHER.
+ *
+ * A live "Tokyo and Kyoto" scan placed "Kyoto Imperial Palace Park" (locality
+ * Kyoto) three kilometres from Tsukiji, and the plan put it on a Tokyo day. When
+ * the traveller named the parts and the proposal's own locality is one of them,
+ * a point that lands far from that part and nearer a different named part is
+ * the wrong thing, not a far-flung version of the right one: the position is
+ * withdrawn and the candidate is unplaced (unknown, never wrong). Bases are
+ * left alone; a point with no named part to compare against is left alone.
+ * Nothing here knows a place name — only the traveller's parts and the
+ * proposal's own words.
+ */
+export const PART_MISMATCH_KM = 40;
+
+export function withdrawCrossPartPositions(
+  proposal: Pick<ScanProposal, 'candidates'>,
+  positions: ReadonlyMap<string, ResolvedPosition | null>,
+  parts: readonly { label: string; center: { lat: number; lng: number } }[],
+): { positions: Map<string, ResolvedPosition | null>; withdrawn: string[] } {
+  const next = new Map(positions);
+  const withdrawn: string[] = [];
+  if (parts.length < 2) return { positions: next, withdrawn };
+  for (const candidate of proposal.candidates) {
+    const at = positions.get(candidate.key);
+    if (!at) continue;
+    const own = parts.find((part) => sameName(candidate.locality, part.label));
+    if (!own) continue;
+    const fromOwn = haversineKm(at.coordinates, own.center);
+    if (fromOwn <= PART_MISMATCH_KM) continue;
+    const nearerOther = parts.some((part) => part !== own && haversineKm(at.coordinates, part.center) < fromOwn);
+    if (!nearerOther) continue;
+    next.set(candidate.key, null);
+    withdrawn.push(candidate.key);
+  }
+  return { positions: next, withdrawn };
+}
+
 export async function placeScanProposal(proposal: ScanProposal, options: PlacementOptions): Promise<PlacementResult> {
   const positions = new Map<string, ResolvedPosition | null>();
   const usePlaces = googlePlacesUsable();

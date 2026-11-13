@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { walkEndOf, walkNotes } from './planner-composer';
+import { carFreeMoveFor, walkEndOf, walkNotes } from './planner-composer';
 import type { PlannerBase, StructurePlan } from './structure-planner';
 
 const bed = (id: string, name: string, lat: number, lng: number): PlannerBase => ({ id, name, why: '', coordinates: { lat, lng }, fromDate: '2027-03-20', toDate: '2027-03-22', nights: 2, transferMinutesFromPrevious: 0 });
@@ -31,5 +31,19 @@ describe('one-way walks on the day', () => {
     const [note] = walkNotes({ plan, bases: [bed('chikatsuyu', 'Chikatsuyu', 33.812, 135.521)], carAvailable: true });
     expect(note!.code).toBe('walk_return');
     expect(note!.note).toMatch(/back to the car/);
+  });
+});
+
+describe('a car-free move says how it is made', () => {
+  const tokyo = { lat: 35.6896, lng: 139.7006 };
+  const kyoto = { lat: 35.0037, lng: 135.7788 };
+  it('a long hop where high-speed rail is the backbone is a high-speed train; elsewhere a train', () => {
+    expect(carFreeMoveFor(tokyo, kyoto, 'JP')).toEqual({ how: 'high_speed_rail', when: 'start' });
+    expect(carFreeMoveFor(tokyo, kyoto, 'IS')).toEqual({ how: 'rail', when: 'start' });
+    expect(carFreeMoveFor(tokyo, { lat: 35.45, lng: 139.63 }, 'JP')).toEqual({ how: 'rail', when: 'start' });
+  });
+  it('a hop across town, or an unplaced bed, states nothing', () => {
+    expect(carFreeMoveFor(tokyo, { lat: 35.69, lng: 139.705 }, 'JP')).toBeNull();
+    expect(carFreeMoveFor(undefined, kyoto, 'JP')).toBeNull();
   });
 });

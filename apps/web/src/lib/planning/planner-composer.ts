@@ -431,6 +431,18 @@ export function themeFor(day: StructurePlan['days'][number], baseName: string, i
   return clip(body || `A slower day around ${baseName}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
 }
 
+/** How a car-free move between two beds is made: a train, high-speed where the country's facts make it the backbone and the hop is long; nothing for a hop across town. */
+export function carFreeMoveFor(
+  from: { lat: number; lng: number } | undefined,
+  to: { lat: number; lng: number } | undefined,
+  countryCode: string | null | undefined,
+): { how: 'rail' | 'high_speed_rail'; when: 'start' } | null {
+  if (!from || !to) return null;
+  const km = haversineKm(from, to);
+  if (km <= 1.5) return null;
+  return { how: km >= 100 && highSpeedRailBackbone(countryCode) ? 'high_speed_rail' : 'rail', when: 'start' };
+}
+
 function draftFromPlan(args: {
   windows: readonly PlannerDayWindow[];
   plan: StructurePlan;
@@ -501,6 +513,15 @@ function draftFromPlan(args: {
       theme: themeFor(day, name, isFirst, isLast),
       intensity: day.intensity,
       ...(day.relocation ? { relocation: true } : {}),
+      /*
+       * A car-free move says it is a train. Without it the leg that leaves the
+       * old base fell through to the reconciler's default and a live Tokyo → Kyoto
+       * day printed "≈9 hr 15 min bus". High-speed only where the country's facts
+       * make it the backbone and the hop is long enough to be one.
+       */
+      ...(day.relocation && !input.carAvailable
+        ? ((move) => (move ? { move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), input.region.compiled.scope.countryCode))
+        : {}),
       anchors,
       meals: {
         /* On a moving day the traveller wakes where they slept last night, not where they sleep tonight. */

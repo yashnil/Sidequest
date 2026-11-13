@@ -95,3 +95,37 @@ describe('the wrong kind of answer (live Tanzania scan)', () => {
     expect(answerScaleOfTypes(['locality', 'political'])).toBe('settlement');
   });
 });
+
+describe('a place placed in a different named part than its own (live Tokyo-and-Kyoto scan)', () => {
+  const tokyo = { label: 'Tokyo', center: { lat: 35.6896, lng: 139.7006 } };
+  const kyoto = { label: 'Kyoto', center: { lat: 35.0116, lng: 135.7681 } };
+  const at = (lat: number, lng: number) => ({ coordinates: { lat, lng }, method: 'geocoder' as const, provider: 'nominatim', approximate: false });
+
+  it('is withdrawn when its own locality is a named part and it landed near another one', async () => {
+    const normalized = normalizeScanProposal({
+      bases: [{ name: 'Shinjuku', locality: 'Tokyo', nightsHint: 4, why: 'Central.' }],
+      candidates: [
+        { name: 'Kyoto Imperial Palace Park', locality: 'Kyoto', kind: 'park', tier: 'classic', why: 'Blossom.' },
+        { name: 'Kiyomizu-dera', locality: 'Kyoto', kind: 'temple', tier: 'classic', why: 'Views.' },
+        { name: 'Senso-ji', locality: 'Tokyo', kind: 'temple', tier: 'classic', why: 'Old Tokyo.' },
+        { name: 'Hakone Open-Air Museum', locality: 'Hakone', kind: 'museum', tier: 'side_quest', why: 'Art.' },
+      ],
+    });
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const [palace, kiyomizu, sensoji, hakone] = normalized.proposal.candidates.map((c) => c.key);
+    const { withdrawCrossPartPositions } = await import('./placement');
+    const positions = new Map([
+      [palace!, at(35.6652, 139.7708)], // Tsukiji: the Tokyo side
+      [kiyomizu!, at(34.9949, 135.785)],
+      [sensoji!, at(35.7148, 139.7967)],
+      [hakone!, at(35.2447, 139.0505)],
+    ]);
+    const checked = withdrawCrossPartPositions(normalized.proposal, positions, [tokyo, kyoto]);
+    expect(checked.withdrawn).toEqual([palace]);
+    expect(checked.positions.get(palace!)).toBeNull();
+    expect(checked.positions.get(kiyomizu!)).not.toBeNull();
+    expect(checked.positions.get(hakone!)).not.toBeNull();
+    /* One named part: nothing to compare against. */
+    expect(withdrawCrossPartPositions(normalized.proposal, positions, [tokyo]).withdrawn).toEqual([]);
+  });
+});
