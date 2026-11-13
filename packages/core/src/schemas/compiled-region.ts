@@ -8,6 +8,7 @@ import { destinationEntityTypeSchema, scopeBreadthSchema } from './geography';
 import { operatingHoursDatasetSchema } from './hours';
 import { placeSchema } from './place';
 import { regionSchema } from './region';
+import { routeFeasibilitySchema } from './route-feasibility';
 import { mustDoCoverageSchema } from './must-do';
 import { destinationResearchReadinessSchema } from './research-readiness';
 import { dataLicenceSchema } from './licence';
@@ -334,6 +335,15 @@ export const travelTimeMatrixSchema = z.object({
     note: z.string().min(1),
     source: z.string().min(1).optional(),
   }),
+  /**
+   * Per cell, what stands behind the figure (`schemas/route-feasibility.ts`).
+   * Absent on matrices written before it existed and on wholly measured or
+   * authored ones, where the provenance above already says it. When present,
+   * a `bounded_estimate` cell holds a floor proved from measured legs, a
+   * `disconnected` cell a router's affirmative no-route (its minutes are a
+   * placeholder never to be scheduled), and only `verified` was measured.
+   */
+  feasibility: z.array(z.array(routeFeasibilitySchema)).optional(),
 });
 export type TravelTimeMatrixData = z.infer<typeof travelTimeMatrixSchema>;
 

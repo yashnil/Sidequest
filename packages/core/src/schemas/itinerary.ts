@@ -14,6 +14,7 @@ import { experienceGraphSchema } from '../experience/graph';
 import { accessConstraintSchema } from '../access/constraints';
 import { qualityCompilerReportSchema } from '../quality/compiler-report';
 import { stayDecisionSchema } from './stay';
+import { routeFeasibilitySchema } from './route-feasibility';
 
 export { MINUTES_PER_DAY, TIMELINE_MINUTE_LIMIT, formatMinuteOfDay, formatTimelineMinute, minuteOfDaySchema, parseMinuteOfDay, timelineMinuteSchema } from './common';
 
@@ -210,6 +211,13 @@ export const travelSegmentSchema = z
      * model's figure. Present only when `provenance` is `estimated`.
      */
     estimateKind: z.enum(['geo', 'model']).optional(),
+    /**
+     * Eval v3 — whether the road behind the figure is known to exist
+     * (`schemas/route-feasibility.ts`). `bounded_estimate` means `minutes` is a
+     * floor proved from measured legs (the leg is *at least* this long) and
+     * never a precise drive; absent on legs written before it existed.
+     */
+    feasibility: routeFeasibilitySchema.optional(),
     /** The honest inputs behind a geo estimate. `approxKm` is a detour-adjusted figure, never a road measurement, and is never copied into `km`. */
     estimate: z.object({ straightLineKm: z.number().min(0), approxKm: z.number().min(0), kmh: z.number().min(0) }).optional(),
     /** Set when the model's transport hint was overridden because the geometry made it implausible (a 90 km "walk"). Carries the hinted mode. */

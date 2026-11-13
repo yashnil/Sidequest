@@ -1,4 +1,4 @@
-import { imageCropPolicy } from '@sidequest/core';
+import { imageCropPolicy, travelFigurePrefix } from '@sidequest/core';
 import {
   PACKING_CATEGORY_LABELS,
   TRANSPORT_MODE_LABELS,
@@ -202,7 +202,9 @@ function travelPhrase(item: ItineraryItem): { title: string; duration?: string; 
   const title = `${mode} to ${travel.toName}`;
   if (travel.minutes === null) return { title, duration: 'time not measured', approx: true };
   const approx = travel.provenance !== 'measured' && travel.provenance !== 'official';
-  return { title, duration: `${approx ? '≈ ' : ''}${travelSpan(travel.minutes)}`, approx };
+  /* Eval v3 — `≥` for a floor proved from measured legs, `≈` for an estimate. */
+  const mark = travelFigurePrefix(travel);
+  return { title, duration: `${mark ? `${mark} ` : ''}${travelSpan(travel.minutes)}${travel.feasibility === 'bounded_estimate' ? ' at least' : ''}`, approx };
 }
 
 function intensityWord(value: ItineraryDay['intensity']): GuideDay['intensity'] {
@@ -497,7 +499,7 @@ export function assembleGuide(input: GuideInput): GuideModel {
     .map((day) => {
       const source = itinerary.days.find((d) => d.dayNumber === day.number)!;
       const leg = source.items.find((item) => item.kind === 'travel' && item.travel && item.travel.role !== 'approach' && item.travel.fromId !== item.travel.toId) ?? source.items.find((item) => item.kind === 'travel' && item.travel);
-      const how = leg?.travel ? (leg.travel.minutes === null ? `${modeLabel(leg.travel.mode)} · time not measured` : `${modeLabel(leg.travel.mode)} · ${leg.travel.provenance === 'measured' ? '' : '≈ '}${travelSpan(leg.travel.minutes)}`) : modeLabel(source.transport.primaryMode as TransportMode);
+      const how = leg?.travel ? (leg.travel.minutes === null ? `${modeLabel(leg.travel.mode)} · time not measured` : `${modeLabel(leg.travel.mode)} · ${((mark) => (mark ? `${mark} ` : ''))(travelFigurePrefix(leg.travel))}${travelSpan(leg.travel.minutes)}`) : modeLabel(source.transport.primaryMode as TransportMode);
       return { day: day.number, from: day.move!.from, to: day.move!.to, how };
     });
 

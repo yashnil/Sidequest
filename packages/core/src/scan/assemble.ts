@@ -17,6 +17,7 @@ import type { FoodDataset } from '../schemas/food';
 import type { WeatherLocation } from '../schemas/weather';
 import type { Region } from '../schemas/region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
+import { boundTravelMatrix } from '../travel/feasibility';
 import { highSpeedRailBackbone } from '../reality/jurisdictions';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
@@ -203,7 +204,7 @@ export function areaExperienceAnswered(kind: string, position: Pick<ResolvedPosi
  * `estimated` and built from the same mode-aware estimator the reconciler uses
  * (`travel/estimate.ts`), so the board and the plan agree about a guess.
  */
-export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot'): TravelTimeMatrixData {
+export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot', status: 'provider_unavailable' | 'plausible_unverified' = 'provider_unavailable'): TravelTimeMatrixData {
   const ids = points.map((p) => p.id);
   const estimateMode: TransportMode = mode === 'car' ? 'drive' : 'walk';
   const minutes = points.map((a) => points.map((b) => (a.id === b.id ? 0 : Math.max(1, Math.round(estimateLegMinutes({ from: a.coordinates, to: b.coordinates, mode: estimateMode })?.minutes ?? fallbackMinutes(a, b, mode))))));
@@ -214,6 +215,8 @@ export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 
     minutes,
     km,
     provenance: { kind: 'estimated', note: 'Estimated from straight-line distance with a road factor; no router answered.', source: 'sidequest-geo-estimate' },
+    /* Eval v3 — a straight line says how far, never that a road joins the two ends. */
+    feasibility: points.map((a) => points.map((b) => (a.id === b.id ? 'verified' : status))),
   };
 }
 
@@ -576,7 +579,14 @@ export function walkDuration(c: ScanCandidateProposal): number {
 }
 
 export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly {
-  const { proposal, positions, plan, matrix } = input;
+  const { proposal, positions, plan } = input;
+  /*
+   * Eval v3 — where the matrix says which cells a router measured, every other
+   * cell is raised to the floor those measurements prove (`travel/feasibility.ts`):
+   * two stops either side of a cliff are as far apart as the road between them,
+   * not as the crow flies. Idempotent, so a matrix bounded upstream is unchanged.
+   */
+  const matrix = input.matrix.feasibility ? boundTravelMatrix({ matrix: input.matrix }).matrix : input.matrix;
   const nights = Math.max(0, input.dates.length - 1);
   const index = new Map(matrix.ids.map((id, i) => [id, i]));
   const matrixMinutes = (a: string, b: string): number | null => {

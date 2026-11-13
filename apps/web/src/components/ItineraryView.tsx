@@ -3094,6 +3094,8 @@ function travelLine(item: ItineraryItem): string {
     return `${travelSpan(travel.minutes)} ${item.title}${travel.km !== null && travel.km > 0 ? ` · ${Math.round(travel.km)} km` : ''}${travel.basis === 'traffic_aware' ? ' · with traffic' : travel.basis === 'scheduled' ? ' · timetable' : ''}${travel.viaBases ? ' · base to base' : ''}`;
   }
   if (travel.minutes !== null && travel.provenance !== 'unmeasured') {
+    /* Eval v3 — a floor proved from measured legs says it is at least that long, and never prints a crow-flies km beside it. */
+    if (travel.feasibility === 'bounded_estimate') return `≥${travelSpan(travel.minutes)} ${item.title} · at least this long by road (not measured directly)`;
     return `${travel.provenance === 'estimated' ? '≈' : ''}${travelSpan(travel.minutes)} ${item.title} · ${travel.provenance === 'estimated' ? `estimate${travel.estimate?.approxKm ? ` (~${travel.estimate.approxKm} km)` : ''}` : travelProvenanceLabel(travel)}`;
   }
   /*
@@ -3548,8 +3550,10 @@ function legLine(item: ItineraryItem): string {
   const travel = item.travel!;
   if (travel.unverifiedScheduled || travel.minutes === null || (travel.provenance !== 'measured' && travel.provenance !== 'estimated')) return travelLine(item);
   const approx = travel.provenance === 'estimated';
-  const km = approx ? (travel.estimate?.approxKm ?? null) : travel.km;
   const mode = TRANSPORT_MODE_LABELS[travel.mode]?.toLowerCase() ?? 'travel';
+  /* Eval v3 — a bounded leg is a floor: "≥2 hr drive · at least", never a precise drive or a straight-line km. */
+  if (travel.feasibility === 'bounded_estimate') return [`≥${travelSpan(travel.minutes)} ${mode}`, 'at least · not measured directly', travel.viaBases ? 'base to base' : null].filter(Boolean).join(' · ');
+  const km = approx ? (travel.estimate?.approxKm ?? null) : travel.km;
   return [
     `${approx ? '≈' : ''}${travelSpan(travel.minutes)} ${mode}`,
     km !== null && km > 0 ? `${approx ? '~' : ''}${Math.round(km)} km` : approx ? 'estimate' : null,

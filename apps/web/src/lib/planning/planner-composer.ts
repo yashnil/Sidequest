@@ -1,4 +1,4 @@
-import { estimateLegMinutes, haversineKm, highSpeedRailBackbone, publicTransportNetwork, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
+import { boundedLegMinutes, estimateLegMinutes, haversineKm, highSpeedRailBackbone, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -258,8 +258,17 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
   for (const c of pool) coordinates.set(c.id, c.coordinates);
   const walkEnds = new Map(pool.filter((c) => c.walkEnd).map((c) => [c.id, c.walkEnd!] as const));
   for (const b of bases) coordinates.set(b.id, b.coordinates);
-  const matrix = region.matrix as unknown as { ids: string[]; minutes: number[][] };
+  const matrix = region.matrix as unknown as { mode?: string; ids: string[]; minutes: number[][]; feasibility?: string[][] };
   const index = new Map(matrix.ids.map((id: string, i: number) => [id, i]));
+  /*
+   * Eval v3 — a road figure nobody measured is raised to the floor the
+   * measured legs prove (`@sidequest/core` `travel/feasibility.ts`), so two
+   * stops either side of a cliff are never a short drive apart because they
+   * are close on a map. Cells of a bounded scan matrix already carry it; this
+   * covers a pair the matrix does not hold.
+   */
+  const verified = verifiedLookup(matrix);
+  const roadMatrix = matrix.mode === undefined || matrix.mode === 'car';
   const placeToRouting = new Map(compiled.places.map((p) => [p.id, p.id]));
   /*
    * Out of a one-way walk, the traveller is at its end, not its start. Without
@@ -293,7 +302,10 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     const pb = coordinates.get(to);
     if (input.carAvailable) {
       if (typeof measured === 'number' && Number.isFinite(measured)) return measured;
-      return pa && pb ? estimateLegMinutes({ from: pa, to: pb, mode: 'drive' })?.minutes ?? null : null;
+      const estimate = pa && pb ? estimateLegMinutes({ from: pa, to: pb, mode: 'drive' })?.minutes ?? null : null;
+      if (!roadMatrix || verified.pivots.length === 0) return estimate;
+      const bound = lowerBoundFrom({ pivots: verified.pivots, measured: (x, y) => verified.measured(placeToRouting.get(x) ?? x, placeToRouting.get(y) ?? y), fromId: placeToRouting.get(from) ?? from, toId: placeToRouting.get(to) ?? to });
+      return boundedLegMinutes({ estimate, bound })?.minutes ?? estimate;
     }
     // Car-free: a short walk is a walk; anything longer is public transport, estimated, never an impossible walk.
     if (pa && pb && haversineKm(pa, pb) <= 1.6) return typeof measured === 'number' && Number.isFinite(measured) ? measured : estimateLegMinutes({ from: pa, to: pb, mode: 'walk' })?.minutes ?? null;
@@ -336,6 +348,8 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     bases,
     candidates: pool,
     minutes,
+    /* Eval v3 — a pair a router affirmatively found no road between is never one day's drive. Car trips only: a foot matrix's no-route says nothing about a bus. */
+    ...(input.carAvailable && roadMatrix && matrix.feasibility ? { disconnected: (a: string, b: string) => matrixFeasibility(matrix, placeToRouting.get(a) ?? a, placeToRouting.get(b) ?? b) === 'disconnected' } : {}),
     pace: profile.pace,
     maxStopsPerDay: Math.max(1, Math.round(profile.derived.activitySlotsPerDay)),
     carAvailable: input.carAvailable,

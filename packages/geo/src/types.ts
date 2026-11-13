@@ -42,6 +42,13 @@ export interface TravelTimeMatrix {
   /** km[from][to]. */
   km: readonly (readonly number[])[];
   provenance: MatrixProvenance;
+  /**
+   * Per cell, what stands behind the figure — `@sidequest/core`'s
+   * `RouteFeasibility` vocabulary (verified, bounded_estimate,
+   * plausible_unverified, disconnected, other_mode_required,
+   * provider_unavailable). Optional: absent means the provenance says it all.
+   */
+  feasibility?: readonly (readonly string[])[];
 }
 
 /**

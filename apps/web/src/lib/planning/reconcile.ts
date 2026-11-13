@@ -81,6 +81,11 @@ import {
   LOCAL_CUISINE_TAG,
   type CuisineWishes,
   estimateLegMinutes,
+  boundedLegMinutes,
+  lowerBoundFrom,
+  matrixFeasibility,
+  verifiedLookup,
+  type RouteFeasibility,
   highSpeedRailBackbone,
   MAX_GEO_ESTIMATE_DRIVE_KM,
   COLOCATED_KM,
@@ -3002,8 +3007,32 @@ export function evidenceMatrixOf(matrix: ReconcileContext['matrix']): ReconcileC
 
 const EMPTY_TRAVEL_MATRIX = { mode: 'car', ids: [], minutes: [], km: [], provenance: { kind: 'estimated', note: 'No matrix consulted.' } } as unknown as ReconcileContext['matrix'];
 
+/**
+ * Eval v3 — the route-feasibility status a leg carries (`schemas/route-feasibility.ts`).
+ * `disconnected` only on an affirmative no-route; a ferry, flight or arranged
+ * transfer the road router cannot see is `other_mode_required`; anything else
+ * nobody could time is `provider_unavailable`, never a verdict.
+ */
+function legFeasibility(input: { measured: boolean; estimate: boolean; bounded: boolean; cell: RouteFeasibility | null; unmeasuredReason: TravelSegment['unmeasuredReason']; noRouteAnswered: boolean }): RouteFeasibility {
+  if (input.measured) return 'verified';
+  if (input.estimate) return input.bounded ? 'bounded_estimate' : input.cell === 'provider_unavailable' ? 'provider_unavailable' : 'plausible_unverified';
+  if (input.noRouteAnswered) return 'disconnected';
+  if (input.unmeasuredReason === 'mode_not_routed' || input.unmeasuredReason === 'operator_unpublished') return 'other_mode_required';
+  return 'provider_unavailable';
+}
+
 function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor[]): { day: ItineraryDay; overflowMinutes: number; legsMeasured: number; legsUnmeasured: number; legsEstimated: number } {
   const { context, window, draftDay, base, previousBase } = input;
+  /*
+   * Eval v3 — the measured legs a road estimate may be bounded through: the
+   * region's verified cells (a bounded scan matrix says which), a wholly
+   * measured matrix, and every pair the router answered during this build.
+   */
+  const verifiedCells = verifiedLookup(context.matrix);
+  const measuredRegion = context.matrix.provenance.kind === 'measured' && !context.matrix.feasibility ? context.matrix : EMPTY_TRAVEL_MATRIX;
+  const floorPivots = [...new Set([...verifiedCells.pivots, ...measuredRegion.ids, ...(input.extraMatrix?.ids ?? [])])];
+  const legFloor = (a: string, b: string) =>
+    floorPivots.length === 0 ? null : lowerBoundFrom({ pivots: floorPivots, measured: (x, y) => measuredLeg(measuredRegion, input.extraMatrix, x, y)?.minutes ?? verifiedCells.measured(x, y), fromId: a, toId: b });
   const canDrive = context.profile.transport.willDrive;
   const groundArrangement = input.groundArrangement;
   const items: ItineraryItem[] = [];
@@ -3338,12 +3367,32 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const geoEstimable = mode === 'rail' || mode === 'public_bus';
     /* The scan's own estimated cell is no better evidence than the estimator for a road nobody has seen measured (`MAX_GEO_ESTIMATE_DRIVE_KM`). */
     const beyondRoadEstimate = mode === 'drive' && fromCoordinates && toCoordinates ? haversineKm(fromCoordinates, toCoordinates) > MAX_GEO_ESTIMATE_DRIVE_KM : false;
-    const estimate = !measured && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
+    /*
+     * Eval v3 — what stands behind the region's own cell for this pair. A pair
+     * the scan's router affirmatively found no road between is never estimated
+     * as a drive; its placeholder figure is not a journey.
+     */
+    const cellFeasibility = matrixFeasibility(context.matrix, from.id, to.id);
+    const cellDisconnected = cellFeasibility === 'disconnected' && (mode === 'drive' || mode === 'rideshare' || mode === 'private_transfer' || mode === 'shuttle');
+    const rawEstimate = !measured && !cellDisconnected && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
       ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot')
         ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
         : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode, highSpeedRail: highSpeedRailBackbone(context.destinationScope?.countryCode) })
       : null;
-    const noRouteAnswered = ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;
+    /*
+     * Eval v3 — PROXIMITY IS NOT DRIVEABILITY. A road estimate is raised to the
+     * floor that measured legs prove (the region's verified cells and whatever
+     * the router answered during this build): T(a,b) ≥ |T(k,b) − T(k,a)|. It
+     * stays an estimate — labelled, never measured, and never the trigger for a
+     * hard-constraint removal — and the leg says it is *at least* this long.
+     */
+    const roadLeg = mode === 'drive' && context.matrix.mode === 'car';
+    const bound = rawEstimate && roadLeg ? legFloor(from.id, to.id) : null;
+    const boundedLeg = rawEstimate ? boundedLegMinutes({ estimate: rawEstimate.minutes, bound }) : null;
+    /* The region's bounded cell only speaks for a road leg on a road matrix, the one case its figure is used. */
+    const bounded = boundedLeg?.feasibility === 'bounded_estimate' || (roadLeg && cellFeasibility === 'bounded_estimate');
+    const estimate = rawEstimate && boundedLeg ? { ...rawEstimate, minutes: boundedLeg.minutes } : rawEstimate;
+    const noRouteAnswered = cellDisconnected || ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;
     const unmeasuredReason: TravelSegment['unmeasuredReason'] =
       walkRefused
         ? /* Nobody was asked and nobody refused: the figure was withdrawn because the journey it described is not one a person makes. */
@@ -3374,6 +3423,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       ...(basis ? { basis } : {}),
       ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (!trustedMatrix || context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
+      feasibility: legFeasibility({ measured: Boolean(measured) && !walkRefused, estimate: Boolean(estimate) && !walkRefused, bounded, cell: cellFeasibility, unmeasuredReason, noRouteAnswered }),
       ...(plausible.corrected ? { modeCorrectedFrom: hinted } : !worldCheck.ok ? { modeCorrectedFrom: hintedRaw } : {}),
       ...(legHint ? { hint: legHint } : {}),
       ...(confirmation?.staticMinutes !== undefined ? { staticMinutes: confirmation.staticMinutes } : {}),
@@ -3394,6 +3444,8 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       travel,
       reason: shown
         ? `${shown.minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
+        : estimate && bounded
+          ? `At least ${estimate.minutes} min by ${labelFor(mode).toLowerCase()} — not measured directly, but measured journeys from a common point show it cannot be shorter; the map distance (${Math.round(estimate.straightLineKm)} km straight) understates the road.`
         : estimate
           ? `About ${estimate.minutes} min by ${labelFor(mode).toLowerCase()}, estimated from map distance (roughly ${estimate.approxKm} km) — not a measured route.${plausible.corrected ? ` The plan said ${labelFor(hinted).toLowerCase()}; ${Math.round(straightLineKm ?? 0)} km apart is not a ${labelFor(hinted).toLowerCase()}.` : ''}`
           : hint && !roadRoutable(hint)

@@ -8,7 +8,6 @@ import {
   assembleScanRegion,
   stayTravellerFor,
   haversineKm,
-  estimatedScanMatrix,
   normalizeScanProposal,
   planScanPoints,
   routeCoverage,
@@ -24,7 +23,6 @@ import {
   type ScanPoint,
   type ScanProposal,
   type ScopeBreadth,
-  type TravelTimeMatrixData,
   JOURNEY_ARCHETYPE_LABELS,
 } from '@sidequest/core';
 import { getIntent } from '../db/compiler-repository';
@@ -56,6 +54,7 @@ import { startAutoBuildAfterScan } from './auto-build';
 import { fixtureScan, openDataProposalAvailable, scanPreflight } from './preflight';
 import { fixtureOpenDataDeps, liveOpenDataDeps, proposeFromOpenData, type OpenDataDiagnostics } from './open-data-proposal';
 import { composerKnownRejected } from '../readiness/probe-cache';
+import { estimatedScanOutcome, measureScanMatrix, type ScanMatrixOutcome } from './scan-matrix';
 
 /**
  * V1 CONVERGENCE — THE DISCOVERY SCAN, END TO END.
@@ -195,51 +194,9 @@ function withinBudget<T>(work: Promise<T>, ms: number, fallback: T, label: strin
   return Promise.race([work.catch(() => fallback), expiry]).finally(() => clearTimeout(timer));
 }
 
-async function measureMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot', deadline: () => boolean): Promise<{ matrix: TravelTimeMatrixData; source: string; measuredPairs: number; totalPairs: number }> {
-  const estimate = estimatedScanMatrix(points, mode);
-  const totalPairs = points.length * (points.length - 1);
-  const routing = verificationProviders().routing;
-  if (!routing || deadline() || points.length < 2) return { matrix: estimate, source: 'distance estimates', measuredPairs: 0, totalPairs };
-  try {
-    const result = await routing.matrix({ points: points.map((p) => ({ id: p.id, lat: p.coordinates.lat, lng: p.coordinates.lng })), mode, maxElements: points.length * points.length });
-    const index = new Map(result.ids.map((id, i) => [id, i]));
-    let measuredPairs = 0;
-    const minutes = estimate.minutes.map((row) => [...row]);
-    const km = estimate.km.map((row) => [...row]);
-    estimate.ids.forEach((from, i) => {
-      estimate.ids.forEach((to, j) => {
-        if (i === j) return;
-        const a = index.get(from);
-        const b = index.get(to);
-        if (a === undefined || b === undefined) return;
-        const m = result.minutes[a]?.[b];
-        const k = result.km[a]?.[b];
-        if (typeof m === 'number' && Number.isFinite(m) && m > 0 && result.provenance.kind === 'measured') {
-          minutes[i]![j] = Math.round(m);
-          if (typeof k === 'number' && Number.isFinite(k)) km[i]![j] = Math.round(k * 10) / 10;
-          measuredPairs += 1;
-        }
-      });
-    });
-    const all = measuredPairs === totalPairs;
-    return {
-      matrix: {
-        mode,
-        ids: estimate.ids,
-        minutes,
-        km,
-        provenance: all
-          ? { kind: 'measured', note: `Measured by ${routing.name}.`, source: routing.name }
-          : { kind: 'estimated', note: `${measuredPairs} of ${totalPairs} journeys measured by ${routing.name}; the rest estimated from distance.`, source: routing.name },
-      },
-      source: measuredPairs > 0 ? routing.name : 'distance estimates',
-      measuredPairs,
-      totalPairs,
-    };
-  } catch (error) {
-    console.warn('Scan matrix: the router did not answer; using estimates', error instanceof Error ? error.message : error);
-    return { matrix: estimate, source: 'distance estimates', measuredPairs: 0, totalPairs };
-  }
+/** Eval v3 — the scan's matrix, measured base rows first within each provider's limits (`scan-matrix.ts`). */
+async function measureMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot', deadline: () => boolean): Promise<ScanMatrixOutcome> {
+  return measureScanMatrix({ points, mode, routing: verificationProviders().routing ?? null, deadline });
 }
 
 /**
@@ -690,14 +647,16 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
             .then((result) => result.positions)
             .catch(() => new Map());
     const timed = fixtureScan()
-      ? { matrix: estimatedScanMatrix(plan.points, mode), source: 'distance estimates', measuredPairs: 0, totalPairs: plan.points.length * (plan.points.length - 1) }
+      ? estimatedScanOutcome(plan.points, mode)
       : await withinBudget(
-          measureMatrix(plan.points, mode, () => false),
+          /* Stops asking a little before the stage's budget so what was measured is kept rather than lost to the timeout's fallback. */
+          ((stopAt) => measureMatrix(plan.points, mode, () => Date.now() >= stopAt))(Date.now() + TIMING_STAGE_BUDGET_MS - 8_000),
           TIMING_STAGE_BUDGET_MS,
-          { matrix: estimatedScanMatrix(plan.points, mode), source: 'distance estimates', measuredPairs: 0, totalPairs: plan.points.length * (plan.points.length - 1) },
+          estimatedScanOutcome(plan.points, mode),
           'matrix',
         );
     noteScanCounters(tripId, scanId, { timed: timed.measuredPairs, measured: timed.matrix.provenance.kind === 'measured' }, new Date());
+    console.warn(`Scan matrix for ${tripId}: ${timed.measuredPairs}/${timed.totalPairs} pairs measured (${timed.baseRows.measured}/${timed.baseRows.total} base↔place) in ${timed.requests.sent}/${timed.requests.planned} requests; ${timed.counts.bounded_estimate} bounded, ${timed.counts.disconnected} disconnected.`);
 
     // --- 3b. somewhere to eat (open map data; never fails the scan) -------------------
     const regionId = `scan-${tripId.slice(0, 8)}-${scanId}`;

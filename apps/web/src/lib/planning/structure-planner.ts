@@ -124,6 +124,13 @@ export interface StructurePlannerInput {
   candidates: readonly PlannerCandidate[];
   /** Door-to-door minutes between two ids (bases and candidates) in the trip's mode, measured or estimated; null when unknown. */
   minutes: (fromId: string, toId: string) => number | null;
+  /**
+   * Eval v3 — true when a router evaluated both ends on the trip's road profile
+   * and affirmatively reported no route (`RouteFeasibility` `disconnected`). Such
+   * a pair is never one day's road outing. Optional: absent, nothing is known
+   * to be disconnected (unknown ≠ false).
+   */
+  disconnected?: (fromId: string, toId: string) => boolean;
   pace: 'slow' | 'balanced' | 'fast';
   /** Most daytime stops a day may hold — the traveller's own pace, from the profile. Evening and sunrise stops are extra. */
   maxStopsPerDay: number;
@@ -602,6 +609,13 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
       if (stops.some((o) => o !== s && o.intensity === 'strenuous')) return fail('too_strenuous', 'One strenuous outing a day is enough.');
       const hard = (i: number) => i >= 0 && i < days.length && stopsOf(i).some((o) => o.intensity === 'strenuous');
       if (input.pace !== 'fast' && (hard(day.index - 1) || hard(day.index + 1))) return fail('too_strenuous', 'Two hard days back to back is more than you asked for.');
+    }
+    if (input.disconnected) {
+      const cut = input.disconnected;
+      const apart = (id: string) => cut(id, s.id) || cut(s.id, id);
+      if (apart(day.baseId) || (day.previousBaseId !== undefined && apart(day.previousBaseId)) || stops.some((o) => o !== s && apart(o.id))) {
+        return fail('not_workable', 'The router found no road between this and the rest of that day.');
+      }
     }
     const fromBase = leg(day.baseId, s.id);
     const alone = stops.length === 1;

@@ -1,0 +1,30 @@
+# Routing audit — straight-line travel fallbacks (eval v3)
+
+**The finding.** A plan had a trailhead and a lookout either side of a sea cliff as a "20 min drive, 6 km". No road crosses there; the real drive is about 3 h. Where no router answered, Sidequest priced the leg from straight-line distance, so being close on a map was read as being an easy drive. Live scans also measured only ~64 of ~1,700 pairs: openrouteservice's matrix seam times only the *consecutive* pairs of the points it is given, and the scan handed it every point at once.
+
+**The fix (provider-agnostic).**
+- A `RouteFeasibility` status now travels with the figures (`packages/core/src/schemas/route-feasibility.ts`). It is carried per cell on `TravelTimeMatrixData.feasibility` and per leg on `TravelSegment.feasibility`.
+- A triangle-inequality lower bound over the measured cells (`packages/core/src/travel/feasibility.ts`) raises every unmeasured pair to what the measured legs prove: `T(a,b) ≥ |T(k,b) − T(k,a)|`.
+- The scan now measures every base → place row inside each provider's per-request limit (`apps/web/src/lib/discovery-scan/scan-matrix.ts`).
+
+| File · function | What it decides | Change |
+|---|---|---|
+| `packages/core/src/travel/estimate.ts#estimateLegMinutes` | The straight-line estimator itself: crow-flies × detour factor at a distance-banded speed. | Unchanged. Still the floor of every estimate. It now carries a `RouteFeasibility` beside it, and `travelFigurePrefix` prints `≥` for a bounded leg and `≈` for an estimate. |
+| `packages/core/src/scan/assemble.ts#estimatedScanMatrix` | The scan matrix when no router answers. | Labels every cell (`provider_unavailable` by default, or `plausible_unverified` when a router was asked). |
+| `packages/core/src/scan/assemble.ts#assembleScanRegion` (`minutes`, `matrixMinutes`) | Base choice, stay objective, reach from base, satellite minutes. | Runs `boundTravelMatrix` on any matrix that carries a feasibility grid (idempotent), so geography reads bounded figures. The stored `travelTimes` keeps the grid. |
+| `packages/core/src/scan/assemble.ts` `edgeMinutes` | Arrival gateway → base minutes. | Unchanged. The gateway is not a matrix point, so there is nothing to bound it through. Remaining gap. |
+| `packages/core/src/scan/assemble.ts` car-free `minutes` (rail estimate) | Car-free geography. | Unchanged. A foot matrix cannot bound a rail journey. |
+| `apps/web/src/lib/discovery-scan/run.ts#measureMatrix` | Which pairs the scan asks the router for. | Now calls `measureScanMatrix`. Each request holds the bases plus the ≤ 20 − b places nearest them: ≤ 400 elements, which is Valhalla's `MAX_MATRIX_PAIRS_PER_REQUEST` and the `ORS_MATRIX_MAX_PAIRS` bound. A scan sends at most 24 requests. Up to 6 direct `route()` confirmations go to base → place pairs that are still unmeasured. The log reports measured, base-row, bounded and disconnected counts. |
+| `apps/web/src/lib/providers/openrouteservice.ts#createOrsRouting.matrix` | Which cells of one ORS matrix answer are kept. | Keeps every answered, plausibility-screened cell of the grid, not just the consecutive pairs. Declined cells are still absences. |
+| `apps/web/src/lib/planning/planner-composer.ts` `baseMinutes` | Planner leg minutes (grouping, ordering, reach). | Matrix cells are already bounded. For a car pair the matrix lacks, the estimate is raised through the matrix's verified cells (`lowerBoundFrom`). A `disconnected` cell is passed to the planner as `disconnected`. |
+| `apps/web/src/lib/planning/planner-composer.ts` walk-end `back` / `walkNotes` / `edgeTransfersFor` | One-way walk returns, the arrival-centre edge. | Unchanged. The walk end and the arrival centre are not matrix points. Remaining gap; these are labelled estimates. |
+| `apps/web/src/lib/planning/structure-planner.ts#stopVerdict` | Whether a stop fits a day. | New optional `disconnected` input: a stop with no road to the day's base or to another stop is refused (`not_workable`). Bounded figures already split days through the ≤ 50 min coherence rule. |
+| `apps/web/src/lib/planning/reconcile.ts` road-leg estimate (`attemptLayout`) | The figure and words of an unmeasured leg. | Raised to the best bound from the region's verified cells, a wholly measured matrix and the build's ledger. Still `provenance: 'estimated'`; `feasibility: 'bounded_estimate'`; reason "At least N min …". A cell the scan's direct route found unroutable gets no estimate (`no_route_found`, `disconnected`). Every leg gets a feasibility status. |
+| `apps/web/src/lib/planning/reconcile.ts` episode walk estimate (~l. 3128) | Walk legs inside a multi-day episode. | Unchanged. Trail legs are not road legs. |
+| `apps/web/src/components/ItineraryView.tsx#legLine`, `travelLine`; `apps/web/src/lib/guide/assemble.ts` | How a leg prints. | A bounded leg prints `≥2 hr drive · at least · not measured directly`, with no straight-line km. |
+| `packages/core/src/scan/base-staleness.ts`, `packages/core/src/scan/sufficiency.ts#candidatesInReach` | Car-free base staleness; whether a scan has enough within reach. | Unchanged. These are coarse counts over coordinates with no measured legs to hand, and they never remove content. Listed as known straight-line readers. |
+| `apps/web/src/lib/discovery-scan/food-eval/eval.ts#legMinutes` | Offline food-eval harness. | Unchanged (an evaluation tool, not product). |
+
+**What does not change.** An estimate, bounded or not, never triggers a hard-constraint removal and is never labelled measured. `disconnected` comes only from a direct route request that evaluated both resolved endpoints and answered no route (`AUTHORITATIVE_NO_ROUTE`). A declined matrix cell, a timeout, an error or an out-of-coverage answer is `plausible_unverified` or `provider_unavailable`.
+
+**Request budget.** With openrouteservice as the global router, a scan of b bases and P places costs about `ceil(P / (20 − b))` matrix requests (≤ 24) plus ≤ 6 direct requests. A typical scan is 5–8 matrix requests, where the old design made one direct request per consecutive pair.

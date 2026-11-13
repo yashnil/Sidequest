@@ -255,6 +255,8 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
       if (n > 2) wanted.push([n - 1, 0]);
       let calls = 0;
       const outstanding: [number, number][] = [];
+      /** Cells the grid answered beyond the consecutive pairs asked for. */
+      const answeredOffRoute = new Set<string>();
       /*
        * V11 §3 — EVERY ACCEPTED CELL IS SCREENED, AND A REFUSED ONE IS AN ABSENCE.
        *
@@ -320,6 +322,28 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
           }
           outstanding.length = 0;
           outstanding.push(...remaining);
+          /*
+           * Eval v3 — the grid already holds every pair of these points, so
+           * every answered cell is kept, not only the consecutive ones asked
+           * for. A discovery scan asks for small sets (a base and the places
+           * near it) precisely so that this one request measures all of them;
+           * dropping the rest is how live scans measured ~64 of ~1,700 pairs.
+           * The same screen applies, and a declined cell stays an absence.
+           */
+          for (let i = 0; i < n; i += 1) {
+            for (let j = 0; j < n; j += 1) {
+              if (i === j || Number.isFinite(minutes[i]![j]!)) continue;
+              const seconds = grid.durations[i]?.[j] ?? null;
+              const distanceKm = grid.distances[i]?.[j] ?? null;
+              if (seconds === null || !Number.isFinite(seconds) || distanceKm === null || !Number.isFinite(distanceKm)) continue;
+              const foundMinutes = Math.round(seconds / 60);
+              const foundKm = Math.round(distanceKm * 10) / 10;
+              if (implausible(i, j, foundMinutes, foundKm)) continue;
+              minutes[i]![j] = foundMinutes;
+              km[i]![j] = foundKm;
+              answeredOffRoute.add(`${i}:${j}`);
+            }
+          }
         }
       }
 
@@ -344,7 +368,7 @@ export function createOrsRouting(diagnostics: { routeCalls: number; routePairs: 
         }
       }
       const asked = new Set(wanted.flatMap(([i, j]) => [`${i}:${j}`, `${j}:${i}`]));
-      for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) if (i !== j && !asked.has(`${i}:${j}`)) fail(ids[i]!, ids[j]!, 'insufficient_evidence');
+      for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) if (i !== j && !asked.has(`${i}:${j}`) && !answeredOffRoute.has(`${i}:${j}`)) fail(ids[i]!, ids[j]!, 'insufficient_evidence');
       return {
         ids,
         minutes,

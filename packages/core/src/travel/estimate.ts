@@ -22,7 +22,14 @@ import type { ItineraryItem, TravelSegment } from '../schemas/itinerary';
  * so that the clock advances by a believable amount between two places that
  * are really 90 km apart.
  */
-export const TRAVEL_DURATION_STATES = ['measured', 'scheduled', 'model_estimate', 'geo_estimate', 'unknown'] as const;
+/*
+ * Eval v3 — the duration state says what kind of figure a leg holds; the
+ * separate `RouteFeasibility` (`schemas/route-feasibility.ts`, carried as
+ * `TravelSegment.feasibility`) says whether the road behind it is known to
+ * exist. A `geo_estimate` leg is `plausible_unverified` or, when measured legs
+ * prove a floor, `bounded_estimate`.
+ */
+export const TRAVEL_DURATION_STATES =['measured', 'scheduled', 'model_estimate', 'geo_estimate', 'unknown'] as const;
 export type TravelDurationState = (typeof TRAVEL_DURATION_STATES)[number];
 
 export function travelDurationStateOf(segment: Pick<TravelSegment, 'provenance' | 'basis' | 'minutes' | 'estimateKind' | 'unverifiedScheduled'>): TravelDurationState {
@@ -31,6 +38,17 @@ export function travelDurationStateOf(segment: Pick<TravelSegment, 'provenance' 
   if (segment.provenance === 'measured') return segment.basis === 'scheduled' ? 'scheduled' : segment.basis === 'estimated' ? 'geo_estimate' : 'measured';
   if (segment.estimateKind === 'model') return 'model_estimate';
   return 'geo_estimate';
+}
+
+/**
+ * The mark a leg's figure carries wherever it is printed: nothing for a
+ * measurement or a timetable, `≈` for an estimate, and `≥` for a floor proved
+ * from measured legs (`travel/feasibility.ts`) — a bounded leg is at least
+ * that long and never a precise drive.
+ */
+export function travelFigurePrefix(segment: Pick<TravelSegment, 'provenance' | 'feasibility'>): '' | '≈' | '≥' {
+  if (segment.feasibility === 'bounded_estimate') return '≥';
+  return segment.provenance === 'measured' || segment.provenance === 'official' ? '' : '≈';
 }
 
 /** Which of the traveller-facing time styles a leg or item earns. */
