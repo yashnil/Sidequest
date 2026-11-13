@@ -1,0 +1,763 @@
+{
+ "summary": {
+  "beach-island": {
+   "verdicts": 9,
+   "new": 1,
+   "old": 8,
+   "tie": 0,
+   "old_mean": 30.8,
+   "new_mean": 27.2,
+   "old_sd": 3.3,
+   "new_sd": 1.7
+  },
+  "city-break": {
+   "verdicts": 9,
+   "new": 1,
+   "old": 6,
+   "tie": 2,
+   "old_mean": 35.6,
+   "new_mean": 32.7,
+   "old_sd": 1.8,
+   "new_sd": 2.0
+  },
+  "family-wellness-march": {
+   "verdicts": 9,
+   "new": 6,
+   "old": 3,
+   "tie": 0,
+   "old_mean": 28.1,
+   "new_mean": 31.2,
+   "old_sd": 2.9,
+   "new_sd": 2.7
+  },
+  "iceland-ring-road": {
+   "verdicts": 9,
+   "new": 6,
+   "old": 3,
+   "tie": 0,
+   "old_mean": 27,
+   "new_mean": 27.8,
+   "old_sd": 2.0,
+   "new_sd": 1.5
+  },
+  "kumano-kodo": {
+   "verdicts": 9,
+   "new": 6,
+   "old": 3,
+   "tie": 0,
+   "old_mean": 27.1,
+   "new_mean": 28.4,
+   "old_sd": 3.3,
+   "new_sd": 1.7
+  },
+  "kyrgyzstan": {
+   "verdicts": 9,
+   "new": 6,
+   "old": 3,
+   "tie": 0,
+   "old_mean": 18,
+   "new_mean": 19.9,
+   "old_sd": 3.4,
+   "new_sd": 2.0
+  },
+  "mountain-hiking": {
+   "verdicts": 9,
+   "new": 4,
+   "old": 3,
+   "tie": 2,
+   "old_mean": 30.8,
+   "new_mean": 31.4,
+   "old_sd": 1.2,
+   "new_sd": 2.8
+  },
+  "multigenerational": {
+   "verdicts": 9,
+   "new": 6,
+   "old": 3,
+   "tie": 0,
+   "old_mean": 27.3,
+   "new_mean": 29.1,
+   "old_sd": 4.6,
+   "new_sd": 0.9
+  },
+  "tanzania-safari": {
+   "verdicts": 9,
+   "new": 3,
+   "old": 6,
+   "tie": 0,
+   "old_mean": 27.3,
+   "new_mean": 23.2,
+   "old_sd": 10.2,
+   "new_sd": 3.9
+  },
+  "tokyo-kyoto-transit": {
+   "verdicts": 9,
+   "new": 9,
+   "old": 0,
+   "tie": 0,
+   "old_mean": 22.2,
+   "new_mean": 36,
+   "old_sd": 0.8,
+   "new_sd": 1.6
+  }
+ },
+ "totals": {
+  "new": 48,
+  "old": 38,
+  "tie": 4
+ },
+ "unanimous": 27,
+ "pairs": 30,
+ "detail": {
+  "beach-island": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 29,
+    "old": 33
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "old",
+    "old": 30,
+    "new": 25
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 26,
+    "old": 28
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 30,
+    "old": 37
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "old",
+    "old": 29,
+    "new": 26
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 26,
+    "old": 28
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 29,
+    "old": 34
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "old",
+    "old": 32,
+    "new": 26
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 28,
+    "old": 26
+   }
+  ],
+  "city-break": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "tie",
+    "old": 35,
+    "new": 35
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 31,
+    "old": 36
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 33,
+    "old": 35
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "tie",
+    "old": 35,
+    "new": 34
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 29,
+    "old": 35
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 34,
+    "old": 37
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 32,
+    "new": 34
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 30,
+    "old": 39
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 34,
+    "old": 36
+   }
+  ],
+  "family-wellness-march": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 28,
+    "old": 32
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 33,
+    "old": 25
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 34,
+    "old": 30
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 28,
+    "old": 32
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 32,
+    "old": 23
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 35,
+    "old": 27
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 27,
+    "old": 30
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 32,
+    "old": 27
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 32,
+    "old": 27
+   }
+  ],
+  "iceland-ring-road": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 27,
+    "old": 29
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 27,
+    "old": 25
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 29,
+    "old": 28
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 27,
+    "old": 30
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 29,
+    "old": 26
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 25,
+    "old": 24
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "old",
+    "new": 27,
+    "old": 29
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 30,
+    "old": 25
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "new",
+    "new": 29,
+    "old": 27
+   }
+  ],
+  "kumano-kodo": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 28,
+    "old": 24
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 28,
+    "new": 30
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 31,
+    "new": 27
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 28,
+    "old": 20
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 28,
+    "new": 29
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 31,
+    "new": 28
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 31,
+    "old": 25
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 29,
+    "new": 30
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 28,
+    "new": 25
+   }
+  ],
+  "kyrgyzstan": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 15,
+    "new": 19
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 16,
+    "new": 22
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 23,
+    "new": 17
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 15,
+    "new": 21
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 15,
+    "new": 20
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 23,
+    "new": 19
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 17,
+    "new": 21
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 16,
+    "new": 23
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 22,
+    "new": 17
+   }
+  ],
+  "mountain-hiking": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 32,
+    "new": 34
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 31,
+    "new": 34
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 27,
+    "old": 30
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "tie",
+    "old": 32,
+    "new": 32
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 30,
+    "new": 33
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 28,
+    "old": 29
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "tie",
+    "old": 33,
+    "new": 33
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "new",
+    "old": 30,
+    "new": 34
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "old",
+    "new": 28,
+    "old": 30
+   }
+  ],
+  "multigenerational": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 25,
+    "new": 30
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 29,
+    "old": 35
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "new",
+    "old": 24,
+    "new": 30
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 24,
+    "new": 29
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 28,
+    "old": 32
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "new",
+    "old": 23,
+    "new": 30
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "new",
+    "old": 25,
+    "new": 30
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 28,
+    "old": 34
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "new",
+    "old": 24,
+    "new": 28
+   }
+  ],
+  "tanzania-safari": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 26,
+    "old": 13
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 26,
+    "old": 32
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 35,
+    "new": 19
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 23,
+    "old": 13
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 28,
+    "old": 35
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 35,
+    "new": 18
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 25,
+    "old": 13
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "old",
+    "new": 27,
+    "old": 34
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "old",
+    "old": 36,
+    "new": 17
+   }
+  ],
+  "tokyo-kyoto-transit": [
+   {
+    "judge": "verdicts-j1-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 38,
+    "old": 23
+   },
+   {
+    "judge": "verdicts-j1-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 36,
+    "old": 22
+   },
+   {
+    "judge": "verdicts-j1-run3",
+    "run": "3",
+    "winner": "new",
+    "old": 22,
+    "new": 35
+   },
+   {
+    "judge": "verdicts-j2-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 38,
+    "old": 22
+   },
+   {
+    "judge": "verdicts-j2-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 37,
+    "old": 21
+   },
+   {
+    "judge": "verdicts-j2-run3",
+    "run": "3",
+    "winner": "new",
+    "old": 23,
+    "new": 34
+   },
+   {
+    "judge": "verdicts-j3-run1",
+    "run": "1",
+    "winner": "new",
+    "new": 37,
+    "old": 23
+   },
+   {
+    "judge": "verdicts-j3-run2",
+    "run": "2",
+    "winner": "new",
+    "new": 36,
+    "old": 21
+   },
+   {
+    "judge": "verdicts-j3-run3",
+    "run": "3",
+    "winner": "new",
+    "old": 23,
+    "new": 33
+   }
+  ]
+ }
+}

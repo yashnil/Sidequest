@@ -1,0 +1,5 @@
+run 1 exit=0   10 passed (34.6m) 
+run 2 exit=0   10 passed (35.0m) 
+run 3 exit=143 
+DONE
+fill run 3 (tokyo-kyoto-transit,city-break,beach-island,mountain-hiking,multigenerational) exit=0   5 passed (16.3m) 

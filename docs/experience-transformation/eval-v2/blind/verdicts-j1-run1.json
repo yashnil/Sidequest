@@ -1,0 +1,332 @@
+[
+  {
+    "id": "beach-island#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 4,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 29
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 4,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 4,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 33
+      }
+    },
+    "preferred": "B",
+    "reason": "B's Princeville base reaches the north shore cleanly (Kilauea Point, Anini, Hanalei Bay, Kalalau Trail to Hanakapiai on day 7), whereas A's Poipu base forces a ~2 hr round trip to Ke'e on arrival day 1 and a 3 hr 25 min drive day 7 for one garden. B mislabels Hanalei Pier 'at sunset' at 16:30 (sunset ~18:43) and neither plan mentions the Haena reservation, a Na Pali boat tour or hurricane season."
+  },
+  {
+    "id": "city-break#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 4,
+        "transport": 4,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 35
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 4,
+        "transport": 4,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 5,
+        "pace": 3,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 35
+      }
+    },
+    "preferred": "tie",
+    "reason": "Both keep one Baixa/Chiado base and walkable days, and both omit Belem/Jeronimos entirely. A labels Sao Jorge 'at sunset' at 16:30 (sunset 20:40) and stacks lunch before the Time Out Market; B adds tram 28, Principe Real, a miradouro and Cervejaria Ramiro but double-books dinner on day 1 and schedules a 05:30 breakfast on departure day. Neither is meaningfully better."
+  },
+  {
+    "id": "family-wellness-march#1",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 2,
+        "lodging": 5,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 28
+      },
+      "B": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 32
+      }
+    },
+    "preferred": "B",
+    "reason": "A's Tenerife pick fits the request, but its plan is towns, churches and museums, with Teide left out by the plan's own admission, a 20:00 drive to Benijo beach after dark on arrival and a 2.5 hr round trip for one hour in Adeje. B's Turangi plan delivers restorative outdoor time (lake walks, waterfalls, Tokaanu and AC Baths hot pools, a boat trip). Its day-6 Red Crater/Emerald Lakes 'short drive' is impossible and too strenuous for children, and Bali in March (rainy season) weakens B's shortlist."
+  },
+  {
+    "id": "iceland-ring-road#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 27
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 29
+      }
+    },
+    "preferred": "B",
+    "reason": "A drives Vik to Hofn on day 3 without stopping at Jokulsarlon (a hard requirement), puts Dyrholaey at 22:40 on 14 June while it is under nesting closure until about 23 June, and its day 4 has an incoherent ~10 hr Hofn-Akureyri leg; it does use the midnight sun well (Godafoss 23:10) and covers Myvatn and Husavik. B includes Jokulsarlon, Diamond Beach, Fjallsarlon, Vestrahorn and Hoffell but skips Myvatn and the south-coast waterfalls, has a 6 hr 10 min drive on day 5 and a pointless 05:30 'sunrise' start (sunrise ~02:26)."
+  },
+  {
+    "id": "kumano-kodo#1",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 3,
+        "geography": 3,
+        "transport": 2,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 4,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 28
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 2,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 4,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 24
+      }
+    },
+    "preferred": "A",
+    "reason": "Both are single-base, rental-car plans, so neither offers multi-day inn-to-inn walking with luggage shuttles. A at least walks the family-friendly Hosshinmon-oji to Hongu Taisha section on day 3 (with a return-transport note) and covers all three Grand Shrines, Oyunohara and Yunomine. B has no Nakahechi walk beyond Daimon-zaka, fills days with scenic drives, mis-times 'sunset' stops at 16:30 and underestimates a Koyasan day trip as 70 min each way."
+  },
+  {
+    "id": "kyrgyzstan#1",
+    "scores": {
+      "A": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 2,
+        "transport": 1,
+        "timing": 2,
+        "quality": 1,
+        "lodging": 1,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 15
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 1,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 19
+      }
+    },
+    "preferred": "B",
+    "reason": "A's 'Song-Kol yurt camp' base is in Bishkek for all 10 nights: bazaars, museums, a nightclub, and Issyk-Kul stargazing scheduled at 18:00 before sunset. It has no trek, no yurt night and no Karakol. B at least spends four nights in Karakol (Jeti-Oguz, Altyn Arashan, Jyrgalan) and visits Kochkor's canyons. It still invents trains, has a broken 14-hour day-5 transfer, never actually sleeps at Song-Kol and has no multi-day trek."
+  },
+  {
+    "id": "mountain-hiking#1",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 32
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 4,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 4,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 34
+      }
+    },
+    "preferred": "B",
+    "reason": "Both use one Alta Badia/Corvara base and miss the Tre Cime circuit, Alpe di Siusi and the Braies/Auronzo reservations. A has stronger hikes (Nuvolau, Puez, Santa Croce), but its day 5 puts Seceda 'at sunrise' via a 35 min drive (the lifts open about 08:30), and day 4 has 3 hr+ of driving for Prato Piazza. B's Sassolungo circuit, Lago di Sorapis, Cinque Torri and Lagazuoi are top-tier and timed realistically, though it leans on scenic-drive filler."
+  },
+  {
+    "id": "multigenerational#1",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 1,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 5,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 25
+      },
+      "B": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 3,
+        "transport": 2,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 30
+      }
+    },
+    "preferred": "B",
+    "reason": "A keeps one Tavira base but spends ~3 hr a day on trains and buses for thin content (Zoomarine and Albufeira at ~2 hr each way). It has only one beach day and no cave boat or clifftop viewpoints. B breaks the one-base rule (Lagos then Tavira) and adds a late 20:15 Cabo Sao Vicente run on arrival. It does deliver the defining Algarve: a Benagil boat trip, a three-beach Lagos day, Praia da Marinha and Algar Seco, Ilha de Tavira and Ilha Deserta. Both plans drop the grandparents from the party."
+  },
+  {
+    "id": "tanzania-safari#1",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 26
+      },
+      "B": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 1,
+        "transport": 1,
+        "timing": 2,
+        "quality": 1,
+        "lodging": 1,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 13
+      }
+    },
+    "preferred": "A",
+    "reason": "A is weak: it has no Serengeti and no Tarangire, Ngorongoro appears only as a 30-min flamingo stop and a truncated 05:30 departure-day drive, and it spends eight nights in Karatu. It does stay in the right region with an operator driver-guide. B is not a safari at all: from a 'Tarangire' base it sends the couple by bus to Dar es Salaam, Zanzibar Stone Town, Bagamoyo and Kizimkazi, which is geographically impossible."
+  },
+  {
+    "id": "tokyo-kyoto-transit#1",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 5,
+        "pace": 3,
+        "safety_season": 4,
+        "usefulness": 4,
+        "total": 38
+      },
+      "B": {
+        "intent": 1,
+        "defining": 2,
+        "geography": 3,
+        "transport": 1,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 2,
+        "safety_season": 4,
+        "usefulness": 2,
+        "total": 23
+      }
+    },
+    "preferred": "A",
+    "reason": "A splits Shinjuku (4 nights) and Higashiyama (5) with the Shinkansen between. Tokyo gets Meiji Jingu, Shibuya, Shinjuku Gyoen blossom and teamLab; Kyoto gets dawn Fushimi Inari, Kiyomizu, Ginkaku-ji, Arashiyama, Kinkaku-ji and Nijo, all on transit (though Asakusa is missing). B never visits Tokyo, books a rental car for a train trip and drives everywhere in Kyoto, with several 05:30 starts."
+  }
+]

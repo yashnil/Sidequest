@@ -1,0 +1,332 @@
+[
+ {
+  "id": "beach-island#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 30
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 2,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 25
+   }
+  },
+  "preferred": "A",
+  "reason": "B's Day 2 sends the couple from Puu o Kila Lookout to the 'Kalalau Trail to Hanakapiai Beach' by a 20-minute, 6 km drive. The trailhead is at Kee on the north shore, and no road crosses Na Pali. The plan also omits any Haena reservation and adds a second 3h20 west-side out-and-back on Day 6. A covers fewer defining sights: there is no Na Pali boat or hike, and its return times from Kalalau Lookout (40 min) are wrong. But its days are mostly followable, and it times the Hanalei sunset well on Day 1."
+ },
+ {
+  "id": "city-break#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 2,
+    "total": 31
+   },
+   "B": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 4,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 36
+   }
+  },
+  "preferred": "B",
+  "reason": "A puts the Feira da Ladra on a Friday, although the market runs Tuesdays and Saturdays. Its Day 1 has two dinners, and Day 4 sends the couple to the castle at 06:15 after a 05:30 breakfast, hours before it opens. A also never includes fado or Belem. B covers the castle, Alfama, a fado evening and the market on the correct Saturday. B still skips Jeronimos despite being in Belem on Day 2, and it labels Santa Luzia at 16:30 'sunset' when sunset is about 20:40."
+ },
+ {
+  "id": "family-wellness-march#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 33
+   },
+   "B": {
+    "intent": 2,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 1,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 25
+   }
+  },
+  "preferred": "A",
+  "reason": "A's shortlist (Tenerife first) fits a mild late-March retreat, and its plan keeps one Puerto de la Cruz base with free afternoons and easy outdoor time every day. Its flaws are a 20:00 beach drive on arrival, a 21:45 stargazing tour unsuited to children, the Saturday market put on a Wednesday, and the family shown as 'two travellers'. B's shortlist includes Bali, which is in its rainy season in March. B's Tongariro plan has a strenuous 4h Ruapehu hike on Day 3, then on Day 6 a 05:30 start for the 7-hour Alpine Crossing followed by another 3-hour track. It also includes a 4h20-driving night-walk day. That contradicts a stressed family's restful retreat."
+ },
+ {
+  "id": "iceland-ring-road#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 2,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 27
+   },
+   "B": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 2,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 25
+   }
+  },
+  "preferred": "A",
+  "reason": "B never visits Jokulsarlon: it arrives in Hofn on Day 1 and leaves for Akureyri on Day 2. It also skips the Vik to Hofn stretch, so the loop is never closed, and it calls Dyrholaey at 16:30 'sunset' in June. A includes Jokulsarlon and Diamond Beach (Day 4) and Dettifoss, and it times its evening viewpoints around the late light. A has its own problems: a 4h round trip to Petra's Stone Collection, a Hofn to Akureyri day over 6 hours, Dyrholaey on 15 June inside the nesting closure, and no Golden Circle, Skogafoss or Myvatn."
+ },
+ {
+  "id": "kumano-kodo#2",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 28
+   },
+   "B": {
+    "intent": 2,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 4,
+    "total": 30
+   }
+  },
+  "preferred": "B",
+  "reason": "Both plans are car-based from one base, with only short Kodo fragments and no inn-to-inn walking or luggage shuttle. B's Kawayu Onsen base is a real, well-placed onsen village, while A's 'Chikatsuyu/Hongu area' covers two places about an hour apart. B adds Oyunohara and gives practical one-way return notes for the Chikatsuyu to Tsugizakura (Day 4) and Hosshinmon to Hongu (Day 10) sections. A's river boat on Day 7 ends nowhere near where the next stop is."
+ },
+ {
+  "id": "kyrgyzstan#2",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 1,
+    "transport": 1,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 1,
+    "usefulness": 1,
+    "total": 16
+   },
+   "B": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 3,
+    "transport": 1,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 22
+   }
+  },
+  "preferred": "B",
+  "reason": "Both plans miss the trek and invent trains or buses on 4WD-only routes. A is geographically incoherent: its 'Song-Kol Lake shore' base is 32 km from Ala Archa, and Days 8 to 10 are Bishkek museums reached by a 35-minute bus. It has a 05:30 start for a 'Sunday' market on a Monday and stargazing at 18:00 in July, so its 4 yurt nights never actually happen. B drops Song-Kol entirely but runs a coherent Bishkek (Ala Archa acclimatisation) to Karakol sequence, with Jeti-Oguz, Altyn-Arashan and Jyrgalan days a traveller could do by hired car."
+ },
+ {
+  "id": "mountain-hiking#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 31
+   },
+   "B": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 34
+   }
+  },
+  "preferred": "B",
+  "reason": "B has the stronger hiking: the Sorapis lake hike (Day 2) and the Scotoni to Lagazuoi circuit (Day 6). It also times Braies at 07:25 on Day 4, before the 09:00 access controls begin, though that day is a lake stroll for 170 minutes of driving. A has more lake strolls, pass drives and museum filler. Its Seceda visit is scheduled for 06:30 on departure day, before the lifts run, and the Day 7 title promises Bolzano but the day never goes there. Neither plan includes Tre Cime."
+ },
+ {
+  "id": "multigenerational#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 29
+   },
+   "B": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 4,
+    "transport": 2,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 4,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 35
+   }
+  },
+  "preferred": "B",
+  "reason": "Both keep one Lagos base and invent trains to Monchique, Zoomarine and Sagres. A starts the grandparents' arrival day with stargazing at Cabo de Sao Vicente from 22:30 to midnight, then a bus back. Its days average 175 minutes of travel, and it adds a Rocha da Pena hike. B's days are gentler and shorter: Meia Praia, Dona Ana and Camilo beaches, Alvor boardwalk, and a near-empty Luz day. B lacks A's dolphin boat and Monchique spa, but it fits 'easy days' far better."
+ },
+ {
+  "id": "tanzania-safari#2",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 1,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 26
+   },
+   "B": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 2,
+    "transport": 3,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 32
+   }
+  },
+  "preferred": "B",
+  "reason": "A spends all 8 nights in Karatu and never reaches the Serengeti or Tarangire. Apart from one 5-hour crater drive and Manyara, it fills the days with a coffee tour, a town walk and village visits. B has the classic structure: Tarangire for 2 nights, the crater rim, a dawn crater descent, 3 Serengeti nights and a flight out, all with a guided 4x4. B's flaws are a garbled 527 km Day 2, a promise of 'July' Mara River crossings on 10 July, and Kogatende and Seronera paired from one camp."
+ },
+ {
+  "id": "tokyo-kyoto-transit#2",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 4,
+    "transport": 4,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 36
+   },
+   "B": {
+    "intent": 1,
+    "defining": 3,
+    "geography": 2,
+    "transport": 1,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 1,
+    "total": 22
+   }
+  },
+  "preferred": "A",
+  "reason": "B ignores the 'by train' request. It books a rental car, drives Hakone twice (Days 3 and 5) and drives 5h30 from Hakone to Kyoto, and on Day 1 it puts the Kyoto Imperial Palace Park 10 minutes from Shinjuku. A honours rail with two sensible bases and covers Fushimi Inari, Nijo, Kinkaku-ji, Kiyomizu and Gion. Its Tokyo days are thin, though: Day 2 is a single evening stop, and there is no Asakusa."
+ }
+]

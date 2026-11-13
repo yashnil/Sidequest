@@ -1,0 +1,332 @@
+[
+ {
+  "id": "beach-island#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 2,
+    "transport": 4,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 4,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 30
+   },
+   "B": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 4,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 4,
+    "safety_season": 2,
+    "usefulness": 4,
+    "total": 37
+   }
+  },
+  "preferred": "B",
+  "reason": "B sleeps on the north shore and covers Kilauea Point, Hanalei Bay, the Kalalau Trail to Hanakapiai (day 7), Waimea Canyon (day 4) and Poipu (day 6), so only two days are long crossings. A sleeps in Poipu and drives to the north shore twice (day 1 to Ke'e for an 18:00 view, with the drive understated at 1 h 05; day 7, 1 h 45 each way to Limahuli) and never does Na Pali by trail or boat. Both skip the Haena reservation and hurricane season, and B's Hanalei Pier 'sunset' at 16:30 is two hours early."
+ },
+ {
+  "id": "city-break#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 4,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 4,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 35
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 4,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 34
+   }
+  },
+  "preferred": "tie",
+  "reason": "Both keep one Baixa/Chiado base and have Alfama, the castle, Feira da Ladra and fado, and neither has Belém, Lisbon's biggest gap. A labels São Jorge 'at sunset' at 16:30 (sunset is 20:40) and runs fado and Bairro Alto 'after dark' at 18:00. B adds Tram 28, Príncipe Real and a miradouro, but schedules two dinners on day 1 (Ramiro, then A Severa) and a 05:30 breakfast on departure day."
+ },
+ {
+  "id": "family-wellness-march#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 4,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 28
+   },
+   "B": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 32
+   }
+  },
+  "preferred": "B",
+  "reason": "B's one base at Turangi gives easy lake and forest walks most days and real restorative soaks (Tokaanu pools on day 3, AC Baths on day 8), which fits 'retreat, feel good, outdoors'. Its flaws: day 6 adds an impossible 25-minute drive to Red Crater, a strenuous alpine stretch unsuitable for children, after a 5-hour hike; days carry about 2 h of driving; and Bali in its rainy season is on the shortlist. A's Tenerife is a sound choice of place, but the plan is a town and church circuit: it drives to Benijo beach at 20:00 on day 1 and to a 21:45 stargazing tour on day 4, drives 98 km for a one-hour old-town visit on day 2, leaves out Teide, has little beach time and calls itself NOT READY."
+ },
+ {
+  "id": "iceland-ring-road#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 27
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 30
+   }
+  },
+  "preferred": "B",
+  "reason": "A drives Vík to Höfn on day 3 straight past Jökulsárlón without stopping, a hard requirement missed. It also sends the couple to Dyrhólaey at 22:40 on 14 June, during the nesting closure, and garbles day 4 into roughly 10 h of driving. B includes Jökulsárlón, Diamond Beach and Fjallsárlón (day 7) plus Goðafoss and Reynisfjara. But B skips Mývatn and the Skógafoss/Seljalandsfoss waterfalls, and it sets a needless 05:30 start for 'sunrise' at Vestrahorn when the sun rises around 02:30."
+ },
+ {
+  "id": "kumano-kodo#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 3,
+    "geography": 3,
+    "transport": 1,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 28
+   },
+   "B": {
+    "intent": 1,
+    "defining": 2,
+    "geography": 2,
+    "transport": 1,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 20
+   }
+  },
+  "preferred": "A",
+  "reason": "Both wrongly make this a self-drive trip from one Hongu base. A at least walks the family-friendly Hosshinmon-oji to Hongu Taisha stretch (day 3) and covers all three Grand Shrines plus Yunomine onsen. B has essentially no Kodo walking (Daimon-zaka and an Iseji pass only). It adds a Koyasan return drive claimed at 1 h 10 each way, presents digging a river onsen at Kawayu as available, and puts 'sunset' stops at 16:30 when sunset is about 18:10."
+ },
+ {
+  "id": "kyrgyzstan#1",
+  "scores": {
+   "A": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 1,
+    "transport": 2,
+    "timing": 2,
+    "quality": 1,
+    "lodging": 1,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 1,
+    "total": 15
+   },
+   "B": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 2,
+    "transport": 1,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 21
+   }
+  },
+  "preferred": "B",
+  "reason": "A labels its base 'Song-Kol yurt camp', but every day is a 35-minute bus ride to Bishkek bazaars, museums and a nightclub, with 'stargazing' at 18:00. It has no trek, no Karakol and no real Song-Kul. B at least spends four nights in Karakol with Jeti-Oguz, Altyn Arashan hot springs and Jyrgalan, then Kochkor and Konorchek canyon. But it routes everything by trains that do not exist, garbles day 5, has no multi-day trek and admits Song-Kul is missing."
+ },
+ {
+  "id": "mountain-hiking#1",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 32
+   },
+   "B": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 4,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 32
+   }
+  },
+  "preferred": "tie",
+  "reason": "A has more real hiking (Nuvolau, Puez, Pralongia, Fanes) and the Seceda and Braies icons. But its Seceda visit at 06:35 is before the lifts run and is miles from an Alta Badia base, and it has two 05:30 starts. B has a cleaner clock and good walks (the Sassolungo circuit, Sorapis, Cinque Torri, Lagazuoi), but leans on pass drives and reaches Tre Cime only as a Cadini viewpoint, with no Auronzo booking. Neither does the Tre Cime circuit."
+ },
+ {
+  "id": "multigenerational#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 2,
+    "transport": 2,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 4,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 24
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 2,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 29
+   }
+  },
+  "preferred": "B",
+  "reason": "B has the defining Algarve experiences: lifeguarded family beaches (Camilo, Meia Praia, Dona Ana, Marinha), a Benagil sea-cave boat trip (day 2), and Cabo de São Vicente timed to the 20:58 sunset. Against that, it breaks the one-base rule (Lagos, then Tavira) and runs about 3 h of 'train' transit a day. A keeps one Tavira base, but its days are long public-transport hauls (about 2 h each way to Zoomarine and to Albufeira old town) with one beach day and no sea-cave boat trip."
+ },
+ {
+  "id": "tanzania-safari#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 1,
+    "geography": 2,
+    "transport": 4,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 1,
+    "total": 23
+   },
+   "B": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 1,
+    "transport": 1,
+    "timing": 2,
+    "quality": 1,
+    "lodging": 1,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 1,
+    "total": 13
+   }
+  },
+  "preferred": "A",
+  "reason": "Both fail as safaris; neither has the Serengeti or a real Ngorongoro crater-floor drive. A at least stays in the Karatu/crater area with an operator driver-guide, a crater flamingo stop and Empakaai. B calls its base 'Tarangire area', but the days are Dar es Salaam museums, Bagamoyo and Zanzibar reached 'by bus', with no game drive at all."
+ },
+ {
+  "id": "tokyo-kyoto-transit#1",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 5,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 4,
+    "total": 38
+   },
+   "B": {
+    "intent": 1,
+    "defining": 2,
+    "geography": 3,
+    "transport": 1,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 4,
+    "usefulness": 2,
+    "total": 22
+   }
+  },
+  "preferred": "A",
+  "reason": "A matches the request: 4 nights in Shinjuku and 5 in Higashiyama, Meiji Jingu, Shibuya and Shinjuku Gyoen in Tokyo, and Fushimi Inari at dawn, Kiyomizu, Gion, Arashiyama, Kinkaku-ji and Nijo in Kyoto. It has glitches: the day 5 transfer is garbled, and the walk from the Sagano train to Gion is impossible. B never visits Tokyo, stays 9 nights in Kyoto, drives a rental car on a 'by train' trip, and has three 05:30 starts."
+ }
+]

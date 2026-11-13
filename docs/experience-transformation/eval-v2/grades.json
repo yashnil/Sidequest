@@ -1,0 +1,4322 @@
+{
+ "old": {
+  "grades": [
+   {
+    "scenario": "family-wellness-march",
+    "run": "1",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "restful-outdoors": {
+      "present": true,
+      "stage": null
+     },
+     "restorative": {
+      "present": true,
+      "stage": null
+     },
+     "family-suitable": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "free-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "strenuous"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 150,
+    "total_travel": 1180,
+    "days_over_limit": 8,
+    "bases": 1,
+    "stops": 23,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 39,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kumano-kodo",
+    "run": "1",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "nakahechi-walk": {
+      "present": true,
+      "stage": null
+     },
+     "hongu-taisha": {
+      "present": true,
+      "stage": null
+     },
+     "nachi-hayatama": {
+      "present": true,
+      "stage": null
+     },
+     "onsen-village-stay": {
+      "present": true,
+      "stage": null
+     },
+     "luggage-transfer": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "no-walking",
+     "rental-car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 140,
+    "total_travel": 976,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 24,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 32,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "1",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": true,
+      "stage": null
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": false,
+      "stage": "selection"
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "aurora-june"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 430,
+    "total_travel": 1695,
+    "days_over_limit": 3,
+    "bases": 4,
+    "stops": 13,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 3,
+    "board_size": 36,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kyrgyzstan",
+    "run": "1",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "song-kul-yurt": {
+      "present": true,
+      "stage": null
+     },
+     "karakol-trek": {
+      "present": false,
+      "stage": "selection"
+     },
+     "issyk-kul": {
+      "present": true,
+      "stage": null
+     },
+     "karakol": {
+      "present": false,
+      "stage": "selection"
+     },
+     "ala-archa": {
+      "present": true,
+      "stage": null
+     },
+     "horse": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "song-kul-bus"
+    ],
+    "sky_violations": [
+     "stargazing \"Issyk-Kul night sky viewing\" at 18:00"
+    ],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 225,
+    "total_travel": 820,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 12,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 6,
+    "board_size": 40,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "1",
+    "build": "old",
+    "defining_present": 1,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "ngorongoro": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": false,
+      "stage": "selection"
+     },
+     "gateway": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 230,
+    "total_travel": 1220,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 8,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 6,
+    "board_size": 30,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tokyo-kyoto-transit",
+    "run": "1",
+    "build": "old",
+    "defining_present": 2,
+    "defining_total": 5,
+    "defining": {
+     "shinkansen": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "sakura": {
+      "present": false,
+      "stage": "selection"
+     },
+     "kyoto-core": {
+      "present": true,
+      "stage": null
+     },
+     "tokyo-core": {
+      "present": false,
+      "stage": "selection"
+     },
+     "two-bases": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": true,
+    "max_day_travel": 70,
+    "total_travel": 415,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 20,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 61,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "city-break",
+    "run": "1",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 130,
+    "total_travel": 231,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 23,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "1",
+    "build": "old",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": true,
+      "stage": null
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 170,
+    "total_travel": 660,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 14,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 26,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "1",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "seceda": {
+      "present": true,
+      "stage": null
+     },
+     "siusi": {
+      "present": false,
+      "stage": "selection"
+     },
+     "braies": {
+      "present": true,
+      "stage": null
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 190,
+    "total_travel": 930,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "multigenerational",
+    "run": "1",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 5,
+    "defining": {
+     "lifeguarded-beach": {
+      "present": false,
+      "stage": "selection"
+     },
+     "boat-grottoes": {
+      "present": false,
+      "stage": "selection"
+     },
+     "easy-viewpoints": {
+      "present": true,
+      "stage": null
+     },
+     "easy-pace": {
+      "present": true,
+      "stage": null
+     },
+     "one-base": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 230,
+    "total_travel": 995,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 9,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 4,
+    "board_size": 23,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "family-wellness-march",
+    "run": "2",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "restful-outdoors": {
+      "present": true,
+      "stage": null
+     },
+     "restorative": {
+      "present": true,
+      "stage": null
+     },
+     "family-suitable": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "free-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "early-starts",
+     "strenuous"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 260,
+    "total_travel": 1253,
+    "days_over_limit": 6,
+    "bases": 1,
+    "stops": 28,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 40,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "kumano-kodo",
+    "run": "2",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "nakahechi-walk": {
+      "present": true,
+      "stage": null
+     },
+     "hongu-taisha": {
+      "present": true,
+      "stage": null
+     },
+     "nachi-hayatama": {
+      "present": true,
+      "stage": null
+     },
+     "onsen-village-stay": {
+      "present": true,
+      "stage": null
+     },
+     "luggage-transfer": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "no-walking",
+     "rental-car",
+     "overlong-stage"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 115,
+    "total_travel": 735,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 28,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 35,
+    "contract_gap": false,
+    "red_flags_n": 3,
+    "hard_n": 3
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "2",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "selection"
+     },
+     "jokulsarlon": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": true,
+      "stage": null
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "aurora-june",
+     "skip-jokulsarlon"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 585,
+    "total_travel": 1960,
+    "days_over_limit": 3,
+    "bases": 4,
+    "stops": 13,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 37,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "kyrgyzstan",
+    "run": "2",
+    "build": "old",
+    "defining_present": 5,
+    "defining_total": 6,
+    "defining": {
+     "song-kul-yurt": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "karakol-trek": {
+      "present": true,
+      "stage": null
+     },
+     "issyk-kul": {
+      "present": true,
+      "stage": null
+     },
+     "karakol": {
+      "present": true,
+      "stage": null
+     },
+     "ala-archa": {
+      "present": true,
+      "stage": null
+     },
+     "horse": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "song-kul-bus"
+    ],
+    "sky_violations": [
+     "stargazing \"Song-Kol stargazing\" at 18:00"
+    ],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 335,
+    "total_travel": 1860,
+    "days_over_limit": 0,
+    "bases": 3,
+    "stops": 19,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 4,
+    "board_size": 38,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "2",
+    "build": "old",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": true,
+      "stage": null
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "self-drive"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": true,
+    "max_day_travel": 435,
+    "total_travel": 435,
+    "days_over_limit": 1,
+    "bases": 5,
+    "stops": 5,
+    "empty_ordinary_days": 3,
+    "one_stop_days": 3,
+    "board_size": 20,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "tokyo-kyoto-transit",
+    "run": "2",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "shinkansen": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "sakura": {
+      "present": true,
+      "stage": null
+     },
+     "kyoto-core": {
+      "present": true,
+      "stage": null
+     },
+     "tokyo-core": {
+      "present": true,
+      "stage": null
+     },
+     "two-bases": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": true,
+    "max_day_travel": 590,
+    "total_travel": 1515,
+    "days_over_limit": 3,
+    "bases": 3,
+    "stops": 26,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 36,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "city-break",
+    "run": "2",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": true,
+      "stage": null
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 130,
+    "total_travel": 244,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 10,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 24,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "2",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": false,
+      "stage": "selection"
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 190,
+    "total_travel": 800,
+    "days_over_limit": 3,
+    "bases": 1,
+    "stops": 18,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 29,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "2",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "seceda": {
+      "present": true,
+      "stage": null
+     },
+     "siusi": {
+      "present": true,
+      "stage": null
+     },
+     "braies": {
+      "present": false,
+      "stage": "selection"
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 160,
+    "total_travel": 915,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 26,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "family-wellness-march",
+    "run": "3",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "restful-outdoors": {
+      "present": true,
+      "stage": null
+     },
+     "restorative": {
+      "present": true,
+      "stage": null
+     },
+     "family-suitable": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "free-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "early-starts",
+     "strenuous"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 144,
+    "total_travel": 1082,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 25,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 42,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "kumano-kodo",
+    "run": "3",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "nakahechi-walk": {
+      "present": true,
+      "stage": null
+     },
+     "hongu-taisha": {
+      "present": true,
+      "stage": null
+     },
+     "nachi-hayatama": {
+      "present": true,
+      "stage": null
+     },
+     "onsen-village-stay": {
+      "present": true,
+      "stage": null
+     },
+     "luggage-transfer": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "no-walking",
+     "rental-car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 115,
+    "total_travel": 754,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 24,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 28,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "3",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": true,
+      "stage": null
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "skip-jokulsarlon"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 620,
+    "total_travel": 1912,
+    "days_over_limit": 2,
+    "bases": 4,
+    "stops": 13,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 37,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kyrgyzstan",
+    "run": "3",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "song-kul-yurt": {
+      "present": false,
+      "stage": "selection"
+     },
+     "karakol-trek": {
+      "present": true,
+      "stage": null
+     },
+     "issyk-kul": {
+      "present": false,
+      "stage": "selection"
+     },
+     "karakol": {
+      "present": true,
+      "stage": null
+     },
+     "ala-archa": {
+      "present": true,
+      "stage": null
+     },
+     "horse": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 495,
+    "total_travel": 1635,
+    "days_over_limit": 1,
+    "bases": 2,
+    "stops": 18,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 4,
+    "board_size": 42,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "3",
+    "build": "old",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": true,
+      "stage": null
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "self-drive"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": true,
+    "max_day_travel": 170,
+    "total_travel": 225,
+    "days_over_limit": 0,
+    "bases": 5,
+    "stops": 4,
+    "empty_ordinary_days": 5,
+    "one_stop_days": 1,
+    "board_size": 20,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "tokyo-kyoto-transit",
+    "run": "3",
+    "build": "old",
+    "defining_present": 2,
+    "defining_total": 5,
+    "defining": {
+     "shinkansen": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "sakura": {
+      "present": true,
+      "stage": null
+     },
+     "kyoto-core": {
+      "present": false,
+      "stage": "selection"
+     },
+     "tokyo-core": {
+      "present": true,
+      "stage": null
+     },
+     "two-bases": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": true,
+    "max_day_travel": 200,
+    "total_travel": 458,
+    "days_over_limit": 1,
+    "bases": 2,
+    "stops": 24,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 38,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "beach-island",
+    "run": "3",
+    "build": "old",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": true,
+      "stage": null
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [
+     "stargazing \"Stargazing at Koke'e State Park\" at 18:00"
+    ],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 195,
+    "total_travel": 930,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 30,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 1
+   },
+   {
+    "scenario": "multigenerational",
+    "run": "2",
+    "build": "old",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "lifeguarded-beach": {
+      "present": true,
+      "stage": null
+     },
+     "boat-grottoes": {
+      "present": false,
+      "stage": "selection"
+     },
+     "easy-viewpoints": {
+      "present": true,
+      "stage": null
+     },
+     "easy-pace": {
+      "present": true,
+      "stage": null
+     },
+     "one-base": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 190,
+    "total_travel": 854,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 13,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 29,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "city-break",
+    "run": "3",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 80,
+    "total_travel": 202,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 26,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "3",
+    "build": "old",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "seceda": {
+      "present": false,
+      "stage": "selection"
+     },
+     "siusi": {
+      "present": true,
+      "stage": null
+     },
+     "braies": {
+      "present": false,
+      "stage": "selection"
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "ferrata-no-gear"
+    ],
+    "sky_violations": [
+     "stargazing \"Stargazing at Alpe di Siusi\" at 18:00"
+    ],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 165,
+    "total_travel": 871,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 18,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 25,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 2
+   },
+   {
+    "scenario": "multigenerational",
+    "run": "3",
+    "build": "old",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "lifeguarded-beach": {
+      "present": true,
+      "stage": null
+     },
+     "boat-grottoes": {
+      "present": true,
+      "stage": null
+     },
+     "easy-viewpoints": {
+      "present": true,
+      "stage": null
+     },
+     "easy-pace": {
+      "present": true,
+      "stage": null
+     },
+     "one-base": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "early-start"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 220,
+    "total_travel": 1070,
+    "days_over_limit": 6,
+    "bases": 2,
+    "stops": 15,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 28,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   }
+  ],
+  "summary": {
+   "beach-island": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4.67,
+     "min": 4,
+     "max": 5
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "max_day_travel": {
+     "mean": 185,
+     "min": 170,
+     "max": 195
+    },
+    "days_over_limit": {
+     "mean": 3,
+     "min": 2,
+     "max": 4
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 1,
+     "unknown": 0
+    },
+    "per_defining": {
+     "na-pali": 3,
+     "waimea-canyon": 3,
+     "north-shore": 3,
+     "south-shore": 2,
+     "beach-time": 3
+    }
+   },
+   "city-break": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.33,
+     "min": 3,
+     "max": 4
+    },
+    "defining_total": 4,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 113.33,
+     "min": 80,
+     "max": 130
+    },
+    "days_over_limit": {
+     "mean": 2,
+     "min": 2,
+     "max": 2
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "alfama-miradouros": 3,
+     "belem": 1,
+     "baixa-chiado": 3,
+     "tram-fado": 3
+    }
+   },
+   "family-wellness-march": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3,
+     "min": 3,
+     "max": 3
+    },
+    "defining_total": 4,
+    "red_flags": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "hard_violations": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 184.67,
+     "min": 144,
+     "max": 260
+    },
+    "days_over_limit": {
+     "mean": 6,
+     "min": 4,
+     "max": 8
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 3,
+     "selection": 0,
+     "unknown": 0
+    },
+    "per_defining": {
+     "restful-outdoors": 3,
+     "restorative": 3,
+     "family-suitable": 0,
+     "free-time": 3
+    }
+   },
+   "iceland-ring-road": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3,
+     "min": 3,
+     "max": 3
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 1.33,
+     "min": 1,
+     "max": 2
+    },
+    "hard_violations": {
+     "mean": 1.33,
+     "min": 1,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 545,
+     "min": 430,
+     "max": 620
+    },
+    "days_over_limit": {
+     "mean": 2.67,
+     "min": 2,
+     "max": 3
+    },
+    "bases": {
+     "mean": 4,
+     "min": 4,
+     "max": 4
+    },
+    "missing_by_stage": {
+     "discovery": 2,
+     "selection": 7,
+     "unknown": 0
+    },
+    "per_defining": {
+     "ring-road": 0,
+     "jokulsarlon": 1,
+     "south-coast": 3,
+     "north": 3,
+     "golden-circle": 2,
+     "skaftafell": 0
+    }
+   },
+   "kumano-kodo": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4,
+     "min": 4,
+     "max": 4
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 2.33,
+     "min": 2,
+     "max": 3
+    },
+    "hard_violations": {
+     "mean": 2.33,
+     "min": 2,
+     "max": 3
+    },
+    "max_day_travel": {
+     "mean": 123.33,
+     "min": 115,
+     "max": 140
+    },
+    "days_over_limit": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 3,
+     "selection": 0,
+     "unknown": 0
+    },
+    "per_defining": {
+     "nakahechi-walk": 3,
+     "hongu-taisha": 3,
+     "nachi-hayatama": 3,
+     "onsen-village-stay": 3,
+     "luggage-transfer": 0
+    }
+   },
+   "kyrgyzstan": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.67,
+     "min": 3,
+     "max": 5
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 0.67,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 1.33,
+     "min": 0,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 351.67,
+     "min": 225,
+     "max": 495
+    },
+    "days_over_limit": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "bases": {
+     "mean": 2,
+     "min": 1,
+     "max": 3
+    },
+    "missing_by_stage": {
+     "discovery": 3,
+     "selection": 4,
+     "unknown": 0
+    },
+    "per_defining": {
+     "song-kul-yurt": 1,
+     "karakol-trek": 2,
+     "issyk-kul": 2,
+     "karakol": 2,
+     "ala-archa": 3,
+     "horse": 1
+    }
+   },
+   "mountain-hiking": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.67,
+     "min": 3,
+     "max": 4
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 0.67,
+     "min": 0,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 171.67,
+     "min": 160,
+     "max": 190
+    },
+    "days_over_limit": {
+     "mean": 4.33,
+     "min": 4,
+     "max": 5
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 3,
+     "selection": 4,
+     "unknown": 0
+    },
+    "per_defining": {
+     "tre-cime": 0,
+     "seceda": 2,
+     "siusi": 2,
+     "braies": 1,
+     "cortina-area": 3,
+     "real-hiking": 3
+    }
+   },
+   "multigenerational": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4,
+     "min": 3,
+     "max": 5
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "max_day_travel": {
+     "mean": 213.33,
+     "min": 190,
+     "max": 230
+    },
+    "days_over_limit": {
+     "mean": 5.33,
+     "min": 5,
+     "max": 6
+    },
+    "bases": {
+     "mean": 1.33,
+     "min": 1,
+     "max": 2
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 3,
+     "unknown": 0
+    },
+    "per_defining": {
+     "lifeguarded-beach": 2,
+     "boat-grottoes": 1,
+     "easy-viewpoints": 3,
+     "easy-pace": 3,
+     "one-base": 3
+    }
+   },
+   "tanzania-safari": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.67,
+     "min": 1,
+     "max": 5
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0.67,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 1.33,
+     "min": 0,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 278.33,
+     "min": 170,
+     "max": 435
+    },
+    "days_over_limit": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "bases": {
+     "mean": 3.67,
+     "min": 1,
+     "max": 5
+    },
+    "missing_by_stage": {
+     "discovery": 2,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "serengeti": 2,
+     "ngorongoro": 2,
+     "tarangire-manyara": 3,
+     "guided-vehicle": 2,
+     "gateway": 2
+    }
+   },
+   "tokyo-kyoto-transit": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 2.67,
+     "min": 2,
+     "max": 4
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 2,
+     "min": 2,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 286.67,
+     "min": 70,
+     "max": 590
+    },
+    "days_over_limit": {
+     "mean": 1.33,
+     "min": 0,
+     "max": 3
+    },
+    "bases": {
+     "mean": 2,
+     "min": 1,
+     "max": 3
+    },
+    "missing_by_stage": {
+     "discovery": 3,
+     "selection": 4,
+     "unknown": 0
+    },
+    "per_defining": {
+     "shinkansen": 0,
+     "sakura": 2,
+     "kyoto-core": 2,
+     "tokyo-core": 2,
+     "two-bases": 2
+    }
+   }
+  }
+ },
+ "new": {
+  "grades": [
+   {
+    "scenario": "family-wellness-march",
+    "run": "1",
+    "build": "new",
+    "defining_present": 1,
+    "defining_total": 4,
+    "defining": {
+     "restful-outdoors": {
+      "present": false,
+      "stage": "selection"
+     },
+     "restorative": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "family-suitable": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "free-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "strenuous"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 195,
+    "total_travel": 1178,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 24,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 39,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kumano-kodo",
+    "run": "1",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "nakahechi-walk": {
+      "present": true,
+      "stage": null
+     },
+     "hongu-taisha": {
+      "present": true,
+      "stage": null
+     },
+     "nachi-hayatama": {
+      "present": true,
+      "stage": null
+     },
+     "onsen-village-stay": {
+      "present": true,
+      "stage": null
+     },
+     "luggage-transfer": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "no-walking",
+     "rental-car",
+     "overlong-stage"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 110,
+    "total_travel": 648,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 25,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 36,
+    "contract_gap": false,
+    "red_flags_n": 3,
+    "hard_n": 3
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "1",
+    "build": "new",
+    "defining_present": 2,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": false,
+      "stage": "selection"
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "aurora-june",
+     "skip-jokulsarlon"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 615,
+    "total_travel": 1930,
+    "days_over_limit": 2,
+    "bases": 4,
+    "stops": 14,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 3,
+    "board_size": 38,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "kyrgyzstan",
+    "run": "1",
+    "build": "new",
+    "defining_present": 6,
+    "defining_total": 6,
+    "defining": {
+     "song-kul-yurt": {
+      "present": true,
+      "stage": null
+     },
+     "karakol-trek": {
+      "present": true,
+      "stage": null
+     },
+     "issyk-kul": {
+      "present": true,
+      "stage": null
+     },
+     "karakol": {
+      "present": true,
+      "stage": null
+     },
+     "ala-archa": {
+      "present": true,
+      "stage": null
+     },
+     "horse": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "song-kul-bus"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 860,
+    "total_travel": 2455,
+    "days_over_limit": 1,
+    "bases": 3,
+    "stops": 20,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 48,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "1",
+    "build": "new",
+    "defining_present": 2,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": false,
+      "stage": "selection"
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": false,
+      "stage": "selection"
+     },
+     "gateway": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 85,
+    "total_travel": 440,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 9,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 6,
+    "board_size": 34,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tokyo-kyoto-transit",
+    "run": "1",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 5,
+    "defining": {
+     "shinkansen": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "sakura": {
+      "present": true,
+      "stage": null
+     },
+     "kyoto-core": {
+      "present": true,
+      "stage": null
+     },
+     "tokyo-core": {
+      "present": true,
+      "stage": null
+     },
+     "two-bases": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 385,
+    "total_travel": 1195,
+    "days_over_limit": 1,
+    "bases": 2,
+    "stops": 22,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 36,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "city-break",
+    "run": "1",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 115,
+    "total_travel": 264,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 12,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 25,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "1",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-shore": {
+      "present": true,
+      "stage": null
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 210,
+    "total_travel": 835,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 15,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 26,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "1",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "selection"
+     },
+     "seceda": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "siusi": {
+      "present": true,
+      "stage": null
+     },
+     "braies": {
+      "present": false,
+      "stage": "selection"
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 160,
+    "total_travel": 750,
+    "days_over_limit": 3,
+    "bases": 1,
+    "stops": 16,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "multigenerational",
+    "run": "1",
+    "build": "new",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "lifeguarded-beach": {
+      "present": true,
+      "stage": null
+     },
+     "boat-grottoes": {
+      "present": true,
+      "stage": null
+     },
+     "easy-viewpoints": {
+      "present": true,
+      "stage": null
+     },
+     "easy-pace": {
+      "present": true,
+      "stage": null
+     },
+     "one-base": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 205,
+    "total_travel": 1250,
+    "days_over_limit": 7,
+    "bases": 2,
+    "stops": 16,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 23,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "family-wellness-march",
+    "run": "2",
+    "build": "new",
+    "defining_present": 1,
+    "defining_total": 4,
+    "defining": {
+     "restful-outdoors": {
+      "present": false,
+      "stage": "selection"
+     },
+     "restorative": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "family-suitable": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "free-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "strenuous"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 180,
+    "total_travel": 1195,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 24,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 45,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kumano-kodo",
+    "run": "2",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "nakahechi-walk": {
+      "present": true,
+      "stage": null
+     },
+     "hongu-taisha": {
+      "present": true,
+      "stage": null
+     },
+     "nachi-hayatama": {
+      "present": true,
+      "stage": null
+     },
+     "onsen-village-stay": {
+      "present": true,
+      "stage": null
+     },
+     "luggage-transfer": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "rental-car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 130,
+    "total_travel": 671,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 24,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 29,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "2",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": true,
+      "stage": null
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": false,
+      "stage": "selection"
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "aurora-june"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 610,
+    "total_travel": 2030,
+    "days_over_limit": 2,
+    "bases": 4,
+    "stops": 13,
+    "empty_ordinary_days": 1,
+    "one_stop_days": 2,
+    "board_size": 34,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kyrgyzstan",
+    "run": "2",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "song-kul-yurt": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "karakol-trek": {
+      "present": true,
+      "stage": null
+     },
+     "issyk-kul": {
+      "present": true,
+      "stage": null
+     },
+     "karakol": {
+      "present": true,
+      "stage": null
+     },
+     "ala-archa": {
+      "present": true,
+      "stage": null
+     },
+     "horse": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 380,
+    "total_travel": 1585,
+    "days_over_limit": 0,
+    "bases": 2,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 5,
+    "board_size": 38,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "2",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": false,
+      "stage": "selection"
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 60,
+    "total_travel": 355,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 5,
+    "board_size": 40,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tokyo-kyoto-transit",
+    "run": "2",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 5,
+    "defining": {
+     "shinkansen": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "sakura": {
+      "present": true,
+      "stage": null
+     },
+     "kyoto-core": {
+      "present": true,
+      "stage": null
+     },
+     "tokyo-core": {
+      "present": true,
+      "stage": null
+     },
+     "two-bases": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 300,
+    "total_travel": 967,
+    "days_over_limit": 1,
+    "bases": 2,
+    "stops": 18,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 3,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "city-break",
+    "run": "2",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 125,
+    "total_travel": 289,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 12,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 26,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "2",
+    "build": "new",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": true,
+      "stage": null
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 210,
+    "total_travel": 900,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 27,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "2",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "seceda": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "siusi": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "braies": {
+      "present": true,
+      "stage": null
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "ferrata-no-gear"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 170,
+    "total_travel": 955,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "multigenerational",
+    "run": "2",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "lifeguarded-beach": {
+      "present": true,
+      "stage": null
+     },
+     "boat-grottoes": {
+      "present": false,
+      "stage": "selection"
+     },
+     "easy-viewpoints": {
+      "present": true,
+      "stage": null
+     },
+     "easy-pace": {
+      "present": true,
+      "stage": null
+     },
+     "one-base": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 240,
+    "total_travel": 1175,
+    "days_over_limit": 6,
+    "bases": 1,
+    "stops": 14,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "family-wellness-march",
+    "run": "3",
+    "build": "new",
+    "defining_present": 2,
+    "defining_total": 4,
+    "defining": {
+     "restful-outdoors": {
+      "present": true,
+      "stage": null
+     },
+     "restorative": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "family-suitable": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "free-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "strenuous"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 165,
+    "total_travel": 1030,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 21,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 3,
+    "board_size": 42,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "kumano-kodo",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "nakahechi-walk": {
+      "present": true,
+      "stage": null
+     },
+     "hongu-taisha": {
+      "present": true,
+      "stage": null
+     },
+     "nachi-hayatama": {
+      "present": true,
+      "stage": null
+     },
+     "onsen-village-stay": {
+      "present": true,
+      "stage": null
+     },
+     "luggage-transfer": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "rental-car"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 150,
+    "total_travel": 921,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 22,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 31,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "3",
+    "build": "new",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": true,
+      "stage": null
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "aurora-june",
+     "skip-jokulsarlon"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 610,
+    "total_travel": 1850,
+    "days_over_limit": 2,
+    "bases": 4,
+    "stops": 15,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 3,
+    "board_size": 34,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "kyrgyzstan",
+    "run": "3",
+    "build": "new",
+    "defining_present": 1,
+    "defining_total": 6,
+    "defining": {
+     "song-kul-yurt": {
+      "present": false,
+      "stage": "selection"
+     },
+     "karakol-trek": {
+      "present": false,
+      "stage": "selection"
+     },
+     "issyk-kul": {
+      "present": false,
+      "stage": "selection"
+     },
+     "karakol": {
+      "present": false,
+      "stage": "selection"
+     },
+     "ala-archa": {
+      "present": true,
+      "stage": null
+     },
+     "horse": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 230,
+    "total_travel": 885,
+    "days_over_limit": 0,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 8,
+    "board_size": 40,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": true,
+      "stage": null
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": false,
+      "stage": "selection"
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 310,
+    "total_travel": 1115,
+    "days_over_limit": 0,
+    "bases": 2,
+    "stops": 14,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 42,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "tokyo-kyoto-transit",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "shinkansen": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "sakura": {
+      "present": true,
+      "stage": null
+     },
+     "kyoto-core": {
+      "present": true,
+      "stage": null
+     },
+     "tokyo-core": {
+      "present": true,
+      "stage": null
+     },
+     "two-bases": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 640,
+    "total_travel": 1385,
+    "days_over_limit": 1,
+    "bases": 2,
+    "stops": 19,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "city-break",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": true,
+      "stage": null
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 140,
+    "total_travel": 305,
+    "days_over_limit": 3,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 25,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-shore": {
+      "present": true,
+      "stage": null
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 210,
+    "total_travel": 879,
+    "days_over_limit": 3,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 28,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "seceda": {
+      "present": false,
+      "stage": "selection"
+     },
+     "siusi": {
+      "present": true,
+      "stage": null
+     },
+     "braies": {
+      "present": true,
+      "stage": null
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 230,
+    "total_travel": 1055,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 16,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 27,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "multigenerational",
+    "run": "3",
+    "build": "new",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "lifeguarded-beach": {
+      "present": true,
+      "stage": null
+     },
+     "boat-grottoes": {
+      "present": false,
+      "stage": "selection"
+     },
+     "easy-viewpoints": {
+      "present": true,
+      "stage": null
+     },
+     "easy-pace": {
+      "present": true,
+      "stage": null
+     },
+     "one-base": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [
+     "seven-valleys-full"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 235,
+    "total_travel": 1005,
+    "days_over_limit": 6,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 3,
+    "board_size": 31,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   }
+  ],
+  "summary": {
+   "beach-island": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4.33,
+     "min": 4,
+     "max": 5
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 210,
+     "min": 210,
+     "max": 210
+    },
+    "days_over_limit": {
+     "mean": 4,
+     "min": 3,
+     "max": 5
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "na-pali": 3,
+     "waimea-canyon": 3,
+     "north-shore": 1,
+     "south-shore": 3,
+     "beach-time": 3
+    }
+   },
+   "city-break": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.33,
+     "min": 3,
+     "max": 4
+    },
+    "defining_total": 4,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 126.67,
+     "min": 115,
+     "max": 140
+    },
+    "days_over_limit": {
+     "mean": 2.33,
+     "min": 2,
+     "max": 3
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "alfama-miradouros": 3,
+     "belem": 1,
+     "baixa-chiado": 3,
+     "tram-fado": 3
+    }
+   },
+   "family-wellness-march": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 1.33,
+     "min": 1,
+     "max": 2
+    },
+    "defining_total": 4,
+    "red_flags": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "max_day_travel": {
+     "mean": 180,
+     "min": 165,
+     "max": 195
+    },
+    "days_over_limit": {
+     "mean": 4.67,
+     "min": 4,
+     "max": 5
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 6,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "restful-outdoors": 1,
+     "restorative": 0,
+     "family-suitable": 0,
+     "free-time": 3
+    }
+   },
+   "iceland-ring-road": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 2.67,
+     "min": 2,
+     "max": 3
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "hard_violations": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 611.67,
+     "min": 610,
+     "max": 615
+    },
+    "days_over_limit": {
+     "mean": 2,
+     "min": 2,
+     "max": 2
+    },
+    "bases": {
+     "mean": 4,
+     "min": 4,
+     "max": 4
+    },
+    "missing_by_stage": {
+     "discovery": 4,
+     "selection": 6,
+     "unknown": 0
+    },
+    "per_defining": {
+     "ring-road": 0,
+     "jokulsarlon": 1,
+     "south-coast": 3,
+     "north": 3,
+     "golden-circle": 1,
+     "skaftafell": 0
+    }
+   },
+   "kumano-kodo": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4,
+     "min": 4,
+     "max": 4
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 3
+    },
+    "hard_violations": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 3
+    },
+    "max_day_travel": {
+     "mean": 130,
+     "min": 110,
+     "max": 150
+    },
+    "days_over_limit": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 3,
+     "selection": 0,
+     "unknown": 0
+    },
+    "per_defining": {
+     "nakahechi-walk": 3,
+     "hongu-taisha": 3,
+     "nachi-hayatama": 3,
+     "onsen-village-stay": 3,
+     "luggage-transfer": 0
+    }
+   },
+   "kyrgyzstan": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.67,
+     "min": 1,
+     "max": 6
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "max_day_travel": {
+     "mean": 490,
+     "min": 230,
+     "max": 860
+    },
+    "days_over_limit": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "bases": {
+     "mean": 2,
+     "min": 1,
+     "max": 3
+    },
+    "missing_by_stage": {
+     "discovery": 1,
+     "selection": 6,
+     "unknown": 0
+    },
+    "per_defining": {
+     "song-kul-yurt": 1,
+     "karakol-trek": 2,
+     "issyk-kul": 2,
+     "karakol": 2,
+     "ala-archa": 3,
+     "horse": 1
+    }
+   },
+   "mountain-hiking": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.33,
+     "min": 3,
+     "max": 4
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "max_day_travel": {
+     "mean": 186.67,
+     "min": 160,
+     "max": 230
+    },
+    "days_over_limit": {
+     "mean": 4.33,
+     "min": 3,
+     "max": 5
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 5,
+     "selection": 3,
+     "unknown": 0
+    },
+    "per_defining": {
+     "tre-cime": 0,
+     "seceda": 0,
+     "siusi": 2,
+     "braies": 2,
+     "cortina-area": 3,
+     "real-hiking": 3
+    }
+   },
+   "multigenerational": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4.33,
+     "min": 4,
+     "max": 5
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "hard_violations": {
+     "mean": 0.33,
+     "min": 0,
+     "max": 1
+    },
+    "max_day_travel": {
+     "mean": 226.67,
+     "min": 205,
+     "max": 240
+    },
+    "days_over_limit": {
+     "mean": 6.33,
+     "min": 6,
+     "max": 7
+    },
+    "bases": {
+     "mean": 1.33,
+     "min": 1,
+     "max": 2
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "lifeguarded-beach": 3,
+     "boat-grottoes": 1,
+     "easy-viewpoints": 3,
+     "easy-pace": 3,
+     "one-base": 3
+    }
+   },
+   "tanzania-safari": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3,
+     "min": 2,
+     "max": 4
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 151.67,
+     "min": 60,
+     "max": 310
+    },
+    "days_over_limit": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "bases": {
+     "mean": 1.33,
+     "min": 1,
+     "max": 2
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 6,
+     "unknown": 0
+    },
+    "per_defining": {
+     "serengeti": 1,
+     "ngorongoro": 3,
+     "tarangire-manyara": 2,
+     "guided-vehicle": 2,
+     "gateway": 1
+    }
+   },
+   "tokyo-kyoto-transit": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.33,
+     "min": 3,
+     "max": 4
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 441.67,
+     "min": 300,
+     "max": 640
+    },
+    "days_over_limit": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "bases": {
+     "mean": 2,
+     "min": 2,
+     "max": 2
+    },
+    "missing_by_stage": {
+     "discovery": 4,
+     "selection": 1,
+     "unknown": 0
+    },
+    "per_defining": {
+     "shinkansen": 0,
+     "sakura": 3,
+     "kyoto-core": 3,
+     "tokyo-core": 3,
+     "two-bases": 1
+    }
+   }
+  }
+ },
+ "new-2e9ed45": {
+  "grades": [
+   {
+    "scenario": "iceland-ring-road",
+    "run": "1",
+    "build": "new-2e9ed45",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": true,
+      "stage": null
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "discovery"
+     }
+    },
+    "red_flags": [
+     "aurora-june",
+     "skip-jokulsarlon"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 610,
+    "total_travel": 1709,
+    "days_over_limit": 2,
+    "bases": 4,
+    "stops": 15,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 34,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "1",
+    "build": "new-2e9ed45",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": true,
+      "stage": null
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 230,
+    "total_travel": 1020,
+    "days_over_limit": 0,
+    "bases": 2,
+    "stops": 9,
+    "empty_ordinary_days": 1,
+    "one_stop_days": 3,
+    "board_size": 38,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "1",
+    "build": "new-2e9ed45",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "seceda": {
+      "present": false,
+      "stage": "selection"
+     },
+     "siusi": {
+      "present": true,
+      "stage": null
+     },
+     "braies": {
+      "present": true,
+      "stage": null
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 155,
+    "total_travel": 693,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 17,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 28,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "2",
+    "build": "new-2e9ed45",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": false,
+      "stage": "selection"
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": true,
+      "stage": null
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "aurora-june",
+     "skip-jokulsarlon"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 610,
+    "total_travel": 1688,
+    "days_over_limit": 2,
+    "bases": 4,
+    "stops": 15,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 34,
+    "contract_gap": false,
+    "red_flags_n": 2,
+    "hard_n": 2
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "2",
+    "build": "new-2e9ed45",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": false,
+      "stage": "selection"
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": true,
+      "stage": null
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 600,
+    "total_travel": 1845,
+    "days_over_limit": 2,
+    "bases": 3,
+    "stops": 11,
+    "empty_ordinary_days": 1,
+    "one_stop_days": 3,
+    "board_size": 42,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "2",
+    "build": "new-2e9ed45",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": true,
+      "stage": null
+     },
+     "seceda": {
+      "present": true,
+      "stage": null
+     },
+     "siusi": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "braies": {
+      "present": false,
+      "stage": "selection"
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 190,
+    "total_travel": 1100,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 19,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 1,
+    "board_size": 33,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "iceland-ring-road",
+    "run": "3",
+    "build": "new-2e9ed45",
+    "defining_present": 3,
+    "defining_total": 6,
+    "defining": {
+     "ring-road": {
+      "present": false,
+      "stage": "discovery"
+     },
+     "jokulsarlon": {
+      "present": true,
+      "stage": null
+     },
+     "south-coast": {
+      "present": true,
+      "stage": null
+     },
+     "north": {
+      "present": true,
+      "stage": null
+     },
+     "golden-circle": {
+      "present": false,
+      "stage": "selection"
+     },
+     "skaftafell": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [
+     "aurora-june"
+    ],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 610,
+    "total_travel": 2250,
+    "days_over_limit": 3,
+    "bases": 4,
+    "stops": 16,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 35,
+    "contract_gap": false,
+    "red_flags_n": 1,
+    "hard_n": 1
+   },
+   {
+    "scenario": "tanzania-safari",
+    "run": "3",
+    "build": "new-2e9ed45",
+    "defining_present": 3,
+    "defining_total": 5,
+    "defining": {
+     "serengeti": {
+      "present": true,
+      "stage": null
+     },
+     "ngorongoro": {
+      "present": true,
+      "stage": null
+     },
+     "tarangire-manyara": {
+      "present": false,
+      "stage": "selection"
+     },
+     "guided-vehicle": {
+      "present": true,
+      "stage": null
+     },
+     "gateway": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 200,
+    "total_travel": 1040,
+    "days_over_limit": 0,
+    "bases": 2,
+    "stops": 9,
+    "empty_ordinary_days": 1,
+    "one_stop_days": 4,
+    "board_size": 31,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "mountain-hiking",
+    "run": "3",
+    "build": "new-2e9ed45",
+    "defining_present": 4,
+    "defining_total": 6,
+    "defining": {
+     "tre-cime": {
+      "present": false,
+      "stage": "selection"
+     },
+     "seceda": {
+      "present": true,
+      "stage": null
+     },
+     "siusi": {
+      "present": false,
+      "stage": "selection"
+     },
+     "braies": {
+      "present": true,
+      "stage": null
+     },
+     "cortina-area": {
+      "present": true,
+      "stage": null
+     },
+     "real-hiking": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 165,
+    "total_travel": 985,
+    "days_over_limit": 5,
+    "bases": 1,
+    "stops": 19,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 35,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   }
+  ],
+  "summary": {
+   "iceland-ring-road": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3,
+     "min": 3,
+     "max": 3
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "hard_violations": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "max_day_travel": {
+     "mean": 610,
+     "min": 610,
+     "max": 610
+    },
+    "days_over_limit": {
+     "mean": 2.33,
+     "min": 2,
+     "max": 3
+    },
+    "bases": {
+     "mean": 4,
+     "min": 4,
+     "max": 4
+    },
+    "missing_by_stage": {
+     "discovery": 4,
+     "selection": 5,
+     "unknown": 0
+    },
+    "per_defining": {
+     "ring-road": 0,
+     "jokulsarlon": 1,
+     "south-coast": 3,
+     "north": 3,
+     "golden-circle": 2,
+     "skaftafell": 0
+    }
+   },
+   "mountain-hiking": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4,
+     "min": 4,
+     "max": 4
+    },
+    "defining_total": 6,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 170,
+     "min": 155,
+     "max": 190
+    },
+    "days_over_limit": {
+     "mean": 4,
+     "min": 2,
+     "max": 5
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 2,
+     "selection": 4,
+     "unknown": 0
+    },
+    "per_defining": {
+     "tre-cime": 1,
+     "seceda": 2,
+     "siusi": 1,
+     "braies": 2,
+     "cortina-area": 3,
+     "real-hiking": 3
+    }
+   },
+   "tanzania-safari": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 3.67,
+     "min": 3,
+     "max": 4
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 343.33,
+     "min": 200,
+     "max": 600
+    },
+    "days_over_limit": {
+     "mean": 0.67,
+     "min": 0,
+     "max": 2
+    },
+    "bases": {
+     "mean": 2.33,
+     "min": 2,
+     "max": 3
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 4,
+     "unknown": 0
+    },
+    "per_defining": {
+     "serengeti": 2,
+     "ngorongoro": 3,
+     "tarangire-manyara": 2,
+     "guided-vehicle": 3,
+     "gateway": 1
+    }
+   }
+  }
+ }
+}

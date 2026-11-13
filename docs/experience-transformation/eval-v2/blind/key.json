@@ -1,0 +1,122 @@
+{
+ "beach-island#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "beach-island#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "beach-island#3": {
+  "A": "new",
+  "B": "old"
+ },
+ "city-break#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "city-break#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "city-break#3": {
+  "A": "new",
+  "B": "old"
+ },
+ "family-wellness-march#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "family-wellness-march#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "family-wellness-march#3": {
+  "A": "new",
+  "B": "old"
+ },
+ "iceland-ring-road#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "iceland-ring-road#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "iceland-ring-road#3": {
+  "A": "new",
+  "B": "old"
+ },
+ "kumano-kodo#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "kumano-kodo#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "kumano-kodo#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "kyrgyzstan#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "kyrgyzstan#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "kyrgyzstan#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "mountain-hiking#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "mountain-hiking#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "mountain-hiking#3": {
+  "A": "new",
+  "B": "old"
+ },
+ "multigenerational#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "multigenerational#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "multigenerational#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "tanzania-safari#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "tanzania-safari#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "tanzania-safari#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "tokyo-kyoto-transit#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "tokyo-kyoto-transit#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "tokyo-kyoto-transit#3": {
+  "A": "old",
+  "B": "new"
+ }
+}

@@ -1,0 +1,332 @@
+[
+ {
+  "id": "beach-island#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 29
+   },
+   "B": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 3,
+    "pace": 4,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 34
+   }
+  },
+  "preferred": "B",
+  "reason": "B's Princeville base reaches the north-shore essentials (Kilauea Point, Anini, Hanalei Bay, and Day 7 Kalalau Trail to Hanakapiai) and still covers Waimea Canyon (Day 4) and Poipu (Day 6). A has no Na Pali boat or hike at all; it sends the couple 2h10 round trip to Ke'e on arrival evening and 3h25 to Limahuli on Day 7 from Poipu, and its Day 7 title promises Hanalei Bay without scheduling it. Neither mentions the Haena reservation or hurricane season, and B's 'Hanalei Pier at sunset' at 16:30 (sunset ~18:42) is a timing slip."
+ },
+ {
+  "id": "city-break#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 2,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 4,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 32
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 4,
+    "transport": 4,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 5,
+    "pace": 2,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 34
+   }
+  },
+  "preferred": "B",
+  "reason": "B groups the days coherently (Day 3 Feira da Ladra, Alfama, São Jorge Castle, Bairro Alto) and adds tram 28 and Miradouro de Santa Luzia. A's Day 2 zig-zags by 30-minute train hops between Campo de Ourique, Gulbenkian and Time Out, and it labels the castle 16:30-18:00 'at sunset' when sunset is 20:40. Neither includes Belém, and B has its own flaws: a double dinner on Day 1 (Ramiro, then A Severa) and an unrequested 05:30 start on departure day."
+ },
+ {
+  "id": "family-wellness-march#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 27
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 30
+   }
+  },
+  "preferred": "B",
+  "reason": "B's Turangi base delivers what a stressful family asked for: easy lake and waterfall walks (Rotopounamu, Taranaki Falls, Tawhai Falls) plus thermal soaks (Tokaanu, AC Baths), on one base. Against it, Day 6 stacks a 5-hour Tama Lakes hike with a 'strenuous' Red Crater at 15:45, which is not kid-appropriate or realistic, and daily driving runs high. A picks a good destination in Tenerife but fills it with old towns, churches and a concert hall, adds no restorative element, drives to Benijo beach at 20:00 on arrival night and runs a stargazing tour to midnight, and admits Teide is missing."
+ },
+ {
+  "id": "iceland-ring-road#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 27
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 29
+   }
+  },
+  "preferred": "B",
+  "reason": "A drives Vík to Höfn on Day 3 straight past Jökulsárlón without stopping, a hard-requirement failure, and schedules Dyrhólaey at 22:40 on 14 June, inside the nesting closure. B includes Jökulsárlón, Diamond Beach and Fjallsárlón (Day 7) plus Reynisfjara, but it skips Mývatn and the Seljalandsfoss/Skógafoss waterfalls, makes Day 5 a 6-hour Akureyri-Höfn slog, and plans a 05:30 'sunrise' at Vestrahorn when the sun rises at about 02:30. Both have garbled base-to-base legs."
+ },
+ {
+  "id": "kumano-kodo#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 4,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 4,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 31
+   },
+   "B": {
+    "intent": 2,
+    "defining": 3,
+    "geography": 2,
+    "transport": 2,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 25
+   }
+  },
+  "preferred": "A",
+  "reason": "A at least walks the Kodo: Day 3 is the family-friendly Hosshinmon-oji to Hongu Taisha stretch, with a note on getting back to the car, and it covers all three Grand Shrines plus Yunomine. B has no Nakahechi walking beyond Daimon-zaka steps and a detour to the Iseji Matsumoto-toge. B's Day 10 Koyasan round trip is shown as 1h10 each way, which is unrealistic, and it puts 1,112 km on a rental car. Both wrongly use one Hongu base with self-drive and no village inns or luggage shuttle."
+ },
+ {
+  "id": "kyrgyzstan#1",
+  "scores": {
+   "A": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 2,
+    "transport": 2,
+    "timing": 3,
+    "quality": 1,
+    "lodging": 1,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 1,
+    "total": 17
+   },
+   "B": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 2,
+    "transport": 1,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 21
+   }
+  },
+  "preferred": "B",
+  "reason": "A's 'Song-Kol yurt camp' base is actually Bishkek. All ten days are city bazaars, museums and a nightclub reached by 35-minute buses, with no trek, no yurt night and no Karakol. B at least spends four nights in Karakol with Jeti-Oguz, Altyn-Arashan hot springs and Jyrgalan, then moves to Kochkor's canyons. Still, it invents trains on routes with no rail, makes Day 5 a 14-hour back-and-forth, and its 'Song-Kol' nights are again really Bishkek."
+ },
+ {
+  "id": "mountain-hiking#1",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 33
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 33
+   }
+  },
+  "preferred": "tie",
+  "reason": "A has more real hiking (Nuvolau, Puez, Pralongia, Rosengarten) and catches Seceda and Braies, though it puts Seceda at 06:35 before the lifts run and then adds a 5-hour Puez hike the same day. B is more drive- and viewpoint-heavy (Sella Ronda, Giau, Pordoi) but has solid hikes in Sassolungo, Sorapis and Cinque Torri, with a saner clock. Neither does the Tre Cime circuit or mentions the Auronzo or Braies reservations."
+ },
+ {
+  "id": "multigenerational#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 3,
+    "transport": 2,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 4,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 25
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 2,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 3,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 30
+   }
+  },
+  "preferred": "B",
+  "reason": "B delivers the Algarve's defining content: a Benagil boat trip, Praia da Marinha, Dona Ana, Camilo and Meia Praia, plus Ilha de Tavira and Ilha Deserta. That earns it the win despite using two bases (against the one-base rule) and taking the group to Cabo São Vicente at sunset with a 1h15 bus back after dark on arrival day. A keeps one Tavira base, but it has only one beach day and no cave boat, and it spends 3-4 hours a day on public transport for Zoomarine, Albufeira and Loulé, which is wrong for 'easy days' with grandparents. Both lost the grandparents from the party."
+ },
+ {
+  "id": "tanzania-safari#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 1,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 25
+   },
+   "B": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 1,
+    "transport": 1,
+    "timing": 2,
+    "quality": 1,
+    "lodging": 1,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 1,
+    "total": 13
+   }
+  },
+  "preferred": "A",
+  "reason": "A at least uses an operator driver-guide in the Karatu/Ngorongoro highlands (Empakaai, a crater viewpoint, Mto wa Mbu), but it has no Serengeti, no proper crater-floor drive and no Tarangire, so it fails as a safari. B is incoherent: from a 'Tarangire' base it sends the couple by public bus to Dar es Salaam's museum, Zanzibar Stone Town and Bagamoyo as day trips, with no game drive at all."
+ },
+ {
+  "id": "tokyo-kyoto-transit#1",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 5,
+    "pace": 3,
+    "safety_season": 4,
+    "usefulness": 3,
+    "total": 37
+   },
+   "B": {
+    "intent": 1,
+    "defining": 2,
+    "geography": 3,
+    "transport": 1,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 4,
+    "usefulness": 2,
+    "total": 23
+   }
+  },
+  "preferred": "A",
+  "reason": "A follows the brief: by train with Shinjuku (4 nights) and Higashiyama (5 nights), Meiji Jingu, Shibuya, Shinjuku Gyoen for blossom, then Fushimi Inari at dawn, Kiyomizu-dera, Kinkaku-ji, Arashiyama and Nijo. Its flaws are an inflated Day 5 transfer and a Nishiki-to-Sagano 'walk' that is really across the city. B drops Tokyo entirely, books a rental car for a train trip, and adds several unrequested 05:30 starts."
+ }
+]
