@@ -215,8 +215,8 @@ function sameName(a: string | undefined, b: string): boolean {
 /**
  * A PLACE THE PROPOSAL SAID IS IN ONE NAMED PART, PLACED IN ANOTHER.
  *
- * A live "Tokyo and Kyoto" scan placed "Kyoto Imperial Palace Park" (locality
- * Kyoto) three kilometres from Tsukiji, and the plan put it on a Tokyo day. When
+ * A live two-city scan placed a park whose locality was the second city three
+ * kilometres from a market in the first, and the plan put it on a day there. When
  * the traveller named the parts and the proposal's own locality is one of them,
  * a point that lands far from that part and nearer a different named part is
  * the wrong thing, not a far-flung version of the right one: the position is
