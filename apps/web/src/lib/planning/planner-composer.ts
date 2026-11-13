@@ -1,4 +1,4 @@
-import { estimateLegMinutes, haversineKm, highSpeedRailBackbone, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
+import { estimateLegMinutes, haversineKm, highSpeedRailBackbone, publicTransportNetwork, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -446,11 +446,13 @@ export function carFreeMoveFor(
   from: { lat: number; lng: number } | undefined,
   to: { lat: number; lng: number } | undefined,
   countryCode: string | null | undefined,
-): { how: 'rail' | 'high_speed_rail'; when: 'start' } | null {
+): { how: 'rail' | 'high_speed_rail' | 'bus'; when: 'start' } | null {
   if (!from || !to) return null;
   const km = haversineKm(from, to);
   if (km <= 1.5) return null;
-  return { how: km >= 100 && highSpeedRailBackbone(countryCode) ? 'high_speed_rail' : 'rail', when: 'start' };
+  if (km >= 100 && highSpeedRailBackbone(countryCode)) return { how: 'high_speed_rail', when: 'start' };
+  /* A train only where the country's facts say trains run between towns; otherwise the bus that does. */
+  return { how: publicTransportNetwork(countryCode).intercityRail ? 'rail' : 'bus', when: 'start' };
 }
 
 function draftFromPlan(args: {
@@ -467,6 +469,8 @@ function draftFromPlan(args: {
   const extras = input.extras;
   const draftBaseId = new Map(bases.map((b, i) => [b.id, `base-${i + 1}`]));
   const baseName = new Map(bases.map((b) => [b.id, b.name]));
+  /* What public transport the country has, so a car-free leg never names a train that does not run. */
+  const network = publicTransportNetwork(input.region.compiled.scope.countryCode);
   const days: DraftDay[] = plan.days.map((day, i) => {
     const isFirst = i === 0;
     const isLast = i === plan.days.length - 1;
@@ -475,7 +479,7 @@ function draftFromPlan(args: {
       const c = stop.candidate;
       const from = args.coordinates.get(previous);
       const km = from ? haversineKm(from, c.coordinates) : null;
-      const transport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category);
+      const transport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category, { ...(input.groundArrangement ? { arrangement: input.groundArrangement } : {}), ...network });
       previous = c.id;
       return {
         name: clip(c.name, 60),

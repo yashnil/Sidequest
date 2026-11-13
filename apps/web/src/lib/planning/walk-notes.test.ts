@@ -39,11 +39,24 @@ describe('a car-free move says how it is made', () => {
   const kyoto = { lat: 35.0037, lng: 135.7788 };
   it('a long hop where high-speed rail is the backbone is a high-speed train; elsewhere a train', () => {
     expect(carFreeMoveFor(tokyo, kyoto, 'JP')).toEqual({ how: 'high_speed_rail', when: 'start' });
-    expect(carFreeMoveFor(tokyo, kyoto, 'IS')).toEqual({ how: 'rail', when: 'start' });
+    expect(carFreeMoveFor(tokyo, kyoto, 'IS')).toEqual({ how: 'bus', when: 'start' });
     expect(carFreeMoveFor(tokyo, { lat: 35.45, lng: 139.63 }, 'JP')).toEqual({ how: 'rail', when: 'start' });
   });
   it('a hop across town, or an unplaced bed, states nothing', () => {
     expect(carFreeMoveFor(tokyo, { lat: 35.69, lng: 139.705 }, 'JP')).toBeNull();
     expect(carFreeMoveFor(undefined, kyoto, 'JP')).toBeNull();
+  });
+});
+
+describe('a car-free leg names only a mode the country has (eval v2: trains that do not exist)', () => {
+  it('rail and metro only where the facts say they run; the operator vehicle on an operator trip', async () => {
+    const { transportFor } = await import('./structure-planner');
+    const none = { intercityRail: false, metro: false };
+    expect(transportFor(false, 120, 90, 'nature', none)).toBe('bus');
+    expect(transportFor(false, 20, 5, 'museum', none)).toBe('bus');
+    expect(transportFor(false, 120, 90, 'nature', { intercityRail: true, metro: true })).toBe('rail');
+    expect(transportFor(false, 20, 5, 'museum', { intercityRail: true, metro: true })).toBe('metro');
+    expect(transportFor(false, 180, 150, 'wildlife', { arrangement: 'operator' })).toBe('four_wheel_drive');
+    expect(transportFor(true, 30, 20, 'nature')).toBe('car');
   });
 });

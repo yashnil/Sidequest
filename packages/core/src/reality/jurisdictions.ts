@@ -753,6 +753,20 @@ export function jurisdictionFor(code: string | null | undefined): Jurisdiction |
   return BY_CODE.get(code.toUpperCase()) ?? null;
 }
 
+/**
+ * What public transport the country's own facts say exists, for naming a
+ * car-free leg: "train" only where intercity or high-speed rail is viable or
+ * better, "metro" only where a metro is. Eval v2's judges found trains that do
+ * not exist (a Kyrgyz park "by train", Algarve beaches by rail) because every
+ * long car-free hop was written as rail and every short one as metro. A
+ * country with no facts gets neither — unknown is not a railway.
+ */
+export function publicTransportNetwork(code: string | null | undefined): { intercityRail: boolean; metro: boolean } {
+  const modes = jurisdictionFor(code)?.modes ?? [];
+  const usable = (mode: string) => modes.some((m) => m.mode === mode && (m.status === 'recommended' || m.status === 'viable'));
+  return { intercityRail: usable('intercity_train') || usable('high_speed_rail'), metro: usable('metro') };
+}
+
 /** Whether the country's own facts make high-speed rail the regional backbone (an estimator profile, `travel/estimate.ts`). Data, never a place name. */
 export function highSpeedRailBackbone(code: string | null | undefined): boolean {
   return jurisdictionFor(code)?.modes.some((m) => m.mode === 'high_speed_rail' && m.status === 'recommended') ?? false;

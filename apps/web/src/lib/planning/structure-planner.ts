@@ -1142,11 +1142,24 @@ function haversine(a: { lat: number; lng: number }, b: { lat: number; lng: numbe
 }
 
 /** The transport the draft states for reaching a stop, from the trip's mode and the leg's size. */
-export function transportFor(carAvailable: boolean, minutesFromPrevious: number | null, kmFromPrevious: number | null, category?: AnchorCategory): DraftTransport {
+/**
+ * How the trip moves between two stops, written on the draft. Car-free legs
+ * name only a mode the trip can actually use: the operator's vehicle on an
+ * operator-run trip, rail or metro only where the country's facts say they
+ * exist (`publicTransportNetwork`), otherwise a bus. Never a train by default.
+ */
+export function transportFor(
+  carAvailable: boolean,
+  minutesFromPrevious: number | null,
+  kmFromPrevious: number | null,
+  category?: AnchorCategory,
+  network: { arrangement?: 'operator' | 'self_drive' | 'public_transport' | 'undecided'; intercityRail?: boolean; metro?: boolean } = {},
+): DraftTransport {
+  if (network.arrangement === 'operator') return (kmFromPrevious ?? 99) <= 1.5 ? 'walk' : 'four_wheel_drive';
   if (carAvailable) return category === 'scenic_drive' || (kmFromPrevious ?? 99) > 1.2 ? 'car' : 'walk';
   if ((kmFromPrevious ?? 99) <= 1.5) return 'walk';
-  if ((kmFromPrevious ?? 0) > 40 || (minutesFromPrevious ?? 0) > 70) return 'rail';
-  return 'metro';
+  if ((kmFromPrevious ?? 0) > 40 || (minutesFromPrevious ?? 0) > 70) return network.intercityRail ? 'rail' : 'bus';
+  return network.metro ? 'metro' : 'bus';
 }
 
 export function archetypeFor(input: { bases: number; carAvailable: boolean; urban: boolean }): TripArchetype {
