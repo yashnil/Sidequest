@@ -1,0 +1,299 @@
+[
+  {
+    "id": "iceland-ring-road#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 28
+      },
+      "B": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      }
+    },
+    "preferred": "A",
+    "reason": "A keeps the hard requirement: Jökulsárlón, Diamond Beach and Fjallsárlón on day 7, plus Goðafoss and Reynisfjara. Its flaws are real: a 05:30 start on day 6 for 'sunrise' at Vestrahorn when the sun rose about 02:30, a 257 km 'walk' on day 8, no Golden Circle, and a finish in Vík far from the airport. B drives straight past Jökulsárlón on day 3 without stopping, schedules Dyrhólaey on 14 June inside the nesting closure, and gives day 4 an incoherent '10 hr' Höfn–Akureyri routing."
+  },
+  {
+    "id": "iceland-ring-road#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 2,
+        "timing": 2,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 21
+      }
+    },
+    "preferred": "A",
+    "reason": "Neither plan stops at Jökulsárlón. A still covers more of the loop's defining sights (Seljalandsfoss and Skógafoss on day 2, Reynisfjara, Krafla/Hverir/Mývatn on day 5, Þingvellir) and ends in Reykjavík for departure. A also has faults: Dyrhólaey at 22:40 on 14 June during the closure, an incoherent day 4, and a mislocated 'Höfn Old Harbour' stop on day 6. B starts with an unrealistic same-day 16:00 arrival in Höfn, gives Mývatn only the baths, labels Dyrhólaey at 16:30 on 21 June 'at sunset' when sunset is near midnight and the cliffs are still closed, and ends in Vík."
+  },
+  {
+    "id": "iceland-ring-road#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 24
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      }
+    },
+    "preferred": "B",
+    "reason": "B's three Höfn nights reach the glacier coast: Diamond Beach across from the lagoon and Fjallsárlón on day 5, Vestrahorn on day 4, and Dettifoss on day 7. That day 7 is a wasteful 5.5-hour out-and-back, though, and B also has a 05:30 start and a '433 km walk' on day 6. A passes Jökulsárlón on day 3 without stopping and calls Dyrhólaey at 16:30 'at sunset' in mid-June. It also has two incoherent ~10-hour transfer days (days 4 and 6), although whale watching at Húsavík is a good choice."
+  },
+  {
+    "id": "mountain-hiking#1",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 28
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 31
+      }
+    },
+    "preferred": "B",
+    "reason": "A is mostly passes and viewpoints, a red flag for a hiking trip. Its only real hike is the 5-hour Fanes outing on day 3; it has no Seceda, Tre Cime or Braies, and day 6 is titled Lagazuoi without visiting it. B has genuine hikes: Nuvolau on day 3, Puez on day 5, Pralongia on day 6 and Rosengarten on day 7. B also has a dawn Braies visit that avoids the 09:00–16:00 access rule, but its 06:35 'sunrise' Seceda cannot work because the lifts open around 08:30."
+  },
+  {
+    "id": "mountain-hiking#2",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 4,
+        "pace": 4,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 33
+      },
+      "B": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 4,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 29
+      }
+    },
+    "preferred": "A",
+    "reason": "A gives a steady run of moderate hut hikes: Nuvolau/Averau on day 3, Scotoni and Cinque Torri on day 5, Pralongia on day 6, and Alpe di Siusi on day 7. It starts at 09:00 apart from a pre-lift Seceda attempt on the departure day. B does reach Tre Cime from Auronzo (day 7) but never mentions the mandatory Auronzo reservation. It also stacks three 05:30 starts, sends the group to Seceda twice including an impossible 06:30 lift ascent, and packs day 6 into a 14-hour Seceda+Pisciadù+Fedaia marathon."
+  },
+  {
+    "id": "mountain-hiking#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 29
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 33
+      }
+    },
+    "preferred": "B",
+    "reason": "B's Cortina base gives better hiking: an AV1 segment to Forcella Sief with the one-way return logistics noted (day 2), the Biella loop (day 3), Cinque Torri/Dibona (day 4), Sorapis (day 7) and a pre-09:00 Braies visit. Its Val Gardena day 5 is filler. A schedules 'stargazing at Alpe di Siusi' at 18:00 on 1 July, three hours before sunset. It spends day 3 on a Bolzano castle and museum, titles day 4 'via ferrata' without doing it, and has no Tre Cime, Seceda or Braies."
+  },
+  {
+    "id": "tanzania-safari#1",
+    "scores": {
+      "A": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 1,
+        "transport": 1,
+        "timing": 2,
+        "quality": 1,
+        "lodging": 1,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 13
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 2,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 27
+      }
+    },
+    "preferred": "B",
+    "reason": "A is not a safari. It has zero game drives, sleeps 8 nights in 'Tarangire area', and makes daily 'bus' trips to Dar es Salaam museums, Bagamoyo and Zanzibar (an island). B has a real northern-circuit core: a 6-hour Ngorongoro crater drive on day 2, Manyara, Empakaai, and three Serengeti nights. B still has nonexistent 'train' legs, a repeat crater visit on day 3, and a 'sunset drive' running to 20:00 past park hours."
+  },
+  {
+    "id": "tanzania-safari#2",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 33
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 1,
+        "transport": 1,
+        "timing": 2,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 18
+      }
+    },
+    "preferred": "A",
+    "reason": "A follows the classic structure: Arusha, then Tarangire (2 nights), the crater rim, Serengeti (3) and a flight back. Its defects are a nonsensical 527 km Maji Moto detour on day 2, overselling Mara crossings on 10 July, and a stray rental-car booking. B has no Serengeti at all and spends four Arusha nights on filler. It routes a 10-hour, 786 km 'train' from Ngorongoro to Tarangire on day 7 and a 'train' to Stone Town from Tarangire on day 8, neither of which exists."
+  },
+  {
+    "id": "tanzania-safari#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 2,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 26
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 34
+      }
+    },
+    "preferred": "B",
+    "reason": "B gives a proper guided circuit: Tarangire on days 2–3, the highland drive and crater, Oldupai into the Serengeti, then a fly-out from the north on day 8. It understates the Seronera–Mara drive on day 7, its crater visit is short, and an arrival-evening Chemka hot-springs round trip adds about 3 hours. A sleeps 5 nights at the crater with filler such as Gibb's Farm and a second crater entry just for a picnic on day 5. It uses nonexistent 'train' legs, skips Tarangire, and ends in the Serengeti with no departure transfer."
+  }
+]

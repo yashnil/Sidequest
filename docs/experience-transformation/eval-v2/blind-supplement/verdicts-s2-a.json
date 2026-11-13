@@ -1,0 +1,299 @@
+[
+ {
+  "id": "iceland-ring-road#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 28
+   },
+   "B": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 25
+   }
+  },
+  "preferred": "A",
+  "reason": "A keeps Jökulsárlón, Diamond Beach and Fjallsárlón (Day 7) plus Goðafoss, while B drives straight past the lagoon on Day 3 and never stops, which is a fail condition; B also puts Dyrhólaey at 22:40 on 14 June inside the nesting closure, and its Day 4 Höfn-Akureyri leg is garbled (~10 h). A has its own defects (05:30 'sunrise' at Vestrahorn when sunrise is ~02:30, a nonsensical '3 h 20 walk, 257 km' on Day 8, ends in Vík with no transfer to Keflavík, no Golden Circle or Mývatn) but it misses less of what defines the loop."
+ },
+ {
+  "id": "iceland-ring-road#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 26
+   },
+   "B": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 2,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 2,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 23
+   }
+  },
+  "preferred": "A",
+  "reason": "Neither plan stops at Jökulsárlón, but A covers more of what defines Iceland: Seljalandsfoss and Skógafoss (Day 2), Krafla, Hverir and Mývatn (Day 5), and Þingvellir and Kerið (Day 7), and it ends in Reykjavík. B starts with an unexplained arrival in far-east Höfn on Day 1, runs a garbled ~9 h 45 Höfn-Akureyri day, labels Dyrhólaey 'at sunset' at 16:30 when sunset is near midnight (and the cliffs are still closed for nesting on 21 June), and finishes in Vík. A has errors of its own: Dyrhólaey at 22:40 inside the closure, and a 'Höfn Old Harbour' stop placed in Reykjavík on Day 6."
+ },
+ {
+  "id": "iceland-ring-road#3",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 25
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 3,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 26
+   }
+  },
+  "preferred": "B",
+  "reason": "B reaches the glacier-lagoon coast (Diamond Beach across from Jökulsárlón, and Fjallsárlón on Day 5), adds Seljalandsfoss, Gljúfrabúi and Skógafoss on Day 2, Vestrahorn, and a Djúpivogur foray into the East Fjords. A skips the entire Jökulsárlón region and books Dyrhólaey 'at sunset' at 16:30 on 14 June. B is still flawed: a 05:30 start for Vestrahorn, Dyrhólaey at 22:40 during the closure, nonsensical '433 km walk' and '381 km walk' legs, and only one night in Reykjavík with no Golden Circle."
+ },
+ {
+  "id": "mountain-hiking#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 28
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 31
+   }
+  },
+  "preferred": "B",
+  "reason": "B is a real hiking week: Nuvolau (Day 3), Seceda followed by the Puez rifugio hike (Day 5), Pralongia, and a Rosengarten walk. It also reaches Lago di Braies at 06:40, before the 09:00-16:00 access restriction. A admits Seceda is missing, has no Braies and no Tre Cime circuit, and fills its days with pass drives, Museo Ladin and village strolls, with only one real hike (Fanes, Day 3). B's weaknesses are a Seceda 'sunrise' arrival at 06:35, before the lifts run, and Prato Piazza and Fanes shown as drive-to with no mention of access limits."
+ },
+ {
+  "id": "mountain-hiking#2",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 29
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 30
+   }
+  },
+  "preferred": "B",
+  "reason": "B covers two of the defining hikes: the Seceda ridge to Firenze hut (Day 2) and Tre Cime from Auronzo to Forcella Longères (Day 7). It also adds Pisciadù as a real big day. A has no Tre Cime and no Braies, and its only Seceda is a 06:30 departure-day slot that relies on a cable car not yet running, with a Dobbiaco and Cortina filler day on Day 2. B is held back by three 05:30 starts, a 06:30 Seceda that also predates the lifts, a 1 h 40 drive to Passo Giau on the arrival evening, and a Tre Cime day that never mentions the mandatory Auronzo toll booking."
+ },
+ {
+  "id": "mountain-hiking#3",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 2,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 29
+   },
+   "B": {
+    "intent": 4,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 33
+   }
+  },
+  "preferred": "B",
+  "reason": "B's Cortina base yields real hikes: an Alta Via 1 segment to Forcella Sief (Day 2, with the one-way return correctly flagged), a 4 h Rifugio Biella loop, Lago di Sorapis (Day 7), and Braies at dawn before the access window. A schedules 'stargazing at Alpe di Siusi' at 18:00 on 1 July when sunset is 21:10, gives Day 3 to Bolzano museums, and titles Day 4 as Via Ferrata Tridentina without scheduling it. Neither plan does Seceda or the full Tre Cime circuit, and B's Cadini viewpoint at 06:40 omits the Auronzo booking."
+ },
+ {
+  "id": "tanzania-safari#1",
+  "scores": {
+   "A": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 1,
+    "transport": 1,
+    "timing": 2,
+    "quality": 1,
+    "lodging": 1,
+    "pace": 2,
+    "safety_season": 1,
+    "usefulness": 1,
+    "total": 12
+   },
+   "B": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 26
+   }
+  },
+  "preferred": "B",
+  "reason": "A contains no safari at all. From a 'Tarangire area' base it sends the couple by 1-2 hour bus rides to Dar es Salaam, Bagamoyo, Stone Town and Kizimkazi, which is geographically impossible, and it has no Serengeti or Ngorongoro. B delivers a guided operator safari with a 6-hour Ngorongoro crater-floor drive (Day 2), Manyara, Empakaai and 3 Serengeti nights. B's own errors: legs labelled 'train', a 15-minute Manyara visit, a repeat crater stop on Day 3, a Serengeti 'sunset drive' running to 20:00 after park hours, and no Tarangire."
+ },
+ {
+  "id": "tanzania-safari#2",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 35
+   },
+   "B": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 1,
+    "transport": 1,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 1,
+    "total": 17
+   }
+  },
+  "preferred": "A",
+  "reason": "A is a correct northern-circuit shape: Arusha, then Tarangire for 2 nights, the Ngorongoro rim, a dawn crater descent (Day 5), 3 Serengeti nights, and a flight back to Arusha, all with a guided 4x4. Its flaws are overpromising Mara crossings as 'prime' on 10 July, an implausible 527 km leg on Day 2, and many untimed legs. B has no Serengeti, spends 4 nights around Arusha, makes a nonsensical return to Arusha on the day it moves to the crater (Day 5), runs a 786 km '10 h train' on Day 7, and sends a Stone Town day trip from Tarangire on Day 8."
+ },
+ {
+  "id": "tanzania-safari#3",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 26
+   },
+   "B": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 35
+   }
+  },
+  "preferred": "B",
+  "reason": "B follows the textbook route: Arusha, Tarangire, 2 Karatu nights with an early crater descent (Day 4), Oldupai into the central Serengeti, a Mara day, and a flight out from the northern airstrip, with crossings worded as 'within the season' rather than promised. A spends 5 nights at Ngorongoro, re-enters the crater on Day 5 just for a picnic site, skips Tarangire and Manyara, gives the Serengeti only one 4-hour game drive and a visitor-centre walk, and labels its legs 'train'. B's weak points are a tiring 3-hour round trip to hot springs on arrival day and a vague single 'Serengeti' base for the Mara day."
+ }
+]

@@ -123,7 +123,7 @@ def grade_run(row):
         'empty_ordinary_days': sum(1 for d in interior if not d.get('stops')),
         'one_stop_days': sum(1 for d in interior if len(d.get('stops', [])) == 1),
         'board_size': len(row.get('board', [])),
-        'contract_gap': 'What this plan still lacks' in row.get('overview', ''),
+        'contract_gap': 'what this plan still lacks' in row.get('overview', '').lower(),
     }
 
 

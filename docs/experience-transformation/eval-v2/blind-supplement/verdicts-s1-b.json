@@ -1,0 +1,200 @@
+[
+  {
+    "id": "beach-island#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 4,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 31
+      }
+    },
+    "preferred": "B",
+    "reason": "A sends the couple west from Princeville three times: Day 3 is 4 h 50 of driving for a 30-minute stop at Pu'u o Kila, Day 5 is 3 h for an hour at Salt Pond, and Day 6 goes back to Waimea. It also never reaches Poipu. B makes one west day (Day 4, Waimea and Koke'e) and one south day (Day 6, Poipu), and its Kalalau morning on Day 7 is sensible. B's own faults are a 'sunset' at Hanalei Pier timed at 16:30 against an 18:43 sunset, and neither plan mentions the Hāʻena reservation."
+  },
+  {
+    "id": "beach-island#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 3,
+        "transport": 3,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 29
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      }
+    },
+    "preferred": "A",
+    "reason": "A is the more coherent trip. It covers the canyon and Kalalau Lookout in one west day (Day 2), times Hanalei Bay correctly for sunset on Day 1, and fills the east-side days well (Secret Falls, Fern Grotto). Its weakness is that it never walks the Kalalau Trail. B does include the trail on Day 2, but it then drives about 2 h each way three separate times (Day 4 Waimea, Day 6 Kalalau and Pu'u o Kila, Day 7 Hanapepe), and on Day 4 it puts a canyon-day lunch at a Princeville bar. B also sends the couple to Kalalau with no Hāʻena reservation."
+  },
+  {
+    "id": "beach-island#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 1,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 23
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 4,
+        "total": 34
+      }
+    },
+    "preferred": "B",
+    "reason": "A's arrival day schedules stargazing at Koke'e at 18:00. That is before the 18:43 sunset, and Koke'e is shown as 40 minutes away when it is roughly 2.5 h from Princeville. A also splits the west into two out-and-backs (Day 6 lookouts, Day 7 canyon) and has no Nā Pali walk. B covers every defining area: the Kalalau Trail to Hanakāpīʻai Falls on Day 2, the canyon plus Koke'e in one day on Day 3, the Wailua kayak to Secret Falls, Tunnels and Limahuli on the north shore, and a south-shore day. Its only real zig-zag is the Day 4 detour to Kauai Museum."
+  },
+  {
+    "id": "city-break#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 4,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 2,
+        "total": 33
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 35
+      }
+    },
+    "preferred": "B",
+    "reason": "Both plans keep one Baixa base, put Feira da Ladra correctly on the Saturday, and leave out Belém and Jerónimos entirely. A labels São Jorge Castle 'at sunset' at 16:30–18:00, about three hours before the 20:40 sunset, and its Day 2 zig-zags by transit from Campo de Ourique to Gulbenkian to Cais do Sodré. B includes Tram 28 and Mouraria, and puts the castle near sunset at 19:50, although that slightly overruns the castle's closing time. Day 1 serving two dinners is sloppy, so B is better only by a hair."
+  },
+  {
+    "id": "city-break#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 4,
+        "transport": 4,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 36
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 4,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 2,
+        "total": 33
+      }
+    },
+    "preferred": "A",
+    "reason": "A's days are geographically tidy: Baixa and Bairro Alto on Day 1, Gulbenkian and Príncipe Real on Day 2, then Feira da Ladra (correct on Saturday), Alfama and the castle on Day 3. Its Senhora do Monte stop at 19:50 is genuinely timed for sunset, but A has no fado, no tram and no Belém. B does have a fado evening, but on Day 2 it goes to the Belém botanical garden and skips Jerónimos next door. On Day 3 it doubles back from Príncipe Real to Alfama for a Santa Luzia 'sunset' at 16:30."
+  },
+  {
+    "id": "city-break#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 4,
+        "transport": 4,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 35
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 4,
+        "transport": 4,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 38
+      }
+    },
+    "preferred": "B",
+    "reason": "A schedules Feira da Ladra on Friday 14 May even though its own card says the market runs only on Tuesdays and Saturdays, so the Day 2 midday slot leads nowhere. A also has no Tram 28 and no Belém. B puts the flea market correctly on Saturday and adds the Museu Nacional de Arte Antiga, ginjinha, fado, Bairro Alto and Tram 28. It does label Senhora do Monte 'at sunset' at 16:30, far from the real 20:40, and it does not reach Belém either."
+  }
+]

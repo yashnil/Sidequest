@@ -1,0 +1,200 @@
+[
+  {
+    "id": "beach-island#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 4,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 30
+      }
+    },
+    "preferred": "B",
+    "reason": "A sends the couple from Princeville to the west side three times (Day 3: 286 min of driving for a 30-minute Pu'u o Kila stop; Day 5: 3 h round trip for one beach; Day 6 Waimea again), which wastes a week-long beach trip. B also stays north but makes one Waimea Canyon day and one Poipu day; its flaws are a 'sunset' at Hanalei Pier at 16:30 (sunset ~18:42) and an understated canyon return time. Neither mentions the Ha'ena State Park reservation needed for the Kalalau trailhead."
+  },
+  {
+    "id": "beach-island#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 31
+      },
+      "B": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 27
+      }
+    },
+    "preferred": "A",
+    "reason": "B includes the Kalalau Trail (Day 2) but splits the west side into three separate 4-5 hour round trips from Princeville (Day 4 Waimea, Day 6 Kalalau Lookout, Day 7 Hanapepe), schedules a Waimea-day lunch at a Princeville bar, and leaves a 'placeholder' description. A misses the Na Pali hike, but it covers Waimea and Kalalau Lookout in one west-side day, times Hanalei Bay for sunset on Day 1 (17:35-19:05), and groups the east side sensibly (Secret Falls, Kamokila, Kapaa). Neither mentions the Ha'ena reservation."
+  },
+  {
+    "id": "beach-island#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 1,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 24
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 4,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 4,
+        "total": 35
+      }
+    },
+    "preferred": "B",
+    "reason": "A's Day 1 is impossible: 'stargazing at Koke'e' at 18:00, before the ~18:46 sunset, with a claimed 40-minute drive to a place about 2.5 h from Princeville, on arrival day. A also splits Kalalau Lookout (Day 6) and Waimea Canyon (Day 7) into two separate long round trips, and it has no Na Pali hike. B combines Waimea, Koke'e and the Kalalau lookouts in one day (Day 3) and adds the Hanakapi'ai hike, the Wailua kayak to Secret Falls, Tunnels snorkelling and Maha'ulepu, though its canyon drive times are understated and it does not mention the Ha'ena permit."
+  },
+  {
+    "id": "city-break#1",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 33
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 4,
+        "transport": 3,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 37
+      }
+    },
+    "preferred": "B",
+    "reason": "Both keep one Baixa/Chiado base, put Feira da Ladra correctly on Saturday 15 May, and both skip Belem/Jeronimos. B adds tram 28 and Mouraria and catches the 20:40 sunset at the castle (19:50, though that runs close to closing time), plus a ferry to Cristo Rei. A labels São Jorge 'at sunset' at 16:30 and zig-zags on Day 2 (Campo de Ourique, then Gulbenkian, then back to Cais do Sodré). B's Day 1 has two dinners in a row (A Severa at 17:35, then Taberna da Rua das Flores at 18:45), and both plans start fado at 18:00."
+  },
+  {
+    "id": "city-break#2",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 4,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 36
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 33
+      }
+    },
+    "preferred": "A",
+    "reason": "B goes all the way to Belem on Day 2 for the tropical garden and lunch at Adega de Belem, yet skips Jeronimos and the tower next door. Its Day 3 zig-zags from Alfama to Principe Real and back to Santa Luzia, labelled 'sunset' at 16:30 when sunset is 20:40. A is more coherent: Bairro Alto and ginjinha on Day 1, Senhora do Monte at 19:50 near sunset, and a single Saturday loop through Feira da Ladra, Alfama and the castle. A's flaws are a 09:10 Time Out Market visit, before it opens, and no Belem."
+  },
+  {
+    "id": "city-break#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 4,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 34
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 4,
+        "transport": 3,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 5,
+        "pace": 4,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 36
+      }
+    },
+    "preferred": "B",
+    "reason": "A puts Feira da Ladra on Friday 14 May (Day 2), but the market runs only on Tuesdays and Saturdays, and it leaves out tram 28. Its Day 3 (Gulbenkian, Estrela, Time Out, a riverside walk) is filler-heavy, though its 19:50 Senhora do Monte timing is right. B has the market on the correct Saturday, adds tram 28, MNAA, ginjinha and Bairro Alto, but calls a 16:30 viewpoint 'sunset' and rides tram 28 at midday despite its own advice to go early. Neither plan includes Belem."
+  }
+]

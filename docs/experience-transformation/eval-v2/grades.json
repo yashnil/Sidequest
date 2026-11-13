@@ -1920,7 +1920,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 2,
     "board_size": 39,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 1,
     "hard_n": 1
    },
@@ -2072,7 +2072,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 2,
     "board_size": 48,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 1,
     "hard_n": 1
    },
@@ -2117,7 +2117,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 6,
     "board_size": 34,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 0,
     "hard_n": 0
    },
@@ -2342,7 +2342,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 0,
     "board_size": 23,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 0,
     "hard_n": 0
    },
@@ -2385,7 +2385,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 1,
     "board_size": 45,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 1,
     "hard_n": 1
    },
@@ -2804,7 +2804,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 0,
     "board_size": 33,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 0,
     "hard_n": 0
    },
@@ -2847,7 +2847,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 3,
     "board_size": 42,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 1,
     "hard_n": 1
    },
@@ -2995,7 +2995,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 8,
     "board_size": 40,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 0,
     "hard_n": 0
    },
@@ -3880,7 +3880,7 @@
     "empty_ordinary_days": 0,
     "one_stop_days": 0,
     "board_size": 28,
-    "contract_gap": false,
+    "contract_gap": true,
     "red_flags_n": 0,
     "hard_n": 0
    },
@@ -4315,6 +4315,361 @@
      "tarangire-manyara": 2,
      "guided-vehicle": 3,
      "gateway": 1
+    }
+   }
+  }
+ },
+ "new-9595734": {
+  "grades": [
+   {
+    "scenario": "city-break",
+    "run": "1",
+    "build": "new-9595734",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 130,
+    "total_travel": 244,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 12,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 24,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "1",
+    "build": "new-9595734",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": false,
+      "stage": "selection"
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 290,
+    "total_travel": 1020,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 16,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 2,
+    "board_size": 31,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "city-break",
+    "run": "2",
+    "build": "new-9595734",
+    "defining_present": 2,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": false,
+      "stage": "selection"
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 110,
+    "total_travel": 215,
+    "days_over_limit": 1,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 25,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "2",
+    "build": "new-9595734",
+    "defining_present": 4,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": false,
+      "stage": "selection"
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 195,
+    "total_travel": 838,
+    "days_over_limit": 3,
+    "bases": 1,
+    "stops": 15,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 31,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "city-break",
+    "run": "3",
+    "build": "new-9595734",
+    "defining_present": 3,
+    "defining_total": 4,
+    "defining": {
+     "alfama-miradouros": {
+      "present": true,
+      "stage": null
+     },
+     "belem": {
+      "present": false,
+      "stage": "selection"
+     },
+     "baixa-chiado": {
+      "present": true,
+      "stage": null
+     },
+     "tram-fado": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 95,
+    "total_travel": 214,
+    "days_over_limit": 2,
+    "bases": 1,
+    "stops": 11,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 26,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   },
+   {
+    "scenario": "beach-island",
+    "run": "3",
+    "build": "new-9595734",
+    "defining_present": 5,
+    "defining_total": 5,
+    "defining": {
+     "na-pali": {
+      "present": true,
+      "stage": null
+     },
+     "waimea-canyon": {
+      "present": true,
+      "stage": null
+     },
+     "north-shore": {
+      "present": true,
+      "stage": null
+     },
+     "south-shore": {
+      "present": true,
+      "stage": null
+     },
+     "beach-time": {
+      "present": true,
+      "stage": null
+     }
+    },
+    "red_flags": [],
+    "sky_violations": [],
+    "early_starts": [],
+    "early_violation": false,
+    "transport_contradiction": false,
+    "max_day_travel": 150,
+    "total_travel": 765,
+    "days_over_limit": 4,
+    "bases": 1,
+    "stops": 18,
+    "empty_ordinary_days": 0,
+    "one_stop_days": 0,
+    "board_size": 27,
+    "contract_gap": false,
+    "red_flags_n": 0,
+    "hard_n": 0
+   }
+  ],
+  "summary": {
+   "beach-island": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 4.33,
+     "min": 4,
+     "max": 5
+    },
+    "defining_total": 5,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 211.67,
+     "min": 150,
+     "max": 290
+    },
+    "days_over_limit": {
+     "mean": 3.67,
+     "min": 3,
+     "max": 4
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 2,
+     "unknown": 0
+    },
+    "per_defining": {
+     "na-pali": 3,
+     "waimea-canyon": 3,
+     "north-shore": 3,
+     "south-shore": 1,
+     "beach-time": 3
+    }
+   },
+   "city-break": {
+    "runs": 3,
+    "defining_share": {
+     "mean": 2.67,
+     "min": 2,
+     "max": 3
+    },
+    "defining_total": 4,
+    "red_flags": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "hard_violations": {
+     "mean": 0,
+     "min": 0,
+     "max": 0
+    },
+    "max_day_travel": {
+     "mean": 111.67,
+     "min": 95,
+     "max": 130
+    },
+    "days_over_limit": {
+     "mean": 1.67,
+     "min": 1,
+     "max": 2
+    },
+    "bases": {
+     "mean": 1,
+     "min": 1,
+     "max": 1
+    },
+    "missing_by_stage": {
+     "discovery": 0,
+     "selection": 4,
+     "unknown": 0
+    },
+    "per_defining": {
+     "alfama-miradouros": 3,
+     "belem": 0,
+     "baixa-chiado": 3,
+     "tram-fado": 2
     }
    }
   }

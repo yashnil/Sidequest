@@ -1,0 +1,62 @@
+{
+ "beach-island#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "beach-island#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "beach-island#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "city-break#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "city-break#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "city-break#3": {
+  "A": "new",
+  "B": "old"
+ },
+ "iceland-ring-road#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "iceland-ring-road#2": {
+  "A": "new",
+  "B": "old"
+ },
+ "iceland-ring-road#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "mountain-hiking#1": {
+  "A": "new",
+  "B": "old"
+ },
+ "mountain-hiking#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "mountain-hiking#3": {
+  "A": "old",
+  "B": "new"
+ },
+ "tanzania-safari#1": {
+  "A": "old",
+  "B": "new"
+ },
+ "tanzania-safari#2": {
+  "A": "old",
+  "B": "new"
+ },
+ "tanzania-safari#3": {
+  "A": "new",
+  "B": "old"
+ }
+}
