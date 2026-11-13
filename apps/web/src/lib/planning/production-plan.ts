@@ -592,6 +592,7 @@ async function generatePlan(
           ...(input.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value } : {}),
           locks: getItineraryLocks(tripId),
           essentialIds,
+          ...(qualityContract ? { groundArrangement: qualityContract.transport.mode } : {}),
         });
     } catch (error) {
       plannerFailure = error instanceof Error ? error.message : 'unknown';

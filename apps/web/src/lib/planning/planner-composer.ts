@@ -114,6 +114,12 @@ export interface PlannerComposeInput {
   locks?: readonly { placeId: string; dayNumber: number }[];
   /** Places the trip-quality contract needs in the plan (`quality/trip-quality-contract.ts`); the proposal's own `defining` marks count too. */
   essentialIds?: ReadonlySet<string>;
+  /**
+   * How the trip's ground travel is arranged, from the trip-quality contract:
+   * an operator-run trip (a safari's driver-guide and 4x4) is never written as
+   * a self-drive rental just because the traveller could drive.
+   */
+  groundArrangement?: 'operator' | 'self_drive' | 'public_transport' | 'undecided';
 }
 
 /**
@@ -596,17 +602,23 @@ function draftFromPlan(args: {
     unresolved: plan.mustConflicts.slice(0, 8).map((m) => clip(`${m.name}: you asked for it, and it did not fit — ${m.detail}`, DRAFT_SOFT_PROSE_CAPS.unresolvedItem)),
     bookingPriorities: [...bookingLines, ...(extras?.package.bookingPriorities ?? [])].slice(0, 8).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.bookingPriority)),
     ...(signatures.length > 0 ? { signatures } : {}),
-    driving: input.carAvailable ? 'rental_self_drive' : 'none',
+    driving: input.groundArrangement === 'operator' ? 'operator_transfer' : input.carAvailable ? 'rental_self_drive' : 'none',
     package: {
       foodStrategy: (extras?.package.foodStrategy ?? []).slice(0, 8).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.foodStrategy)),
       transport: (() => {
         const derived = transportStrategyFor({ plan, bases, carAvailable: input.carAvailable, maxDailyTravelMinutes: input.carAvailable && input.maxDailyDriveMinutes ? Math.min(input.maxDailyTravelMinutes, input.maxDailyDriveMinutes) : input.maxDailyTravelMinutes, minutes: args.minutes, coordinates: args.coordinates });
+        if (input.groundArrangement === 'operator') {
+          return {
+            summary: clip('An operator’s driver-guide and vehicle run the game drives and the roads between stays; nobody needs to hire or drive a car.', DRAFT_SOFT_PROSE_CAPS.transportSummary),
+            notes: ['Book the operator early: the driver-guide, the vehicle and park fees are usually one package.', ...(extras?.package.transportNotes ?? [])].slice(0, 6).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.transportNote)),
+          };
+        }
         return {
           summary: clip(derived.summary, DRAFT_SOFT_PROSE_CAPS.transportSummary),
           notes: [...derived.notes, ...(extras?.package.transportNotes ?? [])].slice(0, 6).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.transportNote)),
         };
       })(),
-      beforeYouGo: dedupeLines([...beforeYouGoFor({ scheduled, carAvailable: input.carAvailable, seasonal: args.seasonalNotes }), ...(extras?.package.beforeYouGo ?? [])]).slice(0, 10).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.beforeYouGo)),
+      beforeYouGo: dedupeLines([...beforeYouGoFor({ scheduled, carAvailable: input.carAvailable && input.groundArrangement !== 'operator', seasonal: args.seasonalNotes }), ...(extras?.package.beforeYouGo ?? [])]).slice(0, 10).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.beforeYouGo)),
       packing: (extras?.package.packing ?? []).slice(0, 15).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.packing)),
       backups,
     },

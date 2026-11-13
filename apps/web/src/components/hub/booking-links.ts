@@ -154,8 +154,15 @@ export function suggestedBookings(input: BookingLinkInput): SuggestedBooking[] {
 
   // --- the car, when the trip is planned around one ------------------------------
   const carNeed = items.find((b) => b.kind === 'rental_vehicle');
-  const drives = itinerary.transportStrategy.primaryMode === 'drive';
-  if ((carNeed && carNeed.status !== 'not_needed') || (drives && !carNeed)) {
+  /*
+   * The trip's transport arrangement, decided once (`travel/arrangement.ts`):
+   * an operator safari's 4x4 is not a car the traveller rents. Only a snapshot
+   * built before the arrangement existed falls back to the strategy's mode.
+   */
+  const arrangement = intel?.destinationContext?.arrangement;
+  const drives = arrangement ? arrangement.selfDrive : itinerary.transportStrategy.primaryMode === 'drive';
+  const someoneElseDrives = arrangement?.primary === 'operator' || arrangement?.primary === 'private_driver';
+  if ((carNeed && carNeed.status !== 'not_needed' && (drives || !arrangement)) || (drives && !carNeed)) {
     const first = itinerary.package?.bases[0];
     /*
      * Where a traveller actually collects a car is where they arrive: the
@@ -176,8 +183,8 @@ export function suggestedBookings(input: BookingLinkInput): SuggestedBooking[] {
     });
   }
 
-  // --- moving between stays without a car -----------------------------------------
-  if (!drives) {
+  // --- moving between stays without a car (an operator or a driver moves them on an arranged trip) ---
+  if (!drives && !someoneElseDrives) {
     const bases = (itinerary.package?.bases ?? []).filter((b) => b.nights > 0);
     for (let i = 1; i < bases.length; i++) {
       const from = bases[i - 1]!.displayName ?? bases[i - 1]!.name;

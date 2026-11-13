@@ -107,3 +107,16 @@ describe('booking links', () => {
     expect(stays[0]!.detail).toContain('1 adult');
   });
 });
+
+describe('the car follows the trip’s transport arrangement', () => {
+  const withArrangement = (primary: 'operator' | 'self_drive' | 'public_transport', selfDrive: boolean) =>
+    ({ bookings: { items: [] }, destinationContext: { arrangement: { primary, selfDrive, selfDriveDays: [], operatorDays: [], flights: false, flightDays: [], basis: 'test', disagreements: [] } } }) as unknown as Parameters<typeof suggestedBookings>[0]['intel'];
+  it('an operator trip planned with road legs never offers a rental car or station transfers', () => {
+    const rows = suggestedBookings({ itinerary: itinerary(), intel: withArrangement('operator', false), adults: 2, children: 0 });
+    expect(rows.some((r) => r.kind === 'car')).toBe(false);
+    expect(rows.some((r) => r.kind === 'transfer')).toBe(false);
+  });
+  it('a self-drive arrangement still gets its car', () => {
+    expect(suggestedBookings({ itinerary: itinerary(), intel: withArrangement('self_drive', true), adults: 2, children: 0 }).some((r) => r.kind === 'car')).toBe(true);
+  });
+});

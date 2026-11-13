@@ -2125,7 +2125,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       ...(relocation && !draftDay?.move && d > 0 && draft.days[d - 1]?.move ? { previousDayMove: draft.days[d - 1]!.move } : {}),
       anchors: dayAnchors,
       groundArrangement: tripGround,
-      ...(tripArrangement.primary === 'operator' && tripArrangement.vehicle ? { tripVehicle: tripArrangement.vehicle } : {}),
+      /* The operator's vehicle on the days it runs (all days when the plan names no operator-run stretch); a city evening before the safari keeps its own transport. */
+      ...(tripArrangement.primary === 'operator' && tripArrangement.vehicle && (tripArrangement.operatorDays.length === 0 || tripArrangement.operatorDays.includes(dayNumber)) ? { tripVehicle: tripArrangement.vehicle } : {}),
       /* V12 §17 — what this trip's own experiences and declared moves vouch for. */
       episodeModes: tripEpisodeModes,
       dayMoveModes: tripDayMoveModes,
