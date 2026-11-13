@@ -1,0 +1,49 @@
+[
+  {
+    "scenario": "mountain-road-trip",
+    "defining": [
+      {"id": "glencoe", "label": "Glen Coe (A82, Three Sisters, visitor centre)", "anyOf": ["Glencoe", "Glen Coe", "Three Sisters", "Rannoch Moor", "Buachaille", "Hidden Valley", "Coire Gabhail"]},
+      {"id": "skye", "label": "Isle of Skye (Trotternish, Fairy Pools, Neist Point)", "anyOf": ["Skye", "Portree", "Old Man of Storr", "Storr", "Quiraing", "Trotternish", "Fairy Pools", "Neist Point", "Kilt Rock", "Glen Brittle"]},
+      {"id": "road-to-the-isles", "label": "Glenfinnan / Road to the Isles", "anyOf": ["Glenfinnan", "Road to the Isles", "Jacobite", "Mallaig", "A830", "Arisaig"]},
+      {"id": "eilean-donan", "label": "Eilean Donan Castle", "anyOf": ["Eilean Donan", "Dornie"]},
+      {"id": "highland-drive", "label": "A signature Highland drive (single-track / mountain road)", "anyOf": ["Applecross", "Bealach na Ba", "Bealach na Bà", "Torridon", "Wester Ross", "single-track", "single track", "passing place", "scenic drive"]},
+      {"id": "skye-crossing", "label": "Skye access stated (bridge or Mallaig–Armadale ferry)", "anyOf": ["Skye Bridge", "Kyle of Lochalsh", "Armadale", "Mallaig ferry", "CalMac"]}
+    ],
+    "redFlags": [
+      {"id": "nc500-full", "label": "Full NC500 squeezed into the trip", "anyOf": ["full NC500", "entire NC500", "complete the NC500", "whole NC500", "full North Coast 500", "entire North Coast 500", "complete North Coast 500"]},
+      {"id": "skip-glencoe-skye", "label": "No Glen Coe or no Skye (check absence of defining ids)", "anyOf": []},
+      {"id": "impossible-geography", "label": "Driving to islands with no ferry / city day trip to Skye", "anyOf": ["drive to Mull", "bridge to Mull", "drive to Harris", "drive to Lewis", "drive to Orkney", "day trip to Skye", "Skye day trip", "Skye in a day"]},
+      {"id": "long-drive-days", "label": "Marathon driving days", "anyOf": ["6 hours of driving", "7 hours of driving", "8 hours of driving", "10 hours of driving", "6-hour drive", "7-hour drive", "8-hour drive", "10-hour drive"]},
+      {"id": "early-sunset", "label": "Sunset framed hours before the ~22:10 sunset", "anyOf": ["sunset at 19", "sunset at 20", "sunset at 21", "sunset dinner at 19", "sunset dinner at 20"]},
+      {"id": "bealach-large-vehicle", "label": "Campervan/caravan over the Bealach na Bà", "anyOf": ["campervan over the Bealach", "motorhome over the Bealach", "caravan over the Bealach"]},
+      {"id": "city-heavy", "label": "City-led days in a Highlands request", "anyOf": ["Royal Mile", "Edinburgh Castle", "Glasgow Necropolis", "pub crawl", "nightlife"]}
+    ],
+    "sunsetLocal": "22:10",
+    "sunriseLocal": "04:30",
+    "timeZone": "Europe/London",
+    "maxDailyTravelMinutes": 240
+  },
+  {
+    "scenario": "point-to-point-trek",
+    "defining": [
+      {"id": "tmb-walk", "label": "Walking the TMB stage to stage", "anyOf": ["Tour du Mont Blanc", "TMB", "hut to hut", "hut-to-hut", "refuge to refuge", "Les Houches", "Les Contamines", "Les Chapieux"]},
+      {"id": "italy-section", "label": "Italian section (Col de la Seigne, Courmayeur, Val Ferret)", "anyOf": ["Col de la Seigne", "Courmayeur", "Val Ferret", "Val Veny", "Elisabetta", "Bonatti", "Arnuva", "Arnouvaz"]},
+      {"id": "swiss-section", "label": "Swiss section (Grand Col Ferret, La Fouly, Champex, Trient)", "anyOf": ["Grand Col Ferret", "La Fouly", "Champex", "Trient", "Col de la Forclaz", "Fenêtre d'Arpette", "Fenetre d'Arpette", "Bovine"]},
+      {"id": "french-return", "label": "Return to the Chamonix valley (Col de Balme, Tré-le-Champ, Flégère, Lac Blanc)", "anyOf": ["Col de Balme", "Tré-le-Champ", "Tre-le-Champ", "Flégère", "Flegere", "Lac Blanc", "Brévent", "Brevent", "La Tête aux Vents"]},
+      {"id": "refuge-nights", "label": "Refuge / gîte nights on half board", "anyOf": ["refuge", "rifugio", "gîte", "gite", "half board", "demi-pension", "dortoir", "dormitory"]},
+      {"id": "booking-ahead", "label": "Accommodation booked months ahead", "anyOf": ["book months", "booked months", "book early", "book well in advance", "book in advance", "bookings open", "montourdumontblanc"]}
+    ],
+    "redFlags": [
+      {"id": "single-base-day-hikes", "label": "TMB as day hikes from one base", "anyOf": ["day hike from Chamonix", "day hikes from Chamonix", "return to Chamonix each", "back to Chamonix each", "same hotel every night", "base in Chamonix", "based in Chamonix"]},
+      {"id": "rental-car", "label": "Rental car as main mode", "anyOf": ["rental car", "rent a car", "car hire", "self-drive", "drive to the trailhead"]},
+      {"id": "closed-refuge", "label": "Night at the Refuge de la Croix du Bonhomme (closed until 2029)", "anyOf": ["Refuge de la Croix du Bonhomme", "Refuge du Col de la Croix du Bonhomme", "Croix du Bonhomme refuge", "Croix du Bonhomme hut"]},
+      {"id": "overlong-stage", "label": "Stage over ~25 km or 1,500 m ascent", "anyOf": ["26 km", "28 km", "30 km", "32 km", "35 km", "1,600 m ascent", "1,800 m ascent", "2,000 m ascent", "1600 m ascent", "1800 m ascent", "2000 m ascent"]},
+      {"id": "wild-camping", "label": "Wild camping / bivouac on the route", "anyOf": ["wild camp", "wild camping", "bivouac", "bivvy"]},
+      {"id": "late-high-walking", "label": "Walking on high ground after ~20:00 or crossing a col late afternoon", "anyOf": ["arrive at 21", "arrive at 22", "cross the col at 16", "cross the col at 17", "night hike"]}
+    ],
+    "sunsetLocal": "21:20",
+    "sunriseLocal": "05:56",
+    "timeZone": "Europe/Paris",
+    "maxDailyTravelMinutes": 120
+  }
+]
