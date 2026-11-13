@@ -91,6 +91,7 @@ export * from './lifecycle/trip-lifecycle';
 export * from './quality/metrics';
 export * from './quality/trip-quality';
 export * from './quality/trip-quality-contract';
+export * from './journey/archetype';
 export * from './interview/sufficiency';
 export * from './interview/conflicts';
 export * from './intelligence';

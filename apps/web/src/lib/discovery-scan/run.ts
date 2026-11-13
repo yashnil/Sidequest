@@ -25,6 +25,7 @@ import {
   type ScanProposal,
   type ScopeBreadth,
   type TravelTimeMatrixData,
+  JOURNEY_ARCHETYPE_LABELS,
 } from '@sidequest/core';
 import { getIntent } from '../db/compiler-repository';
 import { getProfile, getTrip, setSelection, travellerDecisions } from '../db/repository';
@@ -46,6 +47,7 @@ import { boardFor, foodProviderChoice, resolveTripRegion } from '../region';
 import { seedPlannerAutoPicks } from '../planning/seed-autopicks';
 import { SCAN_INSTRUCTION, SCAN_JSON_TAG, SCAN_PROMPT_VERSION, buildScanSupplementTask, buildScanTask, buildScanUntrusted, scanCandidateTarget, scanProposalWireSchema } from './prompt';
 import { fixturePlacement, placeScanProposal, withdrawCrossPartPositions } from './placement';
+import { journeyFor, strategicBaseChanges } from '../planning/journey';
 import { linkWikidataIds } from '../providers/wikidata-link';
 import { providerUserAgent } from '../net/user-agent';
 import { fixtureScanProposal } from './fixture';
@@ -304,7 +306,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const now = new Date();
     const prepared = await scanPromptFor(tripId, now);
     if (!prepared) return fail('internal_generation_error', 'trip disappeared');
-    const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput } = prepared;
+    const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, journey } = prepared;
     if (envelope.route) console.warn(`Discovery scan for ${tripId}: a route-shaped trip (${envelope.route.kind}, "${envelope.route.cue}").`);
     if (!envelope.center || (envelope.center.lat === 0 && envelope.center.lng === 0)) {
       return fail('destination_unplaced', 'no destination centre');
@@ -729,9 +731,10 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       timeZone: envelope.timeZone ?? 'UTC',
       dates,
       carAvailable: canonical.movement.carAvailable,
-      maxBaseChanges: canonical.movement.maxBaseChanges.value ?? 1,
-      /* Release candidate — who is travelling decides what a hotel change costs them (`scan/stay-objective.ts`). */
-      traveller: stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null }),
+      /* Within the journey archetype's range; the traveller's own explicit cap wins where it is lower. */
+      maxBaseChanges: strategicBaseChanges(journey, { value: canonical.movement.maxBaseChanges.value, explicit: canonical.movement.maxBaseChanges.source === 'explicit' }),
+      /* Release candidate — who is travelling decides what a hotel change costs them (`scan/stay-objective.ts`); how moving feels follows the archetype unless the traveller said. */
+      traveller: ((t) => (canonical.movement.maxBaseChanges.source === 'explicit' ? t : { ...t, moveTolerance: journey.strategy.moveTolerance }))(stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null })),
       dayMinutes: buildDailyWindows(trip.basics, profile, resolveConfig()).map((w) => Math.max(0, w.window.endMinute - w.window.startMinute)),
       mustSeeKeys: matchNamedMustDos(namedMustDos, proposal.candidates.map((c) => ({ id: c.key, name: c.name }))),
       /* A journey the traveller asked for: the bases along it are their intent, and a loop is costed back to where it began (`scan/stay-objective.ts`). */
@@ -822,8 +825,22 @@ export async function scanPromptFor(tripId: string, now: Date) {
   const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
   const days = dates.length;
   const namedMustDos = [...canonical.ownWords.mustDo];
-  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos };
-  return { trip, intent, profile, candidate, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
+  /* How this trip is structured, decided before the beds (`journey/archetype.ts`); the proposal is told, and the stays are chosen within it. */
+  const { journey } = journeyFor({
+    destinationPhrase: rawDestinationPhrase ?? envelope.name,
+    composer,
+    profile,
+    semanticType: concept?.type ?? null,
+    scale: envelope.scale ?? null,
+    namedParts: (concept?.parts ?? []).filter((part) => part.center).length >= 2 ? (concept?.parts ?? []).map((part) => part.label) : [],
+    tripDays: days,
+    carAvailable: canonical.movement.carAvailable !== false,
+    maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? null,
+    mustDos: canonical.ownWords.mustDo,
+    avoidances: canonical.ownWords.dislikes,
+  });
+  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos, journey: { label: JOURNEY_ARCHETYPE_LABELS[journey.archetype], reason: journey.reason } };
+  return { trip, intent, profile, candidate, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, journey, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
 }
 
 /**

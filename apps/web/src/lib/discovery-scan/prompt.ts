@@ -110,6 +110,8 @@ export interface ScanPromptInput {
   days: number;
   /** Must-dos the traveller named in their own words; they lead the pool. */
   namedMustDos: readonly string[];
+  /** How the trip is structured (`journey/archetype.ts`), decided before the proposal: what kinds of bases and moves to propose. */
+  journey?: { label: string; reason: string };
 }
 
 /** Sidequest's own words: the task. The traveller's free text never appears here; it travels in the untrusted payload. */
@@ -129,6 +131,7 @@ export function buildScanTask(input: ScanPromptInput): string {
     ...(envelope.accessFacts && envelope.accessFacts.length > 0 ? [`operational facts: ${envelope.accessFacts.join(' | ')}`] : []),
     `</destination>`,
     ...routeBlock(envelope),
+    ...(input.journey ? [`<structure>${input.journey.label}. ${input.journey.reason} Propose bases and candidates that fit this structure.</structure>`] : []),
     `<dates>${input.startDate} to ${input.endDate} (${input.days} days)</dates>`,
     renderTravelerBriefXml(brief),
     `<task>Propose ${target.min} to ${target.max} candidates, ${envelope.route ? '2 to 6 bases in travel order along the route' : '1 to 5 bases'}, up to 8 food areas, up to 6 skipped classics, and the package. ${input.namedMustDos.length > 0 ? 'Every place the traveller named as a must-do appears as a candidate unless it is genuinely impossible on these dates (then put it in skipped with the reason).' : ''}</task>`,

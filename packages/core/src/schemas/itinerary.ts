@@ -1637,6 +1637,8 @@ export const tripPackageSchema = z.object({
     .object({
       version: z.literal(1),
       purpose: z.string().min(1).max(40),
+      /** The journey archetype the stays and the plan were built for (`journey/archetype.ts`). */
+      archetype: z.string().max(40).optional(),
       secondary: z.array(z.string().max(40)).max(10).default([]),
       transport: z.string().max(40),
       structure: z.string().max(40),

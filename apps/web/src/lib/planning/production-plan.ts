@@ -69,7 +69,8 @@ import { ProviderBudget, ceilingsFor } from '../providers/cost-budget';
 import { buildPreservationReport, describePreservation, type DraftPreservationReport } from './preservation';
 import { auditItinerary, type QualityAudit } from './quality-audit';
 import { compileQualitySafely } from './quality-compiler';
-import { essentialIdsFor, evaluateQualityContract, qualityContractFor } from './quality-contract';
+import { essentialIdsFor, evaluateQualityContract } from './quality-contract';
+import { journeyFor } from './journey';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
@@ -559,13 +560,14 @@ async function generatePlan(
    * destination's type and the proposal's own defining marks; the planner is
    * built around those candidates and the finished plan is checked against it.
    */
-  const qualityContract = board
-    ? qualityContractFor({
+  const planned = board
+    ? journeyFor({
         destinationPhrase: rawDestinationPhrase ?? envelope.name,
         composer,
         profile,
         semanticType: concept?.type ?? null,
-        namedParts: concept?.extent?.source === 'union_of_parts' ? (concept.parts ?? []).map((part) => part.label) : [],
+        scale: envelope.scale ?? null,
+        namedParts: (concept?.parts ?? []).filter((part) => part.center).length >= 2 ? (concept?.parts ?? []).map((part) => part.label) : [],
         tripDays: region?.dates.length ?? 1,
         carAvailable: input.movement.carAvailable !== false,
         maxDailyTravelMinutes: input.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes ?? null,
@@ -574,6 +576,8 @@ async function generatePlan(
         board: board.candidates,
       })
     : null;
+  const qualityContract = planned?.contract ?? null;
+  const journey = planned?.journey ?? null;
   const essentialIds = qualityContract && board ? essentialIdsFor(qualityContract, board.candidates) : new Set<string>();
   let plannerFailure: string | null = null;
   const attemptPlanner = (): PlannerComposition | null => {
@@ -592,7 +596,8 @@ async function generatePlan(
           ...(input.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value } : {}),
           locks: getItineraryLocks(tripId),
           essentialIds,
-          ...(qualityContract ? { groundArrangement: qualityContract.transport.mode } : {}),
+          /* The journey archetype's ground arrangement: an operator safari is written as one, whatever car the traveller could have. */
+          ...(journey ? { groundArrangement: journey.strategy.ground } : qualityContract ? { groundArrangement: qualityContract.transport.mode } : {}),
         });
     } catch (error) {
       plannerFailure = error instanceof Error ? error.message : 'unknown';
@@ -1295,6 +1300,7 @@ async function generatePlan(
                 qualityContract: {
                   version: 1 as const,
                   purpose: qualityContract.purpose,
+                  ...(journey ? { archetype: journey.archetype } : {}),
                   secondary: [...qualityContract.secondary],
                   transport: qualityContract.transport.mode,
                   structure: qualityContract.structure,
