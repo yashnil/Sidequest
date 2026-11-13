@@ -51,8 +51,16 @@ test('the food questions ask about eating and nothing about restaurants', async 
   await expect(food.getByText(/near the day's route/)).toBeVisible();
   await expect(food.getByText(/Mostly fuel/)).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/restaurant/i);
-  await page.getByRole('button', { name: 'Back' }).click();
-  await completeQuestionnaire(page);
+});
+
+/*
+ * Its own test, not the tail of the one above. The two shared a flow only by
+ * accident: getting from the food question back to the review meant walking the
+ * rest of the interview again (~8 screens), which made the pair the slowest test
+ * in this file while neither half depends on the other.
+ */
+test('the dietary strictness question only exists once there is a list', async ({ page }) => {
+  await startQuestionnaire(page);
 
   await openReviewLedger(page);
   await page.getByTestId('review-change-dietary').click();

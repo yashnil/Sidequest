@@ -429,6 +429,46 @@ export async function currentInterviewQuestion(page: Page): Promise<string | nul
   return id ? id.replace('interview-question-', '') : null;
 }
 
+/**
+ * WAIT FOR A QUESTION'S ENTRANCE TO FINISH, MEASURED IN FRAMES.
+ *
+ * A new question slides in sideways (240 ms, `QUESTION_VARIANTS`) and its
+ * options then settle vertically for roughly another 300 ms — measured frame by
+ * frame, the first radio stops moving ~580 ms after the screen mounts. Acting
+ * straight away is safe — Playwright refuses to press an element that is still
+ * moving — but its retry backoff (0, 20, 100, 100, 500 ms) rounds that up to
+ * ~0.82 s on every screen the walker presses something on. This waits for the
+ * same condition Playwright waits for — the boxes (the screen and every control
+ * in it) unchanged across consecutive animation frames — and ends on the frame
+ * it becomes true. It is a readiness condition, not a sleep: the cap only stops
+ * a box that never settles from hanging here, and the press after it still runs
+ * Playwright's own checks.
+ */
+export async function waitForSettledBox(locator: Locator): Promise<void> {
+  await locator.evaluate(
+    (element) =>
+      new Promise<void>((resolve) => {
+        const started = performance.now();
+        const watched = [element, ...element.querySelectorAll('input, button')];
+        let last = '';
+        let still = 0;
+        const tick = () => {
+          const now = watched
+            .map((node) => {
+              const box = node.getBoundingClientRect();
+              return `${box.x},${box.y},${box.width},${box.height}`;
+            })
+            .join('|');
+          still = now === last ? still + 1 : 0;
+          last = now;
+          if (still >= 2 || performance.now() - started > 2_000) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  ).catch(() => undefined);
+}
+
 export async function completeQuestionnaire(page: Page, choices: InterviewChoices = {}): Promise<string[]> {
   const seen: string[] = [];
   const priorities = choices.priorities ?? DEFAULT_INTERVIEW.priorities;
@@ -453,6 +493,7 @@ export async function completeQuestionnaire(page: Page, choices: InterviewChoice
     seen.push(id);
     const screen = page.getByTestId(`interview-question-${id}`);
     await waitUntilInteractive(page.getByTestId('interview-decide'));
+    await waitForSettledBox(screen);
     if (id === 'priorities') {
       for (const label of priorities) {
         let chip = screen.getByRole('checkbox', { name: label, exact: true });
@@ -551,6 +592,7 @@ export async function changeInterviewAnswer(page: Page, questionId: string, valu
   await expect(change).toBeVisible();
   await change.click();
   await expect(page.getByTestId(`interview-question-${questionId}`)).toBeVisible({ timeout: 15_000 });
+  await waitForSettledBox(page.getByTestId(`interview-question-${questionId}`));
   await page.locator(`input[type=radio][value="${value}"]`).first().check();
   await advanceInterview(page, questionId);
   await completeQuestionnaire(page, choices);

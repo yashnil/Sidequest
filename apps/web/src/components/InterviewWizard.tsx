@@ -939,10 +939,18 @@ function QuestionScreen({
         The action bar: sticky at every width and the last thing in the column,
         so nothing is ever pinned under it. On a phone it is the thumb's row —
         the two real actions edge to edge, the quiet ones above them.
+
+        The quiet row wraps. With all three of Back, No preference and "Enough —
+        plan it" on screen it is 389 px of buttons in a 350 px row at a 390 px
+        phone; unwrapped, it pushed the whole page to 409 px wide — a sideways
+        scroll on every question once enough had been answered — and presses on
+        Decide and Continue were reported as intercepted by that row until the
+        page was scrolled differently. The end-to-end walker measured it as
+        ~2.9 s of retried clicks per question.
       */}
       <div className="sticky bottom-0 z-20 -mx-5 mt-10 border-t-[1.5px] border-ink bg-paper/95 px-5 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-sm sm:-mx-8 sm:px-8 lg:mx-0 lg:mt-12 lg:px-0 lg:pt-3">
         <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center justify-between gap-2 sm:justify-start">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 sm:justify-start">
             <button type="button" onClick={onBack} disabled={pending} className={cx(buttonClass('ghost'), 'whitespace-nowrap px-3')}>
               ← Back
             </button>
