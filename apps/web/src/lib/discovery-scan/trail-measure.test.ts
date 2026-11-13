@@ -68,7 +68,7 @@ describe('a trail stage’s distance and climb, measured where possible', () => 
 
 describe('the scan asks a trail trip for its stages', () => {
   it('bumps the prompt version and spells out stages, stage-end bases, unsuitable sections and their alternatives', () => {
-    expect(SCAN_PROMPT_VERSION).toBe('discovery-scan/2026-11-13.2');
+    expect(SCAN_PROMPT_VERSION).toBe('discovery-scan/2026-11-15.1');
     expect(SCAN_INSTRUCTION).toMatch(/Trails walked in stages/);
     expect(SCAN_INSTRUCTION).toMatch(/"walk\.stage"/);
     expect(SCAN_INSTRUCTION).toMatch(/"walk\.alternative": \{"mode": "bus" \| "train" \| "taxi" \| "boat" \| "skip"/);

@@ -35,7 +35,6 @@ import { compactBookedFacts } from '../intelligence/booked-facts';
 import { ResearchModel } from '../providers/anthropic';
 import { reserveModelCalls } from '../compiler/daily-ceiling';
 import { isCompositionModelConfigured, isGeocoderEnabled, isGlobalRoutesProviderEnabled, isPoiProviderEnabled } from '../providers/switches';
-import { qualityContractFor } from '../planning/quality-contract';
 import { measureTrailStages } from './trail-measure';
 import { CACHE_TTL_MS, cacheKeyFor } from '../providers/cache-policy';
 import { verificationProviders } from '../planning/verification-providers';
