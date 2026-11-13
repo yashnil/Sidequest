@@ -81,6 +81,7 @@ import {
   LOCAL_CUISINE_TAG,
   type CuisineWishes,
   estimateLegMinutes,
+  highSpeedRailBackbone,
   MAX_GEO_ESTIMATE_DRIVE_KM,
   COLOCATED_KM,
   TIMELINE_MINUTE_LIMIT,
@@ -3170,7 +3171,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const estimate = !measured && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
       ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot')
         ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
-        : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode })
+        : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode, highSpeedRail: highSpeedRailBackbone(context.destinationScope?.countryCode) })
       : null;
     const noRouteAnswered = ledgerFailureReason(input.ledger, from.id, to.id) === AUTHORITATIVE_NO_ROUTE || ledgerFailureReason(input.ledger, to.id, from.id) === AUTHORITATIVE_NO_ROUTE;
     const unmeasuredReason: TravelSegment['unmeasuredReason'] =
