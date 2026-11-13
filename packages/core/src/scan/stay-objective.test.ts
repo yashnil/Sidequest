@@ -144,3 +144,27 @@ describe('the stay objective’s guarantees', () => {
     expect(decision.sentence).toMatch(/2 bases, west, east/);
   });
 });
+
+describe('a trail stage that ends at the next bed (2026-11)', () => {
+  /* Two villages on a trail, 30 km apart by a slow mountain road, a stage of the trail joining them. */
+  const trail: Geometry = { bases: { village: { x: 0, y: 0 }, shrine: { x: 30, y: 0 } }, places: { ...around('v', { x: 0, y: 0 }, 6, 6), ...around('s', { x: 30, y: 0 }, 8, 6) }, scale: 2.5 };
+  const family = { pace: 'slow' as const, carAvailable: false, maxDailyTravelMinutes: 120, children: 2, moveTolerance: 'move_if_it_saves_time' as const };
+
+  it('the move along the trail costs no transfer, so following it wins where a single base would loop back by road', () => {
+    const link = { fromBaseId: 'village', toBaseId: 'shrine', walkMinutes: 150, placeId: 'v0' };
+    const linked = chooseStays({ ...input(trail, 6, family), trailLinks: [link] });
+    expect(linked.stays.map((s) => s.baseId)).toEqual(['village', 'shrine']);
+    expect(linked.decision.chosen.transferMinutes).toBe(0);
+    /* Held to one bed, the same stage costs its way back from the far end. */
+    const villageOnly = (choice: ReturnType<typeof chooseStays>) => [choice.decision.chosen, ...choice.decision.alternatives].find((o) => o.stays.length === 1 && o.stays[0]!.baseId === 'village');
+    const withLink = villageOnly(linked);
+    const withoutLink = villageOnly(chooseStays(input(trail, 6, family)));
+    if (withLink && withoutLink) expect(withLink.dayTravelMinutes).toBeGreaterThan(withoutLink.dayTravelMinutes);
+  });
+
+  it('without a link the same two villages are costed as a road move', () => {
+    const plain = chooseStays(input(trail, 6, family));
+    const two = [plain.decision.chosen, ...plain.decision.alternatives].find((option) => option.stays.length === 2);
+    expect(two?.transferMinutes ?? 1).toBeGreaterThan(0);
+  });
+});

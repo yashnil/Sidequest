@@ -90,6 +90,7 @@ export * from './feasibility/readiness-requirements';
 export * from './lifecycle/trip-lifecycle';
 export * from './quality/metrics';
 export * from './quality/trip-quality';
+export * from './quality/trip-quality-contract';
 export * from './interview/sufficiency';
 export * from './interview/conflicts';
 export * from './intelligence';

@@ -150,6 +150,9 @@ export function walkingMinutes(km: number, ascentM = 0): number {
   return Math.round((km / 4.5) * 60 + (Math.max(0, ascentM) / 600) * 60);
 }
 
+/** The most candidates one proposal may mark as defining. */
+export const MAX_DEFINING = 3;
+
 export interface ScanCandidateProposal {
   /** Stable within one proposal; the model's own index, never trusted as an identity. */
   key: string;
@@ -183,6 +186,14 @@ export interface ScanCandidateProposal {
   why: string;
   caution?: string;
   walk?: ScanWalk;
+  /**
+   * 2026-11 (trip-quality contract) — one of the few experiences this
+   * destination is *for* (what a trip here would be pointless without, for this
+   * traveller). The model's judgement, at most three per proposal; it lifts the
+   * candidate in the plan and the contract checks the plan kept one
+   * (`quality/trip-quality-contract.ts`). Never a place-name rule.
+   */
+  defining?: boolean;
 }
 
 export interface ScanBaseProposal {
@@ -351,8 +362,16 @@ export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
       why: why ?? `${SCAN_KIND_PROFILES[kind].label} in ${locality}.`,
       ...(caution ? { caution } : {}),
       ...walkOf(c.walk, kind, coerced, path),
+      ...(c.defining === true ? { defining: true } : {}),
     });
   });
+  /* At most three defining experiences: a pool where everything is defining says nothing. */
+  let definingSeen = 0;
+  for (const candidate of candidates) {
+    if (!candidate.defining) continue;
+    definingSeen += 1;
+    if (definingSeen > MAX_DEFINING) delete candidate.defining;
+  }
 
   const rawBases = Array.isArray(record.bases) ? record.bases : [];
   const bases: ScanBaseProposal[] = [];

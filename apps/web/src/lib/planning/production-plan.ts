@@ -69,6 +69,7 @@ import { ProviderBudget, ceilingsFor } from '../providers/cost-budget';
 import { buildPreservationReport, describePreservation, type DraftPreservationReport } from './preservation';
 import { auditItinerary, type QualityAudit } from './quality-audit';
 import { compileQualitySafely } from './quality-compiler';
+import { essentialIdsFor, evaluateQualityContract, qualityContractFor } from './quality-contract';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
@@ -552,6 +553,28 @@ async function generatePlan(
    * refuses with an actionable reason rather than shipping an empty day.
    */
   const regressionMode = process.env.SIDEQUEST_PLANNING_MODE?.trim() === 'model';
+  /*
+   * 2026-11 — THE TRIP-QUALITY CONTRACT, BEFORE THE DAYS. What the trip is for
+   * and which experiences it cannot do without, from the traveller's words, the
+   * destination's type and the proposal's own defining marks; the planner is
+   * built around those candidates and the finished plan is checked against it.
+   */
+  const qualityContract = board
+    ? qualityContractFor({
+        destinationPhrase: rawDestinationPhrase ?? envelope.name,
+        composer,
+        profile,
+        semanticType: concept?.type ?? null,
+        namedParts: concept?.extent?.source === 'union_of_parts' ? (concept.parts ?? []).map((part) => part.label) : [],
+        tripDays: region?.dates.length ?? 1,
+        carAvailable: input.movement.carAvailable !== false,
+        maxDailyTravelMinutes: input.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes ?? null,
+        mustDos: input.ownWords.mustDo,
+        avoidances: input.ownWords.dislikes,
+        board: board.candidates,
+      })
+    : null;
+  const essentialIds = qualityContract && board ? essentialIdsFor(qualityContract, board.candidates) : new Set<string>();
   let plannerFailure: string | null = null;
   const attemptPlanner = (): PlannerComposition | null => {
     if (options.useDraft || options.reuseStoredDraft || regressionMode || !plannerScheduledAnything(region, board) || !region || !board) return null;
@@ -568,6 +591,7 @@ async function generatePlan(
           maxDailyTravelMinutes: input.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes,
           ...(input.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value } : {}),
           locks: getItineraryLocks(tripId),
+          essentialIds,
         });
     } catch (error) {
       plannerFailure = error instanceof Error ? error.message : 'unknown';
@@ -1163,6 +1187,12 @@ async function generatePlan(
     /* V12.1 §39 §40 — how this kind of trip should be judged, where the derivation produced one. */
     ...(operating ? { policy: operating.policy } : {}),
   });
+  /* The contract's verdict on the finished plan: a missing essential, a hire car on a no-car trip, an unchosen dawn start on a restful one. */
+  const travellerPicks = new Set(getSelections(tripId).filter((sel) => sel.source === 'user' && sel.status === 'included').map((sel) => sel.placeId));
+  const contractVerdict = qualityContract && board ? evaluateQualityContract(qualityContract, applied.itinerary, board.candidates, travellerPicks) : null;
+  if (contractVerdict && !contractVerdict.passed) {
+    console.warn('Trip quality contract: not met', { tripId, purpose: qualityContract!.purpose, violations: contractVerdict.violations.filter((v) => v.severity === 'fail').map((v) => `${v.id} (${v.stage}): ${v.detail}`) });
+  }
   if (tripQuality.weak.length > 0) {
     console.warn('Trip quality: weak dimensions', { tripId, weak: tripQuality.weak, detail: tripQuality.findings.filter((f) => f.verdict === 'weak').map((f) => `${f.dimension}: ${f.detail}`) });
   }
@@ -1259,6 +1289,23 @@ async function generatePlan(
           ...(structure.chapters.length > 0 ? { chapters: structure.chapters } : {}),
           /* V11 §2 — the internal quality report. Never a score, never shown by default. */
           tripQuality,
+          ...(qualityContract && contractVerdict
+            ? {
+                qualityContract: {
+                  version: 1 as const,
+                  purpose: qualityContract.purpose,
+                  secondary: [...qualityContract.secondary],
+                  transport: qualityContract.transport.mode,
+                  structure: qualityContract.structure,
+                  essentials: qualityContract.essentials.slice(0, 40).map((e) => ({ id: e.id.slice(0, 120), label: e.label.slice(0, 240), requirement: e.requirement, source: e.source })),
+                  constraints: qualityContract.constraints.slice(0, 40).map((c) => ({ id: c.id.slice(0, 120), text: c.text.slice(0, 300), requirement: c.requirement })),
+                  passed: contractVerdict.passed,
+                  satisfied: contractVerdict.satisfied.slice(0, 40).map((id) => id.slice(0, 120)),
+                  violations: contractVerdict.violations.slice(0, 60).map((v) => ({ id: v.id.slice(0, 120), severity: v.severity, stage: v.stage, detail: v.detail.slice(0, 400), ...(v.recovery ? { recovery: v.recovery.slice(0, 300) } : {}) })),
+                  uncertainties: qualityContract.uncertainties.slice(0, 10).map((u) => u.slice(0, 300)),
+                },
+              }
+            : {}),
           /*
            * V10 §7 §6 — the two corrections the compiler is allowed to make, both
            * derived from the plan's own geometry: a claim the route contradicts,

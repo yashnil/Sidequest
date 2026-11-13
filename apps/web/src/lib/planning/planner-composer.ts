@@ -112,6 +112,8 @@ export interface PlannerComposeInput {
   maxDailyDriveMinutes?: number;
   /** Stops the traveller locked to a day on the itinerary; they plan as the traveller's own includes, held to that day. */
   locks?: readonly { placeId: string; dayNumber: number }[];
+  /** Places the trip-quality contract needs in the plan (`quality/trip-quality-contract.ts`); the proposal's own `defining` marks count too. */
+  essentialIds?: ReadonlySet<string>;
 }
 
 /**
@@ -236,6 +238,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
       ...(closedDatesOf(board).length > 0 ? { closedDates: closedDatesOf(board) } : {}),
       ...(board.fit.blockers.length > 0 ? { blocked: board.fit.blockers[0]!.message, blockedCode: board.fit.blockers[0]!.code } : {}),
       ...walkEndOf(place.tags),
+      ...(place.tags.includes('defining') || input.essentialIds?.has(place.id) ? { essential: true } : {}),
     };
     pool.push(candidate);
     provenanceOf.set(place.id, status);

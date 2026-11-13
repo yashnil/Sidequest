@@ -20,7 +20,7 @@ import { estimateLegMinutes, haversineKm } from '../travel/estimate';
 import { highSpeedRailBackbone } from '../reality/jurisdictions';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
-import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller } from './stay-objective';
+import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller, type TrailLink } from './stay-objective';
 import type { RouteShapeKind } from '../destinations/route-shape';
 
 /**
@@ -352,6 +352,8 @@ export interface ChooseScanBasesInput {
   route?: RouteShapeKind;
   /** Places the traveller named as must-dos: a structure that cannot reach one pays for it several times over. */
   mustSee?: ReadonlySet<string>;
+  /** Trail stages joining two proposed beds (`stay-objective.ts#TrailLink`). */
+  trailLinks?: readonly TrailLink[];
 }
 
 export interface ChooseScanBasesResult {
@@ -374,6 +376,39 @@ export interface ChooseScanBasesResult {
  * as worth, a small town as a possible day trip on its own, and the
  * arrival-aware ordering of a set of stays (`orderBasesForEdges`).
  */
+/** How near a bed a trail stage must start, and end, to join two beds. */
+export const TRAIL_START_NEAR_BED_KM = 12;
+export const TRAIL_END_AT_BED_KM = 4;
+
+/**
+ * The trail stages that join two proposed beds: a placed point-to-point walk
+ * starting within `TRAIL_START_NEAR_BED_KM` of one bed and ending within
+ * `TRAIL_END_AT_BED_KM` of another. Its walking time comes from its distance
+ * and ascent when the proposal gave them, else from its time on site.
+ */
+export function trailLinksFor(
+  places: readonly { id: string; proposal: ScanCandidateProposal }[],
+  bases: readonly { id: string; proposal: { key: string } }[],
+  positionOf: (key: string) => { coordinates: { lat: number; lng: number } } | null,
+  bedAt: (id: string) => { lat: number; lng: number } | undefined,
+): TrailLink[] {
+  const links: TrailLink[] = [];
+  for (const place of places) {
+    const walk = place.proposal.walk;
+    if (walk?.shape !== 'point_to_point') continue;
+    const start = positionOf(place.proposal.key)?.coordinates;
+    const end = positionOf(`${place.proposal.key}#end`)?.coordinates;
+    if (!start || !end) continue;
+    const near = (point: { lat: number; lng: number }, limit: number) => bases.filter((b) => { const at = bedAt(b.id); return at !== undefined && haversineKm(at, point) <= limit; }).map((b) => b.id);
+    const to = near(end, TRAIL_END_AT_BED_KM);
+    const from = near(start, TRAIL_START_NEAR_BED_KM).filter((id) => !to.includes(id));
+    if (to.length === 0 || from.length === 0) continue;
+    const walkMinutes = walk.km ? walkingMinutes(walk.km, walk.ascentM ?? 0) : place.proposal.durationMinutes;
+    for (const f of from) for (const t of to) links.push({ fromBaseId: f, toBaseId: t, walkMinutes, placeId: place.id });
+  }
+  return links;
+}
+
 export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesResult {
   const { bases, places, minutes } = input;
   const nights = Math.max(0, input.nights);
@@ -397,6 +432,7 @@ export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesRes
     ...(input.basis ? { basis: input.basis } : {}),
     ...(input.mustCover ? { mustCover: input.mustCover } : {}),
     ...(input.route ? { route: input.route } : {}),
+    ...(input.trailLinks && input.trailLinks.length > 0 ? { trailLinks: input.trailLinks } : {}),
   });
   const kept = choice.stays.map((stay, i) => ({
     id: stay.baseId,
@@ -626,6 +662,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     .filter((part) => part.baseIds.length > 0);
   /* A route's proposed bases are where the traveller asked to go: each is a part the stays sleep within a day's reach of. */
   if (input.route) for (const base of baseEntries) mustCover.push({ name: base.proposal.name, baseIds: [base.id], anchorId: base.id });
+  const trailLinks = trailLinksFor(placeEntries, baseEntries, (key) => input.positions.get(key) ?? null, (id) => pointAt.get(id));
   const choice = chooseScanBases({
     bases: baseEntries,
     places: placeEntries,
@@ -639,6 +676,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     ...(mustCover.length > 0 ? { mustCover } : {}),
     ...(input.route ? { route: input.route.kind } : {}),
     ...(input.mustSeeKeys && input.mustSeeKeys.length > 0 ? { mustSee: new Set(input.mustSeeKeys.map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined)) } : {}),
+    ...(trailLinks.length > 0 ? { trailLinks } : {}),
   });
   /*
    * "The only place to sleep the scan proposed" is false when the scan
@@ -688,7 +726,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       ...(position.wikidataId && /^Q\d+$/.test(position.wikidataId) ? { wikidataId: position.wikidataId } : {}),
       shortDescription: c.why.slice(0, 280),
       coordinates: position.coordinates,
-      tags: [...walkTags(c, position, positionOf(`${c.key}#end`)), `kind:${c.kind}`, `tier:${c.tier}`, ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
+      tags: [...walkTags(c, position, positionOf(`${c.key}#end`)), `kind:${c.kind}`, `tier:${c.tier}`, ...(c.defining ? ['defining'] : []), ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
       source: {
         name: sourceName,
         kind: position.method === 'places' && position.provider.includes('google') ? 'google_places' : 'osm',

@@ -1628,6 +1628,26 @@ export const tripPackageSchema = z.object({
   accessConstraints: z.array(accessConstraintSchema).max(60).optional(),
   /** V10 §16 — the quality compiler's issues, after any safe deterministic correction. */
   qualityCompiler: qualityCompilerReportSchema.optional(),
+  /**
+   * 2026-11 — the trip-quality contract this build was held to and its verdict
+   * (`quality/trip-quality-contract.ts`): what the trip is for, the essential
+   * experiences and where any missing one was lost. Never a score.
+   */
+  qualityContract: z
+    .object({
+      version: z.literal(1),
+      purpose: z.string().min(1).max(40),
+      secondary: z.array(z.string().max(40)).max(10).default([]),
+      transport: z.string().max(40),
+      structure: z.string().max(40),
+      essentials: z.array(z.object({ id: z.string().max(120), label: z.string().max(240), requirement: z.enum(['requirement', 'preference']), source: z.string().max(20) })).max(40),
+      constraints: z.array(z.object({ id: z.string().max(120), text: z.string().max(300), requirement: z.enum(['requirement', 'preference']) })).max(40),
+      passed: z.boolean(),
+      satisfied: z.array(z.string().max(120)).max(40),
+      violations: z.array(z.object({ id: z.string().max(120), severity: z.enum(['fail', 'warn']), stage: z.string().max(20), detail: z.string().max(400), recovery: z.string().max(300).optional() })).max(60),
+      uncertainties: z.array(z.string().max(300)).max(10).default([]),
+    })
+    .optional(),
 });
 export type TripPackage = z.infer<typeof tripPackageSchema>;
 

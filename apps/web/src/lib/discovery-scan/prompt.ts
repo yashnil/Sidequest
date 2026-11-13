@@ -17,7 +17,7 @@ import type { DestinationEnvelope } from '../planning/composition';
  * one again on the way back.
  */
 
-export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-12.1';
+export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-13.1';
 export const SCAN_JSON_TAG = 'scan_proposal';
 
 /** How many candidates to ask for: enough to choose from, never so many the answer runs long. */
@@ -41,7 +41,8 @@ What a strong pool looks like:
 8. Bases. Propose 1 to 5 places to sleep (up to 6 when the task says the trip is a route, spaced along all of it), in the order a traveller arriving would reach them, each with a nightsHint (your suggestion; Sidequest re-allocates nights from what is near each base) and why. A single dense city is usually one base. Respect how willing they are to change hotels.
 9. "why" is one sentence about why THIS traveller would want it, grounded in what they told you. No hype words.
 10. "skipped": up to 6 famous things you deliberately left out because they do not fit this traveller, each with a one-line reason.
-11. "package": short practical prose — how to get around (transportSummary, transportNotes), beforeYouGo, packing (specific to the season and the activities you proposed), foodStrategy, bookingPriorities. Do not state entry, visa or health rules as fact; say what to check and where.
+11. "defining": mark with "defining": true the one to three candidates this destination is FOR — what a trip here would be pointless without, for THIS traveller and party on these dates (a named trail is walked; a safari is game drives in its parks; a beach retreat is time on its beaches). If the destination itself is a walking route, propose its walkable stages that suit this party as point_to_point walks with their real end points, and propose places to sleep where those stages end so the stays can follow the trail. Mark nothing defining that the traveller cannot do (season, party, transport); say why in "skipped" instead.
+12. "package": short practical prose — how to get around (transportSummary, transportNotes), beforeYouGo, packing (specific to the season and the activities you proposed), foodStrategy, bookingPriorities. Do not state entry, visa or health rules as fact; say what to check and where.
 
 Closed vocabularies (use exactly these strings):
 - kind: ${SCAN_KINDS.join(', ')}
@@ -55,11 +56,11 @@ Closed vocabularies (use exactly these strings):
 
 Output contract: reply with ONE JSON object (if asked to wrap it, inside <${SCAN_JSON_TAG}>…</${SCAN_JSON_TAG}>) and nothing else. Shape:
 {"bases":[{"name","locality","nightsHint","why","lodgingArea"}],
- "candidates":[{"name","localName","locality","zone","kind","tier","durationMinutes","intensity","costLevel","exposure","bestTime","crowd","openMonths","seasonalNote","booking","rainyDayOk","interests","why","caution","walk"}],
+ "candidates":[{"name","localName","locality","zone","kind","tier","durationMinutes","intensity","costLevel","exposure","bestTime","crowd","openMonths","seasonalNote","booking","rainyDayOk","interests","why","caution","walk","defining"}],
  "foodAreas":[{"name","locality","specialty","why"}],
  "skipped":[{"name","reason"}],
  "package":{"transportSummary","transportNotes":[],"beforeYouGo":[],"packing":[],"foodStrategy":[],"bookingPriorities":[]}}
-Omit optional fields (zone, openMonths, seasonalNote, caution, lodgingArea, walk) rather than writing null. Keep every string short.`;
+Omit optional fields (zone, openMonths, seasonalNote, caution, lodgingArea, walk, defining) rather than writing null. Keep every string short.`;
 
 /** The shape described to the transport. Loose on purpose: the normaliser, not the provider, holds the vocabularies to account. */
 export const scanProposalWireSchema = z.object({
@@ -86,6 +87,7 @@ export const scanProposalWireSchema = z.object({
       why: z.string(),
       caution: z.string().optional(),
       walk: z.object({ shape: z.string(), endName: z.string().optional(), endLocality: z.string().optional(), km: z.number().optional(), ascentM: z.number().optional() }).optional(),
+      defining: z.boolean().optional(),
     }),
   ),
   foodAreas: z.array(z.object({ name: z.string(), locality: z.string(), specialty: z.string(), why: z.string() })),

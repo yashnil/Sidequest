@@ -148,6 +148,23 @@ export interface StayObjectiveInput {
    * `mustCover` entries with an `anchorId`.
    */
   route?: RouteShapeKind;
+  /**
+   * 2026-11 — trail stages that join two proposed beds: a point-to-point walk
+   * that starts near `fromBaseId` and ends at `toBaseId`. Moving between those
+   * two beds on foot, with bags sent ahead, is the day's experience rather than
+   * a transfer: it costs no transfer minutes, only the walking time the day
+   * spends. Without this a stage-based trek was costed as a car trip from one
+   * base and lost to it every time.
+   */
+  trailLinks?: readonly TrailLink[];
+}
+
+export interface TrailLink {
+  fromBaseId: string;
+  toBaseId: string;
+  /** The stage's walking time, from its distance and ascent. */
+  walkMinutes: number;
+  placeId: string;
 }
 
 /**
@@ -213,11 +230,14 @@ const ROUTE_OVER_LIMIT_WEIGHT = 2;
 /** Most stays a structure may have, whatever the cap: the proposal holds at most six bases. */
 const MAX_STAYS = 5;
 
+/** Carrying bags to and from stations on a car-free move. */
+const CAR_FREE_MOVE_OVERHEAD = 30;
+
 export function moveCostFor(traveller: StayTraveller): StayDecision['moveCost'] {
   const factors: string[] = [];
   let overhead = MOVE_OVERHEAD_MINUTES;
   if (!traveller.carAvailable) {
-    overhead += 30;
+    overhead += CAR_FREE_MOVE_OVERHEAD;
     factors.push('no car: bags to and from stations');
   }
   if (traveller.youngChildren) {
@@ -362,12 +382,21 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
   const buffer = BUFFER_BY_PACE[input.traveller.pace];
   const dayTransfer = new Array<number>(days).fill(0);
   let moves = 0;
+  /* The trail stages this structure walks as its moves. */
+  const walkedMoves = new Set<string>();
   for (let d = 1; d < days; d += 1) {
     const from = stays[stayOfDay[d - 1]!]!.baseId;
     const to = stays[stayOfDay[d]!]!.baseId;
     if (stayOfDay[d] === stayOfDay[d - 1] || from === to) continue;
-    const transfer = model.leg(from, to);
     moves += 1;
+    /* A trail stage that ends at the next bed is the move: walked, bags sent ahead, no transfer to pay. */
+    const stage = input.trailLinks?.find((link) => link.fromBaseId === from && link.toBaseId === to);
+    if (stage) {
+      dayTransfer[d] = stage.walkMinutes;
+      walkedMoves.add(stage.placeId);
+      continue;
+    }
+    const transfer = model.leg(from, to);
     transferMinutes += transfer;
     overLimitTransfer += Math.max(0, transfer - model.limit);
     dayTransfer[d] = transfer + model.move.overheadMinutes;
@@ -459,7 +488,19 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
     idle += Math.max(0, FILL_TARGET[input.traveller.pace] * capacity[d]! - used[d]!);
   }
   const unseen = Math.max(0, model.everything - seenValue);
-  const overhead = moves * model.move.overheadMinutes;
+  /*
+   * A walked move forwards the bags: no carrying them to and from stations, so
+   * the car-free part of the move overhead does not apply to it. And a stage
+   * this structure does NOT walk as a move is a one-way walk from a bed that is
+   * not at its end — the way back from where it ends is real travel, which a
+   * single base used to get for free as if the stage were a loop.
+   */
+  const overhead = moves * model.move.overheadMinutes - (input.traveller.carAvailable ? 0 : walkedMoves.size * CAR_FREE_MOVE_OVERHEAD);
+  for (const link of input.trailLinks ?? []) {
+    if (walkedMoves.has(link.placeId)) continue;
+    if (!stays.some((stay) => stay.baseId === link.fromBaseId)) continue;
+    dayTravel += model.leg(link.toBaseId, link.fromBaseId);
+  }
   const inconvenience = moves * model.move.inconvenienceMinutes;
   /* On a route the road is driven in day-sized legs: a leg longer than the traveller's own day is what a stay between would prevent, so it weighs double. */
   const total = dayTravel + transferMinutes + (input.route ? ROUTE_OVER_LIMIT_WEIGHT : 1) * overLimitTransfer + overhead + inconvenience + IDLE_WEIGHT * idle + unseen;

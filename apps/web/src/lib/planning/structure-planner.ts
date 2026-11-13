@@ -71,6 +71,13 @@ export interface PlannerCandidate {
    * function, so the validator and the tour already count it.
    */
   walkEnd?: { lat: number; lng: number; name?: string };
+  /**
+   * 2026-11 (trip-quality contract) — an experience the trip is for: marked
+   * defining by the proposal, or chosen to satisfy one of the contract's
+   * essential experiences. Lifts priority above everything but the traveller's
+   * own picks, so the plan is built around it rather than filled past it.
+   */
+  essential?: boolean;
 }
 
 export interface PlannerBase {
@@ -185,9 +192,13 @@ export const INTENSITY_RANK: Record<PhysicalIntensity, number> = { none: 0, easy
 const BUFFER_BY_PACE = { slow: 90, balanced: 45, fast: 20 } as const;
 /** Status lifts priority without letting a weak pick outrank a defining place; the traveller's own includes always come first. */
 export const STATUS_BONUS: Record<PlannerStatus, number> = { must: 1000, recommended: 12, maybe: 8, candidate: 0 };
-export function plannerPriority(c: Pick<PlannerCandidate, 'status' | 'fit' | 'significance'>): number {
-  return STATUS_BONUS[c.status] + c.fit + Math.max(0, c.significance - 0.5) * 50;
+/** What an essential experience is worth over its fit: above any recommended pick, below the traveller's own includes. */
+export const ESSENTIAL_BONUS = 250;
+export function plannerPriority(c: Pick<PlannerCandidate, 'status' | 'fit' | 'significance'> & { essential?: boolean | undefined }): number {
+  return STATUS_BONUS[c.status] + c.fit + Math.max(0, c.significance - 0.5) * 50 + (c.essential ? ESSENTIAL_BONUS : 0);
 }
+/** Beyond the usual reach, a day trip's visit must be at least this share of its round trip. */
+export const DAY_TRIP_VISIT_SHARE = 0.75;
 /** A filler is only worth adding when it fits this well. */
 export const FILLER_MIN_FIT = 60;
 /** Fill a day back up to this share of its capacity from high-fit fillers. */
@@ -442,7 +453,7 @@ export interface PlannerKernel {
   slotOf(candidate: PlannerCandidate): PlannedStop['slot'];
   weatherPenalty(candidate: PlannerCandidate, weather: PlannerDayWeather | null): number;
   /** The planner priority without the status bonus: fit plus how defining the place is. */
-  experienceValue(candidate: Pick<PlannerCandidate, 'status' | 'fit' | 'significance'>): number;
+  experienceValue(candidate: Pick<PlannerCandidate, 'status' | 'fit' | 'significance'> & { essential?: boolean | undefined }): number;
   dayMetrics(index: number, stops: readonly PlannerCandidate[]): DayMetrics;
   /**
    * THE DAY VALIDATOR. Whether `stops` may stand as day `index`, given the
@@ -581,7 +592,17 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const fromBase = leg(day.baseId, s.id);
     const alone = stops.length === 1;
     /* A whole-day outing to another town may use a day of its own beyond the usual reach — alone on an ordinary day, never on an arrival, departure or moving day. */
-    const soloDayTrip = s.dayTrip && slot === 'day' && fromBase !== null && fromBase <= dayTripReach && alone && !edge && !day.relocation;
+    /*
+     * 2026-11 — a whole day spent getting somewhere must be worth the getting.
+     * A live eleven-day plan filled a day with 2 h 20 of driving for a
+     * 45-minute visit because a day-trip candidate was within reach and the day
+     * was empty. Beyond the usual reach, the visit has to be at least
+     * `DAY_TRIP_VISIT_SHARE` of the round trip — unless the trip is built around
+     * it or the traveller picked it. An empty day stays a free day, and the
+     * trip-length verdict says so.
+     */
+    const worthTheTrip = fromBase === null || user || s.essential === true || s.durationMinutes >= DAY_TRIP_VISIT_SHARE * 2 * fromBase;
+    const soloDayTrip = s.dayTrip && slot === 'day' && fromBase !== null && fromBase <= dayTripReach && alone && !edge && !day.relocation && worthTheTrip;
     /*
      * On a moving day "how far from where you sleep" is the wrong question: the
      * day is a journey, so what matters is how far a stop takes it off that
@@ -681,7 +702,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     return { ok: true };
   }
 
-  const experienceValue = (c: Pick<PlannerCandidate, 'status' | 'fit' | 'significance'>) => plannerPriority(c) - STATUS_BONUS[c.status];
+  const experienceValue = (c: Pick<PlannerCandidate, 'status' | 'fit' | 'significance'> & { essential?: boolean | undefined }) => plannerPriority(c) - STATUS_BONUS[c.status];
   const aloneMemo = new Map<string, boolean>();
   const standsAlone = (c: PlannerCandidate, index: number): boolean => {
     const key = `${index}\u0000${c.id}`;
