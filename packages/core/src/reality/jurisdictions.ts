@@ -753,6 +753,11 @@ export function jurisdictionFor(code: string | null | undefined): Jurisdiction |
   return BY_CODE.get(code.toUpperCase()) ?? null;
 }
 
+/** Whether the country's own facts make high-speed rail the regional backbone (an estimator profile, `travel/estimate.ts`). Data, never a place name. */
+export function highSpeedRailBackbone(code: string | null | undefined): boolean {
+  return jurisdictionFor(code)?.modes.some((m) => m.mode === 'high_speed_rail' && m.status === 'recommended') ?? false;
+}
+
 export function jurisdictionCodes(): string[] {
   return JURISDICTIONS.map((j) => j.code);
 }

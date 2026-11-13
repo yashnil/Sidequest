@@ -103,6 +103,22 @@ export const MODE_MODELS: Readonly<Record<'drive' | 'walk' | 'bus' | 'rail' | 'b
   bicycle: { detour: 1.25, overheadMinutes: 4, speedAnchors: [[0, 14]] },
 };
 
+/**
+ * Rail where the country's own facts say high-speed rail is the backbone
+ * (`reality/jurisdictions.ts`, `high_speed_rail: recommended`). The regional
+ * profile tops out at 80 km/h, which priced Tokyo → Kyoto at about six and a
+ * half hours by train — the Shinkansen takes about two and a quarter — and a
+ * car-free "Tokyo and Kyoto" trip stopped sleeping in Kyoto. Identical to the
+ * regional profile up to 100 km (local lines are local lines), then rising to
+ * typical door-to-door averages for an intercity high-speed journey, station
+ * access included. Still an estimate, labelled as one; a timetable always wins.
+ */
+export const HIGH_SPEED_RAIL_MODEL: ModeModel = {
+  detour: 1.25,
+  overheadMinutes: 12,
+  speedAnchors: [[2, 12], [5, 16], [12, 24], [25, 36], [50, 45], [100, 55], [200, 105], [400, 145], [800, 165]],
+};
+
 /** Average speed for a leg of this straight-line length: linear between anchors, flat outside them. */
 export function averageSpeedKmh(model: ModeModel, straightLineKm: number): number {
   const anchors = model.speedAnchors;
@@ -151,8 +167,14 @@ export interface GeoEstimate {
  * cannot be estimated from geometry (a ferry, a flight). Rounded to 5 minutes
  * so it never reads as precision it does not have.
  */
-export function estimateLegMinutes(input: { from: { lat: number; lng: number }; to: { lat: number; lng: number }; mode: TransportMode }): GeoEstimate | null {
-  const model = modelFor(input.mode);
+export function estimateLegMinutes(input: {
+  from: { lat: number; lng: number };
+  to: { lat: number; lng: number };
+  mode: TransportMode;
+  /** For `rail`: the country's own facts recommend high-speed rail (`HIGH_SPEED_RAIL_MODEL`). */
+  highSpeedRail?: boolean;
+}): GeoEstimate | null {
+  const model = input.mode === 'rail' && input.highSpeedRail ? HIGH_SPEED_RAIL_MODEL : modelFor(input.mode);
   if (!model) return null;
   const straightLineKm = haversineKm(input.from, input.to);
   if (straightLineKm <= COLOCATED_KM) return { minutes: 0, straightLineKm, approxKm: 0, kmh: 0 };

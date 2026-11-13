@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COLOCATED_KM, MODE_MODELS, averageSpeedKmh, dayPartFor, dayPrecisionOf, estimateLegMinutes, plausibleModeFor, timePrecisionOf, travelDurationStateOf, unknownLegAllowanceMinutes } from './estimate';
+import { highSpeedRailBackbone } from '../reality/jurisdictions';
+import { COLOCATED_KM, HIGH_SPEED_RAIL_MODEL, MODE_MODELS, averageSpeedKmh, dayPartFor, dayPrecisionOf, estimateLegMinutes, plausibleModeFor, timePrecisionOf, travelDurationStateOf, unknownLegAllowanceMinutes } from './estimate';
 
 const CASHEL = { lat: 52.52, lng: -7.8906 };
 const CORK_MARKET = { lat: 51.8979, lng: -8.4748 };
@@ -48,6 +49,26 @@ describe('geo estimator', () => {
     const same = estimateLegMinutes({ from: DUBLIN, to: { lat: DUBLIN.lat + 0.0005, lng: DUBLIN.lng }, mode: 'drive' })!;
     expect(same.straightLineKm).toBeLessThan(COLOCATED_KM);
     expect(same.minutes).toBe(0);
+  });
+  it('where high-speed rail is the backbone, Tokyo → Kyoto is about three and a half hours door to door, not six and a half', () => {
+    const tokyo = { lat: 35.6896, lng: 139.7006 };
+    const kyoto = { lat: 35.0037, lng: 135.7788 };
+    const regional = estimateLegMinutes({ from: tokyo, to: kyoto, mode: 'rail' })!;
+    const fast = estimateLegMinutes({ from: tokyo, to: kyoto, mode: 'rail', highSpeedRail: true })!;
+    expect(regional.minutes).toBeGreaterThan(330);
+    expect(fast.minutes).toBeGreaterThanOrEqual(180);
+    expect(fast.minutes).toBeLessThanOrEqual(240);
+    /* Local lines are local lines: a short hop is the same either way. */
+    expect(estimateLegMinutes({ from: tokyo, to: { lat: 35.45, lng: 139.63 }, mode: 'rail', highSpeedRail: true })!.minutes).toBe(estimateLegMinutes({ from: tokyo, to: { lat: 35.45, lng: 139.63 }, mode: 'rail' })!.minutes);
+  });
+  it('the high-speed profile never makes a longer leg quicker', () => {
+    for (let i = 1; i < HIGH_SPEED_RAIL_MODEL.speedAnchors.length; i += 1) {
+      expect(HIGH_SPEED_RAIL_MODEL.speedAnchors[i]![0]).toBeGreaterThan(HIGH_SPEED_RAIL_MODEL.speedAnchors[i - 1]![0]);
+      expect(HIGH_SPEED_RAIL_MODEL.speedAnchors[i]![1]).toBeGreaterThanOrEqual(HIGH_SPEED_RAIL_MODEL.speedAnchors[i - 1]![1]);
+    }
+    expect(highSpeedRailBackbone('JP')).toBe(true);
+    expect(highSpeedRailBackbone('IS')).toBe(false);
+    expect(highSpeedRailBackbone(null)).toBe(false);
   });
   it('a ferry or an unsupported mode has no geometric estimate', () => {
     expect(estimateLegMinutes({ from: DUBLIN, to: KILKENNY, mode: 'ferry' })).toBeNull();

@@ -17,6 +17,7 @@ import type { FoodDataset } from '../schemas/food';
 import type { WeatherLocation } from '../schemas/weather';
 import type { Region } from '../schemas/region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
+import { highSpeedRailBackbone } from '../reality/jurisdictions';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
 import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller } from './stay-objective';
@@ -558,6 +559,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
    * own mode and provenance; this only decides geography.
    */
   const pointAt = new Map(plan.points.map((p) => [p.id, p.coordinates] as const));
+  /* Where the country's facts make high-speed rail the backbone, a long car-free hop is priced as one (`travel/estimate.ts`). */
+  const highSpeedRail = highSpeedRailBackbone(input.countryCode);
   const minutes = (a: string, b: string): number | null => {
     const measured = matrixMinutes(a, b);
     if (matrix.mode !== 'foot') return measured;
@@ -565,7 +568,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const pb = pointAt.get(b);
     if (!pa || !pb) return measured;
     if (haversineKm(pa, pb) <= CAR_FREE_WALK_KM) return measured;
-    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail' })?.minutes ?? measured;
+    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail })?.minutes ?? measured;
   };
   const kmBetween = (a: string, b: string): number | null => {
     const i = index.get(a);
@@ -589,7 +592,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const at = pointAt.get(baseId);
     if (!at) return null;
     if (haversineKm(at, point) <= CAR_FREE_WALK_KM) return 0;
-    return estimateLegMinutes({ from: point, to: at, mode: matrix.mode === 'foot' ? 'rail' : 'drive' })?.minutes ?? null;
+    return estimateLegMinutes({ from: point, to: at, mode: matrix.mode === 'foot' ? 'rail' : 'drive', highSpeedRail })?.minutes ?? null;
   };
   /*
    * A route with no known gateway begins where its first proposed base is (the

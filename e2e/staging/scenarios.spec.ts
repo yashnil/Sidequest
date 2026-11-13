@@ -94,28 +94,42 @@ test.describe('ten scenarios', () => {
       await openHubView(page, 'book');
       const bookings = (await page.locator('#hub-view-book').innerText().catch(() => '')).slice(0, 6000);
       /* Places to stay: press the first stay's button like a traveller, record what it names. Absent on builds without the panel. */
-      let lodging: { shown: boolean; names: string[]; empty?: string } = { shown: false, names: [] };
+      /*
+       * Recorded, never fatal: the plan above is what this run exists to capture, and a dropped
+       * connection on the evaluator's own network must not throw it away. A failure here is
+       * written into the row with its error, and the report counts it.
+       */
+      let lodging: { shown: boolean; names: string[]; empty?: string; error?: string; seconds?: number } = { shown: false, names: [] };
       const lodgingButton = page.getByTestId('lodging-picks-button').first();
       if (await lodgingButton.isVisible().catch(() => false)) {
-        await lodgingButton.click();
-        const panel = page.getByTestId('lodging-picks').first();
-        await expect(panel.getByTestId('lodging-picks-results').or(panel.getByTestId('lodging-picks-empty')).or(panel.getByRole('alert'))).toBeVisible({ timeout: 90_000 });
-        const names = await panel.getByTestId('lodging-pick').locator('p.font-display').allInnerTexts();
-        /* allInnerTexts never waits for an element that is not there; innerText would sit out the test timeout. */
-        const empty = [...(await panel.getByTestId('lodging-picks-empty').allInnerTexts()), ...(await panel.getByRole('alert').allInnerTexts())].join(' ').trim();
-        lodging = { shown: true, names: names.map((n) => n.trim()).slice(0, 8), ...(empty ? { empty } : {}) };
-        await panel.screenshot({ path: `${OUT}/screens/${scenario.key}-lodging.jpg`, type: 'jpeg', quality: 70 }).catch(() => undefined);
+        const pressed = Date.now();
+        try {
+          await lodgingButton.click();
+          const panel = page.getByTestId('lodging-picks').first();
+          await expect(panel.getByTestId('lodging-picks-results').or(panel.getByTestId('lodging-picks-empty')).or(panel.getByRole('alert'))).toBeVisible({ timeout: 90_000 });
+          const names = await panel.getByTestId('lodging-pick').locator('p.font-display').allInnerTexts();
+          /* allInnerTexts never waits for an element that is not there; innerText would sit out the test timeout. */
+          const empty = [...(await panel.getByTestId('lodging-picks-empty').allInnerTexts()), ...(await panel.getByRole('alert').allInnerTexts())].join(' ').trim();
+          lodging = { shown: true, names: names.map((n) => n.trim()).slice(0, 8), ...(empty ? { empty } : {}), seconds: Math.round((Date.now() - pressed) / 1000) };
+          await panel.screenshot({ path: `${OUT}/screens/${scenario.key}-lodging.jpg`, type: 'jpeg', quality: 70 }).catch(() => undefined);
+        } catch (error) {
+          lodging = { shown: false, names: [], error: String(error).split('\n')[0]!.slice(0, 200), seconds: Math.round((Date.now() - pressed) / 1000) };
+        }
       }
       /* The printed guide, both formats, through whatever renderer this environment has (EVAL_PDF=all or a list of keys). */
       const pdfWanted = (process.env.EVAL_PDF ?? '').split(',').map((s) => s.trim());
-      const pdf: Record<string, { status: number; bytes: number; type: string | null }> = {};
+      const pdf: Record<string, { status: number; bytes: number; type: string | null; error?: string }> = {};
       if (pdfWanted.includes('all') || pdfWanted.includes(scenario.key)) {
         mkdirSync(`${OUT}/pdf`, { recursive: true });
         for (const variant of ['compact', 'complete'] as const) {
-          const response = await page.request.get(`/api/trips/${tripId}/guide.pdf?variant=${variant}`, { timeout: 180_000 });
-          const body = await response.body();
-          pdf[variant] = { status: response.status(), bytes: body.length, type: response.headers()['content-type'] ?? null };
-          if (response.ok() && body.subarray(0, 5).toString() === '%PDF-') writeFileSync(`${OUT}/pdf/${scenario.key}-${variant}.pdf`, body);
+          try {
+            const response = await page.request.get(`/api/trips/${tripId}/guide.pdf?variant=${variant}`, { timeout: 180_000 });
+            const body = await response.body();
+            pdf[variant] = { status: response.status(), bytes: body.length, type: response.headers()['content-type'] ?? null };
+            if (response.ok() && body.subarray(0, 5).toString() === '%PDF-') writeFileSync(`${OUT}/pdf/${scenario.key}-${variant}.pdf`, body);
+          } catch (error) {
+            pdf[variant] = { status: 0, bytes: 0, type: null, error: String(error).split('\n')[0]!.slice(0, 200) };
+          }
         }
       }
       record({

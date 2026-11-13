@@ -1,5 +1,6 @@
 import type { CompiledRegion } from '../schemas/compiled-region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
+import { highSpeedRailBackbone } from '../reality/jurisdictions';
 import { chooseScanBases, SCAN_COMPILER_VERSION } from './assemble';
 import type { ScanBaseProposal, ScanCandidateProposal, ScanTier } from './proposal';
 
@@ -70,7 +71,7 @@ export function scanBaseUpgrade(region: CompiledRegion): ScanBaseUpgrade | null 
     const pa = pointAt.get(a);
     const pb = pointAt.get(b);
     if (!pa || !pb || haversineKm(pa, pb) <= 1.6) return measured;
-    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail' })?.minutes ?? measured;
+    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail: highSpeedRailBackbone(region.scope.countryCode) })?.minutes ?? measured;
   };
 
   const bases = region.bases

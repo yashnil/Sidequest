@@ -25,3 +25,22 @@ describe('statedTravelMode — a mode written into the destination', () => {
     expect(statedTravelMode(undefined)).toBeNull();
   });
 });
+
+describe('withoutModeClause — the places, without how the traveller moves between them', () => {
+  it('drops "by …", "without a car" and a car-free prefix; keeps route words', async () => {
+    const { withoutModeClause } = await import('./stated-mode');
+    expect(withoutModeClause('Tokyo and Kyoto by train')).toBe('Tokyo and Kyoto');
+    expect(withoutModeClause('Bavaria without a car')).toBe('Bavaria');
+    expect(withoutModeClause('car-free Mallorca')).toBe('Mallorca');
+    expect(withoutModeClause('Iceland by car')).toBe('Iceland');
+    expect(withoutModeClause('Scottish Highlands road trip')).toBe('Scottish Highlands road trip');
+    expect(withoutModeClause('Iceland Ring Road')).toBe('Iceland Ring Road');
+    expect(withoutModeClause('by train')).toBe('by train');
+  });
+
+  it('a "Tokyo and Kyoto by train" intent has two parts named Tokyo and Kyoto', async () => {
+    const { parseDestinationIntent } = await import('./intent-graph');
+    const graph = parseDestinationIntent('Tokyo and Kyoto by train');
+    expect(graph.children.map((c) => c.label)).toEqual(['Tokyo', 'Kyoto']);
+  });
+});

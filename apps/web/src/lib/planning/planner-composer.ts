@@ -1,4 +1,4 @@
-import { estimateLegMinutes, haversineKm, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
+import { estimateLegMinutes, haversineKm, highSpeedRailBackbone, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -288,7 +288,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     }
     // Car-free: a short walk is a walk; anything longer is public transport, estimated, never an impossible walk.
     if (pa && pb && haversineKm(pa, pb) <= 1.6) return typeof measured === 'number' && Number.isFinite(measured) ? measured : estimateLegMinutes({ from: pa, to: pb, mode: 'walk' })?.minutes ?? null;
-    return pa && pb ? estimateLegMinutes({ from: pa, to: pb, mode: 'rail' })?.minutes ?? null : null;
+    return pa && pb ? estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail: highSpeedRailBackbone(compiled.scope.countryCode) })?.minutes ?? null : null;
   };
 
   // --- weather per day, at the base where that night is spent --------------------------------

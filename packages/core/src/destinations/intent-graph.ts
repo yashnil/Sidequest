@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { coordinatesSchema, type Coordinates } from '../schemas/common';
 import { geoBoundsSchema, type GeoBounds } from '../schemas/geography';
 import { countriesInText, countryFromDemonym, foldedWordsOf, isDemonym } from '../reference/countries';
+import { withoutModeClause } from './stated-mode';
 
 /**
  * THE DESTINATION INTENT GRAPH — A TRIP IS NOT A POINT.
@@ -278,8 +279,9 @@ export function splitIntentPhrase(rawText: string): string[] {
 export function parseDestinationIntent(rawText: string): DestinationIntentGraph {
   const text = rawText.replace(/\s+/g, ' ').trim();
   const corridor = CORRIDOR_PHRASE.test(text) && !/^(drive|fly|walk|hike|sail|travel|go)\b/i.test(text);
-  let parts = splitIntentPhrase(text);
-  if (parts.length === 0) parts = [text];
+  /* "… by train" is how the traveller will move, not a place; it never reaches a part (`stated-mode.ts`). */
+  let parts = splitIntentPhrase(withoutModeClause(text));
+  if (parts.length === 0) parts = [withoutModeClause(text)];
   /*
    * "Zurich, Switzerland", "Cusco, Peru": one place and the country it is in.
    * Split at the comma, the country became a second part of the trip and the
