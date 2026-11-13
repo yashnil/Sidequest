@@ -2,7 +2,8 @@ import { CONTINENT_OF, EXPERIENCES, type CatalogDestination, type Experience } f
 import type { AdvisorProfile, FactorId, AdvisorInterest } from './profile';
 import { advisorKm } from './origin';
 import { asDestination, type Destination } from './destination';
-import { vacationFit } from './concept';
+import { ownWishes, vacationFit, type VacationFit } from './concept';
+import { primaryConflicts, type PrimaryConflict } from './conflicts';
 import { LIMIT_WORDS, climateFromEditorial, seasonModel, travellerSeason, type Limit, type MonthFit, type SeasonModel } from '../atlas/seasonality';
 
 /**
@@ -66,6 +67,10 @@ export interface ScoredDestination {
   seasonMonths: MonthFit[];
   distanceKm: number | null;
   exclusion: AdvisorExclusion | null;
+  /** The whole trip against the kind of trip asked for — the reading the vacation factor scored and the card's "feel" shows. */
+  feel: VacationFit | null;
+  /** Severe incompatibilities with the traveller's primary intent (`conflicts.ts`): never the first pick while anything else qualifies. */
+  conflicts: PrimaryConflict[];
 }
 
 /** Nominal weights. Refinement emphasis multiplies them; unmeasured ones drop out. Sum to one without `similar`. */
@@ -685,7 +690,7 @@ export function scoreDestination(input: CatalogDestination | Destination, profil
   const group = groupMeasure(destination, profile);
   exclude(group.exclusion);
   add('group', group.measure);
-  const vacation = vacationFit(destination, profile.concept, { nights: profile.nights ? profile.nights.max : null, kids: profile.kids, adventure: profile.adventure, focused: profile.focus.length > 0 });
+  const vacation = vacationFit(destination, profile.concept, { nights: profile.nights ? profile.nights.max : null, kids: profile.kids, adventure: profile.adventure, focused: profile.focus.length > 0, wishes: ownWishes(profile.interests, profile.concept) });
   if (vacation) add('vacation', measured(destination.basis.logistics === 'estimated' ? shrink(vacation.value, 0.7, 0.6) : vacation.value, vacation.basis), vacation.importance);
   const similar = similarMeasure(destination, profile, context.similarTarget ? asDestination(context.similarTarget) : null);
   if (similar) add('similar', similar);
@@ -735,6 +740,8 @@ export function scoreDestination(input: CatalogDestination | Destination, profil
     seasonMonths: season.all,
     distanceKm: reach.distanceKm,
     exclusion,
+    feel: vacation,
+    conflicts: primaryConflicts(destination, profile),
   };
 }
 

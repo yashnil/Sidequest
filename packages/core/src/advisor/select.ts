@@ -2,6 +2,7 @@ import { CONTINENT_OF } from './catalog/schema';
 import type { AdvisorProfile } from './profile';
 import { advisorKm } from './origin';
 import { experienceSimilarity, type ScoredDestination } from './score';
+import { restfulPrimary } from './conflicts';
 
 /**
  * FROM A RANKING TO A SHORTLIST: MAXIMAL MARGINAL RELEVANCE, WITH A FLOOR.
@@ -42,6 +43,8 @@ const VACATION_FLOOR = 0.75;
  */
 export const LEAD_FLOOR = 0.6;
 export const LEAD_FLOOR_DERIVED = 0.5;
+
+const conflictFree = (candidate: ScoredDestination) => candidate.conflicts.length === 0;
 
 export function lambdaFor(profile: AdvisorProfile): number {
   const narrowedPlace = profile.regions !== null || profile.countries !== null || profile.within !== null || profile.similarTo !== null;
@@ -124,8 +127,14 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     const factor = candidate.factors.find((entry) => entry.id === 'vacation');
     return factor && factor.measure.kind === 'measured' ? factor.measure.value : null;
   };
-  /* Only when no activity leads: a stated lead ("a family ski week") decides the primaries, and the kind of trip ranks within it. */
-  const conceptLed = !profile.leadStated && profile.concept.length > 0 && ranked.slice(0, 40).some((candidate) => (candidate.factors.find((entry) => entry.id === 'vacation')?.weight ?? 0) >= 0.1);
+  /*
+   * Only when no activity leads: a stated lead ("a family ski week") decides
+   * the primaries, and the kind of trip ranks within it — except when rest is
+   * the primary intent (`conflicts.ts#restfulPrimary`). "Mountains" from
+   * somebody who wants to come back rested still means mountains that suit a
+   * restful trip, so the floor applies inside the lead-serving places.
+   */
+  const conceptLed = (!profile.leadStated || restfulPrimary(profile)) && profile.concept.length > 0 && ranked.slice(0, 40).some((candidate) => (candidate.factors.find((entry) => entry.id === 'vacation')?.weight ?? 0) >= 0.1);
   const conceptOk = (candidate: ScoredDestination) => !conceptLed || (vacationOf(candidate) ?? 1) >= VACATION_FLOOR;
   const conceptCount = conceptLed ? ranked.slice(0, 60).filter(conceptOk).length : 0;
   const servesLead = ranked.filter(leadOk);
@@ -156,6 +165,11 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     if (pool.length >= size + alternates && distinct(pool) >= size + alternates) break;
     if (pool.length >= 120) break;
     if (candidate.score >= FLOOR_ABSOLUTE && !pool.includes(candidate)) pool.push(candidate);
+  }
+  /* Places free of a severe conflict with the trip, enough to fill the primaries, whenever they clear the absolute bar. */
+  for (const candidate of ranked) {
+    if (pool.filter(conflictFree).length >= size) break;
+    if (conflictFree(candidate) && candidate.score >= FLOOR_ABSOLUTE && !pool.includes(candidate)) pool.push(candidate);
   }
   /*
    * Nothing clears the bar. An empty page helps nobody who asked a hard
@@ -190,6 +204,16 @@ export function selectShortlist(ranked: readonly ScoredDestination[], profile: A
     if (chosen.length < size && profile.leadStated && !remaining.some(leadOk)) {
       const closest = Math.max(...remaining.map((candidate) => candidate.interestFit[0]?.value ?? 0));
       eligible = remaining.filter((candidate) => (candidate.interestFit[0]?.value ?? 0) >= closest - 0.1);
+    }
+    /*
+     * A severe conflict with the trip asked for (`conflicts.ts`) keeps a place
+     * out of the primaries while anything eligible is free of one, and out of
+     * first place whenever anything left is: a card that says "not what a
+     * restful trip is for" is not the top answer to a restful trip.
+     */
+    if (chosen.length < size) {
+      if (eligible.some(conflictFree)) eligible = eligible.filter(conflictFree);
+      else if (chosen.length === 0 && remaining.some(conflictFree)) eligible = remaining.filter(conflictFree);
     }
     let bestIndex = 0;
     let bestValue = -Infinity;

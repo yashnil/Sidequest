@@ -5,7 +5,7 @@ import { arrayWorld, type Destination, type DestinationWorld } from './destinati
 import { profileFrom, type AdvisorProfile, type FactorId } from './profile';
 import { GOOD_MONTH, compareScored, monthWord, scoreDestination, seasonModelFor, type AdvisorExclusion, type ScoredDestination } from './score';
 import { overlap, selectShortlist, similarity } from './select';
-import { durationVerdict, staysNeeded, vacationFit, type VacationFit } from './concept';
+import { durationVerdict, staysNeeded, type VacationFit } from './concept';
 import { advisorKm } from './origin';
 import { travellerSeason, type Activity } from '../atlas/seasonality';
 import { ADVISOR_SHORTLIST_VERSION, type AdvisorPick, type AdvisorShortlist } from './shortlist-schema';
@@ -318,9 +318,15 @@ function capitalise(text: string): string {
   return text ? `${text[0]!.toUpperCase()}${text.slice(1)}` : text;
 }
 
-function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile, feel: VacationFit | null = null): string[] {
-  /* What works against the kind of trip asked for comes first: it is the trade-off the traveller most needs to see. */
-  const out: string[] = [...(feel?.against ?? []).slice(0, 2)];
+function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile): string[] {
+  /*
+   * A disqualifying conflict with the trip asked for comes first, then what
+   * else works against the kind of trip: the trade-offs the traveller most
+   * needs to see. Both are read from the scored record, so the card says what
+   * ranked the place, never a second opinion of it.
+   */
+  const out: string[] = scored.conflicts.map((conflict) => conflict.sentence);
+  for (const line of scored.feel?.against ?? []) if (out.length < 2 && !out.includes(line)) out.push(line);
   for (const factor of scored.factors) {
     if (factor.measure.kind !== 'measured' || factor.measure.value >= 0.6) continue;
     switch (factor.id) {
@@ -337,7 +343,7 @@ function tradeoffsFor(scored: ScoredDestination, profile: AdvisorProfile, feel: 
         out.push('Busy at its peak, which you said you would rather avoid.');
         break;
       case 'getting_around':
-        out.push('Much easier with a car.');
+        if (!scored.conflicts.some((conflict) => conflict.code === 'needs_a_car')) out.push('Much easier with a car.');
         break;
       case 'adventure':
         out.push(`${factor.measure.basis[0]!.toUpperCase()}${factor.measure.basis.slice(1)}.`);
@@ -465,7 +471,7 @@ function gettingThere(scored: ScoredDestination, profile: AdvisorProfile): strin
 
 export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, role: AdvisorPick['role'], earlier: readonly ScoredDestination[], pool: readonly ScoredDestination[] = []): AdvisorPick {
   const d = scored.destination;
-  const feel = vacationFit(d, profile.concept, { nights: profile.nights ? profile.nights.max : null, kids: profile.kids, adventure: profile.adventure, focused: profile.focus.length > 0 });
+  const feel = scored.feel;
   const monthValue = (month: number) => scored.seasonMonths[month - 1]?.value ?? 0;
   const peak = Math.max(0, ...scored.bestMonths.map(monthValue));
   const windowMonths = scored.bestMonths.filter((month) => monthValue(month) >= (peak >= 0.85 ? 0.85 : GOOD_MONTH)).sort((a, b) => a - b);
@@ -500,7 +506,7 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     gettingAround: d.access.note,
     cost: { level: costLevel, label: `${COST_LABELS[costLevel]!}${d.basis.cost !== 'estimated' ? '' : d.costEvidence ? ' (estimated)' : ' (estimated from national price levels)'}`, versusBudget, rooms: roomsLine(d) },
     bases: [...d.bases],
-    tradeoffs: tradeoffsFor(scored, profile, feel),
+    tradeoffs: tradeoffsFor(scored, profile),
     unverified: unverifiedFor(scored, profile),
     differsBy: role === 'primary' || earlier.length > 0 ? differsBy(scored, earlier) : null,
     distanceKm: scored.distanceKm,

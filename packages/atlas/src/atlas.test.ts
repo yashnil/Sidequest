@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   ADVISORY_FRESH_DAYS,
   Atlas,
+  answerAdvisorQuestion,
   DESTINATION_KINDS,
   EXPERIENCES,
   WORLD_REGIONS,
@@ -264,5 +265,44 @@ describe('a thing the request names', () => {
 
   it('does not treat a safari as a thing to find in a guide: a zoo’s safari park is not one', () => {
     expect(picksFor('Safari in April').parsed.answers.discovery?.named).toBeUndefined();
+  });
+});
+
+describe('the primary intent decides what may come first', () => {
+  /* A blind evaluation: the advisor put a trekking region first while its own card said trekking "is not what a restful trip is for". */
+  const OWNER = 'I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.';
+  const RESTFUL_CATCH = /is not what a restful trip is for/;
+  const answersFor = (text: string) => {
+    const base = { ...emptyComposerAnswers('help_me_decide', NOW), dates: { mode: 'month' as const, wantsRecommendation: false } };
+    return parseTravelRequest(text, base, NOW, atlas).answers;
+  };
+  const shortlistFor = (answers: ReturnType<typeof answersFor>) => buildAdvisorShortlist({ answers, catalog: atlas, catalogVersion: atlas.version, now: NOW });
+
+  it('never ranks first a place whose own card says it is not what a restful trip is for, with or without the interview', () => {
+    const owner = answersFor(OWNER);
+    const mountains = answerAdvisorQuestion(owner, 'focus', ['mountains']);
+    const variants = [owner, mountains, answerAdvisorQuestion(mountains, 'mountain_style', ['base_day_hikes']), answerAdvisorQuestion(answerAdvisorQuestion(owner, 'focus', ['mountains', 'lakes']), 'mountain_style', ['base_day_hikes'])];
+    for (const answers of variants) {
+      const shortlist = shortlistFor(answers);
+      expect(shortlist.picks.length).toBeGreaterThan(0);
+      for (const pick of shortlist.picks) expect(pick.tradeoffs.join(' '), pick.name).not.toMatch(RESTFUL_CATCH);
+      /* Rest is the point, so every primary suits it — a mountain base, not a trek. */
+      for (const pick of shortlist.picks) expect(pick.feel?.value ?? 0, pick.name).toBeGreaterThanOrEqual(0.75);
+    }
+  });
+
+  it('answers "Day hikes from a base" for a restful trip with day-hiking places, not trek-built ones', () => {
+    const answers = answerAdvisorQuestion(answerAdvisorQuestion(answersFor(OWNER), 'focus', ['mountains']), 'mountain_style', ['base_day_hikes']);
+    for (const pick of shortlistFor(answers).picks) {
+      const place = atlas.byId(pick.id)!;
+      expect(place.experiences.day_hiking ?? 0, pick.name).toBeGreaterThanOrEqual(2);
+      expect(place.experiences.multi_day_trekking ?? 0, pick.name).toBeLessThanOrEqual(place.experiences.day_hiking ?? 0);
+    }
+  });
+
+  it('does not over-correct: a trekking request still leads with trekking regions', () => {
+    const shortlist = shortlistFor(answersFor('Two weeks of multi-day trekking, hut to hut, in the high mountains in September.'));
+    expect(atlas.byId(shortlist.picks[0]!.id)!.experiences.multi_day_trekking ?? 0).toBeGreaterThanOrEqual(2);
+    for (const pick of shortlist.picks) expect(pick.tradeoffs.join(' ')).not.toMatch(RESTFUL_CATCH);
   });
 });

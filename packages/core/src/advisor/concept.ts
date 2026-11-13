@@ -245,6 +245,49 @@ function strongest(destination: Destination, n: number): Experience[] {
 }
 
 /**
+ * What a place is built around: its two strongest experiences, each at least
+ * two on the catalog's 0–3 scale. The one reading behind every "it is built
+ * around …" sentence on a card and behind the disqualifiers in
+ * `conflicts.ts`, so the words and the ranking cannot disagree about it.
+ */
+export function builtAround(destination: Destination): Experience[] {
+  return strongest(destination, 2);
+}
+
+/**
+ * The share of one stated interest's mapping at which an experience is
+ * something the traveller asked for themselves. Plain "mountains" gives high
+ * mountains 0.45 and multi-day trekking 0.2: the first is their own wish, the
+ * second one possibility among several. Read per interest, so a second
+ * interest ("mountains, then lakes") does not dilute the first one's wishes.
+ */
+export const OWN_WISH_SHARE = 0.3;
+
+/**
+ * What the traveller asked for themselves, as experiences. A leaning (a mood,
+ * `any`) is not a wish. Multi-day trekking counts only where an interest leans
+ * to it over day walks — "hut-to-hut" and "high and wild" do, plain "hiking"
+ * (0.35 beside day hikes at 0.65) does not — or where the request itself named
+ * a trek. A wish is never read back to the traveller as working against their
+ * trip (`vacationFit`), and is never a disqualifier (`conflicts.ts`).
+ */
+export function ownWishes(interests: readonly { any?: boolean; mapping: Partial<Record<Experience, number>> }[], concept: readonly ConceptWeight[] = []): Set<Experience> {
+  const out = new Set<Experience>();
+  for (const interest of interests) {
+    if (interest.any) continue;
+    const total = Object.values(interest.mapping).reduce((sum, share) => sum + (share ?? 0), 0);
+    if (total === 0) continue;
+    for (const [experience, share] of Object.entries(interest.mapping) as [Experience, number][]) {
+      if (share / total < OWN_WISH_SHARE) continue;
+      if (experience === 'multi_day_trekking' && (interest.mapping.day_hiking ?? 0) >= share) continue;
+      out.add(experience);
+    }
+  }
+  if (concept.some((entry) => entry.key === 'trekking')) out.add('multi_day_trekking');
+  return out;
+}
+
+/**
  * How many places to sleep seeing it well takes. `bases` lists the candidate
  * towns, not a required itinerary: a compact region is one base however many
  * towns it names, and a wide one needs more moves the wider it is.
@@ -270,9 +313,22 @@ export function frictionOf(destination: Destination): number {
  * what decided it. Unknowns lower nothing: a place with no lodging reading is
  * not marked down for comfort, and no family reading is not a "no".
  */
-export function vacationFit(destination: Destination, concept: readonly ConceptWeight[], context: { nights: number | null; kids: boolean; adventure?: number | null; /** The request named a broad activity, which the experience factor already scores. */ focused?: boolean }): VacationFit | null {
+export function vacationFit(
+  destination: Destination,
+  concept: readonly ConceptWeight[],
+  context: {
+    nights: number | null;
+    kids: boolean;
+    adventure?: number | null;
+    /** The request named a broad activity, which the experience factor already scores. */
+    focused?: boolean;
+    /** What the traveller asked for themselves (`ownWishes`). */
+    wishes?: ReadonlySet<Experience>;
+  },
+): VacationFit | null {
   if (concept.length === 0) return null;
-  const signature = strongest(destination, 3);
+  const signature = builtAround(destination);
+  const ownWish = (experience: Experience) => context.wishes?.has(experience) === true;
   const friction = frictionOf(destination);
   const bases = staysNeeded(destination);
   const against: string[] = [];
@@ -329,10 +385,12 @@ export function vacationFit(destination: Destination, concept: readonly ConceptW
       fit -= 0.45 * (1 - carried);
       for (const experience of shape.carries) if (strength(destination, experience) >= 0.99) pushOnce(carries, EXPERIENCE_LABELS[experience].toLowerCase());
     }
-    for (const experience of signature.slice(0, 2)) {
-      if (!shape.against.includes(experience)) continue;
+    for (const experience of signature) {
+      /* Something the traveller asked for is not held against the trip they asked for ("mountains" and a restful trip: the peaks are the point). */
+      if (!shape.against.includes(experience) || ownWish(experience)) continue;
       fit -= 0.18;
-      pushOnce(against, `It is built around ${EXPERIENCE_LABELS[experience].toLowerCase()}, which is not what ${phraseFor([{ key, weight: 1 }])} is for.`);
+      /* One sentence per experience, naming the weightiest kind of trip it works against (the concept is sorted by weight). */
+      if (!against.some((line) => line.startsWith(builtAroundPrefix(experience)))) against.push(builtAroundSentence(experience, phraseFor([{ key, weight: 1 }])));
     }
     /* Family: the place's own family reading when there is one. */
     if (key === 'family_bonding' && destination.family !== null) {
@@ -351,7 +409,17 @@ export function vacationFit(destination: Destination, concept: readonly ConceptW
   return { value, importance, basis, against: against.slice(0, 3), carries: carries.slice(0, 4) };
 }
 
-function phraseFor(concept: readonly ConceptWeight[]): string {
+function builtAroundPrefix(experience: Experience): string {
+  return `It is built around ${EXPERIENCE_LABELS[experience].toLowerCase()}, `;
+}
+
+/** The sentence a card carries when what a place is built around works against the kind of trip; `conflicts.ts` uses the same words. */
+export function builtAroundSentence(experience: Experience, tripPhrase: string): string {
+  return `${builtAroundPrefix(experience)}which is not what ${tripPhrase} is for.`;
+}
+
+/** The kind of trip in words ("a restful trip"), led by the weightiest concept. */
+export function phraseFor(concept: readonly ConceptWeight[]): string {
   const lead = concept[0]!.key;
   const words: Record<ConceptKey, string> = {
     restoration: 'a restful trip',
