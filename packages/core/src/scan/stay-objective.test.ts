@@ -168,3 +168,13 @@ describe('a trail stage that ends at the next bed (2026-11)', () => {
     expect(two?.transferMinutes ?? 1).toBeGreaterThan(0);
   });
 });
+
+describe('a trip to a city sleeps in the city (eval v2)', () => {
+  /* The city and a palace town 25 km away; most of what the trip holds is in the city, a few sights in the town. */
+  const city: Geometry = { bases: { town: { x: 25, y: 0 }, centre: { x: 0, y: 0 } }, places: { ...around('c', { x: 0, y: 0 }, 9, 4), ...around('t', { x: 25, y: 0 }, 3, 3) }, scale: 1.4 };
+  it('with the city as the part to cover, a single bed is in the city, never in the town', () => {
+    const choice = chooseStays({ ...input(city, 3, { carAvailable: false }), mustCover: [{ name: 'the city', baseIds: ['centre'] }] });
+    expect(choice.stays.map((s) => s.baseId)).toContain('centre');
+    expect(choice.stays.map((s) => s.baseId)).not.toEqual(['town']);
+  });
+});

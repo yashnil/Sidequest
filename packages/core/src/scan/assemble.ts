@@ -247,7 +247,7 @@ export interface AssembleScanRegionInput {
   /** Usable minutes of each calendar day, first to last, from the trip's own windows. */
   dayMinutes?: readonly number[];
   /** The parts of the destination the traveller named themselves ("Tokyo and Kyoto"); the base choice sleeps in each it can. Never a part Sidequest or a model inferred. */
-  namedParts?: readonly { label: string; center: { lat: number; lng: number } }[];
+  namedParts?: readonly { label: string; center: { lat: number; lng: number }; /** How near a bed must be to sleep in this part; default `NAMED_PART_REACH_KM`. */ reachKm?: number }[];
   /** Proposal keys of the candidates the traveller named as must-dos at setup. */
   mustSeeKeys?: readonly string[];
   /**
@@ -658,7 +658,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       : undefined;
   /* A part is covered by the proposed bases sleeping in or beside it; a part no base is near constrains nothing. */
   const mustCover: MustCoverPart[] = (input.namedParts ?? [])
-    .map((part) => ({ name: part.label, baseIds: baseEntries.filter((b) => { const at = pointAt.get(b.id); return at !== undefined && haversineKm(at, part.center) <= NAMED_PART_REACH_KM; }).map((b) => b.id) }))
+    .map((part) => ({ name: part.label, baseIds: baseEntries.filter((b) => { const at = pointAt.get(b.id); return at !== undefined && haversineKm(at, part.center) <= (part.reachKm ?? NAMED_PART_REACH_KM); }).map((b) => b.id) }))
     .filter((part) => part.baseIds.length > 0);
   /* A route's proposed bases are where the traveller asked to go: each is a part the stays sleep within a day's reach of. */
   if (input.route) for (const base of baseEntries) mustCover.push({ name: base.proposal.name, baseIds: [base.id], anchorId: base.id });

@@ -35,8 +35,26 @@ const DRIVE = /\b(?:by car|road ?trip|self[- ]drive|with (?:a|our|my) (?:car|ren
 const MODE_CLAUSE = /\s*,?\s*\b(?:by (?:train|trains|rail|the shinkansen|bullet train|public transport(?:ation)?|public transit|transit|bus|buses|coach|car)|on (?:a |the )?rail pass|using (?:trains|public transport)|without (?:a |any )?car)\b\s*/gi;
 const CAR_FREE_PREFIX = /^\s*car[- ]free\s+/i;
 
+/**
+ * A trailing word that says what kind of trip it is, not where: "Tanzania
+ * safari", "Kyrgyzstan adventure", "Dolomites hiking". Eval v2 found "Tanzania
+ * safari" read as a town-scale place — a small circle around one point — so
+ * every park on the northern circuit was refused as outside the trip and a
+ * lodge was placed in the capital. Only at the end of the phrase, only when a
+ * place is left, and never the route words ("road trip", "ring road") that
+ * route-shape reading depends on.
+ */
+const TRIP_KIND_SUFFIX = /\s+(?:safari|safaris|hiking|hike|hikes|trekking|trek|treks|adventure|adventures|holiday|holidays|vacation|getaway|honeymoon|ski(?:ing)?(?: trip| holiday)?|beach holiday|city break|break|tour|retreat|trip)$/i;
+
 export function withoutModeClause(text: string): string {
-  const stripped = text.replace(CAR_FREE_PREFIX, '').replace(MODE_CLAUSE, ' ').replace(/\s+/g, ' ').trim();
+  let stripped = text.replace(CAR_FREE_PREFIX, '').replace(MODE_CLAUSE, ' ').replace(/\s+/g, ' ').trim();
+  if (!/\broad ?trip$/i.test(stripped)) {
+    for (let guard = 0; guard < 3; guard += 1) {
+      const next = stripped.replace(TRIP_KIND_SUFFIX, '').trim();
+      if (next === stripped || next.length === 0) break;
+      stripped = next;
+    }
+  }
   return stripped.length > 0 ? stripped : text.trim();
 }
 

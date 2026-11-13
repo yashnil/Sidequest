@@ -148,6 +148,9 @@ function fixtureWantsOpenData(typed: string): boolean {
   return /\bopendata\b/i.test(typed);
 }
 
+/** A bed within this distance of a city destination's centre sleeps in the city. */
+const CITY_PART_REACH_KM = 12;
+
 function entityTypeFor(scale: string | undefined): DestinationEntityType {
   switch (scale) {
     case 'country':
@@ -733,7 +736,12 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       /* A journey the traveller asked for: the bases along it are their intent, and a loop is costed back to where it began (`scan/stay-objective.ts`). */
       ...(envelope.route ? { route: { kind: envelope.route.kind } } : {}),
       /* Only parts the traveller's own phrase joined ("Tokyo and Kyoto"); a model's or a geocoder's parts are not a request. */
-      ...(concept?.extent?.source === 'union_of_parts' ? { namedParts: concept.parts.map((part) => ({ label: part.label, center: part.center })) } : {}),
+      ...(concept?.extent?.source === 'union_of_parts'
+        ? { namedParts: concept.parts.map((part) => ({ label: part.label, center: part.center })) }
+        : /* A trip to a city sleeps in the city unless sleeping elsewhere is clearly better: the city is the part it must cover (eval v2: a Lisbon break slept in Sintra three runs out of three). */
+          envelope.scale === 'city' || envelope.scale === 'local'
+          ? { namedParts: [{ label: envelope.name, center: envelope.center, reachKm: CITY_PART_REACH_KM }] }
+          : {}),
       ...((edges) => (edges ? { edges } : {}))(tripEdgesFor(trip, profile, envelope.center, conceptGateways, envelope.scale)),
       proposal,
       positions: placement.positions,

@@ -38,6 +38,17 @@ describe('withoutModeClause — the places, without how the traveller moves betw
     expect(withoutModeClause('by train')).toBe('by train');
   });
 
+  it('drops a trailing trip word, so the place is resolved at its own scale (eval v2: "Tanzania safari")', async () => {
+    const { withoutModeClause } = await import('./stated-mode');
+    expect(withoutModeClause('Tanzania safari')).toBe('Tanzania');
+    expect(withoutModeClause('Kyrgyzstan adventure')).toBe('Kyrgyzstan');
+    expect(withoutModeClause('Dolomites hiking')).toBe('Dolomites');
+    expect(withoutModeClause('Patagonia trekking holiday')).toBe('Patagonia');
+    expect(withoutModeClause('Scottish Highlands road trip')).toBe('Scottish Highlands road trip');
+    expect(withoutModeClause('Safari')).toBe('Safari');
+    expect(withoutModeClause('Kumano Kodo, Japan')).toBe('Kumano Kodo, Japan');
+  });
+
   it('a "Tokyo and Kyoto by train" intent has two parts named Tokyo and Kyoto', async () => {
     const { parseDestinationIntent } = await import('./intent-graph');
     const graph = parseDestinationIntent('Tokyo and Kyoto by train');
