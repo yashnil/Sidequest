@@ -37,6 +37,8 @@ export interface QualityContractContext {
   mustDos: readonly string[];
   avoidances: readonly string[];
   board: readonly DiscoveryCandidate[];
+  /** The destination's pillars for this trip, from the scan (structured defining experiences). */
+  pillars?: readonly { name: string; tier: 'essential' | 'recommended' | 'optional'; why: string; placeIds: readonly string[] }[];
 }
 
 export function qualityContractFor(context: QualityContractContext): TripQualityContract {
@@ -57,6 +59,7 @@ export function qualityContractFor(context: QualityContractContext): TripQuality
     maxDailyTravelMinutes: context.maxDailyTravelMinutes,
     preferredStartMinute: null,
     namedParts: context.namedParts,
+    ...(context.pillars ? { pillars: context.pillars } : {}),
     mustDos: context.mustDos,
     avoidances: context.avoidances,
     candidates: context.board.map((c) => ({
@@ -81,7 +84,9 @@ export function essentialIdsFor(contract: TripQualityContract, board: readonly D
   for (const essential of contract.essentials) {
     if (essential.requirement !== 'requirement') continue;
     if (essential.placeIds) {
-      for (const id of essential.placeIds) if (usable.some((c) => c.place.id === id)) ids.add(id);
+      /* A pillar's candidates substitute for one another: the plan is built around the best-fitting one. */
+      const usableHere = usable.filter((c) => essential.placeIds!.includes(c.place.id)).sort((a, b) => (b.fit.score ?? 0) - (a.fit.score ?? 0));
+      for (const c of essential.id.startsWith('pillar:') ? usableHere.slice(0, 1) : usableHere) ids.add(c.place.id);
       continue;
     }
     const kinds = new Set<string>(essential.kinds ?? []);

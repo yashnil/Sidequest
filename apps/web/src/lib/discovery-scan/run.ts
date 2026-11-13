@@ -760,7 +760,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     completeScan(tripId, scanId, region, new Date());
     diagnostics.timings = stageTimings(started, stageStartedAt, Date.now());
     try {
-      saveScanExtras(tripId, proposal, diagnostics);
+      saveScanExtras(tripId, proposal, diagnostics, plan.placeIdByKey);
     } catch {
       /* extras are display-only */
     }
@@ -801,8 +801,16 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
  * left out on purpose, and the practical package — kept beside the region for
  * the board and the build to read. Stored as a small JSON row; never planned.
  */
-function saveScanExtras(tripId: string, proposal: ScanProposal, diagnostics: ScanDiagnostics): void {
-  saveScanProposalExtras(tripId, { foodAreas: proposal.foodAreas, skipped: proposal.skipped, package: proposal.package, diagnostics });
+function saveScanExtras(tripId: string, proposal: ScanProposal, diagnostics: ScanDiagnostics, placeIdByKey: ReadonlyMap<string, string> = new Map()): void {
+  saveScanProposalExtras(tripId, {
+    foodAreas: proposal.foodAreas,
+    skipped: proposal.skipped,
+    package: proposal.package,
+    diagnostics,
+    ...(proposal.pillars && proposal.pillars.length > 0
+      ? { pillars: proposal.pillars.map((pillar) => ({ name: pillar.name, tier: pillar.tier, why: pillar.why, placeIds: pillar.candidateKeys.map((key) => placeIdByKey.get(key)).filter((id): id is string => id !== undefined) })) }
+      : {}),
+  });
 }
 
 /**

@@ -180,6 +180,8 @@ export interface ScanProposalExtras {
   package: { transportSummary: string; transportNotes: string[]; beforeYouGo: string[]; packing: string[]; foodStrategy: string[]; bookingPriorities: string[] };
   /** V1 — the scan's own account of itself. Developer-facing; no traveller screen reads it. */
   diagnostics?: ScanDiagnostics;
+  /** The destination's pillars for this trip, with the placed candidates that satisfy each (structured defining experiences). */
+  pillars?: { name: string; tier: 'essential' | 'recommended' | 'optional'; why: string; placeIds: string[] }[];
 }
 
 /** What a scan proposed, what it could not place and why, and whether it recovered — enough to explain a thin scan without rerunning it. */

@@ -681,7 +681,15 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
      * town and left the Serengeti — on the board, defining — out of reach).
      */
     ...((ids) => (ids.size > 0 ? { mustSee: ids } : {}))(
-      new Set([...(input.mustSeeKeys ?? []), ...proposal.candidates.filter((c) => c.defining).map((c) => c.key)].map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined)),
+      new Set(
+        [
+          ...(input.mustSeeKeys ?? []),
+          /* One placed representative per essential pillar (its candidates substitute for one another); the older defining flag where no pillars were named. */
+          ...(proposal.pillars && proposal.pillars.length > 0
+            ? proposal.pillars.filter((p) => p.tier === 'essential').flatMap((p) => p.candidateKeys.filter((key) => plan.placeIdByKey.has(key)).slice(0, 1))
+            : proposal.candidates.filter((c) => c.defining).map((c) => c.key)),
+        ].map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined),
+      ),
     ),
     ...(trailLinks.length > 0 ? { trailLinks } : {}),
   });

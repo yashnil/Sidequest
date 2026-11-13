@@ -20,6 +20,7 @@ export interface JourneyContext {
   mustDos: readonly string[];
   avoidances: readonly string[];
   board?: readonly DiscoveryCandidate[];
+  pillars?: readonly { name: string; tier: 'essential' | 'recommended' | 'optional'; why: string; placeIds: readonly string[] }[];
 }
 
 export function journeyFor(context: JourneyContext): { contract: TripQualityContract; journey: JourneyChoice } {

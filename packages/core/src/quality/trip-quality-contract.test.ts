@@ -75,3 +75,39 @@ describe('the trip-quality contract — what the trip is for', () => {
     expect(contract.essentials.some((e) => e.id === 'destination_defining')).toBe(false);
   });
 });
+
+describe('pillars — defining experiences as structured requirements with substitutes', () => {
+  const candidates = [
+    { id: 'plains', name: 'Great Plains game drive', kind: 'wildlife' as const },
+    { id: 'crater', name: 'Crater floor game drive', kind: 'wildlife' as const },
+    { id: 'baobab', name: 'Baobab park drive', kind: 'national_park' as const },
+    { id: 'lake', name: 'Lake park drive', kind: 'national_park' as const },
+  ];
+  const pillars = [
+    { name: 'The great plains', tier: 'essential' as const, why: 'July is the migration season there.', placeIds: ['plains'] },
+    { name: 'The crater', tier: 'essential' as const, why: '', placeIds: ['crater'] },
+    { name: 'A southern park', tier: 'recommended' as const, why: '', placeIds: ['baobab', 'lake'] },
+    { name: 'A hot-air balloon', tier: 'optional' as const, why: '', placeIds: [] },
+    { name: 'A remote reserve', tier: 'essential' as const, why: 'Its season is short.', placeIds: ['nowhere'] },
+  ];
+  const contract = buildTripQualityContract({ ...base, ownWords: 'safari', carAvailable: false, candidates, pillars });
+  const plan = (ids: string[]) => ({ days: [day(2, ids.map((id, i) => ({ placeId: id, name: id, kind: 'wildlife' as const, startMinute: 480 + i * 120 })))], board: candidates, selfDriveRequested: false });
+
+  it('one requirement per essential pillar, a preference per recommended one, nothing for optional', () => {
+    const ids = contract.essentials.filter((e) => e.id.startsWith('pillar:')).map((e) => [e.label, e.requirement]);
+    expect(ids).toEqual([['The great plains', 'requirement'], ['The crater', 'requirement'], ['A southern park', 'preference'], ['A remote reserve', 'requirement']]);
+    expect(contract.essentials.some((e) => e.id === 'destination_defining')).toBe(false);
+  });
+
+  it('coverage is judged across the whole plan; substitutes count; a missing pillar says why and what to do', () => {
+    const onlyCrater = evaluateTripQualityContract(contract, plan(['crater']));
+    const plains = onlyCrater.violations.find((v) => v.id === 'pillar:0')!;
+    expect(plains).toMatchObject({ severity: 'fail', stage: 'selection' });
+    expect(plains.recovery).toMatch(/migration season/);
+    expect(plains.recovery).toMatch(/Great Plains game drive/);
+    const withSubstitute = evaluateTripQualityContract(contract, plan(['plains', 'crater', 'lake']));
+    expect(withSubstitute.violations.find((v) => v.id === 'pillar:2')).toBeUndefined();
+    /* A pillar nothing placeable offers is a discovery gap, stated. */
+    expect(withSubstitute.violations.find((v) => v.id === 'pillar:4')).toMatchObject({ severity: 'fail', stage: 'discovery' });
+  });
+});

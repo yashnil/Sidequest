@@ -117,6 +117,8 @@ export interface TripQualityContractInput {
   namedParts: readonly string[];
   mustDos: readonly string[];
   avoidances: readonly string[];
+  /** The destination's pillars for this trip (structured defining experiences): each satisfied by any one of its candidates. */
+  pillars?: readonly { name: string; tier: 'essential' | 'recommended' | 'optional'; why: string; placeIds: readonly string[] }[];
   /** The board's candidates: id, name, kind, whether the proposal marked it defining, and whether it is usable on this trip. */
   candidates: readonly { id: string; name: string; kind?: ScanKind | null; defining?: boolean; blocked?: boolean; mustDo?: boolean }[];
 }
@@ -158,8 +160,30 @@ export function buildTripQualityContract(input: TripQualityContractInput): TripQ
   if (purposes.includes('city_culture')) {
     essentials.push({ id: 'city_culture', label: 'The city’s own culture and neighbourhoods', requirement: 'preference', source: 'destination', kinds: CULTURE_KINDS, minCount: Math.max(2, Math.floor(days * 0.8)), recovery: 'Add museums, historic quarters or neighbourhoods on the Discovery Board.' });
   }
-  /* What the proposal marked as defining for this destination, where the traveller can actually do it. */
-  const defining = input.candidates.filter((c) => c.defining && !c.blocked);
+  /*
+   * Pillars: one requirement per essential pillar and one preference per
+   * recommended pillar, each covered by any one of its candidates the traveller
+   * can use. A pillar whose candidates are all unusable or unplaced is still a
+   * requirement — the evaluation reports it as a discovery gap with its reason.
+   */
+  const usableIds = new Set(input.candidates.filter((c) => !c.blocked).map((c) => c.id));
+  const nameOf = new Map(input.candidates.map((c) => [c.id, c.name] as const));
+  for (const [index, pillar] of (input.pillars ?? []).entries()) {
+    if (pillar.tier === 'optional') continue;
+    const ids = pillar.placeIds.filter((id) => usableIds.has(id));
+    const names = ids.map((id) => nameOf.get(id)).filter((n): n is string => Boolean(n)).slice(0, 3);
+    essentials.push({
+      id: `pillar:${index}`,
+      label: pillar.name,
+      requirement: pillar.tier === 'essential' ? 'requirement' : 'preference',
+      source: 'proposal',
+      placeIds: ids,
+      minCount: 1,
+      recovery: names.length > 0 ? `${pillar.why ? `${pillar.why} ` : ''}Keep one of ${names.join(', ')} on the Discovery Board and rebuild.` : `${pillar.why ? `${pillar.why} ` : ''}Nothing that offers it could be placed for this trip; ask Sidequest for it by name, or choose dates or a length that fit it.`,
+    });
+  }
+  /* What the proposal marked as defining, where no pillars were named. */
+  const defining = (input.pillars ?? []).length > 0 ? [] : input.candidates.filter((c) => c.defining && !c.blocked);
   if (defining.length > 0) {
     essentials.push({ id: 'destination_defining', label: `What the destination is known for (${defining.slice(0, 3).map((c) => c.name).join(', ')})`, requirement: 'requirement', source: 'proposal', placeIds: defining.map((c) => c.id), minCount: 1, recovery: 'Keep at least one of these on the Discovery Board and rebuild.' });
   }

@@ -574,6 +574,7 @@ async function generatePlan(
         mustDos: input.ownWords.mustDo,
         avoidances: input.ownWords.dislikes,
         board: board.candidates,
+        ...((pillars) => (pillars && pillars.length > 0 ? { pillars } : {}))(getScanProposalExtras(tripId)?.pillars),
       })
     : null;
   const qualityContract = planned?.contract ?? null;

@@ -222,9 +222,31 @@ export interface ScanPackageProse {
   bookingPriorities: string[];
 }
 
+/**
+ * A PILLAR — one experience this destination is for, on this trip, as a set of
+ * substitutable candidates (2026-11, structured defining experiences). The
+ * model judges the tier against the trip's length, season, transport and the
+ * traveller; the plan covers an essential pillar with any one of its
+ * candidates, and a pillar with no placed candidate is a stated gap, never a
+ * silent one. A pillar names experiences, never a rule about a place.
+ */
+export const SCAN_PILLAR_TIERS = ['essential', 'recommended', 'optional'] as const;
+export type ScanPillarTier = (typeof SCAN_PILLAR_TIERS)[number];
+export interface ScanPillar {
+  name: string;
+  tier: ScanPillarTier;
+  why: string;
+  /** Proposal keys of the candidates that satisfy it (substitutes for one another). */
+  candidateKeys: string[];
+}
+/** At most this many essential pillars: a trip where everything is essential has no priorities. */
+export const MAX_ESSENTIAL_PILLARS = 3;
+
 export interface ScanProposal {
   bases: ScanBaseProposal[];
   candidates: ScanCandidateProposal[];
+  /** The destination's pillars for this trip, when the proposal named them. */
+  pillars?: ScanPillar[];
   foodAreas: ScanFoodArea[];
   /** Well-known things the model judged a poor fit for this traveller, with the reason. Shown, never planned. */
   skipped: { name: string; reason: string }[];
@@ -426,6 +448,26 @@ export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
     })
     .filter((s): s is { name: string; reason: string } => s !== null);
 
+  /* Pillars: names matched to the kept candidates (case- and accent-blind); a pillar with no match stays, empty, as a discovery gap. */
+  const fold = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const keyByName = new Map(candidates.map((c) => [fold(c.name), c.key] as const));
+  let essentials = 0;
+  const pillars: ScanPillar[] = (Array.isArray(record.pillars) ? record.pillars : [])
+    .slice(0, 6)
+    .flatMap((entry) => {
+      const p = (entry ?? {}) as Record<string, unknown>;
+      const name = text(p.name, 80);
+      if (!name) return [];
+      let tier = (SCAN_PILLAR_TIERS as readonly string[]).includes(String(p.tier)) ? (p.tier as ScanPillarTier) : 'recommended';
+      if (tier === 'essential' && (essentials += 1) > MAX_ESSENTIAL_PILLARS) tier = 'recommended';
+      const names = Array.isArray(p.candidates) ? p.candidates.map((n) => (typeof n === 'string' ? fold(n) : '')).filter(Boolean) : [];
+      const candidateKeys = [...new Set(names.map((n) => keyByName.get(n)).filter((k): k is string => k !== undefined))];
+      return [{ name, tier, why: text(p.why, 200) ?? '', candidateKeys }];
+    });
+  /* A candidate in an essential pillar is defining, for everything that reads the older flag. */
+  const essentialKeys = new Set(pillars.filter((p) => p.tier === 'essential').flatMap((p) => p.candidateKeys));
+  for (const candidate of candidates) if (essentialKeys.has(candidate.key)) candidate.defining = true;
+
   const pkg = (record.package ?? {}) as Record<string, unknown>;
   return {
     ok: true,
@@ -434,6 +476,7 @@ export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {
     proposal: {
       bases,
       candidates,
+      ...(pillars.length > 0 ? { pillars } : {}),
       foodAreas,
       skipped,
       package: {
