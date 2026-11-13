@@ -1,0 +1,322 @@
+{
+ "beach-island": {
+  "before": {
+   "days": 8,
+   "stops": 17,
+   "stops_per_day": 2.1,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 1015,
+   "drive_km_total": 775,
+   "drive_min_max_day": 280,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready, with cautions",
+   "seconds": 142,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 8,
+   "stops": 16,
+   "stops_per_day": 2.0,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 809,
+   "drive_km_total": 554,
+   "drive_min_max_day": 200,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Not ready yet",
+   "seconds": 135,
+   "advisor_pick": null
+  }
+ },
+ "city-break": {
+  "before": {
+   "days": 4,
+   "stops": 11,
+   "stops_per_day": 2.8,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 91,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 4,
+   "stops": 11,
+   "stops_per_day": 2.8,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 95,
+   "advisor_pick": null
+  }
+ },
+ "family-wellness-march": {
+  "before": {
+   "days": 11,
+   "stops": 27,
+   "stops_per_day": 2.5,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 778,
+   "drive_km_total": 754,
+   "drive_min_max_day": 125,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Not ready yet",
+   "seconds": 251,
+   "advisor_pick": "Tongariro & Rotorua"
+  },
+  "after": {
+   "days": 11,
+   "stops": 26,
+   "stops_per_day": 2.4,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 1,
+   "length_verdict": false,
+   "readiness": "Ready, with cautions",
+   "seconds": 232,
+   "advisor_pick": "Annapurna Region"
+  }
+ },
+ "iceland-ring-road": {
+  "before": {
+   "days": 9,
+   "stops": 13,
+   "stops_per_day": 1.4,
+   "empty_ordinary_days": 0,
+   "bases": 4,
+   "drive_min_total": 1983,
+   "drive_km_total": 2107,
+   "drive_min_max_day": 600,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 144,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 9,
+   "stops": 15,
+   "stops_per_day": 1.7,
+   "empty_ordinary_days": 0,
+   "bases": 4,
+   "drive_min_total": 1523,
+   "drive_km_total": 1644,
+   "drive_min_max_day": 605,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 150,
+   "advisor_pick": null
+  }
+ },
+ "kumano-kodo": {
+  "before": {
+   "days": 11,
+   "stops": 24,
+   "stops_per_day": 2.2,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 735,
+   "drive_km_total": 756,
+   "drive_min_max_day": 110,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 158,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 11,
+   "stops": 22,
+   "stops_per_day": 2.0,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 785,
+   "drive_km_total": 908,
+   "drive_min_max_day": 140,
+   "one_way_walk_notes": 1,
+   "length_verdict": false,
+   "readiness": "Ready, with cautions",
+   "seconds": 207,
+   "advisor_pick": null
+  }
+ },
+ "kyrgyzstan": {
+  "before": {
+   "days": 11,
+   "stops": 18,
+   "stops_per_day": 1.6,
+   "empty_ordinary_days": 0,
+   "bases": 3,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Needs a decision",
+   "seconds": 231,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 11,
+   "stops": 17,
+   "stops_per_day": 1.5,
+   "empty_ordinary_days": 0,
+   "bases": 3,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Needs a decision",
+   "seconds": 349,
+   "advisor_pick": null
+  }
+ },
+ "mountain-hiking": {
+  "before": {
+   "days": 8,
+   "stops": 20,
+   "stops_per_day": 2.5,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 815,
+   "drive_km_total": 522,
+   "drive_min_max_day": 190,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Not ready yet",
+   "seconds": 269,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 8,
+   "stops": 17,
+   "stops_per_day": 2.1,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 1082,
+   "drive_km_total": 734,
+   "drive_min_max_day": 200,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Not ready yet",
+   "seconds": 152,
+   "advisor_pick": null
+  }
+ },
+ "multigenerational": {
+  "before": {
+   "days": 8,
+   "stops": 12,
+   "stops_per_day": 1.5,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 161,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 8,
+   "stops": 11,
+   "stops_per_day": 1.4,
+   "empty_ordinary_days": 0,
+   "bases": 1,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 1,
+   "length_verdict": false,
+   "readiness": "Ready",
+   "seconds": 149,
+   "advisor_pick": null
+  }
+ },
+ "tanzania-safari": {
+  "before": {
+   "days": 9,
+   "stops": 5,
+   "stops_per_day": 0.6,
+   "empty_ordinary_days": 3,
+   "bases": 5,
+   "drive_min_total": 20,
+   "drive_km_total": 6,
+   "drive_min_max_day": 20,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Needs a decision",
+   "seconds": 493,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 9,
+   "stops": 7,
+   "stops_per_day": 0.8,
+   "empty_ordinary_days": 3,
+   "bases": 4,
+   "drive_min_total": 905,
+   "drive_km_total": 922,
+   "drive_min_max_day": 280,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Needs a decision",
+   "seconds": 422,
+   "advisor_pick": null
+  }
+ },
+ "tokyo-kyoto-transit": {
+  "before": {
+   "days": 10,
+   "stops": 23,
+   "stops_per_day": 2.3,
+   "empty_ordinary_days": 1,
+   "bases": 3,
+   "drive_min_total": 747,
+   "drive_km_total": 713,
+   "drive_min_max_day": 265,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Not ready yet",
+   "seconds": 152,
+   "advisor_pick": null
+  },
+  "after": {
+   "days": 10,
+   "stops": 18,
+   "stops_per_day": 1.8,
+   "empty_ordinary_days": 0,
+   "bases": 2,
+   "drive_min_total": 0,
+   "drive_km_total": 0,
+   "drive_min_max_day": 0,
+   "one_way_walk_notes": 0,
+   "length_verdict": false,
+   "readiness": "Needs a decision",
+   "seconds": 140,
+   "advisor_pick": null
+  }
+ }
+}

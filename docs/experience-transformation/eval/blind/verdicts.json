@@ -1,0 +1,232 @@
+[
+  {
+    "scenario": "beach-island",
+    "scores": {
+      "A": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 2,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 13
+      },
+      "B": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 2,
+        "usefulness": 2,
+        "honesty": 3,
+        "total": 12
+      }
+    },
+    "preferred": "A",
+    "reason": "Both split the west side across two long out-and-backs from Princeville (A: Day 6 Hanapepe alone 3 h, Day 7 Koke'e; B: Day 4 Waimea, Day 7 a 4 h 35 round trip for one 20-minute lookout), and both under-state a return leg (A Day 7 '40 min/18 km' back from Pu'u o Kila; B Day 4 '1 hr/38 km' from Salt Pond). A fits a beach retreat better: named meals throughout, an honest Ke'e shuttle/reservation note and calm days, while B adds a 05:30 start on Day 5, a 13-hour Day 6 with a strenuous Kalalau hike (no Ha'ena permit flagged) and 'stargazing' at 18:00, several unnamed 'time held' dinners, and day titles (Koloa trail, Koke'e) that the schedule never visits."
+  },
+  {
+    "scenario": "city-break",
+    "scores": {
+      "A": {
+        "fit": 3,
+        "feasibility": 4,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 2,
+        "total": 15
+      },
+      "B": {
+        "fit": 4,
+        "feasibility": 4,
+        "geography": 4,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 18
+      }
+    },
+    "preferred": "B",
+    "reason": "B groups Day 3 tightly (Alfama, Feira da Ladra on its Saturday, the castle, then Cervejaria Ramiro) and rides Tram 28 early as it itself advises; A zig-zags Day 2 (Estrela west, Gulbenkian north, back to Ribeira) and puts Tram 28 at 13:20 against its own advice. A also labels Castelo at 16:30 and Senhora do Monte at 17:25 as 'sunset' in mid-May (sunset is about 20:40). Both double up meals (B's Day 1 filler 'Rua da Prata food scene' plus dinner, and Ramiro followed by a burger dinner), so the margin is moderate."
+  },
+  {
+    "scenario": "family-wellness-march",
+    "scores": {
+      "A": {
+        "fit": 2,
+        "feasibility": 3,
+        "geography": 2,
+        "usefulness": 2,
+        "honesty": 2,
+        "total": 11
+      },
+      "B": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 14
+      }
+    },
+    "preferred": "B",
+    "reason": "B's shortlist (Tongariro & Rotorua, Pucón, Bali) fits a stressed family wanting a restful outdoor retreat and states real caveats, including a weather check showing 14 °C rather than the 21 °C expected; A ranks Annapurna first even though its own card says multi-day trekking 'is not what a restful trip is for'. Neither itinerary is restful enough: B's ten nights at Whakapapa have only one thermal-pool day, Day 8 is the 7 h strenuous Alpine Crossing (labelled 'Tama Lakes' and with no answer to the one-way car problem), and there is a lot of filler (Big Carrot, power station). A's Pokhara stay is gentler but padded, with coffee shops as stops, several 05:30 starts, a non-existent 'metro', stargazing at 18:00 and a Tibetan camp ('Jawalakhel') that is in Kathmandu, not Pokhara."
+  },
+  {
+    "scenario": "iceland-ring-road",
+    "scores": {
+      "A": {
+        "fit": 2,
+        "feasibility": 2,
+        "geography": 2,
+        "usefulness": 2,
+        "honesty": 2,
+        "total": 10
+      },
+      "B": {
+        "fit": 3,
+        "feasibility": 3,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 15
+      }
+    },
+    "preferred": "B",
+    "reason": "A drives the whole south-east and never stops at Jökulsárlón, skips Goðafoss and Mývatn, gives Höfn one night, and its Day 4 and Day 6 add a second 400 km 'base to base' leg after arriving, labelled an 'easy day' with about 10 h of driving; it also calls 17:20 in late June 'sunset'. B gives Höfn two nights for Vestrahorn, Jökulsárlón and a lagoon boat (Day 4) and a coherent Höfn to Goðafoss to Akureyri day (Day 5, 397 km), and it states openly which places it could not schedule. It shares the bogus double leg on Day 7 and the wrong-town dinner (Víkurskáli in Höfn)."
+  },
+  {
+    "scenario": "kumano-kodo",
+    "scores": {
+      "A": {
+        "fit": 2,
+        "feasibility": 2,
+        "geography": 2,
+        "usefulness": 3,
+        "honesty": 2,
+        "total": 11
+      },
+      "B": {
+        "fit": 3,
+        "feasibility": 3,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 15
+      }
+    },
+    "preferred": "B",
+    "reason": "Neither plan is a real walking pilgrimage (both are car-based from Hongu with no luggage shuttle), but B at least schedules the family section Hosshinmon-ōji to Hongu Taisha (Day 2, 2.5 h), the Nakahechi ōji, all three grand shrines, and Kamikura correctly in Shingu. A has no Kodo walk at all, puts Kamikura '18 km/15 min' from Hongu, and makes Kōyasan's Danjo Garan an '80 km, 1 h 10' day trip, which is really a long mountain drive each way. B's flaws: the one-way walk leaves the car at Hosshinmon, Day 8 is padded around a 05:30 viewpoint, and the departure day repeats Nachi Falls."
+  },
+  {
+    "scenario": "kyrgyzstan",
+    "scores": {
+      "A": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 2,
+        "total": 13
+      },
+      "B": {
+        "fit": 2,
+        "feasibility": 3,
+        "geography": 2,
+        "usefulness": 2,
+        "honesty": 3,
+        "total": 12
+      }
+    },
+    "preferred": "A",
+    "reason": "A delivers the signature Kyrgyz experience, two nights at Song-Kol with a horse trek and a yurt evening (Days 5–6), then Karakol. Its logistics are wrong, though: there is no bus to Song-Kol, Issyk-Ata is not on the way, and it schedules the 'Sunday' animal market at 16:20 on a Friday. B spends five nights around Bishkek on filler (Dordoi bazaar, a vague 'Kyrgyz Alatau' stop, a 'train' to Panfilov Park) and bases three nights in Kochkor without ever going to Song-Kol, the reason to stay there. B is more candid about unscheduled places, but it is the weaker trip for friends seeking adventure."
+  },
+  {
+    "scenario": "mountain-hiking",
+    "scores": {
+      "A": {
+        "fit": 2,
+        "feasibility": 3,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 14
+      },
+      "B": {
+        "fit": 4,
+        "feasibility": 3,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 16
+      }
+    },
+    "preferred": "B",
+    "reason": "B is the better hiking trip: Averau and Cinque Torri (Day 2), the Catinaccio walk (Day 4), Sorapis (Day 5), Cadini di Misurina and the Biella loop (Day 6), Lagazuoi (Day 7), with moderate drives from Cortina. A uses Day 2 for a 3 h round trip to Bolzano's fruit market as a 'signature experience', Day 4 for mostly pass-driving, and the departure day for a 05:30 out-and-back to Val di Funes; several of its legs are understated (Corvara to Seceda '13 km/30 min'). B's weaknesses are repeating Passo Pordoi on Days 3–4, 'stargazing' at 18:00 in July, and many unnamed Cortina dinners."
+  },
+  {
+    "scenario": "multigenerational",
+    "scores": {
+      "A": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 2,
+        "total": 13
+      },
+      "B": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 2,
+        "usefulness": 2,
+        "honesty": 2,
+        "total": 11
+      }
+    },
+    "preferred": "A",
+    "reason": "Both invent trains to places the Algarve rail line does not reach (Alte, Monchique, Sagres, Algar Seco, Carvoeiro) and both misread the party description as a must-do. A's Lagos base keeps days shorter, makes Day 7 a walkable beach day suited to grandparents, and covers the west and inland in single outings. B's Albufeira base sends the family to the Tavira area twice (Days 3 and 5, about 3.5 h of transit for roughly an hour on site), mentions a 'Tavira base' that does not exist, and puts Day 6's dinner in Benagil after the return to Albufeira; Zoomarine on Day 7 is its one strong family pick."
+  },
+  {
+    "scenario": "tanzania-safari",
+    "scores": {
+      "A": {
+        "fit": 3,
+        "feasibility": 2,
+        "geography": 3,
+        "usefulness": 2,
+        "honesty": 3,
+        "total": 13
+      },
+      "B": {
+        "fit": 4,
+        "feasibility": 3,
+        "geography": 3,
+        "usefulness": 3,
+        "honesty": 4,
+        "total": 17
+      }
+    },
+    "preferred": "B",
+    "reason": "B follows a coherent northern circuit with a driver-guide: Tarangire, Manyara, two nights on the crater rim with a 6 h crater-floor drive and packed lunch (Day 6), Oldupai en route to the Serengeti, and a booked Seronera to Arusha flight on Day 9. It also says honestly that July Seronera relies on resident game. A contradicts itself badly: 'Fly to the plains' on Day 6 is a 309 km drive, 'fly back to Arusha' on Day 8 never happens and departure is from the Serengeti, Day 2 detours 4 h 40 to Maji Moto, the crater visit is only 2 h, it proposes a central-Serengeti day trip to the Mara River, and its bookings ask for a rental car. B's own flaw is a 202 km 'short' detour to Maji Moto on Day 4."
+  },
+  {
+    "scenario": "tokyo-kyoto-transit",
+    "scores": {
+      "A": {
+        "fit": 4,
+        "feasibility": 3,
+        "geography": 4,
+        "usefulness": 3,
+        "honesty": 3,
+        "total": 17
+      },
+      "B": {
+        "fit": 1,
+        "feasibility": 2,
+        "geography": 3,
+        "usefulness": 2,
+        "honesty": 2,
+        "total": 10
+      }
+    },
+    "preferred": "A",
+    "reason": "The traveller said 'by train'. A uses trains and the Shinkansen (Day 6, with seat booking timing) and sensible Shinjuku and Kyoto Station bases, though days are padded (Odaiba after 6 h 45 free, Kiyomizu at 06:25 then nothing) and it overstates the Shinkansen at 3 h 30. B books a rental car for the whole trip, drives to the Hakone Tozan railway and 381 km from Hakone to Kyoto, and its Day 9 legs are geographically wrong (Kiyomizu to Kurama '2 km/15 min', then Fushimi '11 km'); its richer content (Hakone, Fushimi Inari, sakura walks) cannot outweigh ignoring the stated mode."
+  }
+]

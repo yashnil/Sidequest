@@ -1,0 +1,150 @@
+
+## beach-island
+  advisor_pick                         None  →  None
+  bases                                   1  →  1
+  days                                    8  →  8
+  stops                                  17  →  16
+  stops_per_day                         2.1  →  2.0
+  empty_ordinary_days                     0  →  0
+  drive_min_total                      1015  →  809
+  drive_km_total                        775  →  554
+  drive_min_max_day                     280  →  200
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness              Ready, with cautions  →  Not ready yet
+  seconds                               142  →  135
+
+## city-break
+  advisor_pick                         None  →  None
+  bases                                   1  →  1
+  days                                    4  →  4
+  stops                                  11  →  11
+  stops_per_day                         2.8  →  2.8
+  empty_ordinary_days                     0  →  0
+  drive_min_total                         0  →  0
+  drive_km_total                          0  →  0
+  drive_min_max_day                       0  →  0
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness                           Ready  →  Ready
+  seconds                                91  →  95
+
+## family-wellness-march
+  advisor_pick           Tongariro & Rotorua  →  Annapurna Region
+  bases                                   1  →  1
+  days                                   11  →  11
+  stops                                  27  →  26
+  stops_per_day                         2.5  →  2.4
+  empty_ordinary_days                     0  →  0
+  drive_min_total                       778  →  0
+  drive_km_total                        754  →  0
+  drive_min_max_day                     125  →  0
+  one_way_walk_notes                      0  →  1
+  length_verdict                      False  →  False
+  readiness                   Not ready yet  →  Ready, with cautions
+  seconds                               251  →  232
+
+## iceland-ring-road
+  advisor_pick                         None  →  None
+  bases                                   4  →  4
+  days                                    9  →  9
+  stops                                  13  →  15
+  stops_per_day                         1.4  →  1.7
+  empty_ordinary_days                     0  →  0
+  drive_min_total                      1983  →  1523
+  drive_km_total                       2107  →  1644
+  drive_min_max_day                     600  →  605
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness                           Ready  →  Ready
+  seconds                               144  →  150
+
+## kumano-kodo
+  advisor_pick                         None  →  None
+  bases                                   1  →  1
+  days                                   11  →  11
+  stops                                  24  →  22
+  stops_per_day                         2.2  →  2.0
+  empty_ordinary_days                     0  →  0
+  drive_min_total                       735  →  785
+  drive_km_total                        756  →  908
+  drive_min_max_day                     110  →  140
+  one_way_walk_notes                      0  →  1
+  length_verdict                      False  →  False
+  readiness                           Ready  →  Ready, with cautions
+  seconds                               158  →  207
+
+## kyrgyzstan
+  advisor_pick                         None  →  None
+  bases                                   3  →  3
+  days                                   11  →  11
+  stops                                  18  →  17
+  stops_per_day                         1.6  →  1.5
+  empty_ordinary_days                     0  →  0
+  drive_min_total                         0  →  0
+  drive_km_total                          0  →  0
+  drive_min_max_day                       0  →  0
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness                Needs a decision  →  Needs a decision
+  seconds                               231  →  349
+
+## mountain-hiking
+  advisor_pick                         None  →  None
+  bases                                   1  →  1
+  days                                    8  →  8
+  stops                                  20  →  17
+  stops_per_day                         2.5  →  2.1
+  empty_ordinary_days                     0  →  0
+  drive_min_total                       815  →  1082
+  drive_km_total                        522  →  734
+  drive_min_max_day                     190  →  200
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness                   Not ready yet  →  Not ready yet
+  seconds                               269  →  152
+
+## multigenerational
+  advisor_pick                         None  →  None
+  bases                                   1  →  1
+  days                                    8  →  8
+  stops                                  12  →  11
+  stops_per_day                         1.5  →  1.4
+  empty_ordinary_days                     0  →  0
+  drive_min_total                         0  →  0
+  drive_km_total                          0  →  0
+  drive_min_max_day                       0  →  0
+  one_way_walk_notes                      0  →  1
+  length_verdict                      False  →  False
+  readiness                           Ready  →  Ready
+  seconds                               161  →  149
+
+## tanzania-safari
+  advisor_pick                         None  →  None
+  bases                                   5  →  4
+  days                                    9  →  9
+  stops                                   5  →  7
+  stops_per_day                         0.6  →  0.8
+  empty_ordinary_days                     3  →  3
+  drive_min_total                        20  →  905
+  drive_km_total                          6  →  922
+  drive_min_max_day                      20  →  280
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness                Needs a decision  →  Needs a decision
+  seconds                               493  →  422
+
+## tokyo-kyoto-transit
+  advisor_pick                         None  →  None
+  bases                                   3  →  2
+  days                                   10  →  10
+  stops                                  23  →  18
+  stops_per_day                         2.3  →  1.8
+  empty_ordinary_days                     1  →  0
+  drive_min_total                       747  →  0
+  drive_km_total                        713  →  0
+  drive_min_max_day                     265  →  0
+  one_way_walk_notes                      0  →  0
+  length_verdict                      False  →  False
+  readiness                   Not ready yet  →  Needs a decision
+  seconds                               152  →  140

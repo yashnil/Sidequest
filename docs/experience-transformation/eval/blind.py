@@ -17,7 +17,7 @@ HERE = Path(__file__).parent
 BLIND = HERE / 'blind'
 CHROME = [
     r'Use Ctrl \+ scroll to zoom the map', r'Take it with you', r'\bMore\b\n', r'Edit this day\s*▸?', r'Map, hours & weather\s*▸?', r'Hours & weather\s*▸?',
-    r'Directions for the day\s*↗?', r'⋯', r'▸', r'Ask Sidequest', r'Fixture planning data[^\n]*',
+    r'Directions for the day\s*↗?', r'⋯', r'▸', r'Ask Sidequest', r'Fixture planning data[^\n]*', r'Photo ·[^\n]*', r'[^\n]*Cropped; this crop[^\n]*', r', on Wikimedia Commons[^\n]*', r'MAP · NO PHOTOGRAPH',
 ]
 
 
@@ -45,7 +45,7 @@ def plan_text(row: dict) -> str:
 
 
 def build() -> None:
-    before, after = load(HERE / 'before'), load(HERE / 'after')
+    before, after = load(HERE / 'before'), load(HERE / (sys.argv[2] if len(sys.argv) > 2 else 'after'))
     rng = random.Random(20261112)
     pairs, key = [], {}
     for scenario in sorted(before.keys() & after.keys()):

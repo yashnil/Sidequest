@@ -1,0 +1,42 @@
+{
+ "beach-island": {
+  "A": "after",
+  "B": "before"
+ },
+ "city-break": {
+  "A": "before",
+  "B": "after"
+ },
+ "family-wellness-march": {
+  "A": "after",
+  "B": "before"
+ },
+ "iceland-ring-road": {
+  "A": "before",
+  "B": "after"
+ },
+ "kumano-kodo": {
+  "A": "after",
+  "B": "before"
+ },
+ "kyrgyzstan": {
+  "A": "before",
+  "B": "after"
+ },
+ "mountain-hiking": {
+  "A": "after",
+  "B": "before"
+ },
+ "multigenerational": {
+  "A": "before",
+  "B": "after"
+ },
+ "tanzania-safari": {
+  "A": "after",
+  "B": "before"
+ },
+ "tokyo-kyoto-transit": {
+  "A": "after",
+  "B": "before"
+ }
+}
