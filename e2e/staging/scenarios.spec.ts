@@ -63,7 +63,7 @@ async function fromAdvisor(page: Page, scenario: Scenario): Promise<{ pick: stri
 }
 
 test.describe('ten scenarios', () => {
-  test.describe.configure({ mode: 'serial' });
+  /* One worker runs them in order; not serial, so one failed scenario never skips the rest. */
   for (const scenario of chosen) {
     test(`scenario: ${scenario.key}`, async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== 'desktop', 'one width; the pages are judged from text and screenshots');
@@ -132,8 +132,20 @@ test.describe('ten scenarios', () => {
           }
         }
       }
+      /* The Discovery Board the plan was built from (eval v2): which places were there and which were picked, so a missing essential can be told apart as a discovery or a selection failure. */
+      let board: { name: string; status: string }[];
+      try {
+        await page.goto(`/trips/${tripId}/discover`, { timeout: 60_000 });
+        await page.locator('article[data-place-card]').first().waitFor({ timeout: 30_000 });
+        board = await page.locator('article[data-place-card]').evaluateAll((cards) => cards.map((card) => ({ name: (card.querySelector('h3')?.textContent ?? '').trim().slice(0, 120), status: card.getAttribute('data-status') ?? '' })));
+      } catch {
+        board = [];
+      }
       record({
         scenario: scenario.key,
+        run: process.env.EVAL_RUN ?? null,
+        build: process.env.EVAL_BUILD ?? null,
+        board,
         title: scenario.title,
         request: scenario.advisor ?? scenario.destination,
         dates: `${scenario.start} → ${scenario.end}`,
