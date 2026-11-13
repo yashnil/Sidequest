@@ -39,6 +39,23 @@ export const travelIntelligenceSchema = z.object({
     daysUntilTrip: z.number().int(),
     remote: z.boolean(),
     drives: z.boolean(),
+    /**
+     * How the trip gets around, decided once (`travel/arrangement.ts`). Optional
+     * so a snapshot built before it existed still parses. `disagreements` is
+     * what any surface says against it — reported, never acted on.
+     */
+    arrangement: z
+      .object({
+        primary: z.enum(['operator', 'private_driver', 'transfers', 'self_drive', 'public_transport', 'mixed']),
+        selfDrive: z.boolean(),
+        selfDriveDays: z.array(z.number().int().min(1)).default([]),
+        operatorDays: z.array(z.number().int().min(1)).default([]),
+        flights: z.boolean(),
+        flightDays: z.array(z.number().int().min(1)).default([]),
+        basis: z.string().min(1),
+        disagreements: z.array(z.string().min(1)).default([]),
+      })
+      .optional(),
   }),
   verification: z.object({
     anchors: z.number().int().min(0),

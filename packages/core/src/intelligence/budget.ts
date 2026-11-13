@@ -245,6 +245,8 @@ export interface BudgetInput {
   selfDrives?: boolean;
   /** V7 §14 — the draft's driving arrangement, so a hired driver is priced as a driver and never as a rental. */
   driving?: string;
+  /** The days a self-drive car is actually hired, on a trip that is only partly self-driven (`TripArrangement.selfDriveDays`). Absent means the whole trip. */
+  rentalDays?: number;
 }
 
 type RawLine = Omit<BudgetLine, 'currency' | 'includes' | 'excludes' | 'precision'> & { includes: string[]; excludes: string[]; precision: 'estimated' | 'unknown' };
@@ -369,7 +371,8 @@ export function buildBudgetIntelligence(input: BudgetInput): BudgetIntelligence 
     const fuelBasis = driveKm > 0 ? `fuel for about ${Math.round(driveKm)} km of measured driving` : estimatedKm > 0 ? `fuel for roughly ${Math.round(estimatedKm / 50) * 50} km, estimated from map distance` : 'fuel not included — no leg was measured or estimated';
     const fuelKm = driveKm > 0 ? driveKm : estimatedKm;
     const fuelBand: [number, number] = driveKm > 0 ? FUEL_PER_KM : [FUEL_PER_KM[0] * 0.8, FUEL_PER_KM[1] * 1.3];
-    push('car_fuel_tolls_parking', [RENTAL_DAY[style][0] + (fuelBand[0] * fuelKm) / days, RENTAL_DAY[style][1] + (fuelBand[1] * fuelKm) / days], days, false, `${days} rental days plus ${fuelBasis}`, ['Rental, basic insurance', ...(fuelKm > 0 ? ['Fuel'] : [])], ['Tolls, parking, one-way fees, full excess cover', ...(fuelKm > 0 ? [] : ['Fuel'])], fuelKm > 0 && driveKm === 0 ? 'estimate_from_style_bands' : undefined);
+    const rentalDays = Math.max(1, Math.min(days, input.rentalDays ?? days));
+    push('car_fuel_tolls_parking', [RENTAL_DAY[style][0] + (fuelBand[0] * fuelKm) / rentalDays, RENTAL_DAY[style][1] + (fuelBand[1] * fuelKm) / rentalDays], rentalDays, false, `${rentalDays} rental days plus ${fuelBasis}`, ['Rental, basic insurance', ...(fuelKm > 0 ? ['Fuel'] : [])], ['Tolls, parking, one-way fees, full excess cover', ...(fuelKm > 0 ? [] : ['Fuel'])], fuelKm > 0 && driveKm === 0 ? 'estimate_from_style_bands' : undefined);
   }
   if (primary === 'rideshare') {
     push('local_transport', S(TAXI_DAY), days, false, `${days} days getting around by taxi or ride-hailing`, ['Taxi and ride-hailing fares'], ['Airport transfers'], 'derived_from_plan');

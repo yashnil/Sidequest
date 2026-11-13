@@ -1,7 +1,9 @@
-import { impliesSelfDriving, overnightIsExperiential, type DraftDrivingArrangement, type OvernightKind } from '@/lib/planning/trip-draft';
+import { overnightIsExperiential, type OvernightKind } from '@/lib/planning/trip-draft';
+import { dayHasFlightLeg, dayHasRoadTransfer, tripArrangementOf } from '@/lib/planning/arrangement';
 import {
   type FxRate,
   accessStateFor,
+  arrangementDisagreements,
   buildBudgetIntelligence,
   buildChecklist,
   buildFoodIntelligence,
@@ -196,9 +198,17 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
    * inference from the modes stands, so nothing regresses.
    */
   const statedDriving = input.draft?.driving;
-  const drives = statedDriving !== undefined
-    ? impliesSelfDriving(statedDriving as DraftDrivingArrangement)
-    : itinerary.transportStrategy.primaryMode === 'drive' || legs.some((l) => l.mode === 'car' || l.mode === 'four_wheel_drive');
+  /*
+   * ONE ARRANGEMENT FOR EVERY SURFACE. The Tanzania safari whose own summary
+   * said "a single operator driver-guide runs the overland legs" was still
+   * asked to book a rental car, because "a 4x4 leg exists" read as "the
+   * traveller drives". `tripArrangementOf` decides once, from the stated word,
+   * then the plan's own transport prose, its episodes, its hints and its legs;
+   * the bookings, budget, terminal plan, lodging and Prepare below all read it.
+   */
+  const arrangement = tripArrangementOf({ itinerary, draft: input.draft ?? null, willDrive: profile.transport.willDrive });
+  const drives = arrangement.selfDrive;
+  const drivingWord = statedDriving ?? (arrangement.primary === 'private_driver' ? 'private_driver' : arrangement.primary === 'operator' ? 'operator_transfer' : undefined);
 
   // Country and calendar ----------------------------------------------------------------------------
   const home = new Set([input.readinessProfile?.citizenship, input.readinessProfile?.residence].filter(Boolean) as string[]);
@@ -325,10 +335,10 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
   claims.push(...readiness.claims);
 
   // Bookings, budget --------------------------------------------------------------------------------------------
-  const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds, selfDrives: drives, reality, ...(input.resolutions ? { resolutions: input.resolutions } : {}) });
+  const bookings = deriveBookings({ itinerary, pkg, profile, legs, booked: input.booked, daysUntilTrip, remoteBaseIds, selfDrives: drives, arrangement, reality, ...(input.resolutions ? { resolutions: input.resolutions } : {}) });
   const guideDays = new Set(bookings.filter((b) => b.kind === 'tour_guide').map((b) => b.dayNumber)).size;
   const permitCount = bookings.filter((b) => b.kind === 'permit' || b.kind === 'park_entry').length;
-  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, party: { adults: input.basics.adults, children: input.basics.children }, ...(input.destination.countryCode ? { countryCode: input.destination.countryCode } : {}), legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(statedDriving ? { driving: statedDriving } : {}), ...(input.fxRates ? { rates: input.fxRates } : {}), ...(input.fx ? { fx: input.fx } : {}) });
+  const budget = buildBudgetIntelligence({ itinerary, pkg, profile, travellers: input.basics.adults + input.basics.children, party: { adults: input.basics.adults, children: input.basics.children }, ...(input.destination.countryCode ? { countryCode: input.destination.countryCode } : {}), legs, booked: input.booked, permitCount, guideDays, international, selfDrives: drives, ...(arrangement.primary === 'mixed' ? { rentalDays: arrangement.selfDriveDays.length } : {}), ...(drivingWord ? { driving: drivingWord } : {}), ...(input.fxRates ? { rates: input.fxRates } : {}), ...(input.fx ? { fx: input.fx } : {}) });
 
   // Weather, access, safety, packing ------------------------------------------------------------------------
   const weather = buildWeatherIntelligence({ itinerary, categoryOf, packageBackups: pkg?.backups ?? [] });
@@ -452,6 +462,21 @@ export function buildTravelIntelligence(input: BuildIntelligenceInput): TravelIn
       daysUntilTrip,
       remote,
       drives,
+      arrangement: {
+        primary: arrangement.primary,
+        selfDrive: arrangement.selfDrive,
+        selfDriveDays: arrangement.selfDriveDays,
+        operatorDays: arrangement.operatorDays,
+        flights: arrangement.flights,
+        flightDays: [...new Set([...arrangement.flightDays, ...arrangement.statedFlightDays])].sort((a, b) => a - b),
+        basis: arrangement.basis,
+        disagreements: arrangementDisagreements(arrangement, {
+          bookings,
+          budgetCategories: budget.lines.map((line) => line.category),
+          readinessKinds: readiness.packet.entries.map((entry) => entry.kind),
+          days: itinerary.days.map((day) => ({ dayNumber: day.dayNumber, theme: day.theme, hasFlightLeg: dayHasFlightLeg(day), roadTransfer: dayHasRoadTransfer(day) })),
+        }),
+      },
     },
     verification: {
       anchors: pkg?.verification.anchors ?? 0,

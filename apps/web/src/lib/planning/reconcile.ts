@@ -88,6 +88,9 @@ import {
   plausibleModeFor,
   selectSignatureExperiences,
   type GroundArrangement,
+  type TripArrangement,
+  themeForLegs,
+  TRAVEL_MODE_LABELS,
   unknownLegAllowanceMinutes,
   dayPrecisionOf,
   type AnchorKind,
@@ -127,6 +130,7 @@ import {
   type UnresolvedRelocation,
 } from './skeleton-adapter';
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
+import { arrangementFromDraft } from './arrangement';
 import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRoad, episodesOf, type AnchorRole, type DraftAnchor, type DraftEpisode, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving, timeOfDayIsBinding, timeOfDayIsHard } from './trip-draft';
 
 /**
@@ -2073,6 +2077,9 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
    * tolerances, which is the distinction the Rockies defect turned on.
    */
   const tripEpisodeModes = (draft.episodes ?? []).map((episode) => String(episode.mode ?? '')).filter(Boolean);
+  /* How the trip gets around, decided once from the draft; the legs below word their vehicle from it. */
+  const tripArrangement = arrangementFromDraft(draft, context.profile.transport.willDrive);
+  const tripGround = groundArrangementFor(draft, context.matrix.mode === 'transit');
   const tripDayMoveModes = draft.days.map((day) => String(day.move?.how ?? '')).filter(Boolean);
   const days: ItineraryDay[] = [];
   /** V10 §7 — one spatial-order verdict per day. */
@@ -2117,7 +2124,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
       relocation,
       ...(relocation && !draftDay?.move && d > 0 && draft.days[d - 1]?.move ? { previousDayMove: draft.days[d - 1]!.move } : {}),
       anchors: dayAnchors,
-      groundArrangement: groundArrangementFor(draft, context.matrix.mode === 'transit'),
+      groundArrangement: tripGround,
+      ...(tripArrangement.primary === 'operator' && tripArrangement.vehicle ? { tripVehicle: tripArrangement.vehicle } : {}),
       /* V12 §17 — what this trip's own experiences and declared moves vouch for. */
       episodeModes: tripEpisodeModes,
       dayMoveModes: tripDayMoveModes,
@@ -2418,7 +2426,8 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
   const minutesByModeAcrossTrip = new Map<TransportMode, number>();
   for (const day of days) for (const item of day.items) if (item.kind === 'travel' && item.travel && item.travel.fromId !== item.travel.toId) minutesByModeAcrossTrip.set(item.travel.mode, (minutesByModeAcrossTrip.get(item.travel.mode) ?? 0) + item.durationMinutes);
   const busiest = [...minutesByModeAcrossTrip.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const selfDrives = impliesSelfDriving(draft.driving) || (draft.driving === undefined && context.profile.transport.willDrive);
+  /* The one decided arrangement: a stated word decides; an unstated one reads the plan's own prose, episodes and hints before the profile. */
+  const selfDrives = draft.driving !== undefined ? impliesSelfDriving(draft.driving) : tripArrangement.selfDrive;
   const primaryMode: TransportMode = selfDrives ? 'drive' : busiest && busiest !== 'unsupported' ? busiest : context.profile.transport.willDrive ? 'drive' : context.matrix.mode === 'foot' ? 'walk' : 'public_bus';
   /* An estimated region matrix is never the source of a measurement: those legs were measured by the router during the build. */
   const routerName = context.matrix.provenance.kind === 'measured' || context.matrix.provenance.kind === 'estimated' ? 'the routing provider' : `${context.matrix.provenance.kind} road data`;
@@ -2452,7 +2461,7 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
        * The draft states the arrangement (`driving`), and a plan with none —
        * or one nobody drives themselves — has nothing to park.
        */
-      parkingSummary: impliesSelfDriving(draft.driving) || (draft.driving === undefined && primaryMode === 'drive')
+      parkingSummary: impliesSelfDriving(draft.driving) || (draft.driving === undefined && primaryMode === 'drive' && tripArrangement.selfDrive)
         ? 'Parking has not been verified for this plan; check at each stop.'
         : 'No parking to arrange — nothing on this trip is yours to park.',
       transitSummary: context.transit ? 'Some public-transport journeys were measured for this region.' : 'Public-transport journeys were not measured for this plan.',
@@ -2586,6 +2595,12 @@ interface DayLayoutInput {
   anchors: readonly ReconciledAnchor[];
   /** V11 §10 — how the trip's ground travel is arranged, for the mode correction. Undefined when the draft did not say. */
   groundArrangement?: GroundArrangement | undefined;
+  /**
+   * On an operator-run trip, the vehicle the operator drives the traveller in.
+   * Every road leg outside an off-road episode is worded as that vehicle — one
+   * word for one arrangement, never drive, shuttle and walk by turns.
+   */
+  tripVehicle?: NonNullable<TripArrangement['vehicle']> | undefined;
   /** V7 §8 — the episode this day sits inside, when it does. */
   episode?: DraftEpisode | null;
   /**
@@ -2836,7 +2851,7 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
  * traveller's own plan. Only where the model said nothing is this undefined,
  * and the correction then falls back to what the profile can do.
  */
-export function groundArrangementFor(draft: Pick<TripDraft, 'driving' | 'days'>, transitMatrix: boolean): GroundArrangement | undefined {
+export function groundArrangementFor(draft: Pick<TripDraft, 'driving' | 'days'> & Partial<Pick<TripDraft, 'bases' | 'episodes' | 'package'>>, transitMatrix: boolean): GroundArrangement | undefined {
   switch (draft.driving) {
     case 'rental_self_drive':
     case 'owned_self_drive':
@@ -2878,7 +2893,30 @@ export function groundArrangementFor(draft: Pick<TripDraft, 'driving' | 'days'>,
    * whose days say "metro" is a transit trip whatever the field is empty of, and
    * correcting one of its walks to a hired ride would be the same substitution
    * in the other direction.
+   *
+   * The one decided arrangement (`arrangementFromDraft`) reads the same hints
+   * and, before them, the plan's own transport prose and its operator-run
+   * episodes — so a safari whose 4x4 game drives belong to the operator is an
+   * operator trip, not a self-drive one because a 4x4 was mentioned.
    */
+  if (draft.bases) {
+    const decided = arrangementFromDraft(draft as Pick<TripDraft, 'days' | 'bases'> & Partial<TripDraft>);
+    if (decided.evidence === 'text' || decided.evidence === 'episodes') {
+      switch (decided.primary) {
+        case 'operator':
+          return 'operator';
+        case 'private_driver':
+          return 'driver';
+        case 'transfers':
+          return 'taxi';
+        case 'public_transport':
+          return 'transit';
+        case 'self_drive':
+        case 'mixed':
+          return 'self_drive';
+      }
+    }
+  }
   return groundHint(draft);
 }
 
@@ -3054,7 +3092,10 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      */
     const inEpisode = options.inEpisode === true && episode !== null;
     /* Inside any episode a stop with no hint of its own moves the episode's way: a game drive on a safari, a boat on a cruise. */
-    const hint: DraftTransport | undefined = inEpisode ? (hintGiven ?? episodeHint(episode)) : hintGiven;
+    const hintStated: DraftTransport | undefined = inEpisode ? (hintGiven ?? episodeHint(episode)) : hintGiven;
+    /* An operator-run trip's road legs are the operator's vehicle: an unstated, car or 4x4 hint becomes that one word. */
+    const tripVehicle = input.tripVehicle && !(inEpisode && offRoad) ? input.tripVehicle : undefined;
+    const hint: DraftTransport | undefined = tripVehicle && (hintStated === undefined || hintStated === 'unknown' || hintStated === 'car' || hintStated === 'four_wheel_drive') ? tripVehicle : hintStated;
     if (inEpisode && offRoad && episode) {
       const mode = transportModeFor(hint, context.matrix.mode, canDrive);
       const fromCoordinates = from.coordinates;
@@ -3187,7 +3228,11 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const hinted = worldCheck.ok ? hintedRaw : transportModeFor(undefined, context.matrix.mode, canDrive);
     const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
-    const mode = plausible.mode;
+    /* A walk nobody would take on an operator-run trip is the operator's vehicle, never a shuttle the trip does not contain. */
+    const vehicleCorrected = Boolean(tripVehicle && plausible.corrected);
+    const mode = vehicleCorrected ? transportModeFor(tripVehicle, context.matrix.mode, canDrive) : plausible.mode;
+    const legHint: DraftTransport | undefined = vehicleCorrected ? tripVehicle : hint;
+    const vehicleLabel = tripVehicle && legHint === tripVehicle ? TRAVEL_MODE_LABELS[travelModeFromDraft(tripVehicle)] : null;
     /*
      * A FIGURE MEASURED FOR ANOTHER PROFILE IS NOT THIS LEG'S FIGURE.
      *
@@ -3307,7 +3352,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (!trustedMatrix || context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
       ...(plausible.corrected ? { modeCorrectedFrom: hinted } : !worldCheck.ok ? { modeCorrectedFrom: hintedRaw } : {}),
-      ...(hint ? { hint } : {}),
+      ...(legHint ? { hint: legHint } : {}),
       ...(confirmation?.staticMinutes !== undefined ? { staticMinutes: confirmation.staticMinutes } : {}),
       ...(confirmation?.effectiveDepartAt ? { effectiveDepartAt: confirmation.effectiveDepartAt } : {}),
       ...(confirmation?.transitSummary ? { transitSummary: confirmation.transitSummary } : {}),
@@ -3321,7 +3366,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     items.push({
       id: `d${input.dayNumber}-leg-${items.length}`,
       kind: 'travel',
-      title: `${shown || estimate ? `${labelFor(mode)} to` : 'Travel to'} ${to.name}`,
+      title: `${shown || estimate ? `${vehicleLabel ?? labelFor(mode)} to` : 'Travel to'} ${to.name}`,
       ...span(clock, duration),
       travel,
       reason: shown
@@ -3679,7 +3724,11 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     date: input.date,
     baseId: endPoint.id,
     baseName: endPoint.name,
-    theme: draftDay?.theme ?? (input.relocation ? `Moving on to ${endPoint.name}` : 'An open day'),
+    /* A title that says "fly" over a day whose move is a road leg says "drive": the words follow the legs. */
+    theme: themeForLegs(draftDay?.theme ?? (input.relocation ? `Moving on to ${endPoint.name}` : 'An open day'), {
+      hasFlightLeg: allItems.some((i) => i.kind === 'travel' && i.travel?.hint === 'flight'),
+      roadTransfer: allItems.some((i) => i.kind === 'travel' && i.travel?.role === 'transfer' && i.travel.hint !== 'flight' && (i.travel.mode === 'drive' || i.travel.mode === 'private_transfer' || i.travel.mode === 'shuttle' || i.travel.mode === 'rideshare' || i.travel.mode === 'public_bus')),
+    }),
     window: window.window,
     items: allItems,
     ...(draftDay?.split ? { split: draftDay.split } : {}),

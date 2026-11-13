@@ -130,6 +130,7 @@ export * from './weather/solar';
 
 export * from './travel/reach';
 export * from './travel/estimate';
+export * from './travel/arrangement';
 export * from './travel/plausibility';
 export * from './intelligence/anchor-kind';
 export * from './reference/countries';

@@ -3,7 +3,8 @@ import { STRENUOUS_BLOCKERS, dayStrain, describeEdgeTime, isGatewayName, isTrans
 import { impliesSelfDriving, type TripDraft } from './trip-draft';
 import { buildPreservationReport, type DraftPreservationReport } from './preservation';
 import { auditTopology } from './topology';
-import { modeStatusFor, type TravelReality } from '@sidequest/core';
+import { arrangementDisagreements, modeStatusFor, type TravelReality } from '@sidequest/core';
+import { arrangementFromDraft, dayHasFlightLeg, dayHasRoadTransfer, tripArrangementOf } from './arrangement';
 import { skyIntentOfTitle } from './sky-timing';
 
 /** How far a sunrise or sunset stop may sit from its event before the audit says so. */
@@ -101,6 +102,14 @@ export const QUALITY_CHECK_IDS = [
   'timing_rationale_consistent',
   /** V7 §7 — the plan's driving arrangement is not one the destination's compiled reality calls discouraged or unavailable. */
   'transport_reality_respected',
+  /**
+   * The day titles, the leg wording and the advice agree with the one decided
+   * transport arrangement (`travel/arrangement.ts`): no "fly" over a road leg,
+   * one vehicle word on an operator trip, no rental advice where nobody drives.
+   * The intelligence layer runs the same comparison over bookings, budget and
+   * Prepare and records it on `destinationContext.arrangement.disagreements`.
+   */
+  'arrangement_surfaces_agree',
 ] as const;
 export type QualityCheckId = (typeof QUALITY_CHECK_IDS)[number];
 
@@ -600,7 +609,9 @@ function auditV5(input: {
    * never touch. Checked against everything the traveller reads — the transport
    * strategy, the notes, before-you-go and packing.
    */
-  const driving = draft.driving;
+  const decided = arrangementFromDraft(draft, profile.transport.willDrive);
+  /* An unstated arrangement is checked only where the plan's own prose or episodes settle it; a profile default is not evidence enough to call advice wrong. */
+  const driving = draft.driving ?? (decided.evidence === 'text' || decided.evidence === 'episodes' ? ({ operator: 'operator_transfer', private_driver: 'private_driver', transfers: 'taxi_rideshare', public_transport: 'none', self_drive: 'rental_self_drive', mixed: 'rental_self_drive' } as const)[decided.primary] : undefined);
   const advisoryText = [draft.package.transport.summary, ...draft.package.transport.notes, ...draft.package.beforeYouGo, ...draft.package.packing].join(' \n ');
   const selfDriveWords = [...advisoryText.matchAll(SELF_DRIVE_ADVICE)].map((match) => match[0]);
   const drivenFor = driving === 'private_driver' || driving === 'operator_transfer' || driving === 'none';
@@ -616,6 +627,32 @@ function auditV5(input: {
           ? `driving is ${driving} and nothing mentions rentals, permits or parking`
           : `driving is ${driving} but the traveller is told about: ${[...new Set(selfDriveWords.map((w) => w.toLowerCase()))].join(', ')}`,
   );
+
+  /*
+   * The surfaces against the one arrangement. Reported, never acted on: the
+   * reconciler already words legs and titles from the arrangement, so a
+   * disagreement here is a regression or a plan whose own words contradict it.
+   */
+  {
+    const arrangement = tripArrangementOf({ itinerary, draft, willDrive: profile.transport.willDrive });
+    const problems = arrangementDisagreements(arrangement, {
+      advice: [...draft.package.beforeYouGo, ...draft.package.packing],
+      days: itinerary.days.map((day) => ({ dayNumber: day.dayNumber, theme: day.theme, hasFlightLeg: dayHasFlightLeg(day), roadTransfer: dayHasRoadTransfer(day) })),
+    });
+    if (arrangement.primary === 'operator' && arrangement.vehicle) {
+      const offRoadEpisodeModes = new Set(['boat', 'walk', 'rail', 'horse', 'none']);
+      for (const day of itinerary.days) {
+        for (const item of day.items) {
+          const travel = item.kind === 'travel' ? item.travel : undefined;
+          if (!travel || travel.fromId === travel.toId || (travel.episodeMode && offRoadEpisodeModes.has(travel.episodeMode))) continue;
+          const roadMode = travel.mode === 'drive' || travel.mode === 'shuttle' || travel.mode === 'public_bus' || travel.mode === 'rideshare';
+          if (roadMode && travel.hint !== arrangement.vehicle && travel.hint !== 'flight' && travel.hint !== 'bus' && travel.hint !== 'taxi') problems.push(`day ${day.dayNumber}: "${item.title}" is worded as ${travel.mode} on an operator-run trip`);
+        }
+      }
+    }
+    for (const conflict of arrangement.conflicts) problems.push(conflict);
+    add('arrangement_surfaces_agree', problems.length === 0, 'warning', problems.length === 0 ? `the day titles, legs and advice agree with the ${arrangement.primary.replace(/_/g, ' ')} arrangement (${arrangement.basis})` : problems.slice(0, 4).join('; '));
+  }
 
   /*
    * §11 — lodging character. Only meaningful for a trip that moves: one base for

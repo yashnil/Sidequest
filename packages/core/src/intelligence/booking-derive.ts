@@ -5,6 +5,7 @@ import type { TransportLeg } from './transport';
 import { baseDaySpans } from './lodging';
 import { normalizeStays } from '../experience/chapters';
 import type { TravelReality } from '../reality/schema';
+import type { TripArrangement } from '../travel/arrangement';
 
 /**
  * WHAT THIS TRIP DEPENDS ON SOMEBODY ARRANGING.
@@ -25,6 +26,13 @@ export interface DeriveBookingsInput {
   remoteBaseIds: ReadonlySet<string>;
   /** V7 §14 — whether the traveller drives a car they hired; a hired driver or an operator produces no rental row. */
   selfDrives?: boolean;
+  /**
+   * How the trip gets around, decided once (`decideTripArrangement`). When
+   * given it decides the car (only a self-drive trip, or the self-driven days
+   * of a mixed one, rents), the operator or driver the trip depends on, and the
+   * flights a day states but carries no leg for.
+   */
+  arrangement?: Pick<TripArrangement, 'primary' | 'selfDrive' | 'selfDriveDays' | 'operatorDays' | 'flightDays' | 'statedFlightDays' | 'vehicle'>;
   /** V7 §14 — booking lead times compiled for the destination, when known. */
   reality?: TravelReality | null;
   /**
@@ -246,21 +254,59 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
    * V7 — the draft's own `driving` word decides where it exists.
    */
   const movesByTransfers = /\b(transfer|driver|guide|guided|4x4 (game|safari)|game drive)/i.test(itinerary.package?.transport.summary ?? '');
-  const selfDrives = input.selfDrives ?? (itinerary.transportStrategy.primaryMode === 'drive' && profile.transport.willDrive && !movesByTransfers);
+  const arrangement = input.arrangement;
+  const selfDrives = arrangement ? arrangement.selfDrive : (input.selfDrives ?? (itinerary.transportStrategy.primaryMode === 'drive' && profile.transport.willDrive && !movesByTransfers));
+  /* A mixed trip hires the car for the days it drives; everything else hires it for the whole trip. */
+  const rentalDays = arrangement && arrangement.primary === 'mixed' ? arrangement.selfDriveDays : [];
+  const partial = rentalDays.length > 0 && rentalDays.length < itinerary.days.length;
   if (selfDrives) {
-    const booked = matchBooked(input.booked, 'rental_vehicle', { date: itinerary.startDate, title: 'car' });
+    const firstRentalDate = partial ? (itinerary.days.find((d) => d.dayNumber === rentalDays[0])?.date ?? itinerary.startDate) : itinerary.startDate;
+    const booked = matchBooked(input.booked, 'rental_vehicle', { date: firstRentalDate, title: 'car' });
     items.push(
       bookingItemSchema.parse({
         id: 'booking:rental',
-        title: 'Rental car for the whole trip',
+        title: partial ? `Rental car for the self-drive days (day${rentalDays.length === 1 ? '' : 's'} ${dayList(rentalDays)})` : 'Rental car for the whole trip',
         kind: 'rental_vehicle',
         necessity: 'required',
         priority: bookingPriorityFor({ necessity: 'required', hardDependency: true, fixedDateTime: true, limitedCapacity: false, fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
         reason: itinerary.transportStrategy.totals.driveKm > 0 ? `${Math.round(itinerary.transportStrategy.totals.driveKm)} km of the plan is driven; nothing else reaches the far stops.` : 'The ordinary days rely on a car; nothing else reaches the far stops.',
-        date: itinerary.startDate,
+        ...(partial ? { dayNumber: rentalDays[0] } : {}),
+        date: firstRentalDate,
         status: booked ? 'booked' : 'open',
         ...(booked ? { bookedItemId: booked.id } : {}),
         travelerAction: 'Book the car, with the insurance excess you are comfortable with',
+        authority: 'model_proposal',
+      }),
+    );
+  }
+
+  /*
+   * The people who drive the traveller, when somebody else does. An operator
+   * trip (a safari programme, a guided overland) and a private-driver trip
+   * depend on that booking the way a self-drive trip depends on the car; the
+   * episodes below may book parts of it, and this row is the whole arrangement.
+   */
+  if (arrangement && (arrangement.primary === 'operator' || arrangement.primary === 'private_driver')) {
+    const operator = arrangement.primary === 'operator';
+    const kind: BookingItemKind = operator ? 'programme' : 'internal_transfer';
+    const booked = matchBooked(input.booked, kind, { date: itinerary.startDate, title: operator ? 'operator' : 'driver' });
+    const vehicle = arrangement.vehicle === 'four_wheel_drive' ? ' and 4x4' : '';
+    items.push(
+      bookingItemSchema.parse({
+        id: 'booking:ground',
+        title: operator ? `Operator and driver-guide${vehicle} for the trip` : 'Car and driver for the trip',
+        kind,
+        necessity: 'required',
+        priority: bookingPriorityFor({ necessity: 'required', hardDependency: true, fixedDateTime: true, limitedCapacity: operator, fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
+        reason: operator
+          ? `An operator's driver-guide moves you on the road${arrangement.operatorDays.length > 0 ? ` (days ${dayList(arrangement.operatorDays)} are their programme)` : ''}; there is no car for you to hire.`
+          : 'A hired driver moves you on the road; there is no car for you to hire.',
+        dayNumber: itinerary.days[0]?.dayNumber ?? 1,
+        date: itinerary.startDate,
+        capacityEvidence: 'unknown',
+        status: booked ? (booked.status === 'soft_hold' ? 'soft_hold' : 'booked') : 'open',
+        ...(booked ? { bookedItemId: booked.id } : {}),
+        travelerAction: operator ? 'Book the operator, and confirm which transfers and flights they include' : 'Book the driver for the days the plan uses one',
         authority: 'model_proposal',
       }),
     );
@@ -298,6 +344,34 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
         ...(booked ? { bookedItemId: booked.id } : {}),
         travelerAction: `Book the ${leg.mode === 'flight' ? 'flight' : leg.mode === 'ferry' || leg.mode === 'boat' ? 'crossing' : kind === 'train' ? 'train' : 'transfer'} to ${leg.destinationName}`,
         authority: leg.durationBasis === 'scheduled_transit' ? 'official_current' : 'model_proposal',
+      }),
+    );
+  }
+
+  /*
+   * A flight a day promises that the plan's own transport prose states, with no
+   * leg for it yet. The seat still has to be bought; the row says the leg is
+   * not on the plan rather than inventing its endpoints.
+   */
+  for (const dayNumber of arrangement?.statedFlightDays ?? []) {
+    if (items.some((i) => i.kind === 'flight' && i.dayNumber === dayNumber)) continue;
+    const day = itinerary.days.find((d) => d.dayNumber === dayNumber);
+    if (!day) continue;
+    const booked = matchBooked(input.booked, 'flight', { date: day.date });
+    items.push(
+      bookingItemSchema.parse({
+        id: `booking:flight:day-${dayNumber}`,
+        title: `Flight on day ${dayNumber}: ${day.theme}`,
+        kind: 'flight',
+        necessity: 'required',
+        priority: bookingPriorityFor({ necessity: 'required', hardDependency: true, fixedDateTime: true, limitedCapacity: true, fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
+        reason: 'The plan says this day flies, but the flight is not a timed leg yet; book the seat and confirm the times with the airline or operator.',
+        dayNumber,
+        date: day.date,
+        status: booked ? 'booked' : 'open',
+        ...(booked ? { bookedItemId: booked.id } : {}),
+        travelerAction: `Book the flight on day ${dayNumber}`,
+        authority: 'model_proposal',
       }),
     );
   }
@@ -416,4 +490,12 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
 
   const order = { book_first: 0, book_soon: 1, can_wait: 2, keep_flexible: 3 } as const;
   return linked.sort((a, b) => order[a.priority] - order[b.priority] || (a.dayNumber ?? 0) - (b.dayNumber ?? 0));
+}
+
+/** "2–5", "2, 4 and 7": a short, readable list of day numbers. */
+function dayList(days: readonly number[]): string {
+  const sorted = [...new Set(days)].sort((a, b) => a - b);
+  const contiguous = sorted.every((n, i) => i === 0 || n === sorted[i - 1]! + 1);
+  if (contiguous && sorted.length > 2) return `${sorted[0]}–${sorted[sorted.length - 1]}`;
+  return sorted.length <= 1 ? String(sorted[0] ?? '') : `${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
 }
