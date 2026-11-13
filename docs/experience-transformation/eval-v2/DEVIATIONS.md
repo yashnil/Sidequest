@@ -1,0 +1,3 @@
+# Evaluation v2 — deviations from PROTOCOL.md
+
+1. **Local servers lost their sockets mid-run (2026-11-13 ~10:00 UTC).** Both evaluation servers (old on 4400, new on 4500) stopped accepting connections at about the same moment: the new server exited on SIGTERM and the old one stayed alive with no listening socket. Nothing in the evaluation sent either signal; another session on the same machine was running its own Next.js servers at the time, and the cause could not be established. Both were restarted on their own databases with the same configuration. Every scenario whose run failed while a server was down is re-run afterwards with the same run index, and listed below; the failed attempts are not graded.

@@ -164,6 +164,25 @@ describe('sky timing — through the reconciler', () => {
     expect(audit.checks.find((c) => c.id === 'sky_timing_respected')?.ok).toBe(true);
   });
 
+  /* Live eval v2 (2026-11-13): a long stargazing tour stretched the day's window past 24:00 and the build failed validation. */
+  it('a dark-sky stop that would run past midnight keeps the darkness before 24:00, and no window passes it', async () => {
+    const world = skyWorld({ centre: ALPS_JULY.point, zone: ALPS_JULY.zone, startDate: '2027-07-14', endDate: '2027-07-17', places: ['Summit Stargazing Tour', 'Lake Walk', 'Old Quarter', 'Harbour Museum', 'Market Hall'] });
+    const { result } = await build(world, [{ name: 'Lake Walk', category: 'nature' }, { name: 'Summit Stargazing Tour', category: 'nature', minutes: 120, timeOfDay: 'night' }]);
+    expect(result.itinerary.days.every((d) => d.window.endMinute <= 24 * 60)).toBe(true);
+    const tour = itemOn(result.itinerary, 2, 'Summit Stargazing Tour')!;
+    expect(tour.startMinute).toBeGreaterThanOrEqual(hhmm(22, 30));
+    expect(tour.endMinute).toBeLessThanOrEqual(24 * 60);
+    expect(tour.endMinute - tour.startMinute).toBeGreaterThanOrEqual(45);
+  });
+
+  it('a subarctic midsummer sunset (around midnight) never stretches a day past 24:00', async () => {
+    const world = skyWorld({ centre: SUBARCTIC_JUNE.point, zone: SUBARCTIC_JUNE.zone, startDate: '2027-06-20', endDate: '2027-06-23', places: ['Headland Sunset Lookout', 'Old Quarter', 'Harbour Museum', 'Market Hall'] });
+    const { result } = await build(world, [{ name: 'Headland Sunset Lookout', category: 'viewpoint', minutes: 90, timeOfDay: 'sunset' }]);
+    expect(result.itinerary.days.every((d) => d.window.endMinute <= 24 * 60)).toBe(true);
+    const stop = itemOn(result.itinerary, 2, 'Headland Sunset Lookout');
+    if (stop) expect(stop.endMinute).toBeLessThanOrEqual(24 * 60);
+  });
+
   it('subarctic late-June stargazing is left unscheduled with a reason, never placed in daylight', async () => {
     const world = skyWorld({ centre: SUBARCTIC_JUNE.point, zone: SUBARCTIC_JUNE.zone, startDate: '2027-06-24', endDate: '2027-06-27', places: ['Lava Field Stargazing', 'Old Quarter', 'Harbour Museum', 'Market Hall'] });
     const { result } = await build(world, [{ name: 'Lava Field Stargazing', category: 'nature', minutes: 90, timeOfDay: 'night' }]);

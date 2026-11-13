@@ -476,6 +476,10 @@ const MIN_FREE_BLOCK_MINUTES = 30;
  * hard back-by hour, get no tolerance at all — see `layoutDay`.
  */
 const LATE_END_TOLERANCE_MINUTES = 30;
+/** The last minute a day's window may reach: it is a clock reading, not a timeline. */
+const MIDNIGHT_MINUTE = 24 * 60;
+/** The least darkness a dark-sky stop is worth keeping for before midnight. */
+const MIN_DARK_SKY_MINUTES = 45;
 
 /**
  * The traveller's interests, strongest first, as plain keys.
@@ -1281,7 +1285,13 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
         capacityMinutes: day.capacityMinutes + (day.window.startMinute - early),
       };
     }
-    const late = isLastDay ? null : latestFor(day.dayNumber);
+    /*
+     * A day's window is a clock reading (`minuteOfDaySchema`, never widened): it
+     * may stretch for a sky stop as far as midnight and no further. A dark-sky
+     * stop that would run past it comes off in `layoutDay` with its reason.
+     */
+    const lateWanted = isLastDay ? null : latestFor(day.dayNumber);
+    const late = lateWanted === null ? null : Math.min(MIDNIGHT_MINUTE, lateWanted);
     if (late !== null && late > day.window.endMinute) {
       day = {
         ...day,
@@ -2784,7 +2794,18 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
       dropped.push({ anchor, disposition: 'rejected_contradiction', reasonCode: 'not_feasible', reason: `${anchor.draft.name} needs a dark sky, and on ${input.date} ${timing.reason}; it was left off rather than scheduled in daylight.`, suggestedRemedy: 'Keep it for a trip later in the season, when the nights are dark.' });
       continue;
     }
-    if (timing.kind === 'start' && (hardEnd || refusesLateNights) && timing.minute + anchor.durationMinutes > input.window.window.endMinute) {
+    /*
+     * The day's window stops at midnight. A dark-sky stop that would run past
+     * it keeps the darkness it can have before 24:00 — shortened, never moved
+     * into daylight — when that is at least `MIN_DARK_SKY_MINUTES`; otherwise it
+     * comes off below with its reason.
+     */
+    if (timing.kind === 'start' && !hardEnd && !refusesLateNights && timing.minute + anchor.durationMinutes > MIDNIGHT_MINUTE && MIDNIGHT_MINUTE - timing.minute >= MIN_DARK_SKY_MINUTES) {
+      const shortened = { ...anchor, durationMinutes: MIDNIGHT_MINUTE - timing.minute };
+      kept = kept.map((a) => (a.id === anchor.id ? shortened : a));
+      continue;
+    }
+    if (timing.kind === 'start' && ((hardEnd || refusesLateNights) || timing.minute + anchor.durationMinutes > MIDNIGHT_MINUTE) && timing.minute + anchor.durationMinutes > input.window.window.endMinute) {
       kept = kept.filter((a) => a.id !== anchor.id);
       dropped.push({
         anchor,
@@ -3573,10 +3594,15 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       if (start < target) {
         if (target + anchor.durationMinutes <= input.window.window.endMinute) start = target;
         else if (mayRunLate && skyIntent !== 'sunrise') {
-          start = target;
-          const end = target + anchor.durationMinutes;
-          window.window.usableMinutes += end - window.window.endMinute;
-          window.window.endMinute = end;
+          /* As late as the sky wants, but the day ends by midnight: a window is a clock reading. */
+          const end = Math.min(MIDNIGHT_MINUTE, target + anchor.durationMinutes);
+          start = Math.max(start, Math.min(target, end - anchor.durationMinutes));
+          if (target + anchor.durationMinutes > MIDNIGHT_MINUTE) skyNote = `${skyTiming.event}; the day cannot run past midnight, so the visit ends then`;
+          const finish = start + anchor.durationMinutes;
+          if (finish > window.window.endMinute) {
+            window.window.usableMinutes += Math.min(MIDNIGHT_MINUTE, finish) - window.window.endMinute;
+            window.window.endMinute = Math.min(MIDNIGHT_MINUTE, finish);
+          }
         } else {
           const latest = input.window.window.endMinute - anchor.durationMinutes;
           if (latest > start) start = latest;
