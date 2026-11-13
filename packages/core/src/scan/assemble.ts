@@ -675,7 +675,14 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     basis: matrix.provenance.kind === 'measured' && matrix.mode !== 'foot' ? 'measured' : 'estimated',
     ...(mustCover.length > 0 ? { mustCover } : {}),
     ...(input.route ? { route: input.route.kind } : {}),
-    ...(input.mustSeeKeys && input.mustSeeKeys.length > 0 ? { mustSee: new Set(input.mustSeeKeys.map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined)) } : {}),
+    /*
+     * What the stays must keep within reach: the traveller's named must-dos and
+     * the proposal's own defining experiences (eval v2: a safari slept in one
+     * town and left the Serengeti — on the board, defining — out of reach).
+     */
+    ...((ids) => (ids.size > 0 ? { mustSee: ids } : {}))(
+      new Set([...(input.mustSeeKeys ?? []), ...proposal.candidates.filter((c) => c.defining).map((c) => c.key)].map((key) => plan.placeIdByKey.get(key)).filter((id): id is string => id !== undefined)),
+    ),
     ...(trailLinks.length > 0 ? { trailLinks } : {}),
   });
   /*
