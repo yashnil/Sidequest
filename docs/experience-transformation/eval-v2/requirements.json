@@ -1,0 +1,207 @@
+[
+  {
+    "scenario": "family-wellness-march",
+    "defining": [
+      {"id": "restful-outdoors", "label": "Gentle outdoor time (walks, beach, lake, forest, garden)", "anyOf": ["easy walk", "gentle walk", "stroll", "beach", "lake", "forest", "garden", "nature walk", "short trail", "boardwalk"]},
+      {"id": "restorative", "label": "A restorative element (hot spring, onsen, spa, swim, lodge)", "anyOf": ["hot spring", "onsen", "spa", "thermal", "pool", "swim", "lodge", "retreat", "wellness", "massage"]},
+      {"id": "family-suitable", "label": "Child-suitable activities", "anyOf": ["family", "kids", "children", "child-friendly", "family-friendly"]},
+      {"id": "free-time", "label": "Unscheduled rest time", "anyOf": ["free time", "free afternoon", "free morning", "rest", "downtime", "unscheduled", "at leisure", "slow morning", "relax"]}
+    ],
+    "redFlags": [
+      {"id": "early-starts", "label": "05:00-06:30 starts on a restful trip", "anyOf": ["05:00", "05:15", "05:30", "05:45", "06:00", "06:15", "sunrise hike", "pre-dawn", "before dawn"]},
+      {"id": "many-bases", "label": "Multi-base road trip / frequent hotel changes", "anyOf": ["road trip", "check out", "new hotel each", "change hotels", "move base"]},
+      {"id": "strenuous", "label": "Strenuous or high-altitude activity", "anyOf": ["strenuous", "summit", "via ferrata", "high altitude", "scramble", "15 km", "20 km", "all-day hike"]},
+      {"id": "city-heavy", "label": "City/nightlife-led days", "anyOf": ["nightlife", "bar crawl", "club", "museum marathon"]}
+    ],
+    "sunsetLocal": null,
+    "sunriseLocal": null,
+    "timeZone": null,
+    "maxDailyTravelMinutes": 120
+  },
+  {
+    "scenario": "kumano-kodo",
+    "defining": [
+      {"id": "nakahechi-walk", "label": "Walking the Nakahechi route", "anyOf": ["Nakahechi", "Takijiri", "Takijiri-oji", "Chikatsuyu", "Takahara", "Tsugizakura", "Hosshinmon", "Hosshinmon-oji", "Kumano Kodo trail", "walk the Kodo"]},
+      {"id": "hongu-taisha", "label": "Kumano Hongu Taisha", "anyOf": ["Hongu Taisha", "Kumano Hongu", "Hongu", "Oyunohara"]},
+      {"id": "nachi-hayatama", "label": "The other Grand Shrines (Nachi, Hayatama)", "anyOf": ["Nachi Taisha", "Nachi Falls", "Nachi", "Hayatama", "Shingu", "Seiganto-ji"]},
+      {"id": "onsen-village-stay", "label": "Onsen / village minshuku nights", "anyOf": ["Yunomine", "Kawayu", "Watarase", "minshuku", "ryokan", "onsen", "Chikatsuyu"]},
+      {"id": "luggage-transfer", "label": "Luggage shuttle between inns", "anyOf": ["luggage transfer", "luggage shuttle", "bag transfer", "luggage forwarding", "takkyubin"]}
+    ],
+    "redFlags": [
+      {"id": "no-walking", "label": "Kodo trip with no walking stage", "anyOf": ["drive to Hongu", "by car to the shrines", "bus tour of the shrines"]},
+      {"id": "rental-car", "label": "Self-drive rental car as main mode", "anyOf": ["rental car", "rent a car", "car hire", "self-drive"]},
+      {"id": "overlong-stage", "label": "Stage too long for children (e.g. 24 km Chikatsuyu-Hongu in one day)", "anyOf": ["24 km", "25 km", "8-hour walk", "8 hours walking"]},
+      {"id": "walk-after-dark", "label": "Mountain walking after sunset (~18:10)", "anyOf": ["night hike", "walk after dark", "arrive by headlamp"]},
+      {"id": "senninburo", "label": "Kawayu Senninburo offered (winter-only)", "anyOf": ["Senninburo", "Sennin-buro"]}
+    ],
+    "sunsetLocal": "18:11",
+    "sunriseLocal": "05:56",
+    "timeZone": "Asia/Tokyo",
+    "maxDailyTravelMinutes": 150
+  },
+  {
+    "scenario": "iceland-ring-road",
+    "defining": [
+      {"id": "ring-road", "label": "Full Route 1 loop", "anyOf": ["Ring Road", "Route 1", "Hringvegur", "Egilsstadir", "Egilsstaðir", "East Fjords", "Eastfjords"]},
+      {"id": "jokulsarlon", "label": "Jökulsárlón glacier lagoon / Diamond Beach", "anyOf": ["Jökulsárlón", "Jokulsarlon", "Glacier Lagoon", "Diamond Beach"]},
+      {"id": "south-coast", "label": "South coast waterfalls and black beach", "anyOf": ["Seljalandsfoss", "Skógafoss", "Skogafoss", "Reynisfjara", "Vík", "Vik"]},
+      {"id": "north", "label": "Mývatn / Dettifoss / Goðafoss / Akureyri", "anyOf": ["Mývatn", "Myvatn", "Dettifoss", "Goðafoss", "Godafoss", "Akureyri", "Húsavík", "Husavik"]},
+      {"id": "golden-circle", "label": "Golden Circle", "anyOf": ["Þingvellir", "Thingvellir", "Geysir", "Gullfoss", "Golden Circle"]},
+      {"id": "skaftafell", "label": "Skaftafell / Vatnajökull", "anyOf": ["Skaftafell", "Vatnajökull", "Vatnajokull", "Svartifoss"]}
+    ],
+    "redFlags": [
+      {"id": "aurora-june", "label": "Northern lights / stargazing in June", "anyOf": ["northern lights", "aurora", "stargazing", "star gazing", "dark skies"]},
+      {"id": "skip-jokulsarlon", "label": "Loop omits Jökulsárlón (check absence of defining id)", "anyOf": []},
+      {"id": "f-road-2wd", "label": "Highland F-road plans (in 2WD or before opening)", "anyOf": ["F-road", "F208", "F225", "F26", "F35", "Landmannalaugar", "Askja", "Kerlingarfjöll", "Kerlingarfjoll"]},
+      {"id": "swim-reynisfjara", "label": "Swimming at Reynisfjara", "anyOf": ["swim at Reynisfjara", "swimming at Reynisfjara", "paddle at Reynisfjara"]},
+      {"id": "early-sunset", "label": "Evening 'sunset' scheduled hours before the ~midnight sunset", "anyOf": ["sunset at 20", "sunset at 21", "sunset at 19"]}
+    ],
+    "sunsetLocal": "00:03",
+    "sunriseLocal": "02:55",
+    "timeZone": "Atlantic/Reykjavik",
+    "maxDailyTravelMinutes": 300
+  },
+  {
+    "scenario": "kyrgyzstan",
+    "defining": [
+      {"id": "song-kul-yurt", "label": "Song-Kul yurt night", "anyOf": ["Song-Kul", "Song Kul", "Son-Kul", "Son Kul", "Song-Köl", "Song Kol", "Songkol", "yurt camp"]},
+      {"id": "karakol-trek", "label": "Multi-day trek from Karakol (Ala-Kul / Altyn-Arashan)", "anyOf": ["Ala-Kul", "Ala Kul", "Ala-Köl", "Alakol", "Altyn-Arashan", "Altyn Arashan", "Karakol Valley", "trek"]},
+      {"id": "issyk-kul", "label": "Issyk-Kul lake and south shore", "anyOf": ["Issyk-Kul", "Issyk Kul", "Ysyk-Köl", "Skazka", "Fairy Tale Canyon", "Jeti-Oguz", "Jety-Oguz", "Tamga", "Bokonbaevo"]},
+      {"id": "karakol", "label": "Karakol base", "anyOf": ["Karakol"]},
+      {"id": "ala-archa", "label": "Ala Archa acclimatisation hike", "anyOf": ["Ala Archa", "Ala-Archa"]},
+      {"id": "horse", "label": "Horse riding / nomadic culture", "anyOf": ["horse", "horseback", "kymyz", "nomad", "Kochkor", "CBT", "homestay"]}
+    ],
+    "redFlags": [
+      {"id": "song-kul-bus", "label": "Song-Kul by public bus or 2WD", "anyOf": ["bus to Song", "marshrutka to Song", "public transport to Song"]},
+      {"id": "self-drive-4wd", "label": "Unescorted self-drive on 4WD tracks", "anyOf": ["rental car", "self-drive", "rent a car"]},
+      {"id": "no-acclimatisation", "label": "Ala-Kul pass (3,860 m) without acclimatisation", "anyOf": ["day 1: Ala-Kul", "arrive and trek"]},
+      {"id": "overlong-drive", "label": "Single driving day over ~8 h", "anyOf": ["9 hours drive", "10 hours drive", "9-hour drive", "10-hour drive"]}
+    ],
+    "sunsetLocal": "20:22",
+    "sunriseLocal": "05:22",
+    "timeZone": "Asia/Bishkek",
+    "maxDailyTravelMinutes": 420
+  },
+  {
+    "scenario": "tanzania-safari",
+    "defining": [
+      {"id": "serengeti", "label": "Serengeti (migration area)", "anyOf": ["Serengeti", "Seronera", "Kogatende", "Lamai", "Grumeti", "Western Corridor", "Mara River"]},
+      {"id": "ngorongoro", "label": "Ngorongoro Crater game drive", "anyOf": ["Ngorongoro", "Crater floor", "crater rim", "Karatu"]},
+      {"id": "tarangire-manyara", "label": "Tarangire and/or Lake Manyara", "anyOf": ["Tarangire", "Manyara"]},
+      {"id": "guided-vehicle", "label": "Guided 4x4 safari vehicle or fly-in", "anyOf": ["safari vehicle", "Land Cruiser", "guide", "game drive", "fly-in", "light aircraft", "airstrip", "bush flight"]},
+      {"id": "gateway", "label": "Arusha / Kilimanjaro gateway", "anyOf": ["Arusha", "Kilimanjaro", "JRO"]}
+    ],
+    "redFlags": [
+      {"id": "self-drive", "label": "Self-drive rental car", "anyOf": ["rental car", "self-drive", "self drive", "rent a car", "car hire", "drive yourself"]},
+      {"id": "guaranteed-crossing", "label": "Guaranteed Mara crossings in early July", "anyOf": ["guaranteed crossing", "guaranteed river crossing", "will see the crossing"]},
+      {"id": "walking-unguided", "label": "Unguided walking in parks", "anyOf": ["walk on your own", "self-guided walk in the park"]},
+      {"id": "night-drive-np", "label": "Night game drive inside a national park", "anyOf": ["night game drive", "night drive"]},
+      {"id": "crater-late", "label": "Crater descent after 16:00 / full-day crater", "anyOf": ["descend at 16", "descend at 17", "full day on the crater floor"]}
+    ],
+    "sunsetLocal": "18:45",
+    "sunriseLocal": "06:46",
+    "timeZone": "Africa/Dar_es_Salaam",
+    "maxDailyTravelMinutes": 360
+  },
+  {
+    "scenario": "tokyo-kyoto-transit",
+    "defining": [
+      {"id": "shinkansen", "label": "Shinkansen between Tokyo and Kyoto", "anyOf": ["Shinkansen", "Nozomi", "Hikari", "bullet train", "Tokaido"]},
+      {"id": "sakura", "label": "Cherry blossom / hanami", "anyOf": ["cherry blossom", "sakura", "hanami", "Shinjuku Gyoen", "Philosopher's Path", "Maruyama", "Ueno Park", "Meguro River"]},
+      {"id": "kyoto-core", "label": "Kyoto core sights", "anyOf": ["Fushimi Inari", "Kiyomizu", "Gion", "Higashiyama", "Arashiyama", "Kinkaku-ji", "Ginkaku-ji"]},
+      {"id": "tokyo-core", "label": "Tokyo core sights", "anyOf": ["Senso-ji", "Sensoji", "Asakusa", "Meiji Jingu", "Meiji Shrine", "Shibuya", "Shinjuku", "Ueno"]},
+      {"id": "two-bases", "label": "Tokyo and Kyoto both as bases", "anyOf": ["Kyoto"]}
+    ],
+    "redFlags": [
+      {"id": "car", "label": "Rental car or driving on a 'by train' trip", "anyOf": ["rental car", "rent a car", "car hire", "drive to", "self-drive", "parking"]},
+      {"id": "flight", "label": "Flying between Tokyo and Kyoto/Osaka", "anyOf": ["flight to Osaka", "fly to Osaka", "fly to Kyoto", "Itami"]},
+      {"id": "golden-week", "label": "Golden Week claimed (it is late April)", "anyOf": ["Golden Week"]},
+      {"id": "tokyo-full-bloom-late", "label": "Full bloom promised in Tokyo 10-14 April", "anyOf": ["peak bloom in Tokyo", "full bloom in Tokyo"]}
+    ],
+    "sunsetLocal": "18:09",
+    "sunriseLocal": "05:16",
+    "timeZone": "Asia/Tokyo",
+    "maxDailyTravelMinutes": 180
+  },
+  {
+    "scenario": "city-break",
+    "defining": [
+      {"id": "alfama-miradouros", "label": "Alfama and viewpoints", "anyOf": ["Alfama", "miradouro", "Portas do Sol", "Senhora do Monte", "Santa Luzia", "São Jorge", "Sao Jorge", "castle"]},
+      {"id": "belem", "label": "Belém (Jerónimos, Tower)", "anyOf": ["Belém", "Belem", "Jerónimos", "Jeronimos", "Belém Tower", "Pastéis de Belém", "Pasteis de Belem"]},
+      {"id": "baixa-chiado", "label": "Baixa / Chiado / Praça do Comércio", "anyOf": ["Baixa", "Chiado", "Praça do Comércio", "Praca do Comercio", "Rossio", "Bairro Alto"]},
+      {"id": "tram-fado", "label": "Tram 28 / fado", "anyOf": ["Tram 28", "tram", "fado"]}
+    ],
+    "redFlags": [
+      {"id": "car", "label": "Rental car for a city break", "anyOf": ["rental car", "rent a car", "car hire", "self-drive"]},
+      {"id": "too-many-daytrips", "label": "Multiple day trips in a 4-day break", "anyOf": ["Óbidos", "Obidos", "Fátima", "Fatima", "Évora", "Evora", "Nazaré", "Nazare", "Porto"]},
+      {"id": "june-festival", "label": "Santo António festivities (June) promised", "anyOf": ["Santo António", "Santo Antonio", "Festas de Lisboa", "sardine festival"]},
+      {"id": "hotel-change", "label": "Hotel change in a 3-night city break", "anyOf": ["change hotel", "second hotel", "move hotel"]}
+    ],
+    "sunsetLocal": "20:41",
+    "sunriseLocal": "06:26",
+    "timeZone": "Europe/Lisbon",
+    "maxDailyTravelMinutes": 60
+  },
+  {
+    "scenario": "beach-island",
+    "defining": [
+      {"id": "na-pali", "label": "Nā Pali Coast (boat, helicopter or Kalalau first 2 mi)", "anyOf": ["Nā Pali", "Na Pali", "Napali", "Kalalau", "Hanakāpīʻai", "Hanakapiai", "Kēʻē", "Kee Beach", "Hāʻena", "Haena"]},
+      {"id": "waimea-canyon", "label": "Waimea Canyon / Kōkeʻe", "anyOf": ["Waimea Canyon", "Kōkeʻe", "Kokee", "Kalalau Lookout", "Puʻu O Kila", "Puu o Kila"]},
+      {"id": "north-shore", "label": "Hanalei / north shore", "anyOf": ["Hanalei", "Princeville", "Tunnels", "Makua", "Kilauea Lighthouse", "Kīlauea"]},
+      {"id": "south-shore", "label": "Poʻipū / south shore", "anyOf": ["Poʻipū", "Poipu", "Spouting Horn", "Shipwreck", "Mahaʻulepu", "Mahaulepu"]},
+      {"id": "beach-time", "label": "Beach / snorkel time", "anyOf": ["beach", "snorkel", "swim"]}
+    ],
+    "redFlags": [
+      {"id": "no-haena-reservation", "label": "Hāʻena/Kēʻē/Kalalau without reservation mention", "anyOf": ["no reservation needed", "just show up"]},
+      {"id": "full-kalalau", "label": "Full 11-mile Kalalau without permit", "anyOf": ["Kalalau Beach", "11 miles", "22 miles", "hike to Kalalau"]},
+      {"id": "drive-around", "label": "Driving 'around the island' / road along Nā Pali", "anyOf": ["drive around the island", "circle the island", "loop the island", "drive the Na Pali", "drive the Nā Pali"]},
+      {"id": "hanakapiai-swim", "label": "Swimming at Hanakāpīʻai Beach", "anyOf": ["swim at Hanakapiai", "swim at Hanakāpīʻai"]}
+    ],
+    "sunsetLocal": "18:43",
+    "sunriseLocal": "06:24",
+    "timeZone": "Pacific/Honolulu",
+    "maxDailyTravelMinutes": 120
+  },
+  {
+    "scenario": "mountain-hiking",
+    "defining": [
+      {"id": "tre-cime", "label": "Tre Cime di Lavaredo circuit", "anyOf": ["Tre Cime", "Drei Zinnen", "Auronzo", "Locatelli", "Dreizinnenhütte"]},
+      {"id": "seceda", "label": "Seceda ridge / Puez-Odle", "anyOf": ["Seceda", "Puez", "Odle", "Geisler", "Fermeda", "Col Raiser"]},
+      {"id": "siusi", "label": "Alpe di Siusi / Seiser Alm", "anyOf": ["Alpe di Siusi", "Seiser Alm", "Seiser", "Siusi", "Sassolungo", "Langkofel"]},
+      {"id": "braies", "label": "Lago di Braies", "anyOf": ["Braies", "Pragser Wildsee", "Prags"]},
+      {"id": "cortina-area", "label": "Cortina / Cinque Torri / Lagazuoi / Val di Funes", "anyOf": ["Cinque Torri", "Lagazuoi", "Cortina", "Val di Funes", "Villnöss", "Santa Maddalena", "Passo Giau", "Sorapis", "Sorapiss"]},
+      {"id": "real-hiking", "label": "Real hiking days (rifugio, Alta Via, ascent)", "anyOf": ["rifugio", "Alta Via", "hut", "ascent", "hike", "trail"]}
+    ],
+    "redFlags": [
+      {"id": "braies-no-booking", "label": "Driving to Braies 09:00-16:00 without booking", "anyOf": ["drive to Braies", "park at Braies"]},
+      {"id": "late-start-ridge", "label": "Afternoon starts on exposed ridges (thunderstorms)", "anyOf": ["start at 13:00", "start at 14:00", "afternoon summit", "13:00 hike", "14:00 hike"]},
+      {"id": "ferrata-no-gear", "label": "Via ferrata with no gear/guide", "anyOf": ["via ferrata"]},
+      {"id": "no-hiking", "label": "Strolls and viewpoints only (check absence of real-hiking)", "anyOf": []}
+    ],
+    "sunsetLocal": "21:09",
+    "sunriseLocal": "05:26",
+    "timeZone": "Europe/Rome",
+    "maxDailyTravelMinutes": 120
+  },
+  {
+    "scenario": "multigenerational",
+    "defining": [
+      {"id": "lifeguarded-beach", "label": "Beach time (lifeguarded)", "anyOf": ["beach", "praia", "lifeguard"]},
+      {"id": "boat-grottoes", "label": "Boat trip to sea caves/grottoes", "anyOf": ["Ponta da Piedade", "Benagil", "grotto", "sea cave", "boat trip", "boat tour"]},
+      {"id": "easy-viewpoints", "label": "Easy viewpoints / gentle sights", "anyOf": ["Praia da Marinha", "Ponta da Piedade", "Sagres", "Cabo de São Vicente", "Cape St Vincent", "Silves", "Tavira", "Ria Formosa", "viewpoint"]},
+      {"id": "easy-pace", "label": "Easy days / pool / shade", "anyOf": ["pool", "easy", "relaxed", "shade", "siesta", "rest", "leisurely"]},
+      {"id": "one-base", "label": "A single Algarve base", "anyOf": ["Lagos", "Carvoeiro", "Albufeira", "Tavira", "Vilamoura", "Portimão", "Portimao", "Armação de Pêra"]}
+    ],
+    "redFlags": [
+      {"id": "seven-valleys-full", "label": "Full Seven Hanging Valleys return for the whole party", "anyOf": ["Seven Hanging Valleys", "Sete Vales Suspensos", "11 km"]},
+      {"id": "benagil-swim-land", "label": "Swim/kayak into Benagil or land on its beach", "anyOf": ["swim to Benagil", "kayak to Benagil", "kayak into Benagil", "land on the beach inside", "paddleboard to Benagil"]},
+      {"id": "long-daytrip", "label": "Day trip to Lisbon or Seville", "anyOf": ["day trip to Lisbon", "Lisbon day trip", "Seville", "Sevilla"]},
+      {"id": "early-start", "label": "Starts before 08:00", "anyOf": ["06:00", "06:30", "07:00", "07:30"]},
+      {"id": "strenuous", "label": "Strenuous or cliff-edge hiking", "anyOf": ["strenuous", "Via Algarviana", "Rota Vicentina", "cliff-edge"]}
+    ],
+    "sunsetLocal": "20:58",
+    "sunriseLocal": "06:16",
+    "timeZone": "Europe/Lisbon",
+    "maxDailyTravelMinutes": 75
+  }
+]
