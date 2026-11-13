@@ -440,8 +440,9 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         });
     if (!placement) return fail('provider_unavailable', 'no geocoder or places provider is configured to place the proposal');
     /* A place the proposal put in one of the traveller's named parts, placed in another, is unplaced rather than wrong (`withdrawCrossPartPositions`). */
-    if (concept?.extent?.source === 'union_of_parts') {
-      const parts = (concept.parts ?? []).flatMap((part) => (part.center ? [{ label: part.label, center: part.center }] : []));
+    /* Whenever the phrase named two or more placed parts — the extent may be recorded as interpreted or absent while the centre is still built from those parts (staging, "Tokyo and Kyoto by train"). */
+    if ((concept?.parts ?? []).filter((part) => part.center).length >= 2) {
+      const parts = (concept?.parts ?? []).flatMap((part) => (part.center ? [{ label: part.label, center: part.center }] : []));
       const checked = withdrawCrossPartPositions(proposal, placement.positions, parts);
       if (checked.withdrawn.length > 0) {
         console.warn(`Discovery scan placement for ${tripId}: ${checked.withdrawn.length} placed in a different named part than their own locality, withdrawn (${checked.withdrawn.slice(0, 5).join(', ')}).`);
