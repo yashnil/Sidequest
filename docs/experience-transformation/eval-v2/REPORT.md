@@ -57,3 +57,9 @@ Defining-experience presence per scenario, with the stage each miss was lost at,
 - **Kauai (3–6):** the single north-shore base drives to the west side on two or three separate days; the improvement phase moves one stop at a time and cannot consolidate a far zone that does not fit in one day. Where the router does not answer, straight-line estimates cannot see the Nā Pali cliffs (a "20-minute drive" between two points no road joins).
 - **Kumano:** the new build walks a trail stage, but neither build plans inn-to-inn walking with luggage transfer; the proposals do not offer stage ends at lodging often enough for trail links to form.
 - **Common to both builds:** Jökulsárlón skipped in several Iceland runs; Dyrhólaey inside its nesting closure; permits and reservations (Hāʻena, Auronzo) not mentioned; a party's grandparents dropped by the interview defaults.
+
+## Mobile suite timeouts — machine load, with a thin margin on a few slow tests
+
+- Two earlier full mobile runs failed 23 and 18 tests, all 60 s timeouts, in contiguous alphabetical blocks of unrelated spec files (d–h, then c–f), each taking 1.4–2.6 h. The same files re-run alone passed (31/31, 66/66).
+- An instrumented full run on a quiet machine (evaluation servers stopped; load sampled every 15 s, per-test timings recorded): **264 passed, 0 failed, 39.4 min**, one-minute load median 5.4 (max 11.6). The failing runs overlapped the evaluation servers, a background VM and a busy browser tab, at loads of 10–14.
+- Conclusion: the failures come from machine load, not application behaviour. But the margin is thin for a few tests even on a quiet machine: `transport.spec.ts:180/213/49` take 51–55 s and `food.spec.ts:208/44` 43–44 s against a 60 s budget, so contention tips them over. Those tests should be split or given an explicit `test.slow()` budget; that is a test-design change left for a deliberate decision rather than made quietly here.
