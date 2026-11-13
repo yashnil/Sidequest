@@ -15,6 +15,7 @@ import {
   candidatesInReach,
   tripDates,
   validateCompiledRegion,
+  MAX_TRAIL_STAGES,
   type DestinationEntityType,
   type Interest,
   type TravelerProfile,
@@ -25,7 +26,7 @@ import {
   type ScopeBreadth,
   JOURNEY_ARCHETYPE_LABELS,
 } from '@sidequest/core';
-import { getIntent } from '../db/compiler-repository';
+import { getIntent, readProviderCache, writeProviderCache } from '../db/compiler-repository';
 import { getProfile, getTrip, setSelection, travellerDecisions } from '../db/repository';
 import { beginScan, completeScan, failScan, heartbeatScan, markScanStage, noteScanCounters, saveScanProposalExtras, scanView, type ScanDiagnostics, type ScanView } from '../db/scan-repository';
 import { listBookedItems } from '../db/intelligence-repository';
@@ -33,7 +34,10 @@ import { listPartyMembersForBrief } from '../db/party-repository';
 import { compactBookedFacts } from '../intelligence/booked-facts';
 import { ResearchModel } from '../providers/anthropic';
 import { reserveModelCalls } from '../compiler/daily-ceiling';
-import { isCompositionModelConfigured, isGeocoderEnabled, isPoiProviderEnabled } from '../providers/switches';
+import { isCompositionModelConfigured, isGeocoderEnabled, isGlobalRoutesProviderEnabled, isPoiProviderEnabled } from '../providers/switches';
+import { qualityContractFor } from '../planning/quality-contract';
+import { measureTrailStages } from './trail-measure';
+import { CACHE_TTL_MS, cacheKeyFor } from '../providers/cache-policy';
 import { verificationProviders } from '../planning/verification-providers';
 import { buildCanonicalTripBuildInput } from '../planning/canonical-input';
 import { composerModel } from '../planning/composition-model';
@@ -73,7 +77,7 @@ import { estimatedScanOutcome, measureScanMatrix, type ScanMatrixOutcome } from 
 const SCAN_MODEL_TIMEOUT_MS = 150_000;
 const SCAN_MAX_TOKENS = 16_000;
 /** The proposal's own cap on places to sleep (`normalizeScanProposal`); a supplement never adds past it. */
-const SCAN_MAX_BASES = 6;
+const SCAN_MAX_BASES = 9;
 const PLACEMENT_DEADLINE_MS = 120_000;
 const HEARTBEAT_MS = 10_000;
 /** How many placed points the scan screen's map is sent. */
@@ -263,7 +267,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const now = new Date();
     const prepared = await scanPromptFor(tripId, now);
     if (!prepared) return fail('internal_generation_error', 'trip disappeared');
-    const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, journey } = prepared;
+    const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, journey, trail } = prepared;
     if (envelope.route) console.warn(`Discovery scan for ${tripId}: a route-shaped trip (${envelope.route.kind}, "${envelope.route.cue}").`);
     if (!envelope.center || (envelope.center.lat === 0 && envelope.center.lng === 0)) {
       return fail('destination_unplaced', 'no destination centre');
@@ -627,7 +631,11 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
      * leaves the walk planned as before (back where it started).
      */
     const placedNow = placement.positions;
-    const walkEnds = proposal.candidates.filter((c) => c.walk?.shape === 'point_to_point' && c.walk.endName && placedNow.get(c.key)).slice(0, 6);
+    /* A trail walked in stages places every stage's end (its numbered stages first); any other trip, six at most. */
+    const walkEnds = proposal.candidates
+      .filter((c) => c.walk?.shape === 'point_to_point' && c.walk.endName && placedNow.get(c.key))
+      .sort((a, b) => (trail.trail ? (a.walk?.stage ?? 1000) - (b.walk?.stage ?? 1000) : 0))
+      .slice(0, trail.trail ? MAX_TRAIL_STAGES : 6);
     const ending: Promise<Map<string, ResolvedPosition | null>> =
       walkEnds.length === 0 || openData || fixtureScan() || !isGeocoderEnabled()
         ? Promise.resolve(new Map())
@@ -675,11 +683,31 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       for (const [key, position] of ends) if (position && !position.approximate) positions.set(key, position);
       placement = { ...placement, positions };
     }
+    /*
+     * 2026-11 — a trail walked in stages: each placed stage's distance and climb
+     * from openrouteservice's hiking profile, bounded and cached; a failure
+     * leaves the proposal's figures, labelled as such (`trail-measure.ts`).
+     */
+    const trailMeasured = trail.trail && !openData && !fixtureScan() && isGlobalRoutesProviderEnabled()
+      ? await withinBudget(
+          measureTrailStages(proposal, (key) => placement.positions.get(key)?.coordinates ?? null, {
+            cache: {
+              read: (key) => readProviderCache<{ km: number; ascentM: number }>(cacheKeyFor('static_route', [key]), new Date()),
+              write: (key, value) => writeProviderCache(cacheKeyFor('static_route', [key]), 'openrouteservice', value, CACHE_TTL_MS.static_route, new Date()),
+            },
+          }).then((r) => r.measured),
+          TIMING_STAGE_BUDGET_MS,
+          new Map<string, { km: number; ascentM: number }>(),
+          'trail stages',
+        )
+      : new Map<string, { km: number; ascentM: number }>();
     const food = await scanFoodFor({ regionId, destinationName: envelope.name, points: plan.points, proposal, envelope: { center: envelope.center, countryCode: envelope.countryCode ?? null, countryName: envelope.countryName ?? null }, reach });
 
     // --- 4. assemble, validate, adopt ------------------------------------------------
     markScanStage(tripId, scanId, 'assembling', new Date());
     stageStartedAt.assembling = Date.now();
+    const stayTraveller = stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null });
+    const dailyWindows = buildDailyWindows(trip.basics, profile, resolveConfig());
     const assembly = assembleScanRegion({
       regionId,
       destinationName: envelope.name,
@@ -693,8 +721,19 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       /* Within the journey archetype's range; the traveller's own explicit cap wins where it is lower. */
       maxBaseChanges: strategicBaseChanges(journey, { value: canonical.movement.maxBaseChanges.value, explicit: canonical.movement.maxBaseChanges.source === 'explicit' }),
       /* Release candidate — who is travelling decides what a hotel change costs them (`scan/stay-objective.ts`); how moving feels follows the archetype unless the traveller said. */
-      traveller: ((t) => (canonical.movement.maxBaseChanges.source === 'explicit' ? t : { ...t, moveTolerance: journey.strategy.moveTolerance }))(stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null })),
-      dayMinutes: buildDailyWindows(trip.basics, profile, resolveConfig()).map((w) => Math.max(0, w.window.endMinute - w.window.startMinute)),
+      traveller: canonical.movement.maxBaseChanges.source === 'explicit' ? stayTraveller : { ...stayTraveller, moveTolerance: journey.strategy.moveTolerance },
+      dayMinutes: dailyWindows.map((w) => Math.max(0, w.window.endMinute - w.window.startMinute)),
+      /* A trail walked in stages: judged for this party and followed from bed to bed unless they asked to drive to day walks (`scan/trail-stages.ts`). */
+      ...(trail.trail
+        ? {
+            trail: {
+              follow: trail.follow,
+              party: { intensity: profile.dailyIntensity, children: stayTraveller.children, youngChildren: stayTraveller.youngChildren, reducedMobility: stayTraveller.reducedMobility, pace: profile.pace },
+              dayStartMinutes: dailyWindows.map((w) => w.window.startMinute),
+              ...(trailMeasured.size > 0 ? { measured: trailMeasured } : {}),
+            },
+          }
+        : {}),
       mustSeeKeys: matchNamedMustDos(namedMustDos, proposal.candidates.map((c) => ({ id: c.key, name: c.name }))),
       /* A journey the traveller asked for: the bases along it are their intent, and a loop is costed back to where it began (`scan/stay-objective.ts`). */
       ...(envelope.route ? { route: { kind: envelope.route.kind } } : {}),
@@ -792,8 +831,12 @@ export async function scanPromptFor(tripId: string, now: Date) {
   const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
   const days = dates.length;
   const namedMustDos = [...canonical.ownWords.mustDo];
-  /* How this trip is structured, decided before the beds (`journey/archetype.ts`); the proposal is told, and the stays are chosen within it. */
-  const { journey } = journeyFor({
+  /*
+   * How this trip is structured, decided before the beds (`journey/archetype.ts`), from the same
+   * trip-quality contract the build checks against; the proposal is told, and the stays are chosen
+   * within it. A trail walked in stages is followed inn to inn unless the traveller said they will drive.
+   */
+  const { journey, contract } = journeyFor({
     destinationPhrase: rawDestinationPhrase ?? envelope.name,
     composer,
     profile,
@@ -806,8 +849,9 @@ export async function scanPromptFor(tripId: string, now: Date) {
     mustDos: canonical.ownWords.mustDo,
     avoidances: canonical.ownWords.dislikes,
   });
-  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos, journey: { label: JOURNEY_ARCHETYPE_LABELS[journey.archetype], reason: journey.reason } };
-  return { trip, intent, profile, candidate, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, journey, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
+  const trail = { trail: contract.structure === 'trail_stages', follow: contract.structure === 'trail_stages' && !(contract.transport.stated && contract.transport.mode === 'self_drive') };
+  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos, journey: { label: JOURNEY_ARCHETYPE_LABELS[journey.archetype], reason: journey.reason }, ...(trail.trail ? { trail: true } : {}) };
+  return { trip, intent, profile, candidate, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, journey, trail, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
 }
 
 /**

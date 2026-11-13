@@ -78,6 +78,14 @@ export interface PlannerCandidate {
    * own picks, so the plan is built around it rather than filled past it.
    */
   essential?: boolean;
+  /**
+   * 2026-11 (point-to-point trekking) — a trail stage walked as the day's
+   * move from one bed to the next (`scan/trail-stages.ts`). It is pinned to
+   * its move day, already judged for this party's walking time, climbing and
+   * daylight, so the planner's own reach and effort rules do not second-guess
+   * it, and the day holds nothing else of Sidequest's choosing.
+   */
+  trailStage?: boolean;
 }
 
 export interface PlannerBase {
@@ -525,7 +533,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
   const plannable: PlannerCandidate[] = [];
   const maxIntensity = INTENSITY_RANK[input.maxPhysicalIntensity];
   for (const candidate of input.candidates) {
-    if (!candidate.openOnTripDates && candidate.status !== 'must') {
+    if (!candidate.openOnTripDates && candidate.status !== 'must' && !candidate.trailStage) {
       preDropped.push({ candidate, reason: 'out_of_season', detail: 'Closed or impractical in the months you are travelling.' });
       continue;
     }
@@ -534,7 +542,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
       if (candidate.status === 'must') preConflicts.push({ candidateId: candidate.id, name: candidate.name, reason: 'not_workable', detail: candidate.blocked });
       continue;
     }
-    if (INTENSITY_RANK[candidate.intensity] > maxIntensity && candidate.status !== 'must') {
+    if (INTENSITY_RANK[candidate.intensity] > maxIntensity && candidate.status !== 'must' && !candidate.trailStage) {
       preDropped.push({ candidate, reason: 'too_strenuous', detail: 'More effort than you said you want.' });
       continue;
     }
@@ -603,6 +611,8 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const edge = day.isFirst || day.isLast;
     if (s.pinnedDay !== undefined && s.pinnedDay !== day.dayNumber) return fail('capacity', `You locked this to day ${s.pinnedDay}, and it no longer fits that day.`);
     if (s.closedDates?.includes(day.date)) return fail('closed', 'Its published hours say it is shut that day.');
+    /* A trail stage was judged for this party when the stays were chosen; on its own move day it is the day. */
+    if (s.trailStage) return null;
     const slot = slotOf(s);
     if (s.intensity === 'strenuous' && !user) {
       if (edge) return fail('too_strenuous', 'A strenuous outing does not belong on an arrival or departure day.');
@@ -670,12 +680,15 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
       if (verdict) return verdict;
     }
     const daytime = stops.filter((s) => slotOf(s) === 'day');
+    const stage = stops.find((s) => s.trailStage);
+    if (stage && daytime.some((s) => s !== stage && s.status !== 'must')) return fail('capacity', 'That day is the walk from one bed to the next.');
     const metrics = dayMetrics(index, stops);
     /*
      * The evening run comes first for an evening stop, as it always has: its
      * refusal is about the drive, not the daytime shape.
      */
-    const travelOver = metrics.tourMinutes + metrics.eveningMinutes + metrics.sunriseMinutes > day.travelBudgetMinutes && stops.some((s) => s.status !== 'must');
+    /* On a trail stage's day the walk is the move: its length was judged against the party's walking limit, not the travel limit. */
+    const travelOver = !stage && metrics.tourMinutes + metrics.eveningMinutes + metrics.sunriseMinutes > day.travelBudgetMinutes && stops.some((s) => s.status !== 'must');
     const travelFailure = fail('too_far', `It would take the day's travel past the ${input.maxDailyTravelMinutes} minutes you set.`);
     if (focus && slotOf(focus) !== 'day' && slotOf(focus) !== 'sunrise' && travelOver) return travelFailure;
     /*
@@ -716,7 +729,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const extras = stops.length - daytime.length;
     if (daytime.some((s) => s.status !== 'must') && daytime.length > input.maxStopsPerDay - Math.max(0, extras - 1)) return fail('capacity', 'The day already holds as many stops as your pace allows.');
     const used = metrics.activityMinutes + metrics.tourMinutes;
-    const loneMust = daytime.length === 1 && daytime[0]!.status === 'must';
+    const loneMust = daytime.length === 1 && (daytime[0]!.status === 'must' || daytime[0]!.trailStage === true);
     if (daytime.length > 0 && used > day.capacityMinutes && !loneMust) return fail('capacity', 'The day is already full.');
     if (travelOver) return travelFailure;
     /*
@@ -725,7 +738,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
      * order-free form of construction's "only keep a filler that landed on a
      * thin day".
      */
-    const fillers = stops.filter((s) => s.status === 'candidate');
+    const fillers = stops.filter((s) => s.status === 'candidate' && !s.trailStage);
     if (fillers.length > 0) {
       const largest = Math.max(0, ...fillers.filter((s) => slotOf(s) === 'day').map((s) => s.durationMinutes));
       if (metrics.activityMinutes - largest >= day.capacityMinutes * fillTarget) return fail('capacity', 'A good fit with no room left for it.');
@@ -882,7 +895,7 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
    * unlocked include could fill the locked day first and turn the traveller's
    * own lock into a conflict.
    */
-  const lockedFirst = (c: PlannerCandidate) => (c.status === 'must' && c.pinnedDay !== undefined ? 1 : 0);
+  const lockedFirst = (c: PlannerCandidate) => ((c.status === 'must' && c.pinnedDay !== undefined) || c.trailStage ? 1 : 0);
   const ordered = [...plannable].sort((a, b) => lockedFirst(b) - lockedFirst(a) || plannerPriority(b) - plannerPriority(a) || a.id.localeCompare(b.id));
   const primaries = ordered.filter((c) => c.status !== 'candidate');
   const fillers = ordered.filter((c) => c.status === 'candidate' && c.fit >= FILLER_MIN_FIT);

@@ -215,6 +215,38 @@ export function deriveBookings(input: DeriveBookingsInput): BookingItem[] {
     );
   }
 
+  // 2026-11 — a trail walked inn to inn: the bags travel ahead on the walking days -------------------
+  /*
+   * A stage walked from one bed to the next only works if the luggage is at
+   * the next bed when the walker arrives. The services that carry it need
+   * notice and do not run everywhere every day, so it is a booking the walk
+   * depends on — read off the plan's own trail record, never a guess.
+   */
+  const trail = pkg?.planning?.stay?.trail;
+  if (trail?.followed) {
+    const walkDays = [...new Set(trail.stages.filter((s) => s.dayNumber !== undefined && s.resolution !== 'alternative').map((s) => s.dayNumber!))].sort((a, b) => a - b);
+    if (walkDays.length > 0) {
+      const firstDay = itinerary.days.find((d) => d.dayNumber === walkDays[0]);
+      const booked = matchBooked(input.booked, 'shuttle', { date: firstDay?.date, title: 'luggage' });
+      items.push(
+        bookingItemSchema.parse({
+          id: 'booking:luggage-transfer',
+          title: `Luggage transfer between the inns (day${walkDays.length === 1 ? '' : 's'} ${dayList(walkDays)})`,
+          kind: 'shuttle',
+          necessity: 'required',
+          priority: bookingPriorityFor({ necessity: 'required', hardDependency: true, fixedDateTime: true, limitedCapacity: false, fewAlternatives: true, longLeadTime: longLead, weatherSensitive: false, importance: 'core' }),
+          reason: `Each walking day ends at the next bed; the bags have to be sent ahead from the last one, and the services need notice.`,
+          ...(firstDay ? { dayNumber: firstDay.dayNumber, date: firstDay.date } : {}),
+          capacityEvidence: 'unknown',
+          status: booked ? (booked.status === 'soft_hold' ? 'soft_hold' : 'booked') : 'open',
+          ...(booked ? { bookedItemId: booked.id } : {}),
+          travelerAction: 'Book a luggage transfer for every walking day, or ask each inn to arrange it',
+          authority: 'model_proposal',
+        }),
+      );
+    }
+  }
+
   // V7 §14 — the episodes: a cruise, a trek, a safari programme is one booking the trip stands on -----
   const leadFor = (kind: NonNullable<TravelReality['bookingLeads']>[number]['kind']) => input.reality?.bookingLeads.find((b) => b.kind === kind) ?? null;
   for (const episode of pkg?.episodes ?? []) {

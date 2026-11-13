@@ -22,6 +22,23 @@ import { highSpeedRailBackbone } from '../reality/jurisdictions';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
 import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller, type TrailLink } from './stay-objective';
+import {
+  civilDuskMinute,
+  DEFAULT_TRAIL_START_MINUTE,
+  orderTrailStages,
+  resolveTrailStages,
+  trailBedChain,
+  trailDayMinutes,
+  trailLimitsFor,
+  trailStageRecord,
+  TRAIL_DUSK_MARGIN_MINUTES,
+  TRAIL_END_AT_BED_KM,
+  TRAIL_START_NEAR_BED_KM,
+  type MeasuredStage,
+  type ResolvedTrailStage,
+  type TrailParty,
+} from './trail-stages';
+import type { TrailRecord } from '../schemas/stay';
 import type { RouteShapeKind } from '../destinations/route-shape';
 
 /**
@@ -282,6 +299,15 @@ export interface AssembleScanRegionInput {
    * usable came back. Absent means the caller ran no food step.
    */
   food?: ScanFoodInput;
+  /**
+   * 2026-11 (point-to-point trekking) — the trip is for walking a trail in
+   * stages (the trip-quality contract's `trail_stages` structure). `follow`
+   * is false when the traveller asked to drive to day walks instead; the
+   * stages are still judged and recorded. `measured` holds a hiking router's
+   * distance and ascent per stage, by proposal key; `dayStartMinutes` the
+   * trip's own day starts, first to last.
+   */
+  trail?: { follow: boolean; party: TrailParty; dayStartMinutes?: readonly number[]; measured?: ReadonlyMap<string, MeasuredStage> };
 }
 
 export type ScanFoodSource = 'overture' | 'openstreetmap' | 'overture+openstreetmap' | 'fixture' | null;
@@ -357,6 +383,8 @@ export interface ChooseScanBasesInput {
   mustSee?: ReadonlySet<string>;
   /** Trail stages joining two proposed beds (`stay-objective.ts#TrailLink`). */
   trailLinks?: readonly TrailLink[];
+  /** A trail to follow from bed to bed (`stay-objective.ts`). */
+  trail?: { chain: readonly string[]; restBaseIds?: readonly string[] };
 }
 
 export interface ChooseScanBasesResult {
@@ -379,9 +407,6 @@ export interface ChooseScanBasesResult {
  * as worth, a small town as a possible day trip on its own, and the
  * arrival-aware ordering of a set of stays (`orderBasesForEdges`).
  */
-/** How near a bed a trail stage must start, and end, to join two beds. */
-export const TRAIL_START_NEAR_BED_KM = 12;
-export const TRAIL_END_AT_BED_KM = 4;
 
 /**
  * The trail stages that join two proposed beds: a placed point-to-point walk
@@ -436,6 +461,7 @@ export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesRes
     ...(input.mustCover ? { mustCover: input.mustCover } : {}),
     ...(input.route ? { route: input.route } : {}),
     ...(input.trailLinks && input.trailLinks.length > 0 ? { trailLinks: input.trailLinks } : {}),
+    ...(input.trail ? { trail: input.trail } : {}),
   });
   const kept = choice.stays.map((stay, i) => ({
     id: stay.baseId,
@@ -579,7 +605,9 @@ export function walkDuration(c: ScanCandidateProposal): number {
 }
 
 export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly {
-  const { proposal, positions, plan } = input;
+  const { proposal, plan } = input;
+  /* A split trail stage adds a second walk and moves the first one's end: an overlay, so the caller's map is never changed. */
+  const positions = new Map(input.positions);
   /*
    * Eval v3 — where the matrix says which cells a router measured, every other
    * cell is raised to the floor those measurements prove (`travel/feasibility.ts`):
@@ -672,9 +700,20 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     .filter((part) => part.baseIds.length > 0);
   /* A route's proposed bases are where the traveller asked to go: each is a part the stays sleep within a day's reach of. */
   if (input.route) for (const base of baseEntries) mustCover.push({ name: base.proposal.name, baseIds: [base.id], anchorId: base.id });
-  const trailLinks = trailLinksFor(placeEntries, baseEntries, (key) => input.positions.get(key) ?? null, (id) => pointAt.get(id));
+  /*
+   * 2026-11 — A TRAIL WALKED IN STAGES. The one-way walks as one ordered
+   * sequence, each stage judged for this party (time, climbing, season,
+   * daylight) and split, replaced or flagged; the beds the sequence joins are
+   * what the stays follow (`trail-stages.ts`, `stay-objective.ts#trail`).
+   */
+  const trailPlan = input.trail ? planTrailStages(input, placeEntries, baseEntries, positions, pointAt) : null;
+  const trailLinks = trailPlan && input.trail?.follow
+    ? trailPlan.links
+    : trailLinksFor(placeEntries, baseEntries, (key) => positions.get(key) ?? null, (id) => pointAt.get(id));
+  const followingTrail = Boolean(trailPlan && input.trail?.follow && trailPlan.chain.length >= 2);
   const choice = chooseScanBases({
-    bases: baseEntries,
+    /* Six places to sleep enter the search, as the proposal always held; a followed trail brings every stage end. */
+    bases: followingTrail ? baseEntries : baseEntries.slice(0, 6),
     places: placeEntries,
     minutes,
     nights,
@@ -702,6 +741,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       ),
     ),
     ...(trailLinks.length > 0 ? { trailLinks } : {}),
+    ...(followingTrail ? { trail: { chain: trailPlan!.chain, restBaseIds: trailPlan!.restBaseIds } } : {}),
   });
   /*
    * "The only place to sleep the scan proposed" is false when the scan
@@ -714,6 +754,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     choice.decision = { ...choice.decision, sentence: `One base, ${baseEntries[0]!.proposal.name}: the scan also proposed ${list}, but ${lostBases.length === 1 ? 'it' : 'they'} could not be placed on the map, so every day is planned from here.` };
   }
   const keptIds = choice.kept.map((k) => k.id);
+  if (trailPlan && input.trail) choice.decision = { ...choice.decision, trail: trailRecordFor(input, trailPlan, choice.kept, baseEntries, pointAt) };
+  const stageOf = new Map((trailPlan?.stages ?? []).map((stage) => [stage.placeId, stage] as const));
   const primaryBaseId = keptIds[0]!;
   const positionOf = (key: string) => positions.get(key)!;
   const baseById = new Map(baseEntries.map((b) => [b.id, b]));
@@ -751,7 +793,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       ...(position.wikidataId && /^Q\d+$/.test(position.wikidataId) ? { wikidataId: position.wikidataId } : {}),
       shortDescription: c.why.slice(0, 280),
       coordinates: position.coordinates,
-      tags: [...walkTags(c, position, positionOf(`${c.key}#end`)), `kind:${c.kind}`, `tier:${c.tier}`, ...(c.defining ? ['defining'] : []), ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
+      tags: [...walkTags(c, position, positionOf(`${c.key}#end`)), ...(stageOf.has(id) ? [`trail-stage:${stageOf.get(id)!.order}`, `walk-basis:${stageOf.get(id)!.distanceBasis}`] : []), `kind:${c.kind}`, `tier:${c.tier}`, ...(c.defining ? ['defining'] : []), ...(c.zone ? [`zone:${c.zone}`] : []), ...(c.booking !== 'none' ? [`booking:${c.booking}`] : []), ...(position.approximate ? ['position:approximate'] : []), ...(position.accessPoint ? [`access:${position.accessPoint.kind}`, ...(position.accessPoint.footprint ? [`footprint:${position.accessPoint.footprint.lat.toFixed(5)},${position.accessPoint.footprint.lng.toFixed(5)}`] : [])] : [])],
       source: {
         name: sourceName,
         kind: position.method === 'places' && position.provider.includes('google') ? 'google_places' : 'osm',
@@ -766,7 +808,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       durationBasis: 'category_estimate',
       estimatedDefaults: ['access', 'seasonal_access', 'physical_intensity', 'crowd_level', 'cost_level'],
       interests: c.interests.length > 0 ? c.interests : [...profile.interests],
-      typicalDurationMinutes: walkDuration(c),
+      /* A trail stage's day on the clock is its walking time with rests, from the router's distance and climb where one answered. */
+      typicalDurationMinutes: stageOf.has(id) ? Math.max(15, Math.min(600, trailDayMinutes(stageOf.get(id)!.walkMinutes))) : walkDuration(c),
       costLevel: c.costLevel,
       physicalIntensity: c.intensity,
       crowdLevel: c.crowd,
@@ -1106,6 +1149,133 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
 }
 
 export const SCAN_COMPILER_VERSION = 'discovery-scan/1';
+
+/** A bed this close to a hot spring the scan proposed offers a rest day worth having. */
+const REST_SPRING_KM = 3;
+
+interface TrailPlan {
+  stages: ResolvedTrailStage[];
+  dropped: { name: string; reason: string }[];
+  chain: string[];
+  links: TrailLink[];
+  restBaseIds: string[];
+  limits: ReturnType<typeof trailLimitsFor>;
+}
+
+/**
+ * The trail's stages, judged and joined to beds. A split stage becomes two
+ * walks: the first keeps its place and now ends at the intermediate overnight;
+ * the second is added to the places (`<id>~2`), starting there and ending
+ * where the stage always did. Mutates `placeEntries` and `positions` (the
+ * assembler's own overlay) for that, and nothing else.
+ */
+function planTrailStages(
+  input: AssembleScanRegionInput,
+  placeEntries: { id: string; proposal: ScanCandidateProposal }[],
+  baseEntries: readonly { id: string; proposal: ScanBaseProposal }[],
+  positions: Map<string, ResolvedPosition | null>,
+  pointAt: ReadonlyMap<string, { lat: number; lng: number }>,
+): TrailPlan {
+  const trail = input.trail!;
+  const limits = trailLimitsFor(trail.party);
+  const ordered = orderTrailStages({ candidates: placeEntries, positionOf: (key) => positions.get(key)?.coordinates ?? null, ...(trail.measured ? { measured: trail.measured } : {}) });
+  const beds = baseEntries.flatMap((b) => (pointAt.get(b.id) ? [{ id: b.id, name: b.proposal.name, coordinates: pointAt.get(b.id)! }] : []));
+  const last = Math.max(0, input.dates.length - 1);
+  const resolved = resolveTrailStages({
+    stages: ordered.stages,
+    limits,
+    beds,
+    /* Before the stays are chosen, stage n is assumed walked on day n + 1; the record is re-timed for the real day once they are. */
+    contextFor: (index, stage) => {
+      const at = Math.min(index + 1, last);
+      const date = input.dates[at]!;
+      return { month: Number(date.slice(5, 7)), duskMinute: civilDuskMinute(stage.end, date, input.timeZone), startMinute: trail.dayStartMinutes?.[at] ?? DEFAULT_TRAIL_START_MINUTE };
+    },
+  });
+  /* The split stages, written into the places. */
+  for (const stage of resolved) {
+    if (stage.resolution !== 'split' || !stage.splitAt) continue;
+    const originalKey = stage.part === 2 ? stage.key.replace(/~2$/, '') : stage.key;
+    const entry = placeEntries.find((p) => p.proposal.key === originalKey);
+    const start = positions.get(originalKey);
+    if (!entry || !start) continue;
+    const { accessPoint: _accessPoint, ...plain } = start;
+    const mid: ResolvedPosition = { ...plain, coordinates: stage.splitAt.at, approximate: false, method: 'geocoder', locality: stage.splitAt.name };
+    const walk = { ...entry.proposal.walk!, ...(stage.km !== null ? { km: stage.km } : {}), ...(stage.ascentM !== null ? { ascentM: stage.ascentM } : {}) };
+    if (stage.part === 1) {
+      entry.proposal = { ...entry.proposal, name: stage.name, walk: { ...walk, endName: stage.splitAt.name } };
+      positions.set(`${originalKey}#end`, mid);
+    } else {
+      placeEntries.push({ id: stage.placeId, proposal: { ...entry.proposal, key: stage.key, name: stage.name, walk, defining: false } });
+      positions.set(stage.key, mid);
+      positions.set(`${stage.key}#end`, { ...mid, coordinates: stage.end, locality: stage.endName ?? mid.locality ?? stage.splitAt.name });
+    }
+  }
+  const { chain, stages: chained } = trailBedChain(resolved);
+  /* A stage the party walks (or will have to sort out on the day) is the move; one replaced by the bus is an ordinary transfer. */
+  const links: TrailLink[] = chained
+    .filter((stage) => stage.resolution !== 'alternative')
+    .map((stage) => ({ fromBaseId: stage.fromBaseId!, toBaseId: stage.toBaseId!, walkMinutes: stage.walkMinutes, placeId: stage.placeId }));
+  const springs = placeEntries.filter((p) => p.proposal.kind === 'hot_spring').map((p) => positions.get(p.proposal.key)?.coordinates).filter((c): c is { lat: number; lng: number } => Boolean(c));
+  const restBaseIds = chain.filter((id) => {
+    const at = pointAt.get(id);
+    return at !== undefined && springs.some((spring) => haversineKm(at, spring) <= REST_SPRING_KM);
+  });
+  return { stages: resolved, dropped: ordered.dropped, chain, links, restBaseIds, limits };
+}
+
+/** What the stay decision records about the trail, once the stays are chosen: each stage's day, its daylight on that day, and the way home. */
+function trailRecordFor(
+  input: AssembleScanRegionInput,
+  trail: TrailPlan,
+  kept: readonly { id: string; nights: number }[],
+  baseEntries: readonly { id: string; proposal: ScanBaseProposal }[],
+  pointAt: ReadonlyMap<string, { lat: number; lng: number }>,
+): TrailRecord {
+  const nameOf = (id: string) => baseEntries.find((b) => b.id === id)?.proposal.name;
+  /* The day each move happens: the morning after a stay's last night. */
+  const moveDay = new Map<string, number>();
+  let night = 0;
+  kept.forEach((stay, i) => {
+    if (i > 0) moveDay.set(`${kept[i - 1]!.id}>${stay.id}`, night + 1);
+    night += stay.nights;
+  });
+  const followed = Boolean(input.trail?.follow) && trail.chain.length >= 2 && kept.length >= 2 && kept[0]!.id === trail.chain[0] && kept[1]!.id === trail.chain[1];
+  const limits = trail.limits;
+  const stages = trail.stages.map((stage) => {
+    const dayNumber = followed && stage.fromBaseId && stage.toBaseId ? moveDay.get(`${stage.fromBaseId}>${stage.toBaseId}`) : undefined;
+    if (dayNumber === undefined) return trailStageRecord(stage, nameOf);
+    const date = input.dates[Math.min(dayNumber - 1, input.dates.length - 1)]!;
+    const dusk = civilDuskMinute(stage.end, date, input.timeZone);
+    const retimed = dusk === null ? stage : { ...stage, duskMinute: dusk, latestStartMinute: dusk - TRAIL_DUSK_MARGIN_MINUTES - trailDayMinutes(stage.walkMinutes) };
+    return trailStageRecord(retimed, nameOf, dayNumber);
+  });
+  const lastBed = followed ? kept[kept.length - 1]!.id : null;
+  const lastAt = lastBed ? pointAt.get(lastBed) : undefined;
+  const returnMinutes = lastAt && input.edges && haversineKm(lastAt, input.edges.departure) > 3 ? estimateLegMinutes({ from: lastAt, to: input.edges.departure, mode: 'rail' })?.minutes : undefined;
+  const gap = followed
+    ? undefined
+    : !input.trail?.follow
+      ? 'You asked to drive to the walks, so the stages are planned as day walks from where you sleep.'
+      : trail.stages.length === 0
+        ? 'The scan proposed no trail stages whose ends could be placed on a map, so this plan is not a walk from inn to inn: it is planned from where it sleeps.'
+        : trail.chain.length < 2
+          ? 'The trail stages the scan proposed do not end where a place to sleep was proposed, so the stays cannot follow the trail; the stages are planned as walks from where you sleep.'
+          : input.traveller?.moveTolerance === 'stay_put' || input.maxBaseChanges === 0
+            ? 'You asked to keep one place to sleep, so the stages are planned as day walks from it.'
+            : 'The nights do not stretch to sleeping along the trail, so the stages are planned as walks from where you sleep.';
+  return {
+    version: 1,
+    followed,
+    stages,
+    dropped: trail.dropped,
+    limits: { walkMinutes: limits.walkMinutes, ascentM: limits.ascentM, basis: limits.basis },
+    restBaseIds: followed ? trail.restBaseIds.filter((id) => (kept.find((k) => k.id === id)?.nights ?? 0) >= 2) : [],
+    ...(lastBed && returnMinutes !== undefined ? { returnLeg: { fromBaseId: lastBed, fromName: nameOf(lastBed) ?? lastBed, minutes: Math.round(returnMinutes), basis: 'estimated' as const } } : {}),
+    ...(gap ? { gap } : {}),
+  };
+}
+
 
 /** Months the scan's dates touch, for callers assembling a region request. */
 export { monthsOf as scanMonthsOf };

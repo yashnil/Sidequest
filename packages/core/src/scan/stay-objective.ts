@@ -157,6 +157,17 @@ export interface StayObjectiveInput {
    * base and lost to it every time.
    */
   trailLinks?: readonly TrailLink[];
+  /**
+   * 2026-11 (point-to-point trekking) — a trail the trip is for, as the beds
+   * its stages join, in walking order (`trail-stages.ts#trailBedChain`). When
+   * given, the stays follow it — one bed per stage end, every move that day's
+   * walk — rather than the cheapest structure by the minutes, because a walk
+   * from inn to inn is what was asked for, and a single base with day hikes by
+   * road is a different trip. A traveller who asked to stay put keeps one base.
+   * `restBaseIds` are beds with a hot spring at hand, where a spare night is a
+   * rest day before anywhere else.
+   */
+  trail?: { chain: readonly string[]; restBaseIds?: readonly string[] };
 }
 
 export interface TrailLink {
@@ -691,6 +702,43 @@ function sentenceFor(input: StayObjectiveInput, model: Model, chosen: StayOption
 }
 
 /**
+ * The stays a followed trail sleeps in: each stage end in walking order, at
+ * least a night each, a spare night first at a bed with a hot spring at hand
+ * (a rest day mid-walk), the rest wherever the objective says they are worth
+ * most. As many stages as the nights hold, from the start; none at all for a
+ * traveller who asked to keep one base.
+ */
+function trailStays(model: Model, input: StayObjectiveInput): { evaluation: Evaluation; sentence: (nameOf: ReadonlyMap<string, string>) => string } | null {
+  const known = new Set(input.bases.map((b) => b.id));
+  const chain = (input.trail?.chain ?? []).filter((id) => known.has(id));
+  if (chain.length < 2 || model.nights < 2 || input.traveller.moveTolerance === 'stay_put' || input.maxBaseChanges === 0) return null;
+  const beds = chain.slice(0, Math.min(chain.length, model.nights));
+  if (beds.length < 2) return null;
+  const spare = model.nights - beds.length;
+  const rest = new Set(input.trail?.restBaseIds ?? []);
+  let restLeft = spare;
+  const minimums = beds.map((id) => {
+    if (restLeft > 0 && rest.has(id)) {
+      restLeft -= 1;
+      return 2;
+    }
+    return 1;
+  });
+  const evaluation = bestSplit(model, beds, minimums);
+  if (!evaluation) return null;
+  const restAt = beds.filter((id, i) => rest.has(id) && (evaluation.option.stays[i]?.nights ?? 0) >= 2);
+  const shortBy = chain.length - beds.length;
+  return {
+    evaluation,
+    sentence: (nameOf) => {
+      const names = beds.map((id) => nameOf.get(id) ?? id);
+      const restNames = restAt.map((id) => nameOf.get(id) ?? id);
+      return `Following the trail from bed to bed: ${names.join(' → ')}. Each move is that day's walk, with the bags sent ahead${restNames.length > 0 ? `, and a rest day in ${restNames.join(' and ')}, where there is a hot spring` : ''}.${shortBy > 0 ? ` ${model.nights} nights hold ${beds.length - 1} of the ${chain.length - 1} stages; the rest are left off.` : ''}`;
+    },
+  };
+}
+
+/**
  * The structure that minimises the cost, with the record of why.
  *
  * Every non-empty set of proposed bases up to the cap is ordered (by the
@@ -708,8 +756,10 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
   const basis = input.basis ?? 'estimated';
   const margin = MARGIN_MINUTES[basis];
 
+  /* A followed trail decides the structure; the search only costs the simplest alternatives beside it, for the record. */
+  const trail = trailStays(model, input);
   const costed: { evaluation: Evaluation; splitStay: boolean }[] = [];
-  for (const subset of subsetsUpTo(input.bases.map((b) => b.id), Math.min(input.bases.length, maxMoves + 1))) {
+  for (const subset of subsetsUpTo(input.bases.map((b) => b.id), Math.min(input.bases.length, trail ? Math.min(2, maxMoves + 1) : maxMoves + 1))) {
     const ordered = subset.length === 1 ? { order: subset, splitStay: false } : input.order ? input.order(subset) : { order: subset, splitStay: false };
     if (ordered.order.length - 1 > maxMoves) continue;
     /* A split stay's arrival night is deliberate: one night is its minimum whatever the trip. */
@@ -730,6 +780,7 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
   for (const [, candidate] of ladder.slice(1)) {
     if (candidate.evaluation.option.totalCostMinutes + margin <= chosen.evaluation.option.totalCostMinutes) chosen = candidate;
   }
+  if (trail) chosen = { evaluation: trail.evaluation, splitStay: false };
 
   const named = (evaluation: Evaluation): StayOption => ({ ...evaluation.option, stays: evaluation.option.stays.map((s) => ({ baseId: s.baseId, baseName: nameOf.get(s.baseId) ?? s.baseId, nights: s.nights })) });
   const chosenOption = named(chosen.evaluation);
@@ -756,6 +807,7 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
     .filter((b) => !keptIds.has(b.id))
     .map((b) => {
       if (capped) return { baseId: b.id, reason: 'You asked to keep to one place to sleep.' };
+      if (trail) return { baseId: b.id, reason: 'The trip follows the trail from one stage end to the next, and this is not one of them.' };
       const withIt = input.bases.map((x) => x.id).filter((id) => keptIds.has(id) || id === b.id);
       const ordered = input.order ? input.order(withIt) : { order: withIt, splitStay: false };
       const evaluation = ordered.order.length - 1 <= maxMoves ? bestSplit(model, ordered.order, ordered.order.map(() => minStay)) : null;
@@ -808,7 +860,7 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
       maxMovesAllowed: maxMoves,
       basis,
       marginMinutes: margin,
-      sentence: routeLead ?? `${sentenceFor(input, model, chosenOption, alternatives, capped)}${ruledOutNote}${routeNote}`,
+      sentence: trail ? trail.sentence(nameOf) : routeLead ?? `${sentenceFor(input, model, chosenOption, alternatives, capped)}${ruledOutNote}${routeNote}`,
       ...(route ? { route } : {}),
     },
   };

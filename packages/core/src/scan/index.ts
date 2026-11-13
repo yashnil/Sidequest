@@ -6,3 +6,4 @@ export * from './access-point';
 export * from './candidate-identity';
 export * from './base-staleness';
 export * from './route-coverage';
+export * from './trail-stages';

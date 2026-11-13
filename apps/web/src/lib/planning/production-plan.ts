@@ -1196,7 +1196,7 @@ async function generatePlan(
   });
   /* The contract's verdict on the finished plan: a missing essential, a hire car on a no-car trip, an unchosen dawn start on a restful one. */
   const travellerPicks = new Set(getSelections(tripId).filter((sel) => sel.source === 'user' && sel.status === 'included').map((sel) => sel.placeId));
-  const contractVerdict = qualityContract && board ? evaluateQualityContract(qualityContract, applied.itinerary, board.candidates, travellerPicks) : null;
+  const contractVerdict = qualityContract && board ? evaluateQualityContract(qualityContract, applied.itinerary, board.candidates, travellerPicks, false, plannerComposition?.stay?.trail ?? null) : null;
   if (contractVerdict && !contractVerdict.passed) {
     console.warn('Trip quality contract: not met', { tripId, purpose: qualityContract!.purpose, violations: contractVerdict.violations.filter((v) => v.severity === 'fail').map((v) => `${v.id} (${v.stage}): ${v.detail}`) });
   }

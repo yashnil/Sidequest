@@ -127,8 +127,35 @@ export const SCAN_KIND_PROFILES: Record<ScanKind, KindProfile> = {
  */
 export const WALK_SHAPES = ['loop', 'out_and_back', 'point_to_point'] as const;
 export type WalkShape = (typeof WALK_SHAPES)[number];
+/**
+ * How a traveller usually covers a trail section they should not walk (too
+ * long for the party, closed in the season): the bus or train between its
+ * ends, a taxi, a boat — or simply skipping it. The model's travel knowledge,
+ * stated on the day as such, never a timetable.
+ */
+export const STAGE_ALTERNATIVE_MODES = ['bus', 'train', 'taxi', 'boat', 'skip'] as const;
+export type StageAlternativeMode = (typeof STAGE_ALTERNATIVE_MODES)[number];
+export interface ScanStageAlternative {
+  mode: StageAlternativeMode;
+  /** One short sentence: what to take, between where. */
+  note: string;
+  /** Present only when the alternative itself is seasonal; absent means unknown, which is never closed. */
+  openMonths?: number[];
+}
+
 export interface ScanWalk {
   shape: WalkShape;
+  /**
+   * 2026-11 (point-to-point trekking) — the stage's place in the trail's order,
+   * 1 first, when the walk is one stage of a multi-day route walked inn to inn.
+   * An ordering hint only: Sidequest checks that each stage's end is the next
+   * one's start before it believes the order (`trail-stages.ts`).
+   */
+  stage?: number;
+  /** The usual way round this section when it cannot be walked (too long, closed). */
+  alternative?: ScanStageAlternative;
+  /** Why this section does not suit this party, in the model's words, when it said so. */
+  unsuitable?: string;
   /** Where a point-to-point walk ends: a real place name, placed by the geocoder like any other. */
   endName?: string;
   endLocality?: string;
@@ -264,7 +291,8 @@ export type ScanProposalNormalization =
   | { ok: false; reason: string };
 
 const MAX_CANDIDATES = 60;
-const MAX_BASES = 6;
+/** A trail walked in stages names its start and every stage end (up to eight stages); any other trip proposes at most six, and only six enter the stay search (`assemble.ts`). */
+const MAX_BASES = 9;
 
 function text(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -322,7 +350,34 @@ function walkOf(raw: unknown, kind: ScanKind, coerced: string[], path: string): 
     coerced.push(`${path}.walk.endName`);
     return {};
   }
-  return { walk: { shape, ...(shape === 'point_to_point' && endName ? { endName, ...(endLocality ? { endLocality } : {}) } : {}), ...(km !== undefined ? { km } : {}), ...(ascentM !== undefined ? { ascentM } : {}) } };
+  /* Stage order, the usual way round, and a stated unsuitability: only on a one-way walk, where they mean something. */
+  const stage = shape === 'point_to_point' && typeof w.stage === 'number' && Number.isInteger(w.stage) && w.stage >= 1 && w.stage <= 30 ? w.stage : undefined;
+  const alternative = shape === 'point_to_point' ? alternativeOf(w.alternative, coerced, `${path}.walk.alternative`) : undefined;
+  const unsuitable = shape === 'point_to_point' ? text(w.unsuitable, 160) : null;
+  return {
+    walk: {
+      shape,
+      ...(shape === 'point_to_point' && endName ? { endName, ...(endLocality ? { endLocality } : {}) } : {}),
+      ...(km !== undefined ? { km } : {}),
+      ...(ascentM !== undefined ? { ascentM } : {}),
+      ...(stage !== undefined ? { stage } : {}),
+      ...(alternative ? { alternative } : {}),
+      ...(unsuitable ? { unsuitable } : {}),
+    },
+  };
+}
+
+function alternativeOf(raw: unknown, coerced: string[], path: string): ScanStageAlternative | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const a = raw as Record<string, unknown>;
+  const mode = typeof a.mode === 'string' ? a.mode.trim().toLowerCase() : '';
+  const note = text(a.note, 200);
+  if (!(STAGE_ALTERNATIVE_MODES as readonly string[]).includes(mode) || !note) {
+    coerced.push(path);
+    return undefined;
+  }
+  const months = Array.isArray(a.openMonths) ? [...new Set(a.openMonths.map((m) => int(m, 1, 12)).filter((m): m is number => m !== null))].sort((x, y) => x - y) : [];
+  return { mode: mode as StageAlternativeMode, note, ...(months.length > 0 && months.length < 12 ? { openMonths: months } : {}) };
 }
 
 export function normalizeScanProposal(raw: unknown): ScanProposalNormalization {

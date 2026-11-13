@@ -54,7 +54,7 @@ export const ORS_NO_ROUTE_CODE = 2009;
 export const ORS_NO_ROUTABLE_POINT_CODE = 2010;
 const REQUEST_TIMEOUT_MS = 12_000;
 
-export type OrsProfile = 'driving-car' | 'foot-walking' | 'cycling-regular';
+export type OrsProfile = 'driving-car' | 'foot-walking' | 'cycling-regular' | 'foot-hiking';
 
 export function orsProfileFor(mode: 'car' | 'foot' | 'transit' | 'bicycle'): OrsProfile | null {
   switch (mode) {
@@ -215,6 +215,81 @@ export async function computeOrsRoute(input: { from: { lat: number; lng: number 
   const km = Math.round((feature.properties.summary.distance / 1000) * 10) / 10;
   const geometry = feature.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
   return { found: true, minutes, km, geometry, provider: 'openrouteservice' };
+}
+
+const orsTrailSchema = z.object({
+  features: z
+    .array(
+      z.object({
+        properties: z.object({ summary: z.object({ distance: z.number(), duration: z.number() }), ascent: z.number().optional(), descent: z.number().optional() }),
+      }),
+    )
+    .min(1),
+});
+
+export interface OrsTrailResult {
+  found: boolean;
+  km: number | null;
+  /** Total climbing in metres along the route, from the service's elevation model; null when it gave none. */
+  ascentM: number | null;
+  minutes: number | null;
+  reason?: ProviderGapReason;
+  provider: 'openrouteservice';
+}
+
+/**
+ * 2026-11 (point-to-point trekking) — one trail stage on the `foot-hiking`
+ * profile with elevation: the distance along paths and the climbing, which is
+ * what a walking day is judged on. Never throws; every failure is a
+ * `found: false` with its reason, and the caller keeps its estimate. Screened
+ * by the same plausibility envelope as every walking leg (V11 §3): a refused
+ * figure is `insufficient_evidence`, never a statement about the path.
+ */
+export async function computeOrsTrailStage(input: { from: { lat: number; lng: number }; to: { lat: number; lng: number } }, http: OrsHttp = {}): Promise<OrsTrailResult> {
+  const none = (reason: ProviderGapReason): OrsTrailResult => ({ found: false, km: null, ascentM: null, minutes: null, reason, provider: 'openrouteservice' });
+  const apiKey = http.apiKey ?? process.env[ORS_KEY_ENV];
+  if (!apiKey) return none('provider_error');
+  const doFetch = http.fetchImpl ?? fetch;
+  if (http.counter) http.counter.calls += 1;
+  let response: Response;
+  try {
+    response = await doFetch(`${ORS_BASE}/directions/foot-hiking/geojson`, {
+      method: 'POST',
+      headers: { authorization: apiKey, 'content-type': 'application/json', accept: 'application/geo+json, application/json', 'user-agent': USER_AGENT },
+      body: JSON.stringify({ coordinates: [[input.from.lng, input.from.lat], [input.to.lng, input.to.lat]], elevation: true, instructions: false, geometry_simplify: true }),
+      signal: requestSignal(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    if (http.counter) http.counter.failures += 1;
+    return none('provider_error');
+  }
+  if (response.status === 429) {
+    if (http.counter) http.counter.failures += 1;
+    return none('rate_limited');
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    if (http.counter) http.counter.failures += 1;
+    return none('provider_error');
+  }
+  if (!response.ok) {
+    if (http.counter) http.counter.failures += 1;
+    const parsed = orsErrorSchema.safeParse(body);
+    const code = parsed.success ? parsed.data.error?.code : undefined;
+    return none(code === ORS_NO_ROUTE_CODE ? 'not_found' : code === ORS_NO_ROUTABLE_POINT_CODE ? 'insufficient_evidence' : 'provider_error');
+  }
+  const parsed = orsTrailSchema.safeParse(body);
+  if (!parsed.success) {
+    if (http.counter) http.counter.failures += 1;
+    return none('provider_error');
+  }
+  const properties = parsed.data.features[0]!.properties;
+  const km = Math.round((properties.summary.distance / 1000) * 10) / 10;
+  const minutes = Math.max(1, Math.round(properties.summary.duration / 60));
+  if (!assessLegPlausibility({ minutes, km, from: input.from, to: input.to, mode: screeningModeFor('foot') }).ok) return none('insufficient_evidence');
+  return { found: true, km, ascentM: properties.ascent !== undefined ? Math.round(properties.ascent) : null, minutes, provider: 'openrouteservice' };
 }
 
 /**

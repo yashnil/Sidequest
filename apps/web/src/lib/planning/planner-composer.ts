@@ -1,4 +1,4 @@
-import { boundedLegMinutes, estimateLegMinutes, haversineKm, highSpeedRailBackbone, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset } from '@sidequest/core';
+import { boundedLegMinutes, estimateLegMinutes, haversineKm, highSpeedRailBackbone, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -152,6 +152,7 @@ const WALK_ENDS_AT_BED_KM = 3;
  * Never a timetable or a promise: Sidequest has none to give.
  */
 export function walkNotes(args: { plan: StructurePlan; bases: readonly PlannerBase[]; carAvailable: boolean }): { dayNumber: number; code: 'walk_return' | 'walk_luggage'; note: string }[] {
+  /* A trail stage on its own move day ends at tonight's bed by construction (`scan/trail-stages.ts`), within the stage-end reach rather than this file's three kilometres. */
   const notes: { dayNumber: number; code: 'walk_return' | 'walk_luggage'; note: string }[] = [];
   for (const day of args.plan.days) {
     const bed = args.bases.find((b) => b.id === day.baseId);
@@ -160,7 +161,7 @@ export function walkNotes(args: { plan: StructurePlan; bases: readonly PlannerBa
       if (!c.walkEnd) continue;
       const endName = c.walkEnd.name ?? 'the end of the walk';
       const toBed = bed ? haversineKm(c.walkEnd, bed.coordinates) : null;
-      if (toBed !== null && toBed <= WALK_ENDS_AT_BED_KM && !args.carAvailable) {
+      if (toBed !== null && (toBed <= WALK_ENDS_AT_BED_KM || (c.trailStage && day.relocation)) && !args.carAvailable) {
         notes.push({
           dayNumber: day.dayNumber,
           code: 'walk_luggage',
@@ -188,7 +189,57 @@ export function walkNotes(args: { plan: StructurePlan; bases: readonly PlannerBa
   return notes;
 }
 
-export function composeWithPlanner(input: PlannerComposeInput): PlannerComposition {
+/**
+ * 2026-11 (point-to-point trekking) — what a followed trail writes on its
+ * days: each stage's figures and where they came from, the latest start that
+ * still arrives before dusk, a stage covered the usual other way, one still
+ * unresolved, the rest day, and the way home from the trail's end. Every
+ * sentence is a figure Sidequest has, labelled as measured or estimated.
+ */
+export type TrailNoteCode = 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap';
+export function trailNotes(args: { trail: TrailRecord; plan: StructurePlan; bases: readonly PlannerBase[] }): { dayNumber: number; code: TrailNoteCode; note: string }[] {
+  const { trail, plan } = args;
+  const notes: { dayNumber: number; code: TrailNoteCode; note: string }[] = [];
+  if (!trail.followed) {
+    if (trail.gap) notes.push({ dayNumber: 1, code: 'trail_gap', note: trail.gap });
+    return notes;
+  }
+  const scheduled = new Set(plan.days.flatMap((d) => d.stops.map((s) => s.candidate.id)));
+  const total = trail.stages.length;
+  for (const stage of trail.stages) {
+    if (stage.dayNumber === undefined) continue;
+    const route = stage.fromName && stage.toName ? `${stage.fromName} → ${stage.toName}` : stage.name;
+    if (stage.resolution === 'alternative') {
+      notes.push({ dayNumber: stage.dayNumber, code: 'trail_alternative', note: `${route}: ${stage.note ?? 'covered the usual other way, not walked.'}` });
+      continue;
+    }
+    if (!scheduled.has(stage.placeId)) continue;
+    const figures = [stage.km !== null ? `${stage.km} km` : null, stage.ascentM !== null ? `${Math.round(stage.ascentM)} m of climbing` : null].filter(Boolean).join(' and ');
+    const basis = stage.distanceBasis === 'measured' ? 'measured on the trail by openrouteservice' : stage.distanceBasis === 'proposal' ? "Sidequest's research, not measured" : 'from the time the walk usually takes, not measured';
+    const timing = stage.latestStartMinute !== undefined && stage.duskMinute !== undefined ? `; set off by ${trailClock(Math.floor(stage.latestStartMinute / 15) * 15)} to reach ${stage.toName ?? 'the next bed'} at least an hour before dusk (about ${trailClock(stage.duskMinute)})` : '';
+    notes.push({ dayNumber: stage.dayNumber, code: 'trail_stage', note: `Stage ${stage.order} of ${total}: ${route}${figures ? `, ${figures}` : ''} (${basis}) — about ${trailHours(stage.walkMinutes)} of walking${timing}.${stage.resolution === 'split' && stage.note ? ` ${stage.note}` : ''}` });
+    if (stage.resolution === 'unresolved' && stage.note) notes.push({ dayNumber: stage.dayNumber, code: 'trail_unresolved', note: `${route} is a long day for this party: ${stage.note}` });
+  }
+  for (const baseId of trail.restBaseIds) {
+    const day = plan.days.find((d, i) => d.baseId === baseId && !d.relocation && i > 0 && i < plan.days.length - 1);
+    const name = args.bases.find((b) => b.id === baseId)?.name;
+    if (day && name) notes.push({ dayNumber: day.dayNumber, code: 'trail_rest', note: `A rest day in ${name}: no stage today, and a hot spring close by.` });
+  }
+  if (trail.returnLeg && plan.days.length > 0) {
+    notes.push({ dayNumber: plan.days[plan.days.length - 1]!.dayNumber, code: 'trail_return', note: `The trail ends in ${trail.returnLeg.fromName}: from there to where you leave is about ${trailHours(trail.returnLeg.minutes)} by bus or train (estimated; no timetable was consulted) — check the last departure.` });
+  }
+  return notes;
+}
+
+export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerComposition {
+  /*
+   * A trail followed inn to inn is walked, with public transport for the gaps
+   * and the bags sent ahead: no hire car, whatever the traveller could drive.
+   */
+  const trail = rawInput.region.basePortfolio?.decision?.trail;
+  const trailFollowed = trail?.followed === true;
+  const input: PlannerComposeInput = trailFollowed ? { ...rawInput, carAvailable: false, groundArrangement: 'public_transport' } : rawInput;
+  const stageById = new Map((trailFollowed ? trail!.stages : []).filter((s) => s.dayNumber !== undefined).map((s) => [s.placeId, s] as const));
   const { trip, profile, region } = input;
   const compiled = region.compiled;
   const selectionById = new Map(input.selections.map((s) => [s.placeId, s]));
@@ -204,6 +255,13 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     const base = compiled.bases.find((c) => c.id === b.baseId) ?? compiled.bases[0]!;
     return { id: b.id, name: base.name, why: base.rationale, coordinates: base.coordinates, fromDate: b.fromDate, toDate: b.toDate, nights: b.nights, transferMinutesFromPrevious: b.transfer };
   });
+  /* A move a trail stage walks costs no transfer: the walker walks it and the bags go by luggage service (the stage is the day). */
+  for (const stage of stageById.values()) {
+    if (stage.resolution === 'alternative' || !input.candidates.some((c) => c.place.id === stage.placeId)) continue;
+    const date = region.dates[stage.dayNumber! - 1];
+    const at = bases.findIndex((b, i) => i > 0 && b.fromDate === date && b.id === stage.toBaseId && bases[i - 1]!.id === stage.fromBaseId);
+    if (at > 0) bases[at] = { ...bases[at]!, transferMinutesFromPrevious: 0 };
+  }
 
   // --- the pool --------------------------------------------------------------------------
   const pool: PlannerCandidate[] = [];
@@ -212,7 +270,10 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     const place = board.place;
     const selectionStatus = statusOf(selectionById.get(place.id));
     // A lock is the traveller's decision too: it outranks everything but their own skip of the same place.
-    const status = selectionStatus === 'excluded' ? 'excluded' : lockedDay.has(place.id) ? 'must' : selectionStatus;
+    const stage = stageById.get(place.id);
+    const walked = stage !== undefined && stage.resolution !== 'alternative';
+    /* A stage the trail is walked on is Sidequest's pick for its move day unless the traveller already chose it. */
+    const status = selectionStatus === 'excluded' ? 'excluded' : lockedDay.has(place.id) ? 'must' : walked && selectionStatus === 'candidate' ? 'recommended' : selectionStatus;
     if (status === 'excluded') continue;
     const fitScore = (board as unknown as { fit?: { score?: number } }).fit?.score ?? 50;
     const primaryInterest = ((board as unknown as { fit?: { primaryInterest?: Interest } }).fit?.primaryInterest ?? place.interests[0] ?? null) as Interest | null;
@@ -245,6 +306,14 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
       ...(board.fit.blockers.length > 0 ? { blocked: board.fit.blockers[0]!.message, blockedCode: board.fit.blockers[0]!.code } : {}),
       ...walkEndOf(place.tags),
       ...(place.tags.includes('defining') || input.essentialIds?.has(place.id) ? { essential: true } : {}),
+      /*
+       * A walked stage: pinned to its move day, essential, timed for any hour
+       * of the day, and outside the interest caps (it is the trip, not one more
+       * hike). A stage covered the usual other way is not workable as a walk,
+       * with the reason the day also states.
+       */
+      ...(walked ? { trailStage: true, essential: true, pinnedDay: lockedDay.get(place.id) ?? stage.dayNumber!, bestTime: 'any' as const, primaryInterest: null } : {}),
+      ...(stage && !walked ? { blocked: stage.note ?? 'Not walked on this trip.', blockedCode: 'too_strenuous' } : {}),
     };
     pool.push(candidate);
     provenanceOf.set(place.id, status);
@@ -364,9 +433,15 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
   };
   const plan = planStructure(plannerInput);
   plan.dayNotes.push(...walkNotes({ plan, bases, carAvailable: input.carAvailable }));
+  if (trail) plan.dayNotes.push(...trailNotes({ trail, plan, bases }));
 
   const seasonalNotes = new Map(compiled.places.filter((p) => p.seasonalAccess.closureRisk !== 'none' && p.seasonalAccess.note).map((p) => [p.id, p.seasonalAccess.note!] as const));
   const draft = draftFromPlan({ plan, bases, input, windows, poolSize: pool.length, minutes, coordinates, seasonalNotes });
+  if (trailFollowed && draft.package) {
+    /* The two things a walk from inn to inn stands on, said before anything else the traveller books. */
+    const prep = clip('Book a bed at every stage end, and a luggage transfer for each walking day — both need notice, and the inns can often arrange the bags.', DRAFT_SOFT_PROSE_CAPS.beforeYouGo);
+    draft.package.beforeYouGo = dedupeLines([draft.package.beforeYouGo[0] ?? prep, prep, ...draft.package.beforeYouGo.slice(1)]).slice(0, 10);
+  }
   const stay = region.basePortfolio?.decision;
   const baseSuggestion = suggestBaseForPicks({
     plan,

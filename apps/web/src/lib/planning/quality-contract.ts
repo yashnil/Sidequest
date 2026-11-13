@@ -106,7 +106,7 @@ export function asksForHireCar(itinerary: Pick<Itinerary, 'transportStrategy'>):
   return /\b(?:rental|hire)[ -]car\b|\bcar hire\b|\brent(?:ing)? a car\b/i.test(text);
 }
 
-export function evaluateQualityContract(contract: TripQualityContract, itinerary: Pick<Itinerary, 'days' | 'transportStrategy'>, board: readonly DiscoveryCandidate[], pickedIds: ReadonlySet<string>, extraSelfDrive = false): TripQualityEvaluation {
+export function evaluateQualityContract(contract: TripQualityContract, itinerary: Pick<Itinerary, 'days' | 'transportStrategy'> & { package?: Itinerary['package'] }, board: readonly DiscoveryCandidate[], pickedIds: ReadonlySet<string>, extraSelfDrive = false, trail?: { followed: boolean; gap?: string | undefined } | null): TripQualityEvaluation {
   const tagsById = new Map(board.map((c) => [c.place.id, c.place.tags] as const));
   return evaluateTripQualityContract(contract, {
     days: itinerary.days.map((day) => {
@@ -126,5 +126,6 @@ export function evaluateQualityContract(contract: TripQualityContract, itinerary
     }),
     board: board.map((c) => ({ id: c.place.id, name: c.place.name, kind: kindOf(c.place.tags) })),
     selfDriveRequested: extraSelfDrive || asksForHireCar(itinerary),
+    trail: trail ?? itinerary.package?.planning?.stay?.trail ?? null,
   });
 }

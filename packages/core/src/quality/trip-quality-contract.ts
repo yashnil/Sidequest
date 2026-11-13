@@ -253,6 +253,8 @@ export interface PlanForContract {
   board: readonly { id: string; name: string; kind?: ScanKind | null }[];
   /** Whether bookings, budget or prepare ask for a self-drive hire car. */
   selfDriveRequested: boolean;
+  /** The stay decision's trail record (`scan/trail-stages.ts`), when the scan judged one: whether the stays follow it, and why not. */
+  trail?: { followed: boolean; gap?: string | undefined } | null;
 }
 
 function matches(e: EssentialExperience, stop: { placeId?: string; name: string; kind?: ScanKind | null }): boolean {
@@ -281,6 +283,14 @@ export function evaluateTripQualityContract(contract: TripQualityContract, plan:
       detail: count > 0 ? `${e.label}: ${count} of the ${e.minCount} a trip like this needs.` : `${e.label} is not in the plan${stage === 'discovery' ? ', and nothing on the board offers it' : ', although the board offers it'}.`,
       recovery: e.recovery,
     });
+  }
+  /*
+   * A stage-based walk that could not be planned inn to inn is a gap in the
+   * contract, said in its own words — never papered over with day hikes that
+   * look like a trek. The walk itself is still checked above.
+   */
+  if (contract.structure === 'trail_stages' && plan.trail && !plan.trail.followed) {
+    violations.push({ id: 'trail_stages', severity: 'warn', stage: 'discovery', detail: plan.trail.gap ?? 'This trip is not planned as a walk from inn to inn.', recovery: 'Add the trail stages that suit the party, with places to sleep at their ends, on the Discovery Board, or tell Sidequest which section to walk.' });
   }
   const hard = (id: string) => contract.constraints.find((c) => c.id === id);
   const noDrive = hard('no_self_drive') ?? hard('operator_ground');

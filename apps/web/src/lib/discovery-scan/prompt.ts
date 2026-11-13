@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { INTERESTS, SCAN_BOOKING, SCAN_EXPOSURES, SCAN_KINDS, SCAN_TIERS, renderTravelerBriefXml, type TravelerBrief } from '@sidequest/core';
+import { INTERESTS, SCAN_BOOKING, SCAN_EXPOSURES, SCAN_KINDS, SCAN_TIERS, STAGE_ALTERNATIVE_MODES, renderTravelerBriefXml, type TravelerBrief } from '@sidequest/core';
 import type { DestinationEnvelope } from '../planning/composition';
 
 /**
@@ -17,7 +17,7 @@ import type { DestinationEnvelope } from '../planning/composition';
  * one again on the way back.
  */
 
-export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-14.1';
+export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-15.1';
 export const SCAN_JSON_TAG = 'scan_proposal';
 
 /** How many candidates to ask for: enough to choose from, never so many the answer runs long. */
@@ -42,6 +42,7 @@ What a strong pool looks like:
 9. "why" is one sentence about why THIS traveller would want it, grounded in what they told you. No hype words.
 10. "skipped": up to 6 famous things you deliberately left out because they do not fit this traveller, each with a one-line reason.
 11. "pillars": up to 6 experiences this destination is FOR on THIS trip, each {"name", "tier", "why", "candidates"}. tier is "essential" (the trip would be pointless or badly incomplete without it, given these dates, this length, this transport and this party — at most 3), "recommended" (strongly worth it if it fits) or "optional". Judge the tier against the trip actually asked for: a short trip cannot hold every famous region, so say which ones it should. "candidates" lists the exact names of the candidates above that would satisfy it — alternatives for one another (e.g. the parks or sections that give the same experience). Also mark with "defining": true the candidates in essential pillars. If the destination itself is a walking route, propose its walkable stages that suit this party as point_to_point walks with their real end points, and propose places to sleep where those stages end so the stays can follow the trail. Mark nothing essential that the traveller cannot do (season, party, transport); say why in "skipped" instead.
+11a. Trails walked in stages. When the destination is a pilgrimage route, a long-distance path or a hut-to-hut trek, the trip IS walking it from one overnight village to the next with the bags sent ahead. Then: (a) propose the walkable stages that suit THIS party, in walking order, as consecutive point_to_point walks — each stage's start is the previous stage's end — numbered with "walk.stage" (1 first), named by their start and end ("A to B"), with "locality" the start village, "endName"/"endLocality" the end village, and "km" and "ascentM" where you know them; (b) propose as bases the village where the first stage starts and the overnight village at the end of every stage (inns, guesthouses or huts are there), in walking order, each with nightsHint 1 — this overrides the usual 1 to 5 bases, up to 8; include a hot-spring village as a base where the trail passes one, as a rest-day stop; (c) when a section is unsuitable for this party (too long, too steep, closed in these months), still list it in order but add "walk.unsuitable" with the reason in a few words, and "walk.alternative": {"mode": "bus" | "train" | "taxi" | "boat" | "skip", "note": the usual way round it in one sentence, "openMonths" only if that service is seasonal}; (d) if the party's days cannot hold a full section, propose the shorter official section that suits them instead. Never invent a stage, a village or a bus.
 12. "package": short practical prose — how to get around (transportSummary, transportNotes), beforeYouGo, packing (specific to the season and the activities you proposed), foodStrategy, bookingPriorities. Do not state entry, visa or health rules as fact; say what to check and where.
 
 Closed vocabularies (use exactly these strings):
@@ -52,6 +53,8 @@ Closed vocabularies (use exactly these strings):
 - bestTime: sunrise, morning, afternoon, sunset, night, any
 - crowd: quiet, moderate, busy, very_busy
 - booking: ${SCAN_BOOKING.join(', ')}
+- walk.shape: loop, out_and_back, point_to_point
+- walk.alternative.mode: ${STAGE_ALTERNATIVE_MODES.join(', ')}
 - interests (choose 1-3 per candidate): ${INTERESTS.join(', ')}
 
 Output contract: reply with ONE JSON object (if asked to wrap it, inside <${SCAN_JSON_TAG}>…</${SCAN_JSON_TAG}>) and nothing else. Shape:
@@ -87,7 +90,18 @@ export const scanProposalWireSchema = z.object({
       interests: z.array(z.string()),
       why: z.string(),
       caution: z.string().optional(),
-      walk: z.object({ shape: z.string(), endName: z.string().optional(), endLocality: z.string().optional(), km: z.number().optional(), ascentM: z.number().optional() }).optional(),
+      walk: z
+        .object({
+          shape: z.string(),
+          endName: z.string().optional(),
+          endLocality: z.string().optional(),
+          km: z.number().optional(),
+          ascentM: z.number().optional(),
+          stage: z.number().optional(),
+          unsuitable: z.string().optional(),
+          alternative: z.object({ mode: z.string(), note: z.string(), openMonths: z.array(z.number()).optional() }).optional(),
+        })
+        .optional(),
       defining: z.boolean().optional(),
     }),
   ),
@@ -114,6 +128,12 @@ export interface ScanPromptInput {
   namedMustDos: readonly string[];
   /** How the trip is structured (`journey/archetype.ts`), decided before the proposal: what kinds of bases and moves to propose. */
   journey?: { label: string; reason: string };
+  /**
+   * The trip is for walking a trail in stages (the trip-quality contract's
+   * `trail_stages` structure, read from the traveller's own words): the task
+   * asks for the stages in order and a bed at every stage end (rule 11a).
+   */
+  trail?: boolean;
 }
 
 /** Sidequest's own words: the task. The traveller's free text never appears here; it travels in the untrusted payload. */
@@ -136,7 +156,8 @@ export function buildScanTask(input: ScanPromptInput): string {
     ...(input.journey ? [`<structure>${input.journey.label}. ${input.journey.reason} Propose bases and candidates that fit this structure.</structure>`] : []),
     `<dates>${input.startDate} to ${input.endDate} (${input.days} days)</dates>`,
     renderTravelerBriefXml(brief),
-    `<task>Propose ${target.min} to ${target.max} candidates, ${envelope.route ? '2 to 6 bases in travel order along the route' : '1 to 5 bases'}, up to 8 food areas, up to 6 skipped classics, and the package. ${input.namedMustDos.length > 0 ? 'Every place the traveller named as a must-do appears as a candidate unless it is genuinely impossible on these dates (then put it in skipped with the reason).' : ''}</task>`,
+    ...(input.trail ? [`<trail>This trip is for walking the trail in stages from one overnight village to the next (rule 11a): the walkable stages that suit this party, in order, each starting where the last one ended, and a base at the start and at every stage end.</trail>`] : []),
+    `<task>Propose ${target.min} to ${target.max} candidates, ${input.trail ? 'the trail stages in walking order among them, a base at the start of the first stage and at the end of every stage (up to 9 bases, in walking order)' : envelope.route ? '2 to 6 bases in travel order along the route' : '1 to 5 bases'}, up to 8 food areas, up to 6 skipped classics, and the package. ${input.namedMustDos.length > 0 ? 'Every place the traveller named as a must-do appears as a candidate unless it is genuinely impossible on these dates (then put it in skipped with the reason).' : ''}</task>`,
   ];
   return lines.join('\n');
 }
