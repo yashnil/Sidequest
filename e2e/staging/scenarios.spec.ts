@@ -45,6 +45,8 @@ const SCENARIOS: readonly Scenario[] = [
   { key: 'city-break', title: 'European city break', destination: 'Lisbon, Portugal', start: '2027-05-13', end: '2027-05-16', party: 'couple' },
   { key: 'beach-island', title: 'Beach and island retreat', destination: 'Kauai, Hawaii', start: '2027-09-10', end: '2027-09-17', party: 'couple' },
   { key: 'mountain-hiking', title: 'Mountain hiking vacation', destination: 'Dolomites hiking', start: '2027-07-01', end: '2027-07-08', party: 'friends' },
+  { key: 'mountain-road-trip', title: 'Mountain road trip', destination: 'Scottish Highlands road trip', start: '2027-06-06', end: '2027-06-13', party: 'couple' },
+  { key: 'point-to-point-trek', title: 'Point-to-point trek', destination: 'Tour du Mont Blanc trek', start: '2027-07-10', end: '2027-07-19', party: 'friends' },
   { key: 'multigenerational', title: 'Multi-generational family holiday', destination: 'Algarve, Portugal', start: '2027-06-20', end: '2027-06-27', party: 'family', mustDo: 'Travelling with our children and their grandparents; easy days.' },
 ];
 const wanted = (process.env.STAGING_SCENARIOS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
