@@ -4,6 +4,12 @@ import { impliesSelfDriving, type TripDraft } from './trip-draft';
 import { buildPreservationReport, type DraftPreservationReport } from './preservation';
 import { auditTopology } from './topology';
 import { modeStatusFor, type TravelReality } from '@sidequest/core';
+import { skyIntentOfTitle } from './sky-timing';
+
+/** How far a sunrise or sunset stop may sit from its event before the audit says so. */
+const SKY_TOLERANCE_MINUTES = 60;
+/** The audit's stand-in for dusk where only the sunset is recorded. */
+const DUSK_AFTER_SUNSET_MINUTES = 45;
 
 /**
  * THE DETERMINISTIC QUALITY AUDIT — STRUCTURE, NEVER TASTE.
@@ -78,6 +84,8 @@ export const QUALITY_CHECK_IDS = [
   'transfers_not_experiences',
   /** V6 §12 — a daylight-only outdoor stop is not scheduled after sunset when the sunset is known. */
   'daylight_respected',
+  /** A sunrise, sunset or dark-sky stop sits within an hour of its real event, and never in daylight for stars. */
+  'sky_timing_respected',
   /** V6 §5 — a strenuous day with a party member who cannot do it offers that member something else. */
   'party_hard_fails',
   /*
@@ -509,6 +517,44 @@ function auditV5(input: {
       if (item.startMinute > sunset - 30) daylightBreaches.push(`day ${day.dayNumber}: ${item.title} starts at ${String(Math.floor(item.startMinute / 60)).padStart(2, '0')}:${String(item.startMinute % 60).padStart(2, '0')}, after sunset (${String(Math.floor(sunset / 60)).padStart(2, '0')}:${String(sunset % 60).padStart(2, '0')})`);
     }
   }
+  /*
+   * THE SKY'S OWN HOUR. A stop whose name or intent is the sky — sunrise,
+   * sunset, stargazing, a dark-sky site, the aurora — is judged against that
+   * day's real sun (`day.weather`, computed from the base and its zone), not
+   * against the generous part-of-day windows above: a "sunset" at 16:30 passes
+   * `time_intent_respected` in May and is still four hours early. Sunrise and
+   * sunset may sit up to an hour either side of the event; a darkness stop may
+   * not start before dusk (approximated as 45 minutes after sunset — civil dusk
+   * is shorter than that only near the equator, where it hardly matters). A
+   * day with no solar record produces no finding: unknown ≠ false. It reports;
+   * it never moves or removes anything.
+   */
+  const skyBreaches: string[] = [];
+  let skyChecked = 0;
+  const anchorTimeOfDay = new Map(draft.days.flatMap((d) => d.anchors.map((a) => [`${d.dayNumber}|${norm(a.name)}`, a.timeOfDay] as const)));
+  const clock = (m: number) => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, '0')}:${String((((m % 1440) + 1440) % 1440) % 60).padStart(2, '0')}`;
+  for (const day of itinerary.days) {
+    const { sunriseMinute, sunsetMinute } = day.weather;
+    for (const item of day.items) {
+      if (item.kind !== 'activity') continue;
+      const intent = skyIntentOfTitle(item.title, anchorTimeOfDay.get(`${day.dayNumber}|${norm(item.title)}`));
+      if (!intent) continue;
+      if (intent === 'sunrise' && sunriseMinute !== undefined) {
+        skyChecked += 1;
+        if (Math.abs(item.startMinute - sunriseMinute) > SKY_TOLERANCE_MINUTES) skyBreaches.push(`day ${day.dayNumber}: ${item.title} starts at ${clock(item.startMinute)}, sunrise is at ${clock(sunriseMinute)}`);
+      } else if (intent === 'sunset' && sunsetMinute !== undefined) {
+        skyChecked += 1;
+        /* The visit should span the sunset: judged on whichever end is nearer it. */
+        const away = item.startMinute <= sunsetMinute && item.endMinute >= sunsetMinute ? 0 : Math.min(Math.abs(item.startMinute - sunsetMinute), Math.abs(item.endMinute - sunsetMinute));
+        if (away > SKY_TOLERANCE_MINUTES) skyBreaches.push(`day ${day.dayNumber}: ${item.title} runs ${clock(item.startMinute)}–${clock(item.endMinute)}, sunset is at ${clock(sunsetMinute)}`);
+      } else if (intent === 'darkness' && sunsetMinute !== undefined) {
+        skyChecked += 1;
+        if (item.startMinute < sunsetMinute + DUSK_AFTER_SUNSET_MINUTES) skyBreaches.push(`day ${day.dayNumber}: ${item.title} starts at ${clock(item.startMinute)}, before dark (sunset ${clock(sunsetMinute)})`);
+      }
+    }
+  }
+  add('sky_timing_respected', skyBreaches.length === 0, 'warning', skyBreaches.length === 0 ? `${skyChecked} sky-timed stop(s) sit at their real sunrise, sunset or darkness` : skyBreaches.slice(0, 4).join('; '));
+
   add('daylight_respected', daylightBreaches.length === 0, 'warning', daylightBreaches.length === 0 ? 'no daylight-only stop is scheduled after a known sunset' : daylightBreaches.slice(0, 4).join('; '));
 
   /*

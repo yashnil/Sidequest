@@ -130,6 +130,12 @@ export interface StructurePlannerInput {
   carAvailable: boolean;
   maxDailyTravelMinutes: number;
   maxPhysicalIntensity: PhysicalIntensity;
+  /**
+   * The traveller's daily effort answer. `light` (like a `slow` pace) means a
+   * pre-dawn start is more than they asked for: only their own must-do sunrise
+   * is planned. Optional so a caller without it keeps the old behaviour.
+   */
+  dailyIntensity?: 'light' | 'moderate' | 'intense';
   /** Times each interest may appear for Sidequest's own additions (traveller picks are never capped). */
   frequencyCaps: Partial<Record<Interest, number>>;
   weather: readonly PlannerDayWeather[];
@@ -612,6 +618,13 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     if (fromBase !== null && fromBase > reach && !user && !soloDayTrip && !onTheWay) return fail('too_far', `About ${Math.round(fromBase)} minutes each way from where you sleep that night.`);
     if (!user && stops.some((o) => o !== s && o.dayTrip && (leg(day.baseId, o.id) ?? 0) > reach)) return fail('capacity', 'That day is a day trip elsewhere.');
     if (slot === 'sunrise') {
+      /*
+       * Unavoidable timing versus an early-start opportunity. A sunrise the
+       * traveller picked as a must is theirs to have, whatever the pace; one
+       * Sidequest would add (or the traveller only liked) is an opportunity,
+       * and a slow or light trip did not ask to be up before dawn for it.
+       */
+      if (!user && (input.pace === 'slow' || input.dailyIntensity === 'light')) return fail('capacity', 'A pre-dawn start is more than a restful trip asked for.');
       if (day.isFirst || day.relocation || stops.some((o) => o !== s && slotOf(o) === 'sunrise')) return fail('capacity', 'No free sunrise.');
       /* A 5:30 start is a treat once. Two in a row is a schedule, unless the traveller asked for this stop or travels fast. */
       const dawn = (i: number) => i >= 0 && i < days.length && stopsOf(i).some((o) => slotOf(o) === 'sunrise');

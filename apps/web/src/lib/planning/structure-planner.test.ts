@@ -174,6 +174,20 @@ describe('structure planner — time of day and geography', () => {
     expect(plan.days[plan.days.length - 1]!.stops.some((s) => s.slot === 'night' || s.slot === 'sunset')).toBe(false);
   });
 
+  it('a slow or light trip is not woken before dawn for a sunrise it did not ask for, but keeps the one it picked as a must', () => {
+    const pool = (status: PlannerCandidate['status']) => [c('dawn-lake', { bestTime: 'sunrise', coordinates: at(0.02, 0), status }), ...Array.from({ length: 4 }, (_, i) => c(`d${i}`, { coordinates: at(0.003 * i, 0.003) }))];
+    for (const overrides of [{ pace: 'slow' as const }, { dailyIntensity: 'light' as const }]) {
+      const optional = planStructure(input(pool('recommended'), overrides));
+      expect(scheduledIds(optional)).not.toContain('dawn-lake');
+      const refused = optional.dropped.find((d) => d.candidate.id === 'dawn-lake')!;
+      expect(refused.reason).toBe('capacity');
+      expect(refused.detail).toBe('A pre-dawn start is more than a restful trip asked for.');
+      const picked = planStructure(input(pool('must'), overrides));
+      expect(scheduledIds(picked)).toContain('dawn-lake');
+    }
+    expect(scheduledIds(planStructure(input(pool('recommended'))))).toContain('dawn-lake');
+  });
+
   it('groups nearby stops onto the same day rather than zig-zagging', () => {
     const east = Array.from({ length: 3 }, (_, i) => c(`east-${i}`, { coordinates: at(0, 0.3 + 0.01 * i) }));
     const west = Array.from({ length: 3 }, (_, i) => c(`west-${i}`, { coordinates: at(0, -0.3 - 0.01 * i) }));

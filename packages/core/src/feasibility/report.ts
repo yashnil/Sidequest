@@ -236,8 +236,9 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
     no_stop_past_window: 'A stop runs past the end of its day',
     time_intent_respected: 'A stop is not at the hour it needs',
     stops_follow_transfers: 'A stop starts before the leg that reaches it ends',
+    sky_timing_respected: 'A sunrise, sunset or stargazing stop is not at the real hour of its sky',
   };
-  for (const id of ['no_overlaps', 'edges_respected', 'no_stop_past_window', 'time_intent_respected', 'stops_follow_transfers'] as const) {
+  for (const id of ['no_overlaps', 'edges_respected', 'no_stop_past_window', 'time_intent_respected', 'stops_follow_transfers', 'sky_timing_respected'] as const) {
     const check = input.audit?.checks.find((c) => c.id === id);
     if (check && !check.ok) items.push({ area: 'time', severity: 'caution', detail: `${TIME_LEAD[id]}: ${check.detail}.` });
   }

@@ -335,6 +335,7 @@ export function composeWithPlanner(input: PlannerComposeInput): PlannerCompositi
     carAvailable: input.carAvailable,
     maxDailyTravelMinutes: input.carAvailable && input.maxDailyDriveMinutes ? Math.min(input.maxDailyTravelMinutes, input.maxDailyDriveMinutes) : input.maxDailyTravelMinutes,
     maxPhysicalIntensity: profile.derived.maxPhysicalIntensity,
+    dailyIntensity: profile.dailyIntensity,
     frequencyCaps: profile.derived.frequencyCaps,
     weather,
     foodAreas,

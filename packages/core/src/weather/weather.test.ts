@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatMinuteOfDay } from '../schemas/common';
-import { dayLengthFor, solarEventsFor } from './solar';
+import { dayLengthFor, solarEventsFor, twilightFor, TWILIGHT_DEPRESSION_DEGREES } from './solar';
 import {
   assessPlaceWeather,
   evaluateWeather,
@@ -35,6 +35,22 @@ import {
 describe('sunrise and sunset', () => {
   const MAMMOTH = { lat: 37.6485, lng: -118.9721 };
   const PDT = -420;
+
+  it('places each twilight after sunset in order, and reports a white night as an answer rather than a gap', () => {
+    const sun = solarEventsFor(MAMMOTH, '2026-07-30', PDT);
+    const civil = twilightFor(MAMMOTH, '2026-07-30', PDT, TWILIGHT_DEPRESSION_DEGREES.civil);
+    const nautical = twilightFor(MAMMOTH, '2026-07-30', PDT, TWILIGHT_DEPRESSION_DEGREES.nautical);
+    const astronomical = twilightFor(MAMMOTH, '2026-07-30', PDT, TWILIGHT_DEPRESSION_DEGREES.astronomical);
+    if (sun.kind !== 'normal' || civil.kind !== 'normal' || nautical.kind !== 'normal' || astronomical.kind !== 'normal') throw new Error('unexpected');
+    expect(civil.duskMinute).toBeGreaterThan(sun.sunsetMinute);
+    expect(nautical.duskMinute).toBeGreaterThan(civil.duskMinute);
+    expect(astronomical.duskMinute).toBeGreaterThan(nautical.duskMinute);
+    // Civil dusk runs roughly half an hour after sunset at this latitude in summer.
+    expect(civil.duskMinute - sun.sunsetMinute).toBeGreaterThan(20);
+    expect(civil.duskMinute - sun.sunsetMinute).toBeLessThan(40);
+    // At 64° N on the solstice the sun never sinks 6° below the horizon.
+    expect(twilightFor({ lat: 64.15, lng: -21.94 }, '2026-06-21', 0, TWILIGHT_DEPRESSION_DEGREES.civil).kind).toBe('never_this_dark');
+  });
 
   it('matches the provider to within a minute in midsummer', () => {
     const events = solarEventsFor(MAMMOTH, '2026-07-30', PDT);

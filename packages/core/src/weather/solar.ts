@@ -120,14 +120,55 @@ function cosHourAngleFor(
   coordinates: Coordinates,
   date: string,
   utcOffsetMinutes: number,
+  zenithDegrees: number = ZENITH_DEGREES,
 ): number {
   const { sunDeclin } = solarPositionFor(date, utcOffsetMinutes);
   const latRad = coordinates.lat * DEGREES;
   const declRad = sunDeclin * DEGREES;
   return (
-    Math.cos(ZENITH_DEGREES * DEGREES) / (Math.cos(latRad) * Math.cos(declRad)) -
+    Math.cos(zenithDegrees * DEGREES) / (Math.cos(latRad) * Math.cos(declRad)) -
     Math.tan(latRad) * Math.tan(declRad)
   );
+}
+
+/** How far below the horizon the sun is at the end of each twilight. */
+export const TWILIGHT_DEPRESSION_DEGREES = { civil: 6, nautical: 12, astronomical: 18 } as const;
+
+export type TwilightEvents =
+  /**
+   * `dawnMinute`/`duskMinute` are minutes from local midnight of `date` and are
+   * deliberately **not** clamped to the clock: a dusk at 00:20 the next morning
+   * is 1460, because "after midnight" and "never" are different answers.
+   */
+  | { kind: 'normal'; dawnMinute: number; duskMinute: number }
+  /** The sun never sinks this far that night — a white night for this twilight. */
+  | { kind: 'never_this_dark' }
+  /** The sun never rises this high above the depression line — it stays dark. */
+  | { kind: 'never_this_light' };
+
+/**
+ * When the sky gets (and stops being) as dark as one twilight's depression.
+ *
+ * The same NOAA algebra as `solarEventsFor`, with the zenith moved below the
+ * horizon: 96° for civil, 102° for nautical, 108° for astronomical twilight.
+ * Above about 48° of latitude in high summer the sun never reaches 18° below
+ * the horizon, and far enough north it never reaches 6°: those nights are
+ * `never_this_dark`, which a stargazing plan must treat as an answer rather
+ * than as a gap.
+ */
+export function twilightFor(
+  coordinates: Coordinates,
+  date: string,
+  utcOffsetMinutes: number,
+  depressionDegrees: number,
+): TwilightEvents {
+  const { equationOfTime } = solarPositionFor(date, utcOffsetMinutes);
+  const cosHourAngle = cosHourAngleFor(coordinates, date, utcOffsetMinutes, 90 + depressionDegrees);
+  if (cosHourAngle < -1) return { kind: 'never_this_dark' };
+  if (cosHourAngle > 1) return { kind: 'never_this_light' };
+  const hourAngle = Math.acos(cosHourAngle) / DEGREES;
+  const solarNoonMinutes = 720 - 4 * coordinates.lng - equationOfTime + utcOffsetMinutes;
+  return { kind: 'normal', dawnMinute: Math.round(solarNoonMinutes - hourAngle * 4), duskMinute: Math.round(solarNoonMinutes + hourAngle * 4) };
 }
 
 /**

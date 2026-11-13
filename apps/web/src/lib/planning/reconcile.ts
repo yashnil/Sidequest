@@ -100,6 +100,7 @@ import {
   type ResolutionConfidence,
   type ResolutionContext,
 } from '@sidequest/core';
+import { daySkyFor, formatSkyMinute, skyIntentOf, skyStartFor, type DaySky } from './sky-timing';
 import {
   AUTHORITATIVE_NO_ROUTE,
   acquireRoute,
@@ -415,10 +416,13 @@ const DINNER_LATEST = 21 * 60;
  * floor — a day already starts in the morning, and pushing an unconstrained stop
  * later would only empty the morning.
  *
- * `sunset` is 16:30 rather than an astronomical calculation on purpose. The real
- * sunset moves by hours across a year and a latitude, Sidequest does not have it
- * at this point in the pipeline, and a floor that is roughly late-afternoon
- * everywhere is honest where a computed instant would be precise and wrong.
+ * These are the FALLBACK only. A stop whose point is the sky — sunrise, sunset,
+ * stargazing — is timed to that day's real sun (`sky-timing.ts`) wherever the
+ * day has a placed point and a trusted zone: a fixed 16:30 "sunset" was 4 hours
+ * early in a southern European May and a fixed 18:00 "stargazing" sat in alpine
+ * July daylight. Only when no coordinates or zone exist do these floors decide,
+ * because unknown ≠ false: a roughly-late-afternoon floor is still better than
+ * no floor at all.
  */
 const TIME_OF_DAY_FLOOR: Record<string, number> = {
   midday: 11 * 60,
@@ -431,6 +435,32 @@ const TIME_OF_DAY_FLOOR: Record<string, number> = {
 function timeOfDayFloor(intent: string | undefined): number | null {
   if (!intent) return null;
   return TIME_OF_DAY_FLOOR[intent] ?? null;
+}
+
+/**
+ * A slow trip did not ask for pre-dawn starts. A sunrise stop on one is kept
+ * only when the traveller asked for it by name (a board must, their own
+ * must-do); anything the composition added at dawn comes off with a reason
+ * instead of opening the day at half past five.
+ *
+ * Pace only, here. The structure planner also holds back its own optional dawn
+ * additions on a light-effort trip, but light effort is about physical strain —
+ * it is the smart default for a party with limited mobility — and a composed
+ * dawn game drive from a jeep is not strain. Removing composed content needs
+ * the traveller's own statement about the shape of the day, which is pace.
+ */
+function isRestfulTrip(profile: ReconcileContext['profile']): boolean {
+  return profile.pace === 'slow';
+}
+
+const PRE_DAWN_RESTFUL_REASON = 'A pre-dawn start is more than a restful trip asked for.';
+
+/** The day's real sky at its base (or, failing that, the weather point that speaks for it). Null leaves the fixed floors in charge. */
+function daySkyOf(input: Pick<DayLayoutInput, 'base' | 'previousBase' | 'relocation' | 'weather' | 'date'>): DaySky | null {
+  const point = input.base?.identity?.coordinates ?? (input.relocation ? input.previousBase?.identity?.coordinates : undefined) ?? null;
+  const location = nearestWeatherLocation(input.weather, point);
+  if (!location) return null;
+  return daySkyFor(point ?? location.coordinates, input.date, location.timeZone);
 }
 
 const MIN_FREE_BLOCK_MINUTES = 30;
@@ -1225,9 +1255,17 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
    * the arrival day, whose start is the arrival itself.
    */
   const DAWN_START = 5 * 60 + 30;
+  /*
+   * Only for a sunrise that will actually be kept: on a slow or light trip a
+   * dawn stop the traveller did not ask for by name comes off in `layoutDay`
+   * (with its reason), and the day it sat on keeps the traveller's own start.
+   * The exact opening minute is settled at layout against the real sunrise.
+   */
+  const restful = isRestfulTrip(context.profile);
+  const askedFor = new Set((context.mustIncludeNames ?? []).map(normalizeName));
   const earliestFor = (dayNumber: number): number | null => {
     const day = draft.days.find((entry) => entry.dayNumber === dayNumber);
-    return (day?.anchors ?? []).some((anchor) => anchor.timeOfDay === 'sunrise') ? DAWN_START : null;
+    return (day?.anchors ?? []).some((anchor) => anchor.timeOfDay === 'sunrise' && (!restful || askedFor.has(normalizeName(anchor.name)))) ? DAWN_START : null;
   };
   const windows: PlannedDay[] = buildDailyWindows(context.basics, context.profile, config).map((day, index, all) => {
     const isLastDay = index === all.length - 1;
@@ -2102,9 +2140,9 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
         placeId: dropped.anchor.identity?.id ?? `model-proposal:day${dayNumber}:${normalizeName(dropped.anchor.draft.name).replace(/\s+/g, '-')}`,
         name: dropped.anchor.draft.name,
         wasManual: mustInclude.has(normalizeName(dropped.anchor.draft.name)),
-        reasonCode: dropped.disposition === 'rejected_hard_constraint' ? 'exceeds_daily_travel' : 'no_time_left',
+        reasonCode: dropped.reasonCode ?? (dropped.disposition === 'rejected_hard_constraint' ? 'exceeds_daily_travel' : 'no_time_left'),
         reason: dropped.reason,
-        suggestedRemedy: dropped.disposition === 'rejected_hard_constraint' ? 'Raise your daily driving limit, or move this to a day based nearer to it.' : 'Give this day a lighter pace, or move something else off it.',
+        suggestedRemedy: dropped.suggestedRemedy ?? (dropped.disposition === 'rejected_hard_constraint' ? 'Raise your daily driving limit, or move this to a day based nearer to it.' : 'Give this day a lighter pace, or move something else off it.'),
       });
       revisions.push({ code: dropped.disposition === 'rejected_hard_constraint' ? 'dropped_lowest_priority' : 'replaced_with_free_time', description: dropped.reason, dayNumber, ...(dropped.anchor.identity ? { placeId: dropped.anchor.identity.id } : {}) });
       if (dropped.disposition === 'rejected_hard_constraint') {
@@ -2577,8 +2615,11 @@ interface DayLayoutInput {
 
 interface DroppedAnchor {
   anchor: ReconciledAnchor;
-  disposition: Extract<AnchorDispositionCode, 'rejected_hard_constraint' | 'unscheduled_capacity'>;
+  disposition: Extract<AnchorDispositionCode, 'rejected_hard_constraint' | 'unscheduled_capacity' | 'rejected_contradiction'>;
   reason: string;
+  /** Set where the drop is not about travel or room (the sky, a restful pace); otherwise derived from the disposition. */
+  reasonCode?: UnscheduledPlace['reasonCode'];
+  suggestedRemedy?: string;
 }
 
 interface Point {
@@ -2695,6 +2736,49 @@ function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: Dropped
    */
   const hardEnd = input.isLast || input.context.profile.interview?.mustBeBackByMinute !== undefined;
   const tolerance = hardEnd ? 0 : LATE_END_TOLERANCE_MINUTES;
+  /*
+   * THE SKY DECIDES SOME STOPS BEFORE ANY CLOCK DOES.
+   *
+   * Two kinds of stop come off here, each with its reason, before a single leg
+   * is built:
+   *
+   * - a darkness stop (stargazing, a dark-sky site, the aurora) on a night the
+   *   sun never sinks far enough for it, or whose darkness falls after a hard
+   *   edge (departure, a back-by hour) or past a traveller who said no late
+   *   nights. Scheduling it in daylight is the defect this replaces; leaving it
+   *   off and saying why is the honest answer.
+   * - a sunrise stop on a slow or light trip that the traveller did not ask for
+   *   by name. A traveller's own pick is unavoidable timing and stays.
+   */
+  const sky = daySkyOf(input);
+  const askedFor = new Set((input.context.mustIncludeNames ?? []).map(normalizeName));
+  const restful = isRestfulTrip(input.context.profile);
+  const refusesLateNights = input.context.profile.interview?.lateNights === 'no';
+  for (const anchor of [...kept]) {
+    const intent = skyIntentOf(anchor.draft);
+    if (intent === 'sunrise' && restful && !askedFor.has(normalizeName(anchor.draft.name))) {
+      kept = kept.filter((a) => a.id !== anchor.id);
+      dropped.push({ anchor, disposition: 'unscheduled_capacity', reasonCode: 'lower_priority', reason: `${PRE_DAWN_RESTFUL_REASON} ${anchor.draft.name} happens at dawn, so it was left off day ${input.dayNumber}.`, suggestedRemedy: 'Add it as a must-do if the early start is worth it to you.' });
+      continue;
+    }
+    if (intent !== 'darkness') continue;
+    const timing = skyStartFor('darkness', sky);
+    if (timing.kind === 'impossible') {
+      kept = kept.filter((a) => a.id !== anchor.id);
+      dropped.push({ anchor, disposition: 'rejected_contradiction', reasonCode: 'not_feasible', reason: `${anchor.draft.name} needs a dark sky, and on ${input.date} ${timing.reason}; it was left off rather than scheduled in daylight.`, suggestedRemedy: 'Keep it for a trip later in the season, when the nights are dark.' });
+      continue;
+    }
+    if (timing.kind === 'start' && (hardEnd || refusesLateNights) && timing.minute + anchor.durationMinutes > input.window.window.endMinute) {
+      kept = kept.filter((a) => a.id !== anchor.id);
+      dropped.push({
+        anchor,
+        disposition: 'unscheduled_capacity',
+        reasonCode: 'hours_do_not_fit',
+        reason: `${anchor.draft.name} needs a dark sky, which on day ${input.dayNumber} comes at about ${formatSkyMinute(timing.minute)} — after ${refusesLateNights && !hardEnd ? 'the evening you asked to keep free of late nights' : 'this day has to end'}; it was left off rather than scheduled in daylight.`,
+        suggestedRemedy: 'Move it to a night with no early departure, or allow one late night.',
+      });
+    }
+  }
   for (;;) {
     const attempt = attemptLayout(input, kept);
     // The traveller's own hard ceiling: at the wheel on a driving trip, every
@@ -2862,6 +2946,24 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
   const canDrive = context.profile.transport.willDrive;
   const groundArrangement = input.groundArrangement;
   const items: ItineraryItem[] = [];
+  /*
+   * The day's real sky, when it can be known (`sky-timing.ts`). A dawn day was
+   * opened at 05:30 for a sunrise stop; where the real sunrise is later, the day
+   * opens an hour before the sunrise visit instead of sitting in free time from
+   * half past five. Never later than the window the planner already gave it.
+   */
+  const sky = daySkyOf(input);
+  const firstSky = anchors[0] ? skyIntentOf(anchors[0].draft) : null;
+  if (firstSky === 'sunrise') {
+    const timing = skyStartFor('sunrise', sky);
+    const opensAt = timing.kind === 'start' ? timing.minute - 60 : null;
+    if (opensAt !== null && opensAt > window.window.startMinute && opensAt < window.window.endMinute) {
+      window.window.usableMinutes -= opensAt - window.window.startMinute;
+      window.window.startMinute = opensAt;
+    }
+  }
+  const hardEndDay = input.isLast || context.profile.interview?.mustBeBackByMinute !== undefined;
+  const mayRunLate = !hardEndDay && context.profile.interview?.lateNights !== 'no';
   let clock = window.window.startMinute;
   let legsMeasured = 0;
   let legsUnmeasured = 0;
@@ -3315,6 +3417,18 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       hadDinner = placeMeal('dinner', draftDay.meals.dinner, true);
     }
     /*
+     * The same for a stop the real sky puts late — a sunset at nine, stargazing
+     * at eleven: dinner comes first, at its natural hour, or there is no room
+     * left for it once the sky has had its turn.
+     */
+    const skyIntent = skyIntentOf(anchor.draft);
+    const skyTiming = skyIntent ? skyStartFor(skyIntent, sky) : ({ kind: 'unknown' } as const);
+    if (!hadDinner && skyTiming.kind === 'start' && skyIntent !== 'sunrise' && skyTiming.minute >= DINNER_EARLIEST + 60 && (draftDay?.meals?.dinner || !input.isLast)) {
+      if (!hadLunch && clock <= LUNCH_LATEST) hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
+      clock = Math.max(clock, DINNER_EARLIEST);
+      hadDinner = placeMeal('dinner', draftDay?.meals?.dinner);
+    }
+    /*
      * V11 §M — THE FIRST LEG OF A RELOCATION DAY IS THE MOVE.
      *
      * A stop's `transport` says how you get *around* once you are there; the
@@ -3400,9 +3514,36 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * cannot reach its hour stays where it is and keeps its place in the trip:
      * unknown ≠ false, and a slightly early visit beats a deleted one.
      */
-    const intentFloor = timeOfDayFloor(anchor.draft.timeOfDay);
-    if (intentFloor !== null && start < intentFloor && intentFloor + anchor.durationMinutes <= input.window.window.endMinute) {
-      start = intentFloor;
+    let skyNote: string | undefined;
+    if (skyTiming.kind === 'start') {
+      /*
+       * The real sky, not the table. The visit starts at its event's minute; the
+       * day may run on past its usual end to hold it — the same allowance an
+       * evening dinner gets — but never on a departure day, past a back-by hour
+       * or for somebody who said no late nights. Where it cannot reach its hour
+       * it starts as late as the day allows and says what the sky is doing.
+       */
+      const target = skyTiming.minute;
+      if (start < target) {
+        if (target + anchor.durationMinutes <= input.window.window.endMinute) start = target;
+        else if (mayRunLate && skyIntent !== 'sunrise') {
+          start = target;
+          const end = target + anchor.durationMinutes;
+          window.window.usableMinutes += end - window.window.endMinute;
+          window.window.endMinute = end;
+        } else {
+          const latest = input.window.window.endMinute - anchor.durationMinutes;
+          if (latest > start) start = latest;
+          skyNote = `${skyTiming.event}; this day ends before then, so the visit is earlier than the sky it is for`;
+        }
+      } else if (start > target + 60) {
+        skyNote = `${skyTiming.event}; the day could not reach this before then`;
+      }
+    } else {
+      const intentFloor = skyIntent === 'darkness' ? (TIME_OF_DAY_FLOOR.night ?? null) : timeOfDayFloor(anchor.draft.timeOfDay);
+      if (intentFloor !== null && start < intentFloor && intentFloor + anchor.durationMinutes <= input.window.window.endMinute) {
+        start = intentFloor;
+      }
     }
     /*
      * LIVE WORLD V1 closure — a provider-identified stop's regular hours
@@ -3441,6 +3582,9 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     });
     if (hours && end > hours.closeMinute) {
       items[items.length - 1] = { ...items[items.length - 1]!, note: `${items[items.length - 1]!.note} · may run past the published closing time (${formatClock(hours.closeMinute)}); check hours` };
+    }
+    if (skyTiming.kind === 'start') {
+      items[items.length - 1] = { ...items[items.length - 1]!, note: `${items[items.length - 1]!.note} · ${skyNote ?? `timed to the sky: ${skyTiming.event}`}` };
     }
     totals.activityMinutes += Math.max(0, Math.round(end - start));
     clock = end;
