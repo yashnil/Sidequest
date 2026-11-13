@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { createTrip, waitUntilInteractive } from '../support/trip';
 import { openHubView } from '../support/hub';
@@ -93,6 +93,31 @@ test.describe('ten scenarios', () => {
       await page.screenshot({ path: `${OUT}/screens/${scenario.key}-days.jpg`, type: 'jpeg', quality: 70, fullPage: true });
       await openHubView(page, 'book');
       const bookings = (await page.locator('#hub-view-book').innerText().catch(() => '')).slice(0, 6000);
+      /* Places to stay: press the first stay's button like a traveller, record what it names. Absent on builds without the panel. */
+      let lodging: { shown: boolean; names: string[]; empty?: string } = { shown: false, names: [] };
+      const lodgingButton = page.getByTestId('lodging-picks-button').first();
+      if (await lodgingButton.isVisible().catch(() => false)) {
+        await lodgingButton.click();
+        const panel = page.getByTestId('lodging-picks').first();
+        await expect(panel.getByTestId('lodging-picks-results').or(panel.getByTestId('lodging-picks-empty')).or(panel.getByRole('alert'))).toBeVisible({ timeout: 90_000 });
+        const names = await panel.getByTestId('lodging-pick').locator('p.font-display').allInnerTexts();
+        /* allInnerTexts never waits for an element that is not there; innerText would sit out the test timeout. */
+        const empty = [...(await panel.getByTestId('lodging-picks-empty').allInnerTexts()), ...(await panel.getByRole('alert').allInnerTexts())].join(' ').trim();
+        lodging = { shown: true, names: names.map((n) => n.trim()).slice(0, 8), ...(empty ? { empty } : {}) };
+        await panel.screenshot({ path: `${OUT}/screens/${scenario.key}-lodging.jpg`, type: 'jpeg', quality: 70 }).catch(() => undefined);
+      }
+      /* The printed guide, both formats, through whatever renderer this environment has (EVAL_PDF=all or a list of keys). */
+      const pdfWanted = (process.env.EVAL_PDF ?? '').split(',').map((s) => s.trim());
+      const pdf: Record<string, { status: number; bytes: number; type: string | null }> = {};
+      if (pdfWanted.includes('all') || pdfWanted.includes(scenario.key)) {
+        mkdirSync(`${OUT}/pdf`, { recursive: true });
+        for (const variant of ['compact', 'complete'] as const) {
+          const response = await page.request.get(`/api/trips/${tripId}/guide.pdf?variant=${variant}`, { timeout: 180_000 });
+          const body = await response.body();
+          pdf[variant] = { status: response.status(), bytes: body.length, type: response.headers()['content-type'] ?? null };
+          if (response.ok() && body.subarray(0, 5).toString() === '%PDF-') writeFileSync(`${OUT}/pdf/${scenario.key}-${variant}.pdf`, body);
+        }
+      }
       record({
         scenario: scenario.key,
         title: scenario.title,
@@ -106,6 +131,8 @@ test.describe('ten scenarios', () => {
         overview,
         days,
         bookings,
+        lodging,
+        pdf,
         plan: plan.map((d) => ({ day: d.dayNumber, header: d.header, stops: d.activities.filter((a) => a.place).map((a) => a.title), meals: d.meals.map((m) => m.title), travel: d.travel.map((t) => t.text.replace(/\s+/g, ' ').slice(0, 120)) })),
       });
     });

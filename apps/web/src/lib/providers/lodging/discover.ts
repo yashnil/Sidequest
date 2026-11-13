@@ -58,10 +58,28 @@ const FIXTURE: Omit<LodgingPropertyCandidate, 'coordinates'>[] = [
   { source: 'osm', sourceId: 'osm:node/4', name: 'Valley Motel', type: 'motel', typeBasis: 'category', amenities: [{ kind: 'parking', value: 'yes', basis: 'mapped' }], licence: 'ODbL-1.0', attribution: 'Fixture data' },
 ];
 
+/**
+ * The longest a traveller waits on one source after pressing the button. Each
+ * reader has its own internal deadline, but those are checked between reads;
+ * a stalled catalog fetch or row group could still hold the panel open, as a
+ * live Dolomites stay did for over 90 seconds. Past this, the source counts as
+ * not answering — said plainly, nothing guessed.
+ */
+export const LODGING_SOURCE_CEILING_MS = 40_000;
+
+function withCeiling<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const ceiling = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} did not answer within ${Math.round(ms / 1000)} s`)), ms);
+  });
+  return Promise.race([work, ceiling]).finally(() => clearTimeout(timer));
+}
+
 export async function discoverLodgingNear(
   input: { near: { lat: number; lng: number }; radiusKm: number },
   env: Record<string, string | undefined> = process.env,
   deps: LodgingDiscoveryDeps = {},
+  ceilingMs: number = LODGING_SOURCE_CEILING_MS,
 ): Promise<LodgingDiscovery> {
   const cap = capability('lodging.named', env);
   if (cap?.fixture) {
@@ -74,7 +92,7 @@ export async function discoverLodgingNear(
   const useOsm = useOverture && (deps.overpass !== undefined || cap?.provider === 'overture+overpass');
 
   const overtureRead = useOverture
-    ? fetchOvertureLodging(box, deps.overture).then(
+    ? withCeiling(fetchOvertureLodging(box, deps.overture), ceilingMs, 'Overture').then(
         (r) => ({ ok: true as const, ...r }),
         (error: unknown) => {
           console.warn('Lodging: Overture box not read', error instanceof Error ? error.message : error);
@@ -83,7 +101,7 @@ export async function discoverLodgingNear(
       )
     : Promise.resolve(null);
   const osmRead = useOsm
-    ? (deps.overpass ?? ((b: BoundingBox) => fetchLodgingPois(b, { limit: 240, retries: 0, requestTimeoutMs: 25_000, deadlineMs: Date.now() + 35_000, cache: cacheFor<OverpassResult>('overpass-lodging', TTL.poi) })))(box).then(
+    ? withCeiling((deps.overpass ?? ((b: BoundingBox) => fetchLodgingPois(b, { limit: 240, retries: 0, requestTimeoutMs: 25_000, deadlineMs: Date.now() + 35_000, cache: cacheFor<OverpassResult>('overpass-lodging', TTL.poi) })))(box), ceilingMs, 'Overpass').then(
         (r) => ({ ok: true as const, candidates: osmLodgingFromElements(r.elements), cacheHit: r.cacheHit }),
         (error: unknown) => {
           console.warn('Lodging: Overpass not read', error instanceof Error ? error.message : error);

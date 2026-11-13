@@ -164,6 +164,7 @@ export * from './pricing/model-rates';
 
 export * from './destinations/intent';
 export * from './destinations/intent-graph';
+export * from './destinations/stated-mode';
 export * from './destinations/route-shape';
 export * from './destinations/semantics';
 /* V12 — what a place affords, what the traveller intends, and how the trip should work. */

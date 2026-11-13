@@ -17,6 +17,7 @@ import {
   buildDestinationIntent,
   qualifiedNameFor,
   seasonMonths,
+  statedTravelMode,
   tripBasicsSchema,
   type SelectedDestination,
   type TripComposerAnswers,
@@ -203,6 +204,7 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
   const nights = resolveNights(input);
   const { startDate, endDate } = materialiseDates(input, nights, now, destination?.center.lat ?? null);
 
+  const statedMode = statedTravelMode(input.destinationText);
   const answers: TripComposerAnswers = {
     schemaVersion: TRIP_COMPOSER_VERSION,
     mode: 'known_destination',
@@ -256,7 +258,8 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
     travelerNeeds: input.travelerNeeds,
     ...(input.shape ? { shape: input.shape } : {}),
     ...(input.pace ? { pace: input.pace } : {}),
-    ...(input.transport ? { transport: input.transport } : {}),
+    /* A mode the traveller wrote into the destination ("… by train") is their answer, unless they also chose one. */
+    ...(input.transport ? { transport: input.transport } : statedMode ? { transport: statedMode } : {}),
     ...(input.budget ? { budget: input.budget } : {}),
     themes: input.themes ?? [],
     ...(input.outdoorIntensity ? { outdoorIntensity: input.outdoorIntensity } : {}),

@@ -198,6 +198,18 @@ describe('discoverLodgingNear — two sources side by side, never merged', () =>
     expect(result.reason).toMatch(/Nothing was guessed/);
   });
 
+  it('a source that never answers is cut off at the ceiling, and the other source still shows', async () => {
+    const stalled = { readBox: () => new Promise<OvertureLodgingBox>(() => undefined), cache: { read: () => null, write: () => undefined } };
+    const started = Date.now();
+    const result = await discoverLodgingNear({ near, radiusKm: 4 }, {}, { overture: stalled, overpass: deps.overpass }, 50);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(result.sources).toEqual([
+      { source: 'overture', status: 'failed', count: 0 },
+      { source: 'osm', status: 'ok', count: 1, cacheHit: false },
+    ]);
+    expect(result.available).toBe(true);
+  });
+
   it('with the fixture compiler, fixture properties stand in', async () => {
     const result = await discoverLodgingNear({ near, radiusKm: 4 }, { SIDEQUEST_COMPILER_PROVIDER: 'fixture' });
     expect(result.provider).toBe('fixture');
