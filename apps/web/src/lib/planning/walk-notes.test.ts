@@ -42,6 +42,10 @@ describe('a car-free move says how it is made', () => {
     expect(carFreeMoveFor(tokyo, kyoto, 'IS')).toEqual({ how: 'bus', when: 'start' });
     expect(carFreeMoveFor(tokyo, { lat: 35.45, lng: 139.63 }, 'JP')).toEqual({ how: 'rail', when: 'start' });
   });
+  it('a short move between two villages is the bus, even where the backbone is rail (no station in every mountain village)', () => {
+    const village = { lat: 33.83, lng: 135.47 };
+    expect(carFreeMoveFor(village, { lat: 33.87, lng: 135.56 }, 'JP')).toEqual({ how: 'bus', when: 'start' });
+  });
   it('a hop across town, or an unplaced bed, states nothing', () => {
     expect(carFreeMoveFor(tokyo, { lat: 35.69, lng: 139.705 }, 'JP')).toBeNull();
     expect(carFreeMoveFor(undefined, kyoto, 'JP')).toBeNull();

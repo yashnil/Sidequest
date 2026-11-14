@@ -1,6 +1,6 @@
 import { haversineKm } from '../travel/estimate';
 import { twilightFor, TWILIGHT_DEPRESSION_DEGREES } from '../weather/solar';
-import { utcOffsetMinutesOn } from '../time/zone';
+import { utcOffsetMinutesOn, zoneFitsLongitude } from '../time/zone';
 import { walkingMinutes, type ScanCandidateProposal, type ScanStageAlternative } from './proposal';
 import type { TrailStageRecord } from '../schemas/stay';
 
@@ -213,7 +213,7 @@ export function orderTrailStages(input: {
 
 /** Civil dusk at a point on a date, minutes from local midnight; null when it cannot honestly be said (no trusted zone, a white night). */
 export function civilDuskMinute(point: Point, date: string, timeZone: string | undefined): number | null {
-  if (!timeZone || (/^(Etc\/)?(UTC|GMT)$/i.test(timeZone) && Math.abs(point.lng) > 22.5)) return null;
+  if (!timeZone || (/^(Etc\/)?(UTC|GMT)$/i.test(timeZone) && Math.abs(point.lng) > 22.5) || !zoneFitsLongitude(timeZone, point.lng)) return null;
   try {
     const offset = utcOffsetMinutesOn(date, timeZone);
     const civil = twilightFor(point, date, offset, TWILIGHT_DEPRESSION_DEGREES.civil);

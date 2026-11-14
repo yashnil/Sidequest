@@ -382,3 +382,27 @@ export function offsetLabel(zone: string): string {
   const sign = match[1] === '+' ? '−' : '+';
   return `UTC${sign}${match[2]}`;
 }
+
+/** A zone further than this from the point's solar time is not this point's zone. */
+export const ZONE_SOLAR_TOLERANCE_HOURS = 3.5;
+
+/**
+ * Eval v3 — WHETHER A ZONE CAN BE THIS POINT'S CLOCK. A destination's zone can
+ * be a country's default (the United States' is New York); applied to Kauai it
+ * put a sunset at midnight and a beach visit at 23:00. A zone whose offset, in
+ * January and in July, is more than three and a half hours from the point's
+ * solar time (longitude ÷ 15, wrapped at the date line) is refused, and the
+ * caller treats the clock as unknown. Real zones sit within about three hours
+ * of solar time (western China is the widest); Kiritimati's +14 is wrapped.
+ */
+export function zoneFitsLongitude(timeZone: string, lng: number): boolean {
+  const solar = lng / 15;
+  try {
+    return ['2026-01-15', '2026-07-15'].some((date) => {
+      const raw = Math.abs(utcOffsetMinutesOn(date, timeZone) / 60 - solar) % 24;
+      return Math.min(raw, 24 - raw) <= ZONE_SOLAR_TOLERANCE_HOURS;
+    });
+  } catch {
+    return false;
+  }
+}

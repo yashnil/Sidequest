@@ -218,3 +218,10 @@ describe('sky timing — through the reconciler', () => {
     expect(sunrise - dawn.startMinute).toBeLessThanOrEqual(30);
   });
 });
+
+describe('a zone that cannot be this point’s clock (eval v3, Kauai)', () => {
+  it('gives no sky rather than a sunset at midnight', () => {
+    expect(daySkyFor({ lat: 21.874, lng: -159.45 }, '2027-09-10', 'America/New_York')).toBeNull();
+    expect(daySkyFor({ lat: 21.874, lng: -159.45 }, '2027-09-10', 'Pacific/Honolulu')?.sunsetMinute).toBeGreaterThan(18 * 60);
+  });
+});

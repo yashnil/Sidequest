@@ -1,4 +1,4 @@
-import { solarEventsFor, twilightFor, TWILIGHT_DEPRESSION_DEGREES, utcOffsetMinutesOn } from '@sidequest/core';
+import { solarEventsFor, twilightFor, TWILIGHT_DEPRESSION_DEGREES, utcOffsetMinutesOn, zoneFitsLongitude } from '@sidequest/core';
 
 /**
  * THE SKY A STOP IS FOR — SUNRISE, SUNSET AND DARKNESS AT THE REAL HOUR.
@@ -80,6 +80,8 @@ export const LATEST_DARKNESS_START = 25 * 60;
 export function trustedZone(timeZone: string | undefined, lng: number): string | null {
   if (!timeZone) return null;
   if (/^(Etc\/)?(UTC|GMT|UCT|Zulu|Universal)$/i.test(timeZone) && Math.abs(lng) > 22.5) return null;
+  /* A country's default zone on a point far from it (New York on Kauai) is not this point's clock. */
+  if (!zoneFitsLongitude(timeZone, lng)) return null;
   return timeZone;
 }
 

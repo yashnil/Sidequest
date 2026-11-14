@@ -47,7 +47,7 @@ import { buildFailure, classifyModelError, type BuildFailureCause } from '../pla
 import { boardFor, foodProviderChoice, resolveTripRegion } from '../region';
 import { seedPlannerAutoPicks } from '../planning/seed-autopicks';
 import { SCAN_INSTRUCTION, SCAN_JSON_TAG, SCAN_PROMPT_VERSION, buildScanSupplementTask, buildScanTask, buildScanUntrusted, scanCandidateTarget, scanProposalWireSchema } from './prompt';
-import { fixturePlacement, placeScanProposal, withdrawCrossPartPositions } from './placement';
+import { BASE_MISMATCH_KM, baseParts, fixturePlacement, placeScanProposal, withdrawCrossPartPositions } from './placement';
 import { journeyFor, strategicBaseChanges } from '../planning/journey';
 import { linkWikidataIds } from '../providers/wikidata-link';
 import { providerUserAgent } from '../net/user-agent';
@@ -411,6 +411,14 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       const checked = withdrawCrossPartPositions(proposal, placement.positions, parts);
       if (checked.withdrawn.length > 0) {
         console.warn(`Discovery scan placement for ${tripId}: ${checked.withdrawn.length} placed in a different named part than their own locality, withdrawn (${checked.withdrawn.slice(0, 5).join(', ')}).`);
+        placement = { ...placement, positions: checked.positions };
+      }
+    }
+    /* …and against the proposal's own placed bases (`baseParts`): a candidate said to be at one base, placed by another, is unplaced rather than wrong. */
+    {
+      const checked = withdrawCrossPartPositions(proposal, placement.positions, baseParts(proposal, placement.positions), BASE_MISMATCH_KM);
+      if (checked.withdrawn.length > 0) {
+        console.warn(`Discovery scan placement for ${tripId}: ${checked.withdrawn.length} placed by a different base than their own locality, withdrawn (${checked.withdrawn.slice(0, 5).join(', ')}).`);
         placement = { ...placement, positions: checked.positions };
       }
     }

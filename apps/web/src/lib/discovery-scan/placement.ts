@@ -248,6 +248,7 @@ export function withdrawCrossPartPositions(
   proposal: Pick<ScanProposal, 'candidates'>,
   positions: ReadonlyMap<string, ResolvedPosition | null>,
   parts: readonly { label: string; center: { lat: number; lng: number } }[],
+  mismatchKm: number = PART_MISMATCH_KM,
 ): { positions: Map<string, ResolvedPosition | null>; withdrawn: string[] } {
   const next = new Map(positions);
   const withdrawn: string[] = [];
@@ -258,13 +259,33 @@ export function withdrawCrossPartPositions(
     const own = parts.find((part) => sameName(candidate.locality, part.label));
     if (!own) continue;
     const fromOwn = haversineKm(at.coordinates, own.center);
-    if (fromOwn <= PART_MISMATCH_KM) continue;
+    if (fromOwn <= mismatchKm) continue;
     const nearerOther = parts.some((part) => part !== own && haversineKm(at.coordinates, part.center) < fromOwn);
     if (!nearerOther) continue;
     next.set(candidate.key, null);
     withdrawn.push(candidate.key);
   }
   return { positions: next, withdrawn };
+}
+
+/**
+ * Eval v3 — THE SAME CHECK AGAINST THE PROPOSAL'S OWN PLACES TO SLEEP. A live
+ * Tanzania scan placed "Serengeti Balloon Safari" (locality "Serengeti") at the
+ * operator's office in Arusha, 300 km from the trip's own Serengeti base; the
+ * stay decision then "reached the Serengeti" from Arusha and dropped the
+ * Serengeti nights. A candidate whose locality is one of the bases' names or
+ * localities, placed far from that base and nearer another, is unplaced.
+ * Wider than between named parts: a base in a park serves a large area.
+ */
+export const BASE_MISMATCH_KM = 60;
+
+export function baseParts(proposal: Pick<ScanProposal, 'bases'>, positions: ReadonlyMap<string, ResolvedPosition | null>): { label: string; center: { lat: number; lng: number } }[] {
+  return proposal.bases.flatMap((base) => {
+    const at = positions.get(base.key);
+    if (!at) return [];
+    const labels = [base.name, ...(base.locality && !sameName(base.locality, base.name) ? [base.locality] : [])];
+    return labels.map((label) => ({ label, center: at.coordinates }));
+  });
 }
 
 export async function placeScanProposal(proposal: ScanProposal, options: PlacementOptions): Promise<PlacementResult> {

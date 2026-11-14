@@ -149,3 +149,36 @@ describe('a business never stands for a place to sleep (live Kyrgyzstan finding)
     expect(notABaseRow({ category: 'shop' })).toBe(true);
   });
 });
+
+describe('a candidate placed by a different base than its own locality (live Tanzania finding)', () => {
+  it('is withdrawn: the operator office in the gateway town does not stand for the park activity', async () => {
+    const normalized = normalizeScanProposal({
+      bases: [
+        { name: 'Gateway Town', locality: 'Gateway Town', nightsHint: 2, why: 'x' },
+        { name: 'Plains Camp', locality: 'Great Plains', nightsHint: 3, why: 'x' },
+      ],
+      candidates: [
+        { name: 'Great Plains balloon flight', locality: 'Great Plains', kind: 'guided_activity', tier: 'classic', why: 'x' },
+        { name: 'Great Plains game drive', locality: 'Great Plains', kind: 'wildlife', tier: 'classic', why: 'x' },
+      ],
+    });
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const { baseParts, withdrawCrossPartPositions, BASE_MISMATCH_KM } = await import('./placement');
+    const [town, camp] = normalized.proposal.bases;
+    const [balloon, drive] = normalized.proposal.candidates;
+    const at = (lat: number, lng: number) => ({ coordinates: { lat, lng }, method: 'geocoder' as const, provider: 'nominatim', approximate: false });
+    const positions = new Map([
+      [town!.key, at(-3.37, 36.69)],
+      [camp!.key, at(-2.43, 34.89)],
+      /* The balloon "flight" answered by an office 2 km from the gateway town, 220 km from the camp. */
+      [balloon!.key, at(-3.39, 36.71)],
+      /* A drive 70 km from the camp but still far nearer it than the town: kept. */
+      [drive!.key, at(-1.9, 34.6)],
+    ]);
+    const checked = withdrawCrossPartPositions(normalized.proposal, positions, baseParts(normalized.proposal, positions), BASE_MISMATCH_KM);
+    expect(checked.withdrawn).toEqual([balloon!.key]);
+    expect(checked.positions.get(balloon!.key)).toBeNull();
+    expect(checked.positions.get(drive!.key)).not.toBeNull();
+  });
+});
+

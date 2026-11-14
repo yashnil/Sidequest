@@ -530,6 +530,9 @@ export function themeFor(day: StructurePlan['days'][number], baseName: string, i
   return clip(body || `A slower day around ${baseName}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
 }
 
+/** A car-free move shorter than this is a bus even where the country's backbone is rail. */
+export const MIN_CAR_FREE_RAIL_KM = 25;
+
 /** How a car-free move between two beds is made: a train, high-speed where the country's facts make it the backbone and the hop is long; nothing for a hop across town. */
 export function carFreeMoveFor(
   from: { lat: number; lng: number } | undefined,
@@ -540,8 +543,13 @@ export function carFreeMoveFor(
   const km = haversineKm(from, to);
   if (km <= 1.5) return null;
   if (km >= 100 && highSpeedRailBackbone(countryCode)) return { how: 'high_speed_rail', when: 'start' };
-  /* A train only where the country's facts say trains run between towns; otherwise the bus that does. */
-  return { how: publicTransportNetwork(countryCode).intercityRail ? 'rail' : 'bus', when: 'start' };
+  /*
+   * A train only where the country's facts say trains run between towns, and
+   * only for a hop long enough to be one: the facts are national, not a station
+   * in every village, and a 9 km move between two Kii mountain villages printed
+   * as a train. A shorter hop is the bus that does run.
+   */
+  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode).intercityRail ? 'rail' : 'bus', when: 'start' };
 }
 
 function draftFromPlan(args: {
@@ -562,7 +570,9 @@ function draftFromPlan(args: {
   /* A metro serves cities: on a regional, rural or trail trip a short hop is a bus even where the country has a metro somewhere. */
   const countryNetwork = publicTransportNetwork(input.region.compiled.scope.countryCode);
   const cityScale = input.region.compiled.scope.breadth === 'city' || input.region.compiled.scope.breadth === 'local';
-  const network = { ...countryNetwork, metro: countryNetwork.metro && cityScale };
+  /* A trail corridor can read as "local" scope; a hop between its villages is a bus, never a metro (eval v3: "≈30 min train · ~4 km" to Chikatsuyu-oji). */
+  const onTrail = input.region.basePortfolio?.decision?.trail?.followed === true;
+  const network = { ...countryNetwork, metro: countryNetwork.metro && cityScale && !onTrail };
   const days: DraftDay[] = plan.days.map((day, i) => {
     const isFirst = i === 0;
     const isLast = i === plan.days.length - 1;

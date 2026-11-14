@@ -222,3 +222,16 @@ describe('the database the offsets are computed against', () => {
     expect(version === null || /^\d{4}[a-z]$/.test(version)).toBe(true);
   });
 });
+
+describe('whether a zone can be this point’s clock (eval v3, Kauai)', () => {
+  it('refuses a country default far from the point and accepts real zones, including wide and date-line ones', async () => {
+    const { zoneFitsLongitude } = await import('./zone');
+    expect(zoneFitsLongitude('America/New_York', -159.45)).toBe(false);
+    expect(zoneFitsLongitude('Pacific/Honolulu', -159.45)).toBe(true);
+    expect(zoneFitsLongitude('Asia/Shanghai', 75.99)).toBe(true);
+    expect(zoneFitsLongitude('Europe/Madrid', -8.5)).toBe(true);
+    expect(zoneFitsLongitude('Pacific/Kiritimati', -157.4)).toBe(true);
+    expect(zoneFitsLongitude('Asia/Kolkata', 92)).toBe(true);
+    expect(zoneFitsLongitude('Not/AZone', 0)).toBe(false);
+  });
+});
