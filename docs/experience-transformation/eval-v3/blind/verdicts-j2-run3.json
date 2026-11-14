@@ -1,0 +1,233 @@
+[
+  {
+    "id": "beach-island#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 4,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 28
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 4,
+        "transport": 4,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 35
+      }
+    },
+    "preferred": "B",
+    "reason": "A sleeps all 7 nights in Poipu, so the north shore costs three long round trips (Day 1 is a 3 h 10 drive to Lumaha'i on arrival; Days 3, 5 and 7 cross the island again), and the Na Pali coast never appears. B splits Princeville (4) and Poipu (3) as the requirements suggest and includes the Kalalau Trail to Hanakapi'ai, Hanalei and Waimea Canyon. It loses points for timing: Hanalei Bay is labelled 'near sunset' at 22:30, a clifftop vista is set at 23:10, and the Ha'ena reservation is not mentioned."
+  },
+  {
+    "id": "iceland-ring-road#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 32
+      },
+      "B": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 29
+      }
+    },
+    "preferred": "A",
+    "reason": "Narrow call. B reaches more of the defining sights (Reynisfjara, Jokulsarlon, Myvatn, Thingvellir), but it puts Dyrholaey at 22:40 on 14 June, inside the reported nesting closure that runs to about 23 June. It also schedules a needless 05:30 start for Vestrahorn, and its Day 5 Hofn-to-Akureyri leg is incoherent: it drives to Akureyri by lunch, then adds a 6 h 10 'base to base' drive (about 10 h in total). A splits the long eastern stretch with a night in Egilsstadir and its long Day 7 (about 6 h) is stated honestly, but it misses Vik/Reynisfjara and the Golden Circle and spends a day on a Siglufjordur out-and-back."
+  },
+  {
+    "id": "kumano-kodo#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 28
+      },
+      "B": {
+        "intent": 2,
+        "defining": 3,
+        "geography": 3,
+        "transport": 1,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 26
+      }
+    },
+    "preferred": "A",
+    "reason": "A actually walks the Nakahechi in child-sized stages (Takijiri to Takahara, Takahara to Chikatsuyu, Chikatsuyu to Tsugizakura, then Hosshinmon to Hongu Taisha), sends luggage ahead and uses no car. It also reaches all three Grand Shrines. However, it invents trains in the mountains, keeps an 8-night base at Chikatsuyu that is far from Nachi and Shingu, and presents the winter-only Kawayu riverside bath as available (B makes the same error). B hits the red flag of a self-drive rental car (977 km) from a single Nachisan base. It drives to Hongu Taisha before walking to it, and adds a 2 h 40 Shirahama beach day."
+  },
+  {
+    "id": "kyrgyzstan#3",
+    "scores": {
+      "A": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 1,
+        "transport": 1,
+        "timing": 2,
+        "quality": 2,
+        "lodging": 1,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 14
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 2,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      }
+    },
+    "preferred": "B",
+    "reason": "A is essentially broken. Its 'Song-Kol area' base is really Bishkek: it reaches Ala Archa and the museums by non-existent trains and has no real yurt night, no Karakol, no Issyk-Kul and no trek, which leaves an adventure trip of city days and viewpoint out-and-backs. B covers Bishkek, two Song-Kol yurt nights and Karakol, with hikes to Ala-Kol and Altyn Arashan plus Jeti-Oguz. It is still flawed: Song-Kol by bus rather than 4WD with a driver, a 9 h 45 Day 4 that doubles back to Osh Bazaar, an 8 h 50 Day 6 and no multi-day trek."
+  },
+  {
+    "id": "mountain-road-trip#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 2,
+        "transport": 4,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 32
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 35
+      }
+    },
+    "preferred": "B",
+    "reason": "B gives Skye 3 nights (Fairy Pools, Dunvegan, Storr and Quiraing) and adds Glenfinnan and Glen Coe from a Fort William base. That covers more of the defining experiences in a cleaner one-way flow. A's Day 4 and Day 6 both add a phantom extra 3 h 'base to base' drive, which makes them roughly 6 h days, and it budgets the Applecross pass from Portree at 50 min, which is unrealistic. Both plans use unrequested 05:30 starts (A Day 7; B Days 3 and 5)."
+  },
+  {
+    "id": "point-to-point-trek#3",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 2,
+        "timing": 1,
+        "quality": 2,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 19
+      },
+      "B": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 1,
+        "transport": 2,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 1,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 1,
+        "total": 18
+      }
+    },
+    "preferred": "A",
+    "reason": "Both are poor. B is the red-flag 'TMB as day trips from one base': 9 nights in Courmayeur, with the Chamonix side and Refuge des Mottets treated as same-day trips, Chamonix shown as a 15-minute walk away, and only one real TMB stretch. A at least walks three real stages bed to bed with luggage transfer (Les Houches to Contamines to Chapieux to Courmayeur). But its Day 7 is an impossible 42 km / 2,400 m stage starting at 12:25, it walks high passes in the afternoon, it never reaches Switzerland and it relies on fictional trains."
+  },
+  {
+    "id": "tanzania-safari#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 2,
+        "transport": 2,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 25
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 24
+      }
+    },
+    "preferred": "A",
+    "reason": "A follows the classic Tarangire, Ngorongoro rim, central Serengeti circuit with an early 07:05 crater descent. It is marred by 'train' legs, an incoherent 9 h 25 Day 3 that puts a Tarangire game drive past gate close, a Gol Kopjes drive running past sunset, and a night drive (labelled as concession-only). B drops Tarangire and spends Days 3 and 4 on Mto wa Mbu filler. Its Day 5 drives to the Serengeti and back to Endoro Falls and on again (about 5 h), and it admits it has only one Serengeti game drive. That makes it the weaker safari, despite tidier timing."
+  }
+]

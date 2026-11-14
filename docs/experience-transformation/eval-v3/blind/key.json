@@ -1,0 +1,89 @@
+{
+ "compared": "fixed",
+ "pairs": {
+  "beach-island#1": {
+   "A": "new",
+   "B": "previous"
+  },
+  "beach-island#2": {
+   "A": "new",
+   "B": "previous"
+  },
+  "beach-island#3": {
+   "A": "previous",
+   "B": "new"
+  },
+  "iceland-ring-road#1": {
+   "A": "previous",
+   "B": "new"
+  },
+  "iceland-ring-road#2": {
+   "A": "previous",
+   "B": "new"
+  },
+  "iceland-ring-road#3": {
+   "A": "new",
+   "B": "previous"
+  },
+  "kumano-kodo#1": {
+   "A": "previous",
+   "B": "new"
+  },
+  "kumano-kodo#2": {
+   "A": "previous",
+   "B": "new"
+  },
+  "kumano-kodo#3": {
+   "A": "new",
+   "B": "previous"
+  },
+  "kyrgyzstan#1": {
+   "A": "new",
+   "B": "previous"
+  },
+  "kyrgyzstan#2": {
+   "A": "previous",
+   "B": "new"
+  },
+  "kyrgyzstan#3": {
+   "A": "previous",
+   "B": "new"
+  },
+  "mountain-road-trip#1": {
+   "A": "previous",
+   "B": "new"
+  },
+  "mountain-road-trip#2": {
+   "A": "new",
+   "B": "previous"
+  },
+  "mountain-road-trip#3": {
+   "A": "previous",
+   "B": "new"
+  },
+  "point-to-point-trek#1": {
+   "A": "new",
+   "B": "previous"
+  },
+  "point-to-point-trek#2": {
+   "A": "previous",
+   "B": "new"
+  },
+  "point-to-point-trek#3": {
+   "A": "new",
+   "B": "previous"
+  },
+  "tanzania-safari#1": {
+   "A": "previous",
+   "B": "new"
+  },
+  "tanzania-safari#2": {
+   "A": "previous",
+   "B": "new"
+  },
+  "tanzania-safari#3": {
+   "A": "previous",
+   "B": "new"
+  }
+ }
+}

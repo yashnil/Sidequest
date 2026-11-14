@@ -275,7 +275,9 @@ test('hiding every place leaves an explanation and a way back', async ({ page })
   await empty.getByRole('button', { name: 'Show hidden places' }).click();
   await expect(cards).toHaveCount(total);
 
-  // And the marks were real: they are still hidden after a reload.
+  // And the marks were real: they are still hidden after a reload — once every save has landed
+  // (each hide is optimistic; reloading over a save still in flight loses it, which is the test's race, not the board's).
+  await expect(page.getByTestId('provisional-board').locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 20_000 });
   await page.reload();
   await expect(page.getByTestId('provisional-empty')).toBeVisible();
 });

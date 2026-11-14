@@ -1,0 +1,74 @@
+{
+ "summary": {
+  "beach-island": {
+   "new": 6,
+   "previous": 3,
+   "tie": 0,
+   "previous_mean": 30.9,
+   "previous_sd": 2.7,
+   "new_mean": 33,
+   "new_sd": 2.7
+  },
+  "iceland-ring-road": {
+   "new": 9,
+   "previous": 0,
+   "tie": 0,
+   "previous_mean": 25.8,
+   "previous_sd": 2.2,
+   "new_mean": 33.2,
+   "new_sd": 1.6
+  },
+  "kumano-kodo": {
+   "new": 9,
+   "previous": 0,
+   "tie": 0,
+   "previous_mean": 25.7,
+   "previous_sd": 2.6,
+   "new_mean": 30.3,
+   "new_sd": 2.8
+  },
+  "kyrgyzstan": {
+   "new": 3,
+   "previous": 6,
+   "tie": 0,
+   "previous_mean": 18.9,
+   "previous_sd": 4.0,
+   "new_mean": 18.4,
+   "new_sd": 4.1
+  },
+  "mountain-road-trip": {
+   "new": 7,
+   "previous": 1,
+   "tie": 1,
+   "previous_mean": 31.7,
+   "previous_sd": 2.9,
+   "new_mean": 36.1,
+   "new_sd": 1.1
+  },
+  "point-to-point-trek": {
+   "new": 9,
+   "previous": 0,
+   "tie": 0,
+   "previous_mean": 17.6,
+   "previous_sd": 0.8,
+   "new_mean": 22.3,
+   "new_sd": 1.9
+  },
+  "tanzania-safari": {
+   "new": 0,
+   "previous": 8,
+   "tie": 1,
+   "previous_mean": 26.9,
+   "previous_sd": 1.6,
+   "new_mean": 23.3,
+   "new_sd": 1.4
+  }
+ },
+ "totals": {
+  "new": 43,
+  "previous": 18,
+  "tie": 2
+ },
+ "unanimous": 19,
+ "pairs": 21
+}

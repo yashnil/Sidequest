@@ -1,0 +1,3718 @@
+{
+ "previous": [
+  {
+   "scenario": "kumano-kodo",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "rental-car"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 150,
+   "total_travel": 1185,
+   "days_over_limit": 0,
+   "bases": 1,
+   "stops": 21,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [
+    "hire car on a no-self-drive trip",
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 3
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": true,
+     "stage": null
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "aurora-june"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 310,
+   "total_travel": 1375,
+   "days_over_limit": 1,
+   "bases": 4,
+   "stops": 15,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 38,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 1,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": false,
+     "stage": "selection"
+    },
+    "karakol-trek": {
+     "present": false,
+     "stage": "selection"
+    },
+    "issyk-kul": {
+     "present": false,
+     "stage": "selection"
+    },
+    "karakol": {
+     "present": false,
+     "stage": "selection"
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 220,
+   "total_travel": 930,
+   "days_over_limit": 0,
+   "bases": 1,
+   "stops": 9,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 9,
+   "board_size": 40,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 530,
+   "total_travel": 1335,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 10,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 6,
+   "board_size": 40,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 140,
+   "total_travel": 825,
+   "days_over_limit": 2,
+   "bases": 1,
+   "stops": 17,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": true,
+     "stage": null
+    },
+    "eilean-donan": {
+     "present": true,
+     "stage": null
+    },
+    "highland-drive": {
+     "present": true,
+     "stage": null
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 0,
+   "total_travel": 0,
+   "days_over_limit": 0,
+   "bases": 4,
+   "stops": 0,
+   "empty_ordinary_days": 6,
+   "one_stop_days": 0,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "1",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": true,
+     "stage": null
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": true,
+     "stage": null
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 190,
+   "total_travel": 1025,
+   "days_over_limit": 6,
+   "bases": 1,
+   "stops": 23,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 30,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "no-walking",
+    "rental-car"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 115,
+   "total_travel": 750,
+   "days_over_limit": 0,
+   "bases": 1,
+   "stops": 26,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [
+    "hire car on a no-self-drive trip",
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 2,
+   "hard_n": 4
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": true,
+     "stage": null
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "aurora-june"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 610,
+   "total_travel": 2000,
+   "days_over_limit": 2,
+   "bases": 4,
+   "stops": 17,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 39,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 3,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": false,
+     "stage": "selection"
+    },
+    "issyk-kul": {
+     "present": false,
+     "stage": "selection"
+    },
+    "karakol": {
+     "present": false,
+     "stage": "selection"
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 460,
+   "total_travel": 1748,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 14,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 6,
+   "board_size": 42,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "night-drive-np"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 570,
+   "total_travel": 1430,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 9,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 5,
+   "board_size": 37,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": false,
+     "stage": "selection"
+    },
+    "eilean-donan": {
+     "present": true,
+     "stage": null
+    },
+    "highland-drive": {
+     "present": true,
+     "stage": null
+    },
+    "skye-crossing": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 355,
+   "total_travel": 891,
+   "days_over_limit": 1,
+   "bases": 3,
+   "stops": 13,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 28,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": true,
+     "stage": null
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "closed-refuge",
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 180,
+   "total_travel": 1222,
+   "days_over_limit": 7,
+   "bases": 1,
+   "stops": 23,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 31,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [
+    "1 hr 40 min bus · 8 km , Bus to Les Houches"
+   ],
+   "red_flags_n": 2,
+   "hard_n": 3
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "rental-car"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 160,
+   "total_travel": 1000,
+   "days_over_limit": 1,
+   "bases": 1,
+   "stops": 25,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [
+    "hire car on a no-self-drive trip",
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 3
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": true,
+     "stage": null
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "aurora-june"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 610,
+   "total_travel": 1754,
+   "days_over_limit": 1,
+   "bases": 4,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 35,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "issyk-kul": {
+     "present": false,
+     "stage": "selection"
+    },
+    "karakol": {
+     "present": false,
+     "stage": "selection"
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [
+    "song-kul-bus"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 275,
+   "total_travel": 1435,
+   "days_over_limit": 0,
+   "bases": 2,
+   "stops": 11,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 7,
+   "board_size": 40,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "night-drive-np"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 565,
+   "total_travel": 1655,
+   "days_over_limit": 2,
+   "bases": 3,
+   "stops": 12,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 34,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "beach-island",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": false,
+     "stage": "selection"
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 190,
+   "total_travel": 859,
+   "days_over_limit": 5,
+   "bases": 1,
+   "stops": 17,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 30,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": false,
+     "stage": "selection"
+    },
+    "eilean-donan": {
+     "present": true,
+     "stage": null
+    },
+    "highland-drive": {
+     "present": true,
+     "stage": null
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 365,
+   "total_travel": 1104,
+   "days_over_limit": 2,
+   "bases": 3,
+   "stops": 16,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 31,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "3",
+   "build": "previous",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": false,
+     "stage": "selection"
+    },
+    "italy-section": {
+     "present": true,
+     "stage": null
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": true,
+     "stage": null
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 285,
+   "total_travel": 1097,
+   "days_over_limit": 5,
+   "bases": 1,
+   "stops": 22,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 30,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [
+    "3 hr 10 min bus · 16 km , Bus to Courmayeur"
+   ],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "beach-island",
+   "run": "2",
+   "build": "previous",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": false,
+     "stage": "selection"
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 240,
+   "total_travel": 815,
+   "days_over_limit": 3,
+   "bases": 1,
+   "stops": 17,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 28,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 3,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  }
+ ],
+ "new": [
+  {
+   "scenario": "kumano-kodo",
+   "run": "1",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 200,
+   "total_travel": 1345,
+   "days_over_limit": 4,
+   "bases": 2,
+   "stops": 27,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 38,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "1",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": true,
+     "stage": null
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": false,
+     "stage": "selection"
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 550,
+   "total_travel": 1632,
+   "days_over_limit": 2,
+   "bases": 4,
+   "stops": 16,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 4,
+   "board_size": 35,
+   "contract_gap": false,
+   "impossible_legs": [
+    "Jokulsarlon Boat Tour -> Jokulsarlon Glacier Lagoon: 20 min, bound 210"
+   ],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "1",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": false,
+     "stage": "selection"
+    },
+    "horse": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 845,
+   "total_travel": 1445,
+   "days_over_limit": 1,
+   "bases": 5,
+   "stops": 4,
+   "empty_ordinary_days": 6,
+   "one_stop_days": 3,
+   "board_size": 32,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [
+    "12 hr 45 min private transfer · 64 km , Travel to Bishkek"
+   ],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "1",
+   "build": "new",
+   "defining_present": 1,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": false,
+     "stage": "selection"
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": false,
+     "stage": "selection"
+    },
+    "guided-vehicle": {
+     "present": false,
+     "stage": "selection"
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 195,
+   "total_travel": 936,
+   "days_over_limit": 0,
+   "bases": 1,
+   "stops": 12,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 37,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [
+    "1 hr 10 min private transfer · 6 km , Private transfer to Gibb's Farm viewpoint "
+   ],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "1",
+   "build": "new",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 132,
+   "total_travel": 628,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 21,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 33,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "1",
+   "build": "new",
+   "defining_present": 1,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": false,
+     "stage": "selection"
+    },
+    "italy-section": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "french-return": {
+     "present": false,
+     "stage": "selection"
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 175,
+   "total_travel": 882,
+   "days_over_limit": 4,
+   "bases": 1,
+   "stops": 23,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 42,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "2",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 175,
+   "total_travel": 1260,
+   "days_over_limit": 3,
+   "bases": 2,
+   "stops": 24,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 35,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "2",
+   "build": "new",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": true,
+     "stage": null
+    },
+    "skaftafell": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 405,
+   "total_travel": 1516,
+   "days_over_limit": 2,
+   "bases": 4,
+   "stops": 20,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 34,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 4,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "2",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "karakol-trek": {
+     "present": true,
+     "stage": null
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 1530,
+   "total_travel": 6604,
+   "days_over_limit": 6,
+   "bases": 3,
+   "stops": 14,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 6,
+   "board_size": 45,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 6,
+   "consistency": [],
+   "slow_measured_rides": [
+    "6 hr 45 min bus · 34 km , Bus to Ala Archa National Park",
+    "6 hr 45 min bus · 34 km , Bus to Bishkek",
+    "12 hr 45 min bus · 64 km , Bus to Burana Tower",
+    "12 hr 45 min bus · 64 km , Bus to Bishkek",
+    "50 min bus · 4 km , Bus to Osh Bazaar",
+    "10 hr 15 min bus · 51 km , Bus to Bokonbaevo eagle hunting demonstration",
+    "10 hr 15 min bus · 51 km , Bus to Bokonbaevo / Southern Issyk-Kul",
+    "2 hr bus · 10 km , Bus to Skazka Canyon southern shore",
+    "2 hr bus · 10 km , Bus to Bokonbaevo / Southern Issyk-Kul",
+    "4 hr 30 min bus · 22 km , Bus to Karakol",
+    "5 hr 25 min bus · 27 km , Bus to Altyn Arashan hot springs",
+    "5 hr 25 min bus · 27 km , Bus to Karakol"
+   ],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "2",
+   "build": "new",
+   "defining_present": 3,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": false,
+     "stage": "selection"
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 1080,
+   "total_travel": 2055,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 9,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 5,
+   "board_size": 37,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [
+    "9 hr private transfer · 45 km , Private transfer to Serengeti Kogatende Area Gam",
+    "9 hr private transfer · 45 km , Private transfer to Serengeti National Park",
+    "1 hr 10 min private transfer · 6 km , Private transfer to Gibb's Farm Coffee Tou"
+   ],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "2",
+   "build": "new",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 150,
+   "total_travel": 642,
+   "days_over_limit": 3,
+   "bases": 2,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 26,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "2",
+   "build": "new",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": false,
+     "stage": "selection"
+    },
+    "eilean-donan": {
+     "present": false,
+     "stage": "selection"
+    },
+    "highland-drive": {
+     "present": true,
+     "stage": null
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 196,
+   "total_travel": 810,
+   "days_over_limit": 0,
+   "bases": 3,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 32,
+   "contract_gap": false,
+   "impossible_legs": [
+    "Portree harbour -> Applecross Pass (Bealach na Bà): 50 min, bound 144"
+   ],
+   "far_days": 3,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "2",
+   "build": "new",
+   "defining_present": 2,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 185,
+   "total_travel": 963,
+   "days_over_limit": 5,
+   "bases": 1,
+   "stops": 22,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 34,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "3",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 205,
+   "total_travel": 1355,
+   "days_over_limit": 5,
+   "bases": 2,
+   "stops": 25,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 30,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "3",
+   "build": "new",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": true,
+     "stage": null
+    },
+    "skaftafell": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [
+    "aurora-june"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 330,
+   "total_travel": 1434,
+   "days_over_limit": 1,
+   "bases": 4,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 37,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 4,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "3",
+   "build": "new",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": true,
+     "stage": null
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": false,
+     "stage": "selection"
+    },
+    "horse": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 645,
+   "total_travel": 1862,
+   "days_over_limit": 1,
+   "bases": 6,
+   "stops": 7,
+   "empty_ordinary_days": 4,
+   "one_stop_days": 5,
+   "board_size": 38,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [
+    "5 hr 25 min private transfer · 27 km , Travel to Karakol"
+   ],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "3",
+   "build": "new",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 910,
+   "total_travel": 2370,
+   "days_over_limit": 2,
+   "bases": 2,
+   "stops": 7,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 7,
+   "board_size": 33,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [
+    "7 hr 35 min private transfer · 38 km , Private transfer to Lake Manyara Hippo Po",
+    "7 hr 35 min private transfer · 38 km , Private transfer to Karatu / Lake Manyara",
+    "55 min private transfer · 5 km , Private transfer to Karatu Coffee Farm Walk",
+    "55 min private transfer · 5 km , Private transfer to Karatu / Lake Manyara area",
+    "2 hr 30 min private transfer · 13 km , Private transfer to Central Serengeti leo",
+    "2 hr 30 min private transfer · 13 km , Private transfer to Serengeti National Pa"
+   ],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "3",
+   "build": "new",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 150,
+   "total_travel": 640,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 21,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 30,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "3",
+   "build": "new",
+   "defining_present": 2,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "eilean-donan": {
+     "present": false,
+     "stage": "selection"
+    },
+    "highland-drive": {
+     "present": false,
+     "stage": "selection"
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 150,
+   "total_travel": 814,
+   "days_over_limit": 0,
+   "bases": 3,
+   "stops": 17,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "3",
+   "build": "new",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": true,
+     "stage": null
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 185,
+   "total_travel": 1155,
+   "days_over_limit": 7,
+   "bases": 1,
+   "stops": 21,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 35,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [
+    "trek with no forwarded luggage"
+   ],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 2
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "1",
+   "build": "new",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": false,
+     "stage": "selection"
+    },
+    "eilean-donan": {
+     "present": true,
+     "stage": null
+    },
+    "highland-drive": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 165,
+   "total_travel": 595,
+   "days_over_limit": 0,
+   "bases": 3,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 34,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  }
+ ],
+ "fixed": [
+  {
+   "scenario": "kumano-kodo",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "no-walking",
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 180,
+   "total_travel": 1136,
+   "days_over_limit": 3,
+   "bases": 2,
+   "stops": 27,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 35,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 2,
+   "hard_n": 2
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": true,
+     "stage": null
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": false,
+     "stage": "selection"
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 215,
+   "total_travel": 1153,
+   "days_over_limit": 0,
+   "bases": 4,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 34,
+   "contract_gap": false,
+   "impossible_legs": [
+    "Mývatn Nature Baths -> Hverir (Námaskarð): 3 min, bound 120"
+   ],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 2,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "karakol-trek": {
+     "present": false,
+     "stage": "selection"
+    },
+    "issyk-kul": {
+     "present": false,
+     "stage": "selection"
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "song-kul-bus"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 1435,
+   "total_travel": 2580,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 5,
+   "board_size": 46,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "gateway": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [
+    "night-drive-np"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 480,
+   "total_travel": 956,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 12,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 4,
+   "board_size": 45,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "beach-island",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 140,
+   "total_travel": 634,
+   "days_over_limit": 2,
+   "bases": 2,
+   "stops": 21,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 32,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": true,
+     "stage": null
+    },
+    "eilean-donan": {
+     "present": true,
+     "stage": null
+    },
+    "highland-drive": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 185,
+   "total_travel": 757,
+   "days_over_limit": 0,
+   "bases": 3,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "1",
+   "build": "fixed",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": true,
+     "stage": null
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": false,
+     "stage": "selection"
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 200,
+   "total_travel": 1175,
+   "days_over_limit": 7,
+   "bases": 4,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 32,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 190,
+   "total_travel": 1175,
+   "days_over_limit": 3,
+   "bases": 2,
+   "stops": 24,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 30,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": true,
+     "stage": null
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": false,
+     "stage": "selection"
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "aurora-june"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 390,
+   "total_travel": 1281,
+   "days_over_limit": 2,
+   "bases": 4,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 38,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 3,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "karakol-trek": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "song-kul-bus"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 1100,
+   "total_travel": 2288,
+   "days_over_limit": 1,
+   "bases": 3,
+   "stops": 16,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 5,
+   "board_size": 41,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 385,
+   "total_travel": 995,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 15,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 39,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 210,
+   "total_travel": 986,
+   "days_over_limit": 5,
+   "bases": 1,
+   "stops": 12,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 4,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": true,
+     "stage": null
+    },
+    "eilean-donan": {
+     "present": false,
+     "stage": "selection"
+    },
+    "highland-drive": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 160,
+   "total_travel": 716,
+   "days_over_limit": 0,
+   "bases": 3,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 33,
+   "contract_gap": false,
+   "impossible_legs": [
+    "Glen Coe -> Glencoe Lochan: 10 min, bound 50"
+   ],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 1
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "2",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": true,
+     "stage": null
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": true,
+     "stage": null
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 190,
+   "total_travel": 1070,
+   "days_over_limit": 6,
+   "bases": 4,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 32,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 205,
+   "total_travel": 1295,
+   "days_over_limit": 4,
+   "bases": 2,
+   "stops": 26,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 31,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "iceland-ring-road",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "ring-road": {
+     "present": true,
+     "stage": null
+    },
+    "jokulsarlon": {
+     "present": true,
+     "stage": null
+    },
+    "south-coast": {
+     "present": true,
+     "stage": null
+    },
+    "north": {
+     "present": true,
+     "stage": null
+    },
+    "golden-circle": {
+     "present": false,
+     "stage": "selection"
+    },
+    "skaftafell": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "aurora-june"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 385,
+   "total_travel": 1389,
+   "days_over_limit": 1,
+   "bases": 4,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 2,
+   "board_size": 32,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 4,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": true,
+     "stage": null
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": false,
+     "stage": "selection"
+    },
+    "horse": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "song-kul-bus"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 585,
+   "total_travel": 1964,
+   "days_over_limit": 2,
+   "bases": 3,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 39,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 520,
+   "total_travel": 1315,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 10,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 6,
+   "board_size": 39,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 145,
+   "total_travel": 651,
+   "days_over_limit": 2,
+   "bases": 2,
+   "stops": 21,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 28,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 1,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "mountain-road-trip",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "glencoe": {
+     "present": true,
+     "stage": null
+    },
+    "skye": {
+     "present": true,
+     "stage": null
+    },
+    "road-to-the-isles": {
+     "present": true,
+     "stage": null
+    },
+    "eilean-donan": {
+     "present": true,
+     "stage": null
+    },
+    "highland-drive": {
+     "present": true,
+     "stage": null
+    },
+    "skye-crossing": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 295,
+   "total_travel": 851,
+   "days_over_limit": 1,
+   "bases": 3,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 0,
+   "board_size": 28,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "3",
+   "build": "fixed",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": true,
+     "stage": null
+    },
+    "swiss-section": {
+     "present": true,
+     "stage": null
+    },
+    "french-return": {
+     "present": true,
+     "stage": null
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 200,
+   "total_travel": 1118,
+   "days_over_limit": 6,
+   "bases": 4,
+   "stops": 19,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 27,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  }
+ ],
+ "postfix": [
+  {
+   "scenario": "kyrgyzstan",
+   "run": "1",
+   "build": "postfix",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": true,
+     "stage": null
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": false,
+     "stage": "selection"
+    },
+    "horse": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 565,
+   "total_travel": 2260,
+   "days_over_limit": 2,
+   "bases": 3,
+   "stops": 14,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 6,
+   "board_size": 42,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "kyrgyzstan",
+   "run": "2",
+   "build": "postfix",
+   "defining_present": 5,
+   "defining_total": 6,
+   "defining": {
+    "song-kul-yurt": {
+     "present": true,
+     "stage": null
+    },
+    "karakol-trek": {
+     "present": true,
+     "stage": null
+    },
+    "issyk-kul": {
+     "present": true,
+     "stage": null
+    },
+    "karakol": {
+     "present": true,
+     "stage": null
+    },
+    "ala-archa": {
+     "present": true,
+     "stage": null
+    },
+    "horse": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [
+    "song-kul-bus"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 545,
+   "total_travel": 1835,
+   "days_over_limit": 1,
+   "bases": 3,
+   "stops": 15,
+   "empty_ordinary_days": 1,
+   "one_stop_days": 4,
+   "board_size": 39,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 1,
+   "hard_n": 1
+  }
+ ],
+ "final": [
+  {
+   "scenario": "tanzania-safari",
+   "run": "1",
+   "build": "final",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 470,
+   "total_travel": 1005,
+   "days_over_limit": 1,
+   "bases": 4,
+   "stops": 7,
+   "empty_ordinary_days": 3,
+   "one_stop_days": 2,
+   "board_size": 34,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "beach-island",
+   "run": "1",
+   "build": "final",
+   "defining_present": 5,
+   "defining_total": 5,
+   "defining": {
+    "na-pali": {
+     "present": true,
+     "stage": null
+    },
+    "waimea-canyon": {
+     "present": true,
+     "stage": null
+    },
+    "north-shore": {
+     "present": true,
+     "stage": null
+    },
+    "south-shore": {
+     "present": true,
+     "stage": null
+    },
+    "beach-time": {
+     "present": true,
+     "stage": null
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 210,
+   "total_travel": 740,
+   "days_over_limit": 2,
+   "bases": 2,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 29,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 2,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "point-to-point-trek",
+   "run": "1",
+   "build": "final",
+   "defining_present": 3,
+   "defining_total": 6,
+   "defining": {
+    "tmb-walk": {
+     "present": true,
+     "stage": null
+    },
+    "italy-section": {
+     "present": true,
+     "stage": null
+    },
+    "swiss-section": {
+     "present": false,
+     "stage": "selection"
+    },
+    "french-return": {
+     "present": false,
+     "stage": "discovery"
+    },
+    "refuge-nights": {
+     "present": true,
+     "stage": null
+    },
+    "booking-ahead": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "closed-refuge",
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 165,
+   "total_travel": 1036,
+   "days_over_limit": 5,
+   "bases": 3,
+   "stops": 18,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 3,
+   "board_size": 25,
+   "contract_gap": true,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 2,
+   "hard_n": 2
+  },
+  {
+   "scenario": "tanzania-safari",
+   "run": "2",
+   "build": "final",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "serengeti": {
+     "present": true,
+     "stage": null
+    },
+    "ngorongoro": {
+     "present": true,
+     "stage": null
+    },
+    "tarangire-manyara": {
+     "present": true,
+     "stage": null
+    },
+    "guided-vehicle": {
+     "present": true,
+     "stage": null
+    },
+    "gateway": {
+     "present": false,
+     "stage": "selection"
+    }
+   },
+   "red_flags": [],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 585,
+   "total_travel": 1195,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 10,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 6,
+   "board_size": 38,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 0,
+   "hard_n": 0
+  },
+  {
+   "scenario": "kumano-kodo",
+   "run": "1",
+   "build": "final",
+   "defining_present": 4,
+   "defining_total": 5,
+   "defining": {
+    "nakahechi-walk": {
+     "present": true,
+     "stage": null
+    },
+    "hongu-taisha": {
+     "present": true,
+     "stage": null
+    },
+    "nachi-hayatama": {
+     "present": true,
+     "stage": null
+    },
+    "onsen-village-stay": {
+     "present": true,
+     "stage": null
+    },
+    "luggage-transfer": {
+     "present": false,
+     "stage": "discovery"
+    }
+   },
+   "red_flags": [
+    "no-walking",
+    "overlong-stage"
+   ],
+   "sky_violations": [],
+   "early_starts": [],
+   "early_violation": false,
+   "transport_contradiction": false,
+   "max_day_travel": 180,
+   "total_travel": 707,
+   "days_over_limit": 1,
+   "bases": 2,
+   "stops": 26,
+   "empty_ordinary_days": 0,
+   "one_stop_days": 1,
+   "board_size": 34,
+   "contract_gap": false,
+   "impossible_legs": [],
+   "far_days": 0,
+   "consistency": [],
+   "slow_measured_rides": [],
+   "red_flags_n": 2,
+   "hard_n": 2
+  }
+ ]
+}

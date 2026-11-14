@@ -1,0 +1,233 @@
+[
+  {
+    "id": "beach-island#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 2,
+        "transport": 4,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 29
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 4,
+        "timing": 4,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 4,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 36
+      }
+    },
+    "preferred": "B",
+    "reason": "A keeps a single Poipu base, so the north-shore highlights (Kalalau on day 4, Ke'e on day 6) each cost about 3.5 h of driving, and day 1 sends the couple to Hanalei Bay at 22:30, long after the 18:46 sunset. B's Princeville base puts Kalalau, Hanalei, Kilauea and Lumaha'i minutes away with sensible evening timing. Its weaknesses are two separate long crossings to Waimea Canyon (days 6 and 7) and no Ha'ena reservation note."
+  },
+  {
+    "id": "iceland-ring-road#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 4,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 26
+      },
+      "B": {
+        "intent": 4,
+        "defining": 3,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 34
+      }
+    },
+    "preferred": "B",
+    "reason": "A sends the couple to Dyrhólaey on 14 June, during its nesting closure, and starts day 4 with a 05:30 breakfast. Its day 5 and day 7 moves come out at about 10 h of contradictory driving, and it skips the East Fjords. B drives a genuine loop (Akureyri, Mývatn, Egilsstaðir and the East Fjords, Jökulsárlón, Skógafoss and Seljalandsfoss) with an Egilsstaðir stop, though day 7 is a 6 h drive and the opening Akureyri days are underused."
+  },
+  {
+    "id": "kumano-kodo#2",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 3,
+        "geography": 3,
+        "transport": 1,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 4,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 28
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 2,
+        "transport": 2,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 30
+      }
+    },
+    "preferred": "B",
+    "reason": "A is a rental-car trip from one Hongu base: the only real Kodo walk is Hosshinmon-oji to Hongu on day 2, and everything else is shrine visits by car, which the requirements flag. B actually walks the Nakahechi, with Takijiri to Takahara, Takahara to Chikatsuyu with luggage forwarded on day 4, Dainichi-goe and Chikatsuyu to Nonaka. It also reaches all three Grand Shrines and Oyunohara. Against that, it invents 'trains' to the mountain villages and runs long out-and-backs from Chikatsuyu to Nachi and Shingu."
+  },
+  {
+    "id": "kyrgyzstan#2",
+    "scores": {
+      "A": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 3,
+        "transport": 1,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 22
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 1,
+        "transport": 2,
+        "timing": 1,
+        "quality": 3,
+        "lodging": 1,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 17
+      }
+    },
+    "preferred": "A",
+    "reason": "Neither plan has a trek or a yurt night. A at least reaches Son-Kul with a horse ride (days 6–7), though from a Kochkor base by fictional 'train' and bus, and it spends four days in Bishkek. B's base is labelled 'Song-Kol area' but its stops are 5 km from Ala-Too Square, so it is really Bishkek. B admits Song-Kul is missing, and its day 6 adds up to 18 h of travel with Skazka Canyon at 21:45, after dark."
+  },
+  {
+    "id": "mountain-road-trip#2",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 35
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 4,
+        "transport": 4,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 36
+      }
+    },
+    "preferred": "B",
+    "reason": "Both cover Glen Coe and Skye with sensible 3-base splits. A has the richer Skye day (Storr, Quiraing, Fairy Pools) and Glenfinnan, but it zig-zags around Glen Coe (Buachaille on day 4, then Glen Coe again on day 5), skips Eilean Donan and makes a 2h45 drive to Portree on arrival day without mentioning it. B runs a clean one-way flow: Cairngorms, the Bealach na Bà, Skye, Eilean Donan, then Glen Coe. It times Neist Point near the 22:19 sunset, though day 3 is a heavy driving day and day 4 is mostly empty."
+  },
+  {
+    "id": "point-to-point-trek#2",
+    "scores": {
+      "A": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 2,
+        "transport": 2,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 1,
+        "pace": 3,
+        "safety_season": 1,
+        "usefulness": 1,
+        "total": 17
+      },
+      "B": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 2,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 23
+      }
+    },
+    "preferred": "B",
+    "reason": "A is not a TMB at all. It is nine nights in Les Houches with valley day trips by 'train', no Italy or Switzerland, and a lunch stop at the Refuge de la Croix du Bonhomme, which is closed in 2027. B at least walks real stages with bags forwarded: Courmayeur to Bonatti, Les Houches to Contamines over the Col de Tricot, and Contamines to Les Chapieux. But it runs them in a muddled order, starts at 11:00, has an impossible 20-minute 'train' to Col de la Seigne and leaves out Switzerland."
+  },
+  {
+    "id": "tanzania-safari#2",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 26
+      },
+      "B": {
+        "intent": 2,
+        "defining": 2,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 23
+      }
+    },
+    "preferred": "A",
+    "reason": "B has no Serengeti at all, which it admits, and spends four days around Arusha, including a 'Serengeti balloon' 25 minutes from the lodge. A includes the Ngorongoro Crater, Manyara and four nights in the central Serengeti. It is flawed: Empakai is crammed into the crater day, day 5 has a 9.5 h backtrack to Gibb's Farm, and a night game drive is scheduled in the park."
+  }
+]

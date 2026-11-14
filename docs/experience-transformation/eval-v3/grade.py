@@ -27,6 +27,7 @@ for r in json.loads((HERE / 'requirements-new.json').read_text()):
 
 LEG = re.compile(r'(?:≈|at least )?(\d+)\s*hr(?:\s*(\d+)\s*min)?[^,]*?,\s*\w+ to (.+)|(?:≈|at least )?(\d+)\s*min[^,]*?,\s*\w+ to (.+)')
 HIRE = re.compile(r'\b(?:rental|hire)[ -]car\b|\bcar hire\b|\brent a car\b', re.I)
+SLOW = re.compile(r'^\s*(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?\s+(bus|private transfer|drive|shuttle|taxi|train|rail)\s*·\s*([\d.]+)\s*km')
 NO_SELF_DRIVE = {'tokyo-kyoto-transit', 'tanzania-safari', 'point-to-point-trek', 'kumano-kodo'}
 
 
@@ -78,7 +79,17 @@ def v3_measures(row):
         consistency.append('hire car on a no-self-drive trip')
     if row['scenario'] in ('point-to-point-trek', 'kumano-kodo') and not re.search(r'luggage|bags (?:ahead|forward)|send your bags', text, re.I):
         consistency.append('trek with no forwarded luggage')
-    return {'impossible_legs': impossible, 'far_days': far_days, 'consistency': consistency}
+    # Post-hoc diagnostic (DEVIATIONS 5), outside the frozen hard count: a ride printed as measured at walking pace.
+    slow = []
+    for d in plan:
+        for t in d.get('travel', []):
+            m = SLOW.search(t)
+            if m and not t.lstrip().startswith(('≈', 'at least')):
+                minutes = int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+                km = float(m.group(4))
+                if minutes >= 30 and km / (minutes / 60) < 10:
+                    slow.append(t[:80])
+    return {'impossible_legs': impossible, 'far_days': far_days, 'consistency': consistency, 'slow_measured_rides': slow}
 
 
 def main():
@@ -96,20 +107,20 @@ def main():
         report[d.name] = grades
     (HERE / 'grades.json').write_text(json.dumps(report, indent=1, ensure_ascii=False))
     scenarios = sorted({g['scenario'] for gs in report.values() for g in gs})
-    cols = ['defining', 'impossible', 'far_days', 'hard', 'maxTravel', 'totalTravel', 'bases']
-    print(f"{'scenario':22}" + ''.join(f' | {n:^62}' for n in report))
+    cols = ['defining', 'impossible', 'far_days', 'hard', 'maxTravel', 'totalTravel', 'bases', 'slowRide']
+    print(f"{'scenario':22}" + ''.join(f' | {n:^72}' for n in report))
     print(f"{'':22}" + ''.join(' | ' + '  '.join(f'{c:>8}' for c in cols) for _ in report))
     for s in scenarios:
         line = f'{s:22}'
         for n, gs in report.items():
             rs = [g for g in gs if g['scenario'] == s]
             if not rs:
-                line += f" | {'—':^62}"
+                line += f" | {'—':^72}"
                 continue
             def ms(f):
                 vals = [f(g) for g in rs if f(g) is not None]
                 return f'{statistics.mean(vals):.1f}±{statistics.pstdev(vals):.1f}' if vals else '—'
-            line += ' | ' + '  '.join(f'{v:>8}' for v in [ms(lambda g: g['defining_present']) + f"/{rs[0]['defining_total']}", ms(lambda g: len(g['impossible_legs'])), ms(lambda g: g['far_days']), ms(lambda g: g['hard_n']), ms(lambda g: g['max_day_travel']), ms(lambda g: g['total_travel']), ms(lambda g: g['bases'])])
+            line += ' | ' + '  '.join(f'{v:>8}' for v in [ms(lambda g: g['defining_present']) + f"/{rs[0]['defining_total']}", ms(lambda g: len(g['impossible_legs'])), ms(lambda g: g['far_days']), ms(lambda g: g['hard_n']), ms(lambda g: g['max_day_travel']), ms(lambda g: g['total_travel']), ms(lambda g: g['bases']), ms(lambda g: len(g['slow_measured_rides']))])
         print(line)
 
 

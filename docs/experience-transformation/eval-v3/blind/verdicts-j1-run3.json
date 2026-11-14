@@ -1,0 +1,233 @@
+[
+  {
+    "id": "beach-island#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 4,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 28
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 4,
+        "transport": 4,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 2,
+        "usefulness": 3,
+        "total": 34
+      }
+    },
+    "preferred": "B",
+    "reason": "B splits Princeville (4 nights) and Poipu (3), so it reaches the north shore and the Nā Pali coast (Kalalau Trail to Hanakāpīʻai on Day 3) without A's single Poipu base. That base forces a 3 h 10 min round trip on arrival day and repeated 70 km crossings to the north on Days 3 and 5, and A has no Nā Pali at all. B is let down by stops at night that are framed as sunset stops (Hanalei Bay at 22:30, a cliff vista at 23:10) and by never mentioning the Hāʻena reservation."
+  },
+  {
+    "id": "iceland-ring-road#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 3,
+        "transport": 4,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 3,
+        "safety_season": 4,
+        "usefulness": 3,
+        "total": 33
+      },
+      "B": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 3,
+        "transport": 3,
+        "timing": 2,
+        "quality": 4,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 29
+      }
+    },
+    "preferred": "A",
+    "reason": "B covers more of the defining sights (Reynisfjara, Þingvellir), but it schedules Dyrhólaey on 14 June during the nesting closure and adds an unrequested 05:30 start on Day 4. Its Day 5 Höfn→Akureyri is incoherent, about 10 h of driving that skips the East Fjords. A runs a more drivable clockwise loop through Egilsstaðir and Höfn with Jökulsárlón, Mývatn and the south-coast waterfalls. It misses Reynisfjara and the Golden Circle, and Day 7 is a single long 6 h drive."
+  },
+  {
+    "id": "kumano-kodo#3",
+    "scores": {
+      "A": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 29
+      },
+      "B": {
+        "intent": 2,
+        "defining": 3,
+        "geography": 3,
+        "transport": 1,
+        "timing": 4,
+        "quality": 3,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 27
+      }
+    },
+    "preferred": "A",
+    "reason": "A treats Kumano as a walk. It sends bags ahead and covers real Nakahechi sections (Takijiri–Takahara–Chikatsuyu, Chikatsuyu–Tsugizakura, Hosshinmon–Hongu, Dainichi-goe to Yunomine) and all three Grand Shrines, though 8 nights in Chikatsuyu bring long daily commutes to Shingu and Nachi. B is built on a rental car (a stated red flag) from one Nachisan base, with short shrine and walk visits by car and a 2 h 40 min Shirahama beach day. Both wrongly present the Kawayu riverside bath as available."
+  },
+  {
+    "id": "kyrgyzstan#3",
+    "scores": {
+      "A": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 1,
+        "transport": 1,
+        "timing": 2,
+        "quality": 1,
+        "lodging": 1,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 1,
+        "total": 13
+      },
+      "B": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 2,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 24
+      }
+    },
+    "preferred": "B",
+    "reason": "A's 'Song-Kol area' base is in fact Bishkek (city sushi restaurants, Ala-Too Square by 'train'). It never sleeps at Song-Kol, has no Karakol, no Issyk-Kul and no trek, and fills days with city museums and out-and-back pass viewpoints. B at least has a yurt night at Song-Kol and Karakol with Altyn-Arashan, the Ala-Kul approach and Jeti-Oguz. However, it reaches Song-Kol by bus with an incoherent 9 h 45 min Day 4, drives 8 h 50 min on Day 6, spends 3 days in Bishkek and has no multi-day trek."
+  },
+  {
+    "id": "mountain-road-trip#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 27
+      },
+      "B": {
+        "intent": 4,
+        "defining": 4,
+        "geography": 3,
+        "transport": 4,
+        "timing": 3,
+        "quality": 4,
+        "lodging": 4,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 3,
+        "total": 35
+      }
+    },
+    "preferred": "B",
+    "reason": "B runs a coherent Portree (3 nights) → Fort William → Aviemore flow. It covers the Fairy Pools, Storr and Quiraing early (sensible for Storr parking), Eilean Donan, Glen Coe, Glenfinnan Viaduct and the Nevis gondola, with mostly moderate driving. A spends 3 nights around Aviemore and Inverness, then has two near-6 h driving days. Its Day 6 is garbled: it claims Applecross is 50 min from Portree, then backtracks through Eilean Donan to Glen Nevis. A also skips Glenfinnan and the Fairy Pools."
+  },
+  {
+    "id": "point-to-point-trek#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 2,
+        "geography": 2,
+        "transport": 2,
+        "timing": 1,
+        "quality": 2,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 1,
+        "usefulness": 1,
+        "total": 19
+      },
+      "B": {
+        "intent": 1,
+        "defining": 1,
+        "geography": 1,
+        "transport": 2,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 1,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 1,
+        "total": 18
+      }
+    },
+    "preferred": "A",
+    "reason": "A at least walks part of the TMB point to point (Les Houches → Contamines → Chapieux → Courmayeur, with luggage forwarding). It never reaches Switzerland, starts the Bonhomme crossing at 11:15 and schedules an impossible 42 km, 13.5 h Chapieux–Courmayeur day starting after noon. B commits the core red flag: a single Courmayeur base with sightseeing day trips (it even shows Chamonix as a 15-minute walk away), and its only real trail day is Courmayeur–Bonatti. It is not a hut-to-hut trek."
+  },
+  {
+    "id": "tanzania-safari#3",
+    "scores": {
+      "A": {
+        "intent": 3,
+        "defining": 4,
+        "geography": 2,
+        "transport": 3,
+        "timing": 2,
+        "quality": 3,
+        "lodging": 3,
+        "pace": 2,
+        "safety_season": 2,
+        "usefulness": 2,
+        "total": 26
+      },
+      "B": {
+        "intent": 2,
+        "defining": 3,
+        "geography": 2,
+        "transport": 3,
+        "timing": 3,
+        "quality": 2,
+        "lodging": 2,
+        "pace": 3,
+        "safety_season": 3,
+        "usefulness": 2,
+        "total": 25
+      }
+    },
+    "preferred": "A",
+    "reason": "A covers the three core parks with operator transport: a Tarangire game drive, a 6 h Ngorongoro crater floor visit and Serengeti drives at Gol Kopjes and Moru. Its Day 3 doubles back incoherently to a game drive that runs past gate closing, and it includes a night game drive that is not permitted in the park. B spends 4 nights in Karatu on cultural filler, skips Tarangire and has only one Serengeti game drive, which it admits is too few. Its Day 5 shuttles 166 km back to Endoro waterfall and then returns to Seronera."
+  }
+]

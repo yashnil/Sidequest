@@ -1,7 +1,7 @@
 """Blind pairs for evaluation v3 (PROTOCOL.md): previous run i vs new run i, seed 20261115,
 v1 chrome stripping, the unchanged v2 rubric. Unblinds every blind/verdicts-*.json.
 
-    python3 docs/experience-transformation/eval-v3/blind.py build
+    python3 docs/experience-transformation/eval-v3/blind.py build [new|fixed]   # which build faces the previous one
     python3 docs/experience-transformation/eval-v3/blind.py unblind
 """
 import importlib.util
@@ -27,8 +27,8 @@ def rows(build):
     return out
 
 
-def build():
-    prev, new = rows('previous'), rows('new')
+def build(other='new'):
+    prev, new = rows('previous'), rows(other)
     rng = random.Random(20261115)
     pairs, key = [], {}
     for k in sorted(prev.keys() & new.keys()):
@@ -39,14 +39,15 @@ def build():
         key[pid] = {'A': 'new' if new_first else 'previous', 'B': 'previous' if new_first else 'new'}
         pairs.append({'id': pid, 'scenario': scenario, 'title': prev[k]['title'], 'request': prev[k]['request'], 'dates': prev[k]['dates'], 'party': prev[k].get('party'), 'A': v1.plan_text(a), 'B': v1.plan_text(b)})
     BLIND.mkdir(exist_ok=True)
-    (BLIND / 'key.json').write_text(json.dumps(key, indent=1))
+    (BLIND / 'key.json').write_text(json.dumps({'compared': other, 'pairs': key}, indent=1))
     for run in ('1', '2', '3'):
         (BLIND / f'pairs-run{run}.json').write_text(json.dumps([p for p in pairs if p['id'].endswith('#' + run)], indent=1, ensure_ascii=False))
     print(f'{len(pairs)} pairs in three run files; key kept separately.')
 
 
 def unblind():
-    key = json.loads((BLIND / 'key.json').read_text())
+    stored = json.loads((BLIND / 'key.json').read_text())
+    key = {p: {l: ('new' if b != 'previous' else b) for l, b in m.items()} for p, m in stored.get('pairs', stored).items()}
     table, by_pair = {}, {}
     for path in sorted(BLIND.glob('verdicts-*.json')):
         for v in json.loads(path.read_text()):
@@ -69,4 +70,5 @@ def unblind():
 
 
 if __name__ == '__main__':
-    {'build': build, 'unblind': unblind}[sys.argv[1] if len(sys.argv) > 1 else 'build']()
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'build'
+    build(*sys.argv[2:3]) if cmd == 'build' else unblind()

@@ -9,3 +9,6 @@ iceland-ring-road 38483475-afdb-4880-b49b-40b872e6944f
 iceland-ring-road 37dc663c-69b9-4e0f-a173-a8465ad2222c
 tanzania e724d363-cb35-42d8-a191-9688cdad122f
 japan-linear d61c5297-f776-4ce7-8daa-7486d5d94ee1
+iceland-ring-road b2e9cc64-c8b1-4136-bda6-3cda30b20d43
+tanzania ba95fbcb-9408-4766-8bcf-1e64319aee60
+scotland-highlands 2177654e-17a2-41c9-bb06-1a8fa8866458

@@ -1,0 +1,233 @@
+[
+ {
+  "id": "beach-island#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 4,
+    "transport": 4,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 34
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 4,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 32
+   }
+  },
+  "preferred": "A",
+  "reason": "A's north/south split (Poipu 4 nights, Princeville 3) suits Kauai and covers Waimea Canyon, Kalalau to Hanakapiai with the Haena permit noted, Haena and Hanalei. Its clock is badly off \u2014 Shipwreck Beach 'for sunset' at 23:00 on day 1 and Hanalei Pier 'golden hour' at 23:10 on day 6, when sunset is about 18:45. B's single Kapaa base means repeated crossings, a stargazing round trip to Kokee on arrival night, an unrequested 05:30 start on day 5 and several unnamed meals. Neither plan has a Na Pali boat tour."
+ },
+ {
+  "id": "iceland-ring-road#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 2,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 27
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 3,
+    "timing": 4,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 4,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 35
+   }
+  },
+  "preferred": "B",
+  "reason": "B follows a real loop direction (Myvatn, then the East Fjords at Egilsstadir, Hofn, Vik) and hits Godafoss, Husavik, Hverir, Jokulsarlon by boat, Fjadrargljufur, Skogafoss, Seljalandsfoss and Reynisfjara. It skips the Golden Circle and Dettifoss, and it does not say how you get to Myvatn at the start. A drops the East Fjords and badly understates the Hofn to Akureyri drive (208 km). It also misses Seljalandsfoss, Myvatn and Dettifoss, schedules Dyrholaey on 14 June during the nesting closure, and adds a 05:30 start on day 4."
+ },
+ {
+  "id": "kumano-kodo#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 3,
+    "geography": 2,
+    "transport": 1,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 22
+   },
+   "B": {
+    "intent": 3,
+    "defining": 4,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 2,
+    "usefulness": 3,
+    "total": 30
+   }
+  },
+  "preferred": "B",
+  "reason": "A is a rental-car trip from one Nachisan base for 10 nights, with only a 2-hour token walk from Takijiri. The rest is shrines by car plus Adventure World and Shirahama Beach: the red flag of a Kodo trip with almost no walking. B uses public transport and sleeps in Yunomine and then Hongu. It walks Hosshinmon to Hongu on day 3 and Takijiri to Takahara to Chikatsuyu on day 10, gives a luggage-forwarding note and covers all three Grand Shrines. Both wrongly present the winter-only Kawayu river bath, and B mislabels buses as trains."
+ },
+ {
+  "id": "kyrgyzstan#1",
+  "scores": {
+   "A": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 1,
+    "transport": 1,
+    "timing": 1,
+    "quality": 3,
+    "lodging": 1,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 1,
+    "total": 16
+   },
+   "B": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 3,
+    "transport": 2,
+    "timing": 3,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 21
+   }
+  },
+  "preferred": "B",
+  "reason": "A does give four Karakol nights with mountain waterfalls. But day 5 cannot be followed: about 24 hours of buses, a Karakol mosque at 01:15 and an animal market at 02:05, then 'Song-Kol stargazing' at 10:55. Its 'Song-Kol Lake area' base is in fact Bishkek city for six nights, so the promised yurt night never happens. B is a dull Bishkek-only stay with no Karakol, trek, Issyk-Kul or Song-Kul, and it fails the adventure intent. It is at least coherent and could be followed, which makes it the less broken plan."
+ },
+ {
+  "id": "mountain-road-trip#1",
+  "scores": {
+   "A": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 2,
+    "transport": 3,
+    "timing": 2,
+    "quality": 4,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 2,
+    "total": 30
+   },
+   "B": {
+    "intent": 4,
+    "defining": 4,
+    "geography": 4,
+    "transport": 4,
+    "timing": 3,
+    "quality": 4,
+    "lodging": 4,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 4,
+    "total": 37
+   }
+  },
+  "preferred": "B",
+  "reason": "A has the more ambitious concept: Ben Nevis, Skye, the Bealach na Ba to Applecross and Torridon. But nothing is timed, every leg says 'journey time to confirm', and the day-3 order goes from Fort William to Eilean Donan, back south to Glencoe, then to Portree, which is a zig-zag. B is a timed, coherent sequence: Skye (Storr early for parking, Quiraing, Dunvegan, Fairy Pools), then Eilean Donan and Glenfinnan to Fort William, a Glen Coe day, and on to Aviemore and the Cairngorms. Its drives stay within the daily limit."
+ },
+ {
+  "id": "point-to-point-trek#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 2,
+    "timing": 2,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 25
+   },
+   "B": {
+    "intent": 1,
+    "defining": 1,
+    "geography": 1,
+    "transport": 1,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 1,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 1,
+    "total": 16
+   }
+  },
+  "preferred": "A",
+  "reason": "A at least walks the TMB point to point for three stages, Les Houches to Les Contamines to Les Chapieux to Courmayeur, with bags sent ahead. It flags its own impossible 42.5 km Chapieux to Courmayeur day and admits that Switzerland is missing. B sleeps nine nights in Courmayeur and makes day trips, mostly to the Chamonix side as if the Mont Blanc tunnel were a 50-minute train. That is the 'TMB as day trips from one base' red flag, with no stage walked except an out-and-back to Bonatti and a 20:35 Brevent visit that is physically impossible."
+ },
+ {
+  "id": "tanzania-safari#1",
+  "scores": {
+   "A": {
+    "intent": 3,
+    "defining": 3,
+    "geography": 3,
+    "transport": 3,
+    "timing": 3,
+    "quality": 3,
+    "lodging": 3,
+    "pace": 3,
+    "safety_season": 3,
+    "usefulness": 3,
+    "total": 30
+   },
+   "B": {
+    "intent": 2,
+    "defining": 2,
+    "geography": 2,
+    "transport": 3,
+    "timing": 2,
+    "quality": 2,
+    "lodging": 2,
+    "pace": 2,
+    "safety_season": 2,
+    "usefulness": 2,
+    "total": 21
+   }
+  },
+  "preferred": "A",
+  "reason": "A, guided by an operator, covers Lake Manyara, a 6-hour Ngorongoro crater drive and three nights in the central Serengeti with game drives. Its day-6 backtrack to Gibb's Farm, the 'train' labels and the missing Tarangire and exit plan are flaws. B has no Serengeti at all, the red flag; it says so itself. It also places a 'Serengeti balloon safari' 20 minutes from Arusha and fills days with Arusha museums and a pointless return trip to Lake Duluti on the transfer day."
+ }
+]
