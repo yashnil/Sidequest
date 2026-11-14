@@ -179,7 +179,20 @@ interface GeocodeFirstOptions {
   notLodgingFor?: string | undefined;
   /** Rows to try first — a place to sleep prefers a settlement over the district around it. */
   prefer?: (place: NominatimPlace) => boolean;
+  /** Rows that may never stand for the thing asked: a café is never the locality a place to sleep is named for. */
+  refuse?: (place: NominatimPlace) => boolean;
 }
+
+/**
+ * Eval v3 — A BUSINESS NEVER STANDS FOR A PLACE TO SLEEP. A live Kyrgyzstan
+ * scan asked for its "Song-Kol Lake area" base as "Song-Kol, Kyrgyzstan"; the
+ * open geocoder's only row was a café called Song-Kol in Bishkek, 200 km from
+ * the lake, and the trip's yurt nights were planned in the capital. A base is
+ * a settlement, an area or a natural feature (or a camp), never a business,
+ * office, road or building; unplaced is honest, a café is not.
+ */
+const NOT_A_BASE_CATEGORIES = new Set(['amenity', 'shop', 'office', 'craft', 'highway', 'building', 'railway', 'aeroway', 'healthcare', 'emergency', 'club', 'man_made', 'power', 'public_transport']);
+export const notABaseRow = (place: Pick<NominatimPlace, 'category'>): boolean => NOT_A_BASE_CATEGORIES.has(place.category ?? '');
 
 async function geocodeFirst(query: string, options: PlacementOptions, first: GeocodeFirstOptions = {}): Promise<{ point: { lat: number; lng: number }; place: NominatimPlace } | { outcome: PlacementOutcome }> {
   const result = await geocode(query, { limit: 5 });
@@ -188,6 +201,10 @@ async function geocodeFirst(query: string, options: PlacementOptions, first: Geo
   const prefer = first.prefer;
   const rows = prefer ? [...result.places.filter((p) => prefer(p)), ...result.places.filter((p) => !prefer(p))] : result.places;
   for (const place of rows) {
+    if (first.refuse?.(place)) {
+      if (refusal === 'no_results') refusal = 'wrong_kind';
+      continue;
+    }
     const rowName = place.name ?? place.display_name?.split(',')[0] ?? '';
     /* A phrase naming two places is placed only by a row that names both; a row for one of them is a guess. */
     const verdict = wholePhrase && !providerNameCoversPhrase(wholePhrase, place.name ?? place.display_name ?? '')
@@ -281,7 +298,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
     const attempts: PlacementAttempt[] = [];
     let canonicalizedByProvider = false;
     const wholePhrase = item.identityType === 'ambiguous' ? item.lookupName : undefined;
-    const nameFirst: GeocodeFirstOptions = isBase ? { wholePhrase, prefer: (row: NominatimPlace) => row.category === 'place' } : { wholePhrase, notLodgingFor: item.lookupName };
+    const nameFirst: GeocodeFirstOptions = isBase ? { wholePhrase, prefer: (row: NominatimPlace) => row.category === 'place', refuse: notABaseRow } : { wholePhrase, notLodgingFor: item.lookupName };
     if (usePlaces && http && !isBase && placesCalls >= options.placesBudget) attempts.push({ provider: 'google-places', query: `${item.lookupName}, ${item.locality}`, outcome: 'not_attempted_budget' });
     if (usePlaces && http && !isBase && placesCalls < options.placesBudget) {
       placesCalls += 1;
@@ -404,7 +421,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         const query = `${form}${country}`;
         try {
           geocoderCalls += 1;
-          const hit = await geocodeFirst(query, options, isBase ? { prefer: (row) => row.category === 'place' } : {});
+          const hit = await geocodeFirst(query, options, isBase ? { prefer: (row) => row.category === 'place', refuse: notABaseRow } : {});
           attempts.push({ provider: 'nominatim', query, outcome: 'point' in hit ? 'placed' : hit.outcome });
           if ('point' in hit) {
             position = isBase && rung > 0

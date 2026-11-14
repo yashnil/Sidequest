@@ -5,7 +5,8 @@ vi.mock('server-only', () => ({}));
 vi.mock('../providers/registry', () => ({ capability: () => ({ configured: false }) }));
 vi.mock('../providers/nominatim', () => ({
   geocode: vi.fn(async (query: string) => ({
-    places: query === 'Akureyri, Akureyri, Iceland' ? [{ name: 'Akureyri (Hof)', category: 'amenity', type: 'charging_station', lat: '65.684', lon: '-18.086', place_rank: 30, address: { country_code: 'is' } }]
+    places: query === 'Upland Lake, Kyrgyzstan' ? [{ name: 'Upland Lake', category: 'amenity', type: 'cafe', lat: '42.84', lon: '74.60', place_rank: 30, address: { country_code: 'kg', city: 'Capital' } }]
+      : query === 'Akureyri, Akureyri, Iceland' ? [{ name: 'Akureyri (Hof)', category: 'amenity', type: 'charging_station', lat: '65.684', lon: '-18.086', place_rank: 30, address: { country_code: 'is' } }]
       : query === 'Akureyri, Iceland' || query === 'Egilsstaðir, Iceland' ? [{ name: query.split(',')[0], category: 'place', type: 'town', lat: query.startsWith('A') ? '65.683' : '65.262', lon: query.startsWith('A') ? '-18.112' : '-14.403', place_rank: 16, address: { country_code: 'is', town: query.split(',')[0] } }]
       : query === 'Passo Giau, Italy' ? [{ lat: '46.4830', lon: '12.0540', place_rank: 30, address: { country_code: 'it', village: 'San Vito di Cadore' } }] : query === 'Far Away Lake, Italy' ? [{ lat: '40.0', lon: '15.0', place_rank: 30, address: { country_code: 'it' } }] : query.startsWith('전쟁기념관') ? [{ lat: '37.5364', lon: '126.9773', place_rank: 30, address: { country_code: 'kr', city_district: '용산구' } }] : [],
     calls: 1,
@@ -127,5 +128,24 @@ describe('a place placed in a different named part than its own (live Tokyo-and-
     expect(checked.positions.get(hakone!)).not.toBeNull();
     /* One named part: nothing to compare against. */
     expect(withdrawCrossPartPositions(normalized.proposal, positions, [tokyo]).withdrawn).toEqual([]);
+  });
+});
+
+describe('a business never stands for a place to sleep (live Kyrgyzstan finding)', () => {
+  it('a café named after the lake is refused for the lake-area base, which stays unplaced rather than in the capital', async () => {
+    const normalized = normalizeScanProposal({
+      bases: [{ name: 'Upland Lake area', locality: 'Upland Lake', nightsHint: 2, why: 'Yurt nights.' }],
+      candidates: [{ name: 'Shore walk', locality: 'Upland Lake', kind: 'easy_walk', tier: 'classic', why: 'x' }],
+    });
+    if (!normalized.ok) throw new Error(normalized.reason);
+    const { placeScanProposal, notABaseRow } = await import('./placement');
+    const result = await placeScanProposal({ ...normalized.proposal, candidates: [] }, { center: { lat: 41.5, lng: 74.7 }, maxDistanceKm: 1600, countryCode: 'KG', countryName: 'Kyrgyzstan', placesBudget: 0, deadline: () => false });
+    const base = normalized.proposal.bases[0]!;
+    expect(result.positions.get(base.key) ?? null).toBeNull();
+    const d = result.diagnostics.find((x) => x.key === base.key)!;
+    expect(d.attempts.find((a) => a.query === 'Upland Lake, Kyrgyzstan')?.outcome).toBe('wrong_kind');
+    expect(notABaseRow({ category: 'place' })).toBe(false);
+    expect(notABaseRow({ category: 'tourism' })).toBe(false);
+    expect(notABaseRow({ category: 'shop' })).toBe(true);
   });
 });
