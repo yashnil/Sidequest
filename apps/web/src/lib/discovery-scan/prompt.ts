@@ -17,7 +17,7 @@ import type { DestinationEnvelope } from '../planning/composition';
  * one again on the way back.
  */
 
-export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-15.1';
+export const SCAN_PROMPT_VERSION = 'discovery-scan/2026-11-15.2';
 export const SCAN_JSON_TAG = 'scan_proposal';
 
 /** How many candidates to ask for: enough to choose from, never so many the answer runs long. */
@@ -37,12 +37,12 @@ What a strong pool looks like:
 4. Weather and season. Mark exposure honestly and include several "rainyDayOk" options. If something is closed or impractical in the trip's months, either leave it out or give its openMonths and a seasonalNote.
 5. One place per candidate. Never combine several stops into one candidate ("X to Y to Z"), and never list the same place twice under different names. A day trip is a candidate named by its town ("Kamakura", kind small_town) with the highlights in "why".
 6. Real names only. Every candidate and base must be a real, specific, findable place with its proper name and the town or district it is in ("locality"). Never invent a venue. If you are unsure a place exists or is open, leave it out. Where the place's own name is written in another language or script locally, give that name too as "localName" (for example the name on the sign at the entrance); maps in that country often know only it.
-7. Honest attributes. durationMinutes is time on site, not travel. For a walk or hike (kind day_hike, easy_walk or national_park), add "walk": {"shape": "loop" | "out_and_back" | "point_to_point"}; a point_to_point walk also gives "endName" and "endLocality" — the real town, bus stop or trailhead where it ends — and, only where you know them, "km" (the whole walk) and "ascentM". Name a trail stage by its start and end. Never invent an end point; if you are unsure of the shape, omit "walk". intensity is physical effort (none, easy, moderate, strenuous). costLevel is 0 free, 1 cheap, 2 moderate, 3 expensive. booking is "required" only when entry genuinely needs advance booking.
+7. Honest attributes. durationMinutes is time on site, not travel. For a walk or hike (kind day_hike, easy_walk or national_park), add "walk": {"shape": "loop" | "out_and_back" | "point_to_point"}; a point_to_point walk also gives "endName" and "endLocality" — the real town, bus stop or trailhead where it ends —; put the length and climb, where you know them, in "why". Name a trail stage by its start and end. Never invent an end point; if you are unsure of the shape, omit "walk". intensity is physical effort (none, easy, moderate, strenuous). costLevel is 0 free, 1 cheap, 2 moderate, 3 expensive. booking is "required" only when entry genuinely needs advance booking.
 8. Bases. Propose 1 to 5 places to sleep (up to 6 when the task says the trip is a route, spaced along all of it), in the order a traveller arriving would reach them, each with a nightsHint (your suggestion; Sidequest re-allocates nights from what is near each base) and why. A single dense city is usually one base. Respect how willing they are to change hotels.
 9. "why" is one sentence about why THIS traveller would want it, grounded in what they told you. No hype words.
 10. "skipped": up to 6 famous things you deliberately left out because they do not fit this traveller, each with a one-line reason.
-11. "pillars": up to 6 experiences this destination is FOR on THIS trip, each {"name", "tier", "why", "candidates"}. tier is "essential" (the trip would be pointless or badly incomplete without it, given these dates, this length, this transport and this party — at most 3), "recommended" (strongly worth it if it fits) or "optional". Judge the tier against the trip actually asked for: a short trip cannot hold every famous region, so say which ones it should. "candidates" lists the exact names of the candidates above that would satisfy it — alternatives for one another (e.g. the parks or sections that give the same experience). Also mark with "defining": true the candidates in essential pillars. If the destination itself is a walking route, propose its walkable stages that suit this party as point_to_point walks with their real end points, and propose places to sleep where those stages end so the stays can follow the trail. Mark nothing essential that the traveller cannot do (season, party, transport); say why in "skipped" instead.
-11a. Trails walked in stages. When the destination is a pilgrimage route, a long-distance path or a hut-to-hut trek, the trip IS walking it from one overnight village to the next with the bags sent ahead. Then: (a) propose the walkable stages that suit THIS party, in walking order, as consecutive point_to_point walks — each stage's start is the previous stage's end — numbered with "walk.stage" (1 first), named by their start and end ("A to B"), with "locality" the start village, "endName"/"endLocality" the end village, and "km" and "ascentM" where you know them; (b) propose as bases the village where the first stage starts and the overnight village at the end of every stage (inns, guesthouses or huts are there), in walking order, each with nightsHint 1 — this overrides the usual 1 to 5 bases, up to 8; include a hot-spring village as a base where the trail passes one, as a rest-day stop; (c) when a section is unsuitable for this party (too long, too steep, closed in these months), still list it in order but add "walk.unsuitable" with the reason in a few words, and "walk.alternative": {"mode": "bus" | "train" | "taxi" | "boat" | "skip", "note": the usual way round it in one sentence, "openMonths" only if that service is seasonal}; (d) if the party's days cannot hold a full section, propose the shorter official section that suits them instead. Never invent a stage, a village or a bus.
+11. "pillars": up to 6 experiences this destination is FOR on THIS trip, each {"name", "tier", "why", "candidates"}. tier is "essential" (the trip would be pointless or badly incomplete without it, given these dates, this length, this transport and this party — at most 3), "recommended" (strongly worth it if it fits) or "optional". Judge the tier against the trip actually asked for: a short trip cannot hold every famous region, so say which ones it should. "candidates" lists the exact names of the candidates above that would satisfy it — alternatives for one another (e.g. the parks or sections that give the same experience). If the destination itself is a walking route, propose its walkable stages that suit this party as point_to_point walks with their real end points, and propose places to sleep where those stages end so the stays can follow the trail. Mark nothing essential that the traveller cannot do (season, party, transport); say why in "skipped" instead.
+11a. Trails walked in stages. When the destination is a pilgrimage route, a long-distance path or a hut-to-hut trek, the trip IS walking it from one overnight village to the next with the bags sent ahead. Then: (a) propose the walkable stages that suit THIS party, in walking order, as consecutive point_to_point walks — each stage's start is the previous stage's end — numbered with "walk.stage" (1 first), named by their start and end ("A to B"), with "locality" the start village, "endName"/"endLocality" the end village, with its length and climb in "why" where you know them; (b) propose as bases the village where the first stage starts and the overnight village at the end of every stage (inns, guesthouses or huts are there), in walking order, each with nightsHint 1 — this overrides the usual 1 to 5 bases, up to 8; include a hot-spring village as a base where the trail passes one, as a rest-day stop; (c) when a section is unsuitable for this party (too long, too steep, closed in these months), still list it in order but add "walk.unsuitable" with the reason in a few words, and "walk.alternative": "mode: note" — mode one of bus, train, taxi, boat, skip, then the usual way round it in one sentence (say if that service is seasonal); (d) if the party's days cannot hold a full section, propose the shorter official section that suits them instead. Never invent a stage, a village or a bus.
 12. "package": short practical prose — how to get around (transportSummary, transportNotes), beforeYouGo, packing (specific to the season and the activities you proposed), foodStrategy, bookingPriorities. Do not state entry, visa or health rules as fact; say what to check and where.
 
 Closed vocabularies (use exactly these strings):
@@ -54,17 +54,17 @@ Closed vocabularies (use exactly these strings):
 - crowd: quiet, moderate, busy, very_busy
 - booking: ${SCAN_BOOKING.join(', ')}
 - walk.shape: loop, out_and_back, point_to_point
-- walk.alternative.mode: ${STAGE_ALTERNATIVE_MODES.join(', ')}
+- walk.alternative mode (before the colon): ${STAGE_ALTERNATIVE_MODES.join(', ')}
 - interests (choose 1-3 per candidate): ${INTERESTS.join(', ')}
 
 Output contract: reply with ONE JSON object (if asked to wrap it, inside <${SCAN_JSON_TAG}>…</${SCAN_JSON_TAG}>) and nothing else. Shape:
 {"bases":[{"name","locality","nightsHint","why","lodgingArea"}],
- "candidates":[{"name","localName","locality","zone","kind","tier","durationMinutes","intensity","costLevel","exposure","bestTime","crowd","openMonths","seasonalNote","booking","rainyDayOk","interests","why","caution","walk","defining"}],
+ "candidates":[{"name","localName","locality","zone","kind","tier","durationMinutes","intensity","costLevel","exposure","bestTime","crowd","openMonths","seasonalNote","booking","rainyDayOk","interests","why","caution","walk"}],
  "foodAreas":[{"name","locality","specialty","why"}],
  "skipped":[{"name","reason"}],
  "pillars":[{"name","tier","why","candidates":[]}],
  "package":{"transportSummary","transportNotes":[],"beforeYouGo":[],"packing":[],"foodStrategy":[],"bookingPriorities":[]}}
-Omit optional fields (zone, openMonths, seasonalNote, caution, lodgingArea, walk, defining) rather than writing null. Keep every string short.`;
+Omit optional fields (zone, openMonths, seasonalNote, caution, lodgingArea, walk) rather than writing null. Keep every string short.`;
 
 /** The shape described to the transport. Loose on purpose: the normaliser, not the provider, holds the vocabularies to account. */
 export const scanProposalWireSchema = z.object({
@@ -95,14 +95,12 @@ export const scanProposalWireSchema = z.object({
           shape: z.string(),
           endName: z.string().optional(),
           endLocality: z.string().optional(),
-          km: z.number().optional(),
-          ascentM: z.number().optional(),
+          /* km and ascentM left the wire (eval v3: the compiled grammar was too large); stages are measured on a walking router, and the normaliser still reads them if sent. */
           stage: z.number().optional(),
-          unsuitable: z.string().optional(),
-          alternative: z.object({ mode: z.string(), note: z.string(), openMonths: z.array(z.number()).optional() }).optional(),
+          /* One string, "mode: note" — a nested object made the compiled grammar too large (eval v3). */
+          alternative: z.string().optional(),
         })
         .optional(),
-      defining: z.boolean().optional(),
     }),
   ),
   foodAreas: z.array(z.object({ name: z.string(), locality: z.string(), specialty: z.string(), why: z.string() })),

@@ -356,7 +356,10 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       const read = normalizeScanProposal(raw);
       if (!read.ok) {
         const seen = rawInfo as { text: string; stopReason: string | null } | null;
-        return fail('invalid_model_response', `${read.reason}${seen ? ` | stop=${seen.stopReason} head=${JSON.stringify(seen.text.slice(0, 300))}` : ''}`);
+        /* What came back, so a shape the normaliser rejects can be diagnosed without re-running the call. */
+        const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+        const shape = record ? Object.keys(record).map((key) => `${key}${Array.isArray(record[key]) ? `[${(record[key] as unknown[]).length}]` : ''}`).join(',') : typeof raw;
+        return fail('invalid_model_response', `${read.reason} | keys=${shape}${seen ? ` | stop=${seen.stopReason} chars=${seen.text.length} head=${JSON.stringify(seen.text.slice(0, 300))} tail=${JSON.stringify(seen.text.slice(-400))}` : ''}`);
       }
       normalized = read;
       rawCandidateCount = Array.isArray((raw as { candidates?: unknown } | null)?.candidates) ? (raw as { candidates: unknown[] }).candidates.length : 0;

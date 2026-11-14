@@ -368,6 +368,15 @@ function walkOf(raw: unknown, kind: ScanKind, coerced: string[], path: string): 
 }
 
 function alternativeOf(raw: unknown, coerced: string[], path: string): ScanStageAlternative | undefined {
+  /*
+   * The wire carries the alternative as one string, "mode: note" (a nested
+   * object made the provider's compiled grammar too large — eval v3); the
+   * object form is still read where a response sends it.
+   */
+  if (typeof raw === 'string') {
+    const at = raw.indexOf(':');
+    return at > 0 ? alternativeOf({ mode: raw.slice(0, at), note: raw.slice(at + 1) }, coerced, path) : (coerced.push(path), undefined);
+  }
   if (!raw || typeof raw !== 'object') return undefined;
   const a = raw as Record<string, unknown>;
   const mode = typeof a.mode === 'string' ? a.mode.trim().toLowerCase() : '';
