@@ -559,7 +559,10 @@ function draftFromPlan(args: {
   const draftBaseId = new Map(bases.map((b, i) => [b.id, `base-${i + 1}`]));
   const baseName = new Map(bases.map((b) => [b.id, b.name]));
   /* What public transport the country has, so a car-free leg never names a train that does not run. */
-  const network = publicTransportNetwork(input.region.compiled.scope.countryCode);
+  /* A metro serves cities: on a regional, rural or trail trip a short hop is a bus even where the country has a metro somewhere. */
+  const countryNetwork = publicTransportNetwork(input.region.compiled.scope.countryCode);
+  const cityScale = input.region.compiled.scope.breadth === 'city' || input.region.compiled.scope.breadth === 'local';
+  const network = { ...countryNetwork, metro: countryNetwork.metro && cityScale };
   const days: DraftDay[] = plan.days.map((day, i) => {
     const isFirst = i === 0;
     const isLast = i === plan.days.length - 1;
