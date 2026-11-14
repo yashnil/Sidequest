@@ -47,6 +47,8 @@ export interface EssentialExperience {
   /** …or by stops whose name carries one of these words (activity words, never place names). */
   nameTerms?: readonly string[];
   minCount: number;
+  /** The count means different places (several parks), so the plan is built around candidates in different areas. */
+  distinctAreas?: boolean;
   /** What the traveller can do when it is missing. */
   recovery: string;
 }
@@ -101,6 +103,8 @@ const CULTURE_KINDS: ScanKind[] = ['museum', 'gallery', 'historic_site', 'castle
 export interface TripQualityContractInput {
   /** Everything the traveller typed: the destination phrase, a Help-me-choose request, notes and must-dos. */
   ownWords: string;
+  /** The destination phrase alone: a trek named there ("… Circuit trek") is the walk itself, not a wish for some walking. */
+  destinationPhrase?: string;
   /** The destination's semantic type (`destinations/semantics.ts`). */
   semanticType?: string | null;
   /** A route the traveller asked to travel (`destinations/route-shape.ts`). */
@@ -128,7 +132,9 @@ export function buildTripQualityContract(input: TripQualityContractInput): TripQ
   const purposes: TripPurpose[] = [];
   const restful = input.restfulWeight >= 0.5 || REST_WORDS.test(text);
   const trail = TRAIL_WORDS.test(text) && !SNOW_WORDS.test(text);
-  if (trail && (input.semanticType === 'corridor' || /\b(?:trail|camino|pilgrimage|kodo|kōdō|sentiero|wanderweg|GR ?\d+|hut[- ]to[- ]hut)\b/i.test(text))) purposes.push('trail');
+  const phrase = input.destinationPhrase ?? '';
+  const namedTrek = /\b(?:trek|trekking|thru-hike|long-distance walk)\b/i.test(phrase) && !SAFARI_WORDS.test(phrase) && !/\b(?:gorilla|chimp(?:anzee)?|primate)s?\b/i.test(phrase) && !SNOW_WORDS.test(phrase);
+  if (namedTrek || (trail && (input.semanticType === 'corridor' || /\b(?:trail|camino|pilgrimage|kodo|kōdō|sentiero|wanderweg|GR ?\d+|hut[- ]to[- ]hut)\b/i.test(text)))) purposes.push('trail');
   if (SAFARI_WORDS.test(text)) purposes.push('wildlife');
   if (input.routeKind || ROUTE_WORDS.test(text)) purposes.push('route');
   if (BEACH_WORDS.test(text) || input.semanticType === 'island' || input.semanticType === 'island_group') purposes.push('beach');
@@ -146,7 +152,7 @@ export function buildTripQualityContract(input: TripQualityContractInput): TripQ
     essentials.push({ id: 'walk_the_trail', label: 'Walking a stage of the trail itself', requirement: 'requirement', source: 'destination', kinds: TRAIL_KINDS, nameTerms: ['trail', 'stage', 'walk', 'hike', 'kodo', 'camino', 'path'], minCount: 1, recovery: 'Add a walkable stage of the trail on the Discovery Board, or tell Sidequest which section suits the party.' });
   }
   if (purposes.includes('wildlife')) {
-    essentials.push({ id: 'wildlife_viewing', label: 'Game drives in the parks', requirement: 'requirement', source: 'request', kinds: WILDLIFE_KINDS, nameTerms: ['game drive', 'safari', 'crater', 'national park', 'reserve'], minCount: Math.max(2, Math.floor(days / 3)), recovery: 'Add game drives in the parks on the Discovery Board; an operator-run circuit is the usual way.' });
+    essentials.push({ id: 'wildlife_viewing', label: 'Game drives in the parks', requirement: 'requirement', source: 'request', kinds: WILDLIFE_KINDS, nameTerms: ['game drive', 'safari', 'crater', 'national park', 'reserve'], minCount: Math.max(2, Math.floor(days / 3)), distinctAreas: true, recovery: 'Add game drives in the parks on the Discovery Board; an operator-run circuit is the usual way.' });
   }
   if (purposes.includes('beach')) {
     essentials.push({ id: 'beach_time', label: 'Unhurried time on a beach', requirement: purpose === 'beach' || restful ? 'requirement' : 'preference', source: 'destination', kinds: BEACH_KINDS, nameTerms: ['beach', 'bay', 'cove', 'lagoon'], minCount: Math.max(1, Math.floor(days / 3)), recovery: 'Add beach days on the Discovery Board.' });

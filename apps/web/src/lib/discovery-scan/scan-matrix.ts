@@ -40,6 +40,8 @@ const MAX_BASES_PER_REQUEST = 10;
 export const MAX_SCAN_MATRIX_REQUESTS = 24;
 /** Direct requests a scan may spend asking whether an unmeasured base → place pair has a road at all. */
 export const MAX_SCAN_ROUTE_CONFIRMATIONS = 6;
+/** Extra direct requests for places no matrix cell reached at all, each asked once from its nearest base. */
+export const MAX_DARK_COLUMN_CONFIRMATIONS = 6;
 
 export interface ScanMatrixRequest {
   /** Indices into the scan's points. */
@@ -172,7 +174,19 @@ export async function measureScanMatrix(input: { points: readonly ScanPoint[]; m
   if (routing?.route) {
     const unmeasured: [number, number][] = [];
     for (let i = 0; i < n; i += 1) for (let j = 0; j < n; j += 1) if (isBase[i] && !isBase[j] && !measured[i]![j] && !measured[j]![i]) unmeasured.push([i, j]);
-    for (const [i, j] of unmeasured.slice(0, MAX_SCAN_ROUTE_CONFIRMATIONS)) {
+    /*
+     * A place the matrix could not reach at all (its whole column unmeasured —
+     * usually a point the router would not snap to a road) leaves every leg into
+     * it a straight-line guess with no measured pivot to bound it; across water
+     * that is a 50-minute "drive" that takes two hours. One measured cell from
+     * its nearest base bounds them all, so those are asked first.
+     */
+    const dark = points.map((_, j) => !isBase[j] && points.every((__, i) => i === j || (!measured[i]![j] && !measured[j]![i])));
+    const nearestBase = (j: number) => points.map((p, i) => ({ i, km: isBase[i] ? haversineKm(p.coordinates, points[j]!.coordinates) : Infinity })).sort((a, b) => a.km - b.km)[0]!.i;
+    const first: [number, number][] = points.flatMap((_, j) => (dark[j] && isBase.some(Boolean) ? [[nearestBase(j), j] as [number, number]] : []));
+    const firstKeys = new Set(first.map(([i, j]) => `${i}:${j}`));
+    const ordered = [...first, ...unmeasured.filter(([i, j]) => !firstKeys.has(`${i}:${j}`))];
+    for (const [i, j] of ordered.slice(0, MAX_SCAN_ROUTE_CONFIRMATIONS + Math.min(first.length, MAX_DARK_COLUMN_CONFIRMATIONS))) {
       if (deadline()) break;
       asked += 1;
       try {

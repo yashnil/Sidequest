@@ -115,6 +115,30 @@ describe('route feasibility from the scan', () => {
     expect(outcome.confirmations.noRoute).toBe(1);
   });
 
+  it('asks first for a place no matrix cell reached, from its nearest base, so every leg into it can be bounded', async () => {
+    /* Many bases come before the dark place in index order; the six ordinary confirmations would be spent on them. */
+    const bases = Array.from({ length: 8 }, (_, k) => pt(`B${k}`, 'base', 10 + k * 0.5, 50));
+    const P = pt('P', 'place', 10.02, 50.02);
+    const Q = pt('Q', 'place', 13.5, 50.1);
+    const dark = pt('D', 'place', 13.6, 50.3);
+    const asked: string[] = [];
+    const routing = fakeRouter({
+      minutes: (a, b) => (a === 'D' || b === 'D' ? null : 60),
+      route: async ({ from, to }) => {
+        asked.push(`${from.lat},${to.lat}`);
+        return { found: true, minutes: 180, km: 140 };
+      },
+    });
+    const outcome = await measureScanMatrix({ points: [...bases, P, Q, dark], mode: 'car', routing, deadline: () => false });
+    /* The nearest base to D is B7 (lat 13.5): asked first. */
+    expect(asked[0]).toBe('13.5,13.6');
+    const m = outcome.matrix;
+    expect(m.feasibility![m.ids.indexOf('B7')]![m.ids.indexOf('D')]).toBe('verified');
+    /* …which bounds the leg from Q (60 min from B7) into D: at least 120 min, not a 24 km straight-line half hour. */
+    expect(m.feasibility![m.ids.indexOf('Q')]![m.ids.indexOf('D')]).toBe('bounded_estimate');
+    expect(m.minutes[m.ids.indexOf('Q')]![m.ids.indexOf('D')]).toBeGreaterThanOrEqual(120);
+  });
+
   it('a matrix cell the router declines is never disconnected', async () => {
     const outcome = await measureScanMatrix({ points: [B, N, W], mode: 'car', routing: fakeRouter({ minutes: () => null }), deadline: () => false });
     expect(outcome.counts.disconnected).toBe(0);

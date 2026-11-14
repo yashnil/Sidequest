@@ -18,6 +18,21 @@ const base: TripQualityContractInput = {
 };
 const day = (dayNumber: number, stops: PlanForContract['days'][number]['stops'], travelMinutes = 60) => ({ dayNumber, firstStartMinute: stops[0]?.startMinute ?? null, stops, travelMinutes });
 
+describe('a trek named in the destination phrase', () => {
+  it('is the walk itself, whatever the place resolved to; a wish for some trekking in the notes is not', () => {
+    const named = buildTripQualityContract({ ...base, ownWords: 'Tour of the Long Ridge trek', destinationPhrase: 'Tour of the Long Ridge trek', semanticType: 'settlement' });
+    expect(named.purpose).toBe('trail');
+    expect(named.structure).toBe('trail_stages');
+    const notes = buildTripQualityContract({ ...base, ownWords: 'Lake District · some trekking if the weather holds', destinationPhrase: 'Lake District', semanticType: 'mountain_region' });
+    expect(notes.purpose).not.toBe('trail');
+  });
+
+  it('a gorilla or snow trek is not a stage walk', () => {
+    expect(buildTripQualityContract({ ...base, ownWords: 'Volcano gorilla trek', destinationPhrase: 'Volcano gorilla trek' }).purpose).not.toBe('trail');
+    expect(buildTripQualityContract({ ...base, ownWords: 'Ski trek in the north', destinationPhrase: 'Ski trek in the north' }).purpose).not.toBe('trail');
+  });
+});
+
 describe('the trip-quality contract — what the trip is for', () => {
   it('a trail trip requires walking the trail, and says where a missing walk was lost', () => {
     const contract = buildTripQualityContract({ ...base, ownWords: 'Kumano Kodo, Japan', semanticType: 'corridor', candidates: [{ id: 'p1', name: 'Hongu Taisha', kind: 'temple_or_shrine' }, { id: 'p2', name: 'Hosshinmon-oji to Hongu walk', kind: 'day_hike', defining: true }] });

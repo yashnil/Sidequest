@@ -46,4 +46,37 @@ describe('a walk never borrows a car measurement', () => {
     expect(drive?.travel!.geometry).toBeTruthy();
     expect(walk!.travel!.geometry).toBeUndefined();
   });
+
+  it('a bus or a transfer never borrows a foot measurement on a car-free trip', async () => {
+    /* A car-free trip's matrix is measured on the foot profile: here, every cell at walking pace. */
+    const world = fictionalWorld({
+      name: 'Harbourland',
+      center: { lat: 64.14, lng: -21.94 },
+      roadKmh: 5,
+      profile: { willDrive: false },
+      places: [
+        { name: 'Harbour Town', lat: 64.146, lng: -21.94, entityType: 'city' as const },
+        { name: 'Lighthouse Point', lat: 64.164, lng: -22.022 },
+        { name: 'Far Gorge', lat: 64.4, lng: -21.5 },
+      ],
+      basics: { startDate: '2026-05-01', endDate: '2026-05-03' },
+    });
+    const context = { ...world.context, matrix: { ...world.context.matrix, mode: 'foot' as const } };
+    const draft = draftOf({
+      bases: [{ id: 'b', name: 'Harbour Town', nights: 2 }],
+      days: [
+        { base: 'b', anchors: [{ name: 'Lighthouse Point', role: 'core', transport: 'bus' }] },
+        { base: 'b', anchors: [{ name: 'Far Gorge', role: 'core', transport: 'private_transfer' }] },
+        { base: 'b', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context });
+    const legs = result.itinerary.days.flatMap((d) => d.items).filter((i) => i.kind === 'travel' && i.travel && i.travel.mode !== 'walk');
+    expect(legs.length).toBeGreaterThan(0);
+    for (const leg of legs) {
+      const t = leg.travel!;
+      /* Never a walking figure printed as a measured ride. */
+      if (t.provenance === 'measured' && t.km) expect((t.km / (t.minutes ?? 1)) * 60).toBeGreaterThan(10);
+    }
+  });
 });

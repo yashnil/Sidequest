@@ -1,6 +1,7 @@
 import {
   buildTripQualityContract,
   evaluateTripQualityContract,
+  haversineKm,
   SCAN_KINDS,
   type DiscoveryCandidate,
   type Itinerary,
@@ -48,6 +49,7 @@ export function qualityContractFor(context: QualityContractContext): TripQuality
   const mustDoNames = new Set(context.mustDos.map((m) => m.trim().toLowerCase()));
   return buildTripQualityContract({
     ownWords,
+    destinationPhrase: context.destinationPhrase,
     semanticType: context.semanticType ?? null,
     routeKind: context.routeKind ?? null,
     tripDays: context.tripDays,
@@ -91,12 +93,36 @@ export function essentialIdsFor(contract: TripQualityContract, board: readonly D
     }
     const kinds = new Set<string>(essential.kinds ?? []);
     const terms = (essential.nameTerms ?? []).map((t) => new RegExp(`\\b${t}\\b`, 'i'));
+    const byKind = (c: DiscoveryCandidate) => kinds.size > 0 && kinds.has(kindOf(c.place.tags) ?? '');
     const matching = usable
-      .filter((c) => (kinds.size > 0 && kinds.has(kindOf(c.place.tags) ?? '')) || terms.some((t) => t.test(c.place.name)))
-      .sort((a, b) => (b.fit.score ?? 0) - (a.fit.score ?? 0));
-    for (const c of matching.slice(0, essential.minCount)) ids.add(c.place.id);
+      .filter((c) => byKind(c) || terms.some((t) => t.test(c.place.name)))
+      /* A stop of the essential's own kind outranks one that only shares a word with it ("Empakaai Crater viewpoint" is not a game drive). */
+      .sort((a, b) => Number(byKind(b)) - Number(byKind(a)) || (b.fit.score ?? 0) - (a.fit.score ?? 0));
+    for (const c of essential.distinctAreas ? spreadAcrossAreas(matching, essential.minCount) : matching.slice(0, essential.minCount)) ids.add(c.place.id);
   }
   return ids;
+}
+
+/** Two candidates closer than this are the same area for an essential that needs several. */
+export const ESSENTIAL_AREA_KM = 30;
+
+/**
+ * Up to `count` candidates in rank order, preferring ones in different areas:
+ * an essential that needs three game drives is three parks, not three stops
+ * around one crater. Same-area candidates fill in only when the board has
+ * nothing elsewhere, so the count is never reduced by the spreading.
+ */
+export function spreadAcrossAreas<T extends Pick<DiscoveryCandidate, 'place'>>(ranked: readonly T[], count: number): T[] {
+  const chosen: T[] = [];
+  for (const c of ranked) {
+    if (chosen.length >= count) break;
+    if (chosen.every((p) => haversineKm(p.place.coordinates, c.place.coordinates) >= ESSENTIAL_AREA_KM)) chosen.push(c);
+  }
+  for (const c of ranked) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(c)) chosen.push(c);
+  }
+  return chosen;
 }
 
 /** Whether the plan asks for a self-drive hire car anywhere a traveller would act on it. */

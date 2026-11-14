@@ -80,7 +80,14 @@ describe('the live Kenya and Tanzania answer of 2026-09-11, replayed', () => {
     expect(legsOf(itinerary, 2).find((l) => l.travel!.role === 'transfer')?.travel!.hint).toBe('flight');
     expect(feasibility.items.filter((i) => i.severity === 'dependency').map((i) => i.detail)).toEqual([]);
     expect(feasibility.verdict).toBe('feasible_with_cautions');
-    /* The arrival evening has its nyama choma. */
+    /*
+     * Eval v3 — the arrival evening's shuttles are estimates. The harness's
+     * non-driver matrix is labelled foot but carries road-pace figures, and the
+     * shuttle used to borrow one as "18 min measured". A foot matrix answers
+     * walks only, so each shuttle is Sidequest's own ~35-minute estimate; the
+     * museum then ends at 19:10 and the arrival evening still has its nyama choma.
+     */
+    for (const leg of legsOf(itinerary, 1)) if (leg.travel!.mode === 'shuttle') expect(leg.travel!.provenance).toBe('estimated');
     expect(itinerary.days[0]!.items.some((i) => i.kind === 'meal' && /nyama choma/i.test(i.title))).toBe(true);
     expect(audit.checks.find((c) => c.id === 'meals_present')!.ok).toBe(true);
     expect(itinerary.package!.episodes[0]).toMatchObject({ kind: 'safari', dayNumbers: [2, 3, 4, 5] });

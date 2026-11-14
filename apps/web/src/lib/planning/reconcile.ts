@@ -3079,9 +3079,14 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const earliest = slot === 'lunch' ? LUNCH_EARLIEST : early ? DINNER_EARLIEST - 30 : DINNER_EARLIEST;
     const latest = slot === 'lunch' ? LUNCH_LATEST + 60 : DINNER_LATEST;
     const start = Math.max(clock, earliest);
-    /* An evening that ends at seven still eats: dinner may run the day on by an hour, and the day's window follows it. */
+    /*
+     * An evening that ends at seven still eats: dinner may run the day on to the
+     * dinner hour's own close, and the day's window follows it. (It was one hour
+     * past the planned end; once estimated legs stopped borrowing faster
+     * figures, an arrival day ending at 19:10 lost its dinner to that rule.)
+     */
     const hardEnd = input.isLast || /Back at base by/.test(window.window.note ?? '');
-    const endAllowed = slot === 'dinner' && !hardEnd ? Math.min(window.window.endMinute + 60, latest) : Math.min(window.window.endMinute, latest);
+    const endAllowed = slot === 'dinner' && !hardEnd ? latest : Math.min(window.window.endMinute, latest);
     if (start + MEAL_MINUTES[slot] > endAllowed) return false;
     if (slot === 'dinner' && start + MEAL_MINUTES[slot] > window.window.endMinute) {
       window.window.usableMinutes += start + MEAL_MINUTES[slot] - window.window.endMinute;
@@ -3297,8 +3302,14 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * profile. A base-to-base stand-in and a timetabled answer are left alone:
      * neither was ever a walk's figure (see `walkIsTheJourney` below).
      */
-    const crossProfile = (mode === 'walk' && context.matrix.mode === 'car') || (mode === 'drive' && context.matrix.mode === 'foot');
-    if (measured && crossProfile && !viaBases && confirmation?.basis !== 'scheduled') {
+    /*
+     * Eval v3 — a foot matrix answers walks and nothing else. Once a car-free
+     * scan's matrix was measured for real (and so trusted), every bus and
+     * private-transfer leg borrowed its walking figure: "12 hr 45 min bus ·
+     * 64 km", printed as measured, at five km/h.
+     */
+    const crossProfile = (mode === 'walk' && context.matrix.mode === 'car') || (mode !== 'walk' && context.matrix.mode === 'foot');
+    if (measured && crossProfile && (!viaBases || context.matrix.mode === 'foot') && confirmation?.basis !== 'scheduled') {
       measured = null;
       confirmation = null;
     }
