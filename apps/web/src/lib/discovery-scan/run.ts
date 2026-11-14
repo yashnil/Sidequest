@@ -732,6 +732,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       maxBaseChanges: strategicBaseChanges(journey, { value: canonical.movement.maxBaseChanges.value, explicit: canonical.movement.maxBaseChanges.source === 'explicit' }),
       /* Release candidate — who is travelling decides what a hotel change costs them (`scan/stay-objective.ts`); how moving feels follows the archetype unless the traveller said. */
       traveller: canonical.movement.maxBaseChanges.source === 'explicit' ? stayTraveller : { ...stayTraveller, moveTolerance: journey.strategy.moveTolerance },
+      /* A limit the journey set is never "as you asked". */
+      ...(canonical.movement.maxBaseChanges.source === 'explicit' ? {} : { capReason: `${JOURNEY_ARCHETYPE_LABELS[journey.archetype].toLowerCase()}` }),
       dayMinutes: dailyWindows.map((w) => Math.max(0, w.window.endMinute - w.window.startMinute)),
       /* A trail walked in stages: judged for this party and followed from bed to bed unless they asked to drive to day walks (`scan/trail-stages.ts`). */
       ...(trail.trail

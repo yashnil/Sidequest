@@ -15,6 +15,8 @@ describe('journey archetypes — a planning strategy chosen before the beds', ()
     expect(archetypeOf({ ownWords: 'Iceland Ring Road', routeKind: 'loop' })).toBe('road_trip_loop');
     expect(archetypeOf({ ownWords: 'Tokyo and Kyoto by train', statedMode: 'public_transport', carAvailable: false, namedParts: ['Tokyo', 'Kyoto'] })).toBe('rail_journey');
     expect(archetypeOf({ ownWords: 'Lisbon, Portugal' }, { semanticType: 'settlement', scale: 'city' })).toBe('urban_single_base');
+    /* A town in a wider landscape is a regional trip that may stay put, not a city stay barred from moving. */
+    expect(archetypeOf({ ownWords: 'Mammoth Lakes' }, { semanticType: 'settlement', scale: 'local' })).toBe('regional_multi_base');
     expect(archetypeOf({ ownWords: 'Kauai, Hawaii' }, { semanticType: 'island' })).toBe('island_exploration');
     expect(archetypeOf({ ownWords: 'a nice retreat, life has been stressful', restfulWeight: 0.7 })).toBe('wellness_retreat');
     expect(archetypeOf({ ownWords: 'Kyrgyzstan' }, { semanticType: 'country', scale: 'country' })).toBe('regional_multi_base');

@@ -82,7 +82,13 @@ export function chooseJourneyArchetype(input: JourneyInput): JourneyChoice {
   if (contract.purpose === 'rest' && !purposes.includes('beach')) {
     return choice('wellness_retreat', 'A restful trip: one comfortable base and short days.', { maxBaseChanges: contract.namedParts.length >= 2 ? 1 : 0, minBaseChanges: 0, moveTolerance: 'stay_put' });
   }
-  if ((input.scale === 'city' || input.scale === 'local' || input.semanticType === 'settlement') && contract.namedParts.length < 2) {
+  /*
+   * A city stay is a city: a town at the edge of a mountain region ("Mammoth
+   * Lakes") is a regional trip that may still keep one base when that is
+   * cheaper, never one barred from moving (eval v3: the town read as a city and
+   * the plan claimed one base "as you asked").
+   */
+  if (input.scale === 'city' && contract.namedParts.length < 2) {
     return choice('urban_single_base', 'A city stay: one base in the city.', { maxBaseChanges: 0, minBaseChanges: 0, moveTolerance: 'stay_put' });
   }
   if (input.semanticType === 'island' || input.semanticType === 'island_group' || purposes.includes('beach')) {

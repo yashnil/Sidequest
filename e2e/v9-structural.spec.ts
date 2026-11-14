@@ -25,7 +25,12 @@ const events = (ics: string) => stable(ics).match(/BEGIN:VEVENT[\s\S]*?END:VEVEN
 
 test('a structural refinement is proposed with a delta, applied, reflected everywhere, and undone exactly', async ({ page }) => {
   test.setTimeout(240_000);
-  const id = await buildFixtureTrip(page, 'Multibase Mammoth Lakes', TEN_DAYS);
+  /*
+   * Eval v3 — a town or city now keeps one base by its journey archetype, so a
+   * multi-stay trip has to be one: a road trip ("Ring Road") is planned with
+   * stays along it, which is what "Fewer hotel changes" needs to act on.
+   */
+  const id = await buildFixtureTrip(page, 'Multibase Ring Road', TEN_DAYS);
 
   /* The plan has several stays; one booking marked; Preflight and the Pack are reachable. */
   const basesBefore = await page.getByTestId('route-bases').locator('[data-testid="base-card"]').count();
@@ -49,6 +54,9 @@ test('a structural refinement is proposed with a delta, applied, reflected every
   expect(daysBefore.length).toBeGreaterThan(1);
   await openHubView(page, 'overview');
   await openHubView(page, 'book');
+  /* Three stays are grouped behind "View bases"; a traveller opens it to mark one booked. */
+  const viewBases = page.locator('#hub-view-book').getByText('View bases', { exact: true }).first();
+  if (await viewBases.isVisible().catch(() => false)) await viewBases.click();
   const { markBooked } = visibleOpenNeed(page);
   await markBooked.click();
   await page.getByTestId('mark-booked-form').getByTestId('mark-booked-save').click();

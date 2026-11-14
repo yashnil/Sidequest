@@ -125,6 +125,12 @@ export interface StayObjectiveInput {
   nights: number;
   /** The traveller's hard cap on hotel changes. */
   maxBaseChanges: number;
+  /**
+   * Why the cap is what it is when the traveller did not set it — the journey's
+   * own reason ("a city stay keeps one base"). Present, the plan never says
+   * "as you asked" for a limit Sidequest chose.
+   */
+  capReason?: string;
   traveller: StayTraveller;
   /** Usable minutes of each calendar day, first to last (nights + 1 entries). Absent: an ordinary day, with a shorter first and last. */
   dayMinutes?: readonly number[];
@@ -679,7 +685,9 @@ function sentenceFor(input: StayObjectiveInput, model: Model, chosen: StayOption
   if (input.bases.length === 1) return `One base, ${chosen.stays[0]!.baseName}: it is the only place to sleep the scan proposed.`;
   if (single) {
     const moving = alternatives.filter((a) => a.moves > 0).sort((a, b) => a.totalCostMinutes - b.totalCostMinutes)[0];
-    const lead = input.traveller.moveTolerance === 'stay_put' || input.maxBaseChanges === 0 ? `One base, ${chosen.stays[0]!.baseName}, as you asked` : `One base, ${chosen.stays[0]!.baseName}`;
+    const lead = input.capReason && (input.traveller.moveTolerance === 'stay_put' || input.maxBaseChanges === 0)
+      ? `One base, ${chosen.stays[0]!.baseName} (${input.capReason})`
+      : input.traveller.moveTolerance === 'stay_put' || input.maxBaseChanges === 0 ? `One base, ${chosen.stays[0]!.baseName}, as you asked` : `One base, ${chosen.stays[0]!.baseName}`;
     if (!moving) return `${lead}: no second place to sleep fits the nights you have.`;
     const added = names(moving).filter((n) => n !== chosen.stays[0]!.baseName);
     const nightsThere = Math.max(1, moving.stays.filter((s) => added.includes(s.baseName)).reduce((n, s) => n + s.nights, 0));

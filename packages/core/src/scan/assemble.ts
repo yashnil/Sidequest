@@ -258,6 +258,8 @@ export interface AssembleScanRegionInput {
   carAvailable: boolean | null;
   /** From the traveller's hotel-switching tolerance. 0 keeps one base. */
   maxBaseChanges: number;
+  /** Why the cap is what it is when the traveller did not set it (the journey's reason); see `StayObjectiveInput.capReason`. */
+  capReason?: string;
   /**
    * Who is travelling, for the base choice: how they feel about changing
    * hotels, their pace and daily travel ceiling, and who is in the party
@@ -367,6 +369,8 @@ export interface ChooseScanBasesInput {
   nights: number;
   /** The traveller's hard cap on hotel changes. 0 keeps one base. */
   maxBaseChanges: number;
+  /** Why the cap is what it is when the traveller did not set it. */
+  capReason?: string;
   /** Where the trip starts and ends, and how much of each edge day is usable; absent means the order is decided by the bases alone. */
   edges?: TripEdges;
   /** Who is travelling. Absent fields fall back to an ordinary traveller, so a stored scan can be re-asked without its profile. */
@@ -453,6 +457,7 @@ export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesRes
     minutes,
     nights,
     maxBaseChanges: input.maxBaseChanges,
+    ...(input.capReason ? { capReason: input.capReason } : {}),
     traveller,
     ...(input.dayMinutes ? { dayMinutes: input.dayMinutes } : {}),
     ...(input.edges ? { edges: { fromArrival: input.edges.fromArrival, toDeparture: input.edges.toDeparture } } : {}),
@@ -718,6 +723,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     minutes,
     nights,
     maxBaseChanges: input.maxBaseChanges,
+    ...(input.capReason ? { capReason: input.capReason } : {}),
     ...(edges ? { edges } : {}),
     traveller: { carAvailable: input.carAvailable !== false, ...(input.traveller ?? {}) },
     ...(input.dayMinutes ? { dayMinutes: input.dayMinutes } : {}),
@@ -1262,7 +1268,7 @@ function trailRecordFor(
         : trail.chain.length < 2
           ? 'The trail stages the scan proposed do not end where a place to sleep was proposed, so the stays cannot follow the trail; the stages are planned as walks from where you sleep.'
           : input.traveller?.moveTolerance === 'stay_put' || input.maxBaseChanges === 0
-            ? 'You asked to keep one place to sleep, so the stages are planned as day walks from it.'
+            ? input.capReason ? `One place to sleep (${input.capReason}), so the stages are planned as day walks from it.` : 'You asked to keep one place to sleep, so the stages are planned as day walks from it.'
             : 'The nights do not stretch to sleeping along the trail, so the stages are planned as walks from where you sleep.';
   return {
     version: 1,

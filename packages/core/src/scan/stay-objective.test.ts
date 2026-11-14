@@ -95,6 +95,10 @@ describe('the stay objective’s guarantees', () => {
     expect(one.stays).toHaveLength(1);
     expect(one.decision.sentence).toMatch(/as you asked/);
     expect(one.decision.alternatives.some((a) => a.moves === 1)).toBe(true);
+    /* A cap the journey set is stated as the journey's, never as the traveller's. */
+    const journeys = chooseStays({ ...input(twin, 7, { moveTolerance: 'stay_put' }, 0), capReason: 'a city stay from one base' });
+    expect(journeys.decision.sentence).toMatch(/\(a city stay from one base\)/);
+    expect(journeys.decision.sentence).not.toMatch(/as you asked/);
     expect(names(input(coast, 8, { moveTolerance: 'move_once' }, 1)).length).toBeLessThanOrEqual(2);
   });
 
