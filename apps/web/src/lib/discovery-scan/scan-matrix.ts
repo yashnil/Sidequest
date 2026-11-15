@@ -230,7 +230,10 @@ export async function measureScanMatrix(input: { points: readonly ScanPoint[]; m
       ? { kind: 'measured', note: `Measured by ${routing!.name}.`, source: routing!.name }
       : measuredPairs > 0
         ? { kind: 'estimated', note: `${measuredPairs} of ${totalPairs} journeys measured by ${routing!.name} (${baseRowsMeasured} of ${baseRowTotal} between a base and a place); the rest estimated from distance and raised to what the measured legs prove.`, source: routing!.name }
-        : estimate.provenance,
+        : routing && sent > 0
+          ? /* Final pass — asked and answered nothing (a spent quota, an outage): the matrix names the router that went quiet, so the build can tell it from "no router at all". */
+            { kind: 'estimated', note: `No journeys measured: ${routing.name} did not answer any of ${sent} request${sent === 1 ? '' : 's'}; every figure is estimated from distance.`, source: routing.name }
+          : estimate.provenance,
     feasibility: prior,
   };
   const bounded = boundTravelMatrix({ matrix: raw, disconnected });

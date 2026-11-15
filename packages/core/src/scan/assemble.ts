@@ -230,6 +230,9 @@ export function areaExperienceAnswered(kind: string, position: Pick<ResolvedPosi
  * `estimated` and built from the same mode-aware estimator the reconciler uses
  * (`travel/estimate.ts`), so the board and the plan agree about a guess.
  */
+/** The provenance source of a matrix no router was asked for. */
+export const SCAN_ESTIMATE_SOURCE = 'sidequest-geo-estimate';
+
 export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 'foot', status: 'provider_unavailable' | 'plausible_unverified' = 'provider_unavailable'): TravelTimeMatrixData {
   const ids = points.map((p) => p.id);
   const estimateMode: TransportMode = mode === 'car' ? 'drive' : 'walk';
@@ -240,7 +243,7 @@ export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 
     ids,
     minutes,
     km,
-    provenance: { kind: 'estimated', note: 'Estimated from straight-line distance with a road factor; no router answered.', source: 'sidequest-geo-estimate' },
+    provenance: { kind: 'estimated', note: 'Estimated from straight-line distance with a road factor; no router answered.', source: SCAN_ESTIMATE_SOURCE },
     /* Eval v3 — a straight line says how far, never that a road joins the two ends. */
     feasibility: points.map((a) => points.map((b) => (a.id === b.id ? 'verified' : status))),
   };

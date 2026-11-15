@@ -50,6 +50,17 @@ import { requestSignal } from '../net/generation-deadline';
  */
 export const ORS_BASE = 'https://api.heigit.org/openrouteservice/v2';
 export const ORS_KEY_ENV = 'OPENROUTESERVICE_API_KEY';
+
+/**
+ * Final pass — the quota-exhaustion simulation points the client at a local
+ * stub (`e2e/support/ors-quota-stub.mjs`). Honoured only with the fixture
+ * switch on (`SIDEQUEST_FIXTURES=allow`), so a deployment cannot be redirected
+ * by a stray variable.
+ */
+function orsBase(): string {
+  const override = process.env.SIDEQUEST_ORS_BASE_URL?.trim();
+  return override && process.env.SIDEQUEST_FIXTURES?.trim() === 'allow' ? override.replace(/\/+$/, '') : ORS_BASE;
+}
 export const ORS_NO_ROUTE_CODE = 2009;
 export const ORS_NO_ROUTABLE_POINT_CODE = 2010;
 const REQUEST_TIMEOUT_MS = 12_000;
@@ -196,7 +207,7 @@ export async function computeOrsMatrix(
     units: 'km',
   });
   try {
-    const response = await fetchImpl(`${ORS_BASE}/matrix/${input.profile}`, {
+    const response = await fetchImpl(`${orsBase()}/matrix/${input.profile}`, {
       method: 'POST',
       headers: { authorization: apiKey, 'content-type': 'application/json', accept: 'application/json', 'user-agent': USER_AGENT },
       body,
@@ -238,7 +249,7 @@ export async function computeOrsRoute(input: { from: { lat: number; lng: number 
   if (http.counter) http.counter.calls += 1;
   let response: Response;
   try {
-    response = await doFetch(`${ORS_BASE}/directions/${input.profile}/geojson`, {
+    response = await doFetch(`${orsBase()}/directions/${input.profile}/geojson`, {
       method: 'POST',
       headers: { authorization: apiKey, 'content-type': 'application/json', accept: 'application/geo+json, application/json', 'user-agent': USER_AGENT },
       body: JSON.stringify({ coordinates: [[input.from.lng, input.from.lat], [input.to.lng, input.to.lat]], instructions: false, geometry_simplify: true }),
@@ -317,7 +328,7 @@ export async function computeOrsTrailStage(input: { from: { lat: number; lng: nu
   if (http.counter) http.counter.calls += 1;
   let response: Response;
   try {
-    response = await doFetch(`${ORS_BASE}/directions/foot-hiking/geojson`, {
+    response = await doFetch(`${orsBase()}/directions/foot-hiking/geojson`, {
       method: 'POST',
       headers: { authorization: apiKey, 'content-type': 'application/json', accept: 'application/geo+json, application/json', 'user-agent': USER_AGENT },
       body: JSON.stringify({ coordinates: [[input.from.lng, input.from.lat], [input.to.lng, input.to.lat]], elevation: true, instructions: false, geometry_simplify: true }),

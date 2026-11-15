@@ -24,9 +24,35 @@ test.describe('routing, weather, geocoder and food all down', () => {
     await expect(page.getByTestId('route-overview')).toBeVisible();
     await openHubView(page, 'days');
     const days = await page.locator('#hub-view-days').innerText();
-    expect(days).toMatch(/estimate/i);
+    /* An unmeasured leg is printed with the estimate prefix (≈, `travelFigurePrefix`) or the word itself. */
+    expect(days).toMatch(/estimate|≈/i);
     expect(days).not.toMatch(/\d+\s?°C/);
     expect(await page.locator('body').innerText()).not.toMatch(NO_LEAKS);
+  });
+});
+
+test.describe('the routing quota is already spent (simulated)', () => {
+  test.use({ baseURL: 'http://localhost:4323' });
+  test('the planner keeps the trip, says the times are estimates, and stops asking the router', async ({ page, request }) => {
+    await createTrip(page, 'Portugal', { start: '2027-05-10', end: '2027-05-14' });
+    await page.waitForURL(/\/questionnaire$/, { timeout: 30_000 });
+    await completeQuestionnaire(page);
+    const find = page.getByTestId('interview-find-places');
+    await waitUntilInteractive(find);
+    await find.click();
+    await expect(page.getByTestId('board-summary')).toBeVisible({ timeout: 90_000 });
+    await page.getByRole('button', { name: /Build my trip|Rebuild my trip/ }).click();
+    await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 120_000 });
+    await expect(page.getByTestId('route-overview')).toBeVisible();
+    /* The planner's plan shipped and says why its times are estimates. */
+    await expect(page.getByTestId('routing-degraded')).toContainText(/estimates/);
+    await openHubView(page, 'days');
+    expect(await page.locator('#hub-view-days').innerText()).toMatch(/estimate|≈/i);
+    expect(await page.locator('body').innerText()).not.toMatch(NO_LEAKS);
+    /* The breaker: the first refusal shut the service until its reset; the rest were never sent. */
+    const { count } = (await (await request.get('http://127.0.0.1:4399/count')).json()) as { count: number };
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThanOrEqual(2);
   });
 });
 
@@ -53,11 +79,21 @@ test.describe('the model refuses the key', () => {
     await page.waitForURL(/\/questionnaire$/, { timeout: 60_000 });
     await completeQuestionnaire(page);
     const find = page.getByTestId('interview-find-places');
-    await waitUntilInteractive(find);
-    await find.click();
-    await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
     const body = page.locator('body');
-    await expect(body).toContainText(/can.t reach|couldn.t|could not|not able|unavailable|try again/i, { timeout: 120_000 });
+    /*
+     * V1 convergence: when the deployment already knows the search cannot run,
+     * the primary action is disabled with the reason beside it, before anyone
+     * presses it. Either honest state passes; a silent one does not.
+     */
+    await expect(find.or(page.getByTestId('build-unavailable')).first()).toBeVisible({ timeout: 60_000 });
+    if (await find.isDisabled()) {
+      await expect(page.getByTestId('build-unavailable')).toContainText(/can.t|couldn.t|could not|not able|unavailable|try again|isn.t/i);
+    } else {
+      await waitUntilInteractive(find);
+      await find.click();
+      await expect(page).toHaveURL(/\/discover$/, { timeout: 30_000 });
+      await expect(body).toContainText(/can.t reach|couldn.t|could not|not able|unavailable|try again/i, { timeout: 120_000 });
+    }
     expect(await body.innerText()).not.toMatch(NO_LEAKS);
   });
 });

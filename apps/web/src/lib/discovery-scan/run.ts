@@ -681,7 +681,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           )
             .then((result) => result.positions)
             .catch(() => new Map());
-    const timed = fixtureScan()
+    /* The quota simulation (`SIDEQUEST_FIXTURE_SCAN_ROUTER=measure`) sends a fixture scan's matrix through the configured router. */
+    const timed = fixtureScan() && process.env.SIDEQUEST_FIXTURE_SCAN_ROUTER?.trim() !== 'measure'
       ? estimatedScanOutcome(plan.points, mode)
       : await withinBudget(
           /* Stops asking a little before the stage's budget so what was measured is kept rather than lost to the timeout's fallback. */

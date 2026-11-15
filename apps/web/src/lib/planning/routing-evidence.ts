@@ -1,4 +1,4 @@
-import type { TravelTimeMatrixData } from '@sidequest/core';
+import { SCAN_ESTIMATE_SOURCE, type TravelTimeMatrixData } from '@sidequest/core';
 
 /**
  * FINAL PASS — HOW MUCH OF THE TRIP'S GEOGRAPHY A ROUTER ACTUALLY ANSWERED.
@@ -53,6 +53,8 @@ export function routingEvidenceOf(matrix: TravelTimeMatrixData | null | undefine
       }
     });
   });
+  /* A matrix that names a router other than the plain estimate was measured, or asked and refused: a router was there (`scan-matrix.ts`). */
+  if (!asked && matrix.provenance.source && matrix.provenance.source !== SCAN_ESTIMATE_SOURCE) asked = true;
   const share = baseTotal > 0 ? baseMeasured / baseTotal : total > 0 ? measured / total : 1;
   return { baseRows: { measured: baseMeasured, total: baseTotal }, measuredPairs: measured, totalPairs: total, routerAsked: asked, degraded: asked && share < DEGRADED_BASE_ROW_SHARE };
 }

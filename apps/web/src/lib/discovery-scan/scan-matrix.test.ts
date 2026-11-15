@@ -150,11 +150,15 @@ describe('route feasibility from the scan', () => {
     expect(outcome.counts.disconnected).toBe(0);
     expect(outcome.counts.provider_unavailable).toBe(6);
     expect(outcome.requests.failed).toBe(1);
+    /* Final pass — the matrix names the router that went quiet, so a spent quota is not read as "no router". */
+    expect(outcome.matrix.provenance.source).toBe(routing.name);
+    expect(outcome.matrix.provenance.note).toMatch(/did not answer/);
   });
 
   it('no router at all is provider_unavailable everywhere', async () => {
     const outcome = await measureScanMatrix({ points: [B, N, W], mode: 'car', routing: null, deadline: () => false });
     expect(outcome.counts.provider_unavailable).toBe(6);
     expect(outcome.measuredPairs).toBe(0);
+    expect(outcome.matrix.provenance.source).toBe('sidequest-geo-estimate');
   });
 });

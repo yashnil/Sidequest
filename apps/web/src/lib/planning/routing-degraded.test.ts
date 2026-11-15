@@ -10,7 +10,7 @@ function matrix(ids: string[], cell: (i: number, j: number) => Status): TravelTi
     ids,
     minutes: ids.map(() => ids.map(() => 10)),
     km: ids.map(() => ids.map(() => 10)),
-    provenance: { kind: 'measured', note: 'test' },
+    provenance: { kind: 'estimated', note: 'test', source: 'sidequest-geo-estimate' },
     feasibility: ids.map((_, i) => ids.map((__, j) => (i === j ? 'verified' : cell(i, j)))),
   };
 }
@@ -29,6 +29,14 @@ describe('routing evidence', () => {
     const e = routingEvidenceOf(matrix(ids, (i, j) => (i === 0 && j === 1 ? 'verified' : 'plausible_unverified')), bases)!;
     expect(e.routerAsked).toBe(true);
     expect(e.baseRows.measured).toBe(1);
+    expect(e.degraded).toBe(true);
+  });
+
+  it('a router asked before the scan that answered nothing at all (quota already spent) is degraded', () => {
+    const m = matrix(ids, () => 'provider_unavailable');
+    m.provenance = { kind: 'estimated', note: 'No journeys measured: openrouteservice did not answer any of 3 requests.', source: 'openrouteservice' };
+    const e = routingEvidenceOf(m, bases)!;
+    expect(e.routerAsked).toBe(true);
     expect(e.degraded).toBe(true);
   });
 
