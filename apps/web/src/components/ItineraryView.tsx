@@ -748,6 +748,11 @@ export function ItineraryView({
   /* Sparse-itinerary pass — a plan thinned by a discovery gap says so once, beside where it sleeps; a relaxed one says nothing. */
   const densityLine = tripDensityLine(itinerary.package?.planning?.density);
   const lengthLine = tripLengthLine(itinerary.package?.planning?.density);
+  /* Final pass — a router that went quiet is said once, with what was kept; it is never an environment detail. */
+  const routingRecord = itinerary.package?.planning?.routing;
+  const routingLine = routingRecord?.degraded
+    ? `Most travel times here are estimates: route measurement was unavailable while this trip was planned (${routingRecord.baseRowsMeasured} of ${routingRecord.baseRowsTotal} legs from where you sleep were measured). Your places and stays are kept; rebuild later to measure them.`
+    : null;
   /* The trip-quality contract's failures, in words, with what the traveller can do (`quality/trip-quality-contract.ts`). Never a score. */
   const contractGaps = (itinerary.package?.qualityContract?.violations ?? []).filter((v) => v.severity === 'fail' && v.stage !== 'pace').slice(0, 3);
   /*
@@ -788,6 +793,7 @@ export function ItineraryView({
               {itinerary.package.planning?.baseSuggestion ? <p className="mt-2 max-w-[62ch] type-small text-ink" data-testid="stay-suggestion">{itinerary.package.planning.baseSuggestion}</p> : null}
               {densityLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="density-gap">{densityLine}</p> : null}
               {lengthLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="trip-length-verdict">{lengthLine}</p> : null}
+              {routingLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="routing-degraded">{routingLine}</p> : null}
               {contractGaps.length > 0 ? (
                 <div className="mt-3 max-w-[62ch] border-l-2 border-clay pl-3" data-testid="contract-gap">
                   <p className="sheet-label text-clay">What this plan still lacks</p>

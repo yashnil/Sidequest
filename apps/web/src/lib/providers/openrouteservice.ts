@@ -54,6 +54,62 @@ export const ORS_NO_ROUTE_CODE = 2009;
 export const ORS_NO_ROUTABLE_POINT_CODE = 2010;
 const REQUEST_TIMEOUT_MS = 12_000;
 
+/**
+ * FINAL PASS — A SPENT ALLOWANCE IS A STATE, NOT A STREAM OF REFUSALS.
+ *
+ * Eval v3's degraded Tanzania run: openrouteservice's daily quota ran out after
+ * a day of traffic and every later request still went out, waited, and came
+ * back refused — 1,392 of 1,482 scan pairs. One process-wide breaker now holds
+ * the service shut until the window the service itself announces
+ * (`x-ratelimit-reset`, epoch seconds) or, without one, for a minute. While it
+ * is shut nothing is sent and every caller gets `rate_limited` at once — an
+ * absence, never a statement about the road (V9.1), so the trip keeps its
+ * places and the legs say they were not measured.
+ */
+const ORS_DEFAULT_BLOCK_MS = 60_000;
+const ORS_MAX_BLOCK_MS = 24 * 60 * 60_000;
+const orsBreaker = { blockedUntil: 0, reason: null as null | 'rate_limited' | 'quota_exhausted', skipped: 0 };
+
+/** Whether a request may go out now; counts the ones held back. */
+function orsOpen(now = Date.now()): boolean {
+  if (orsBreaker.blockedUntil > now) {
+    orsBreaker.skipped += 1;
+    return false;
+  }
+  return true;
+}
+
+/** Read the service's own window from a response and shut the breaker when it is spent. */
+export function noteOrsResponse(response: Pick<Response, 'status' | 'headers'>, bodyMessage?: string, now = Date.now()): void {
+  const remaining = response.headers.get('x-ratelimit-remaining');
+  const resetRaw = Number(response.headers.get('x-ratelimit-reset'));
+  const resetAt = Number.isFinite(resetRaw) && resetRaw > 0 ? resetRaw * 1000 : null;
+  const until = (fallbackMs: number) => Math.min(now + ORS_MAX_BLOCK_MS, resetAt !== null && resetAt > now ? resetAt : now + fallbackMs);
+  const quotaWords = /quota/i.test(bodyMessage ?? '');
+  if (response.status === 429 || (response.status === 403 && quotaWords)) {
+    orsBreaker.blockedUntil = until(ORS_DEFAULT_BLOCK_MS);
+    orsBreaker.reason = quotaWords || remaining === '0' ? 'quota_exhausted' : 'rate_limited';
+    return;
+  }
+  if (remaining === '0') {
+    orsBreaker.blockedUntil = until(ORS_DEFAULT_BLOCK_MS);
+    orsBreaker.reason = 'quota_exhausted';
+  }
+}
+
+/** Provider health for diagnostics and the scan log; never shown to a traveller as an environment detail. */
+export function orsHealth(now = Date.now()): { open: boolean; reason: typeof orsBreaker.reason; reopensAt: string | null; skipped: number } {
+  const open = orsBreaker.blockedUntil <= now;
+  return { open, reason: open ? null : orsBreaker.reason, reopensAt: open ? null : new Date(orsBreaker.blockedUntil).toISOString(), skipped: orsBreaker.skipped };
+}
+
+/** Test hook: close nothing, forget everything. */
+export function resetOrsBreaker(): void {
+  orsBreaker.blockedUntil = 0;
+  orsBreaker.reason = null;
+  orsBreaker.skipped = 0;
+}
+
 export type OrsProfile = 'driving-car' | 'foot-walking' | 'cycling-regular' | 'foot-hiking';
 
 export function orsProfileFor(mode: 'car' | 'foot' | 'transit' | 'bicycle'): OrsProfile | null {
@@ -132,6 +188,7 @@ export async function computeOrsMatrix(
 ): Promise<{ durations: (number | null)[][]; distances: (number | null)[][] } | null> {
   const apiKey = http.apiKey ?? process.env[ORS_KEY_ENV];
   if (!apiKey) return null;
+  if (!orsOpen()) return null;
   const fetchImpl = http.fetchImpl ?? fetch;
   const body = JSON.stringify({
     locations: input.points.map((p) => [p.lng, p.lat]),
@@ -148,8 +205,10 @@ export async function computeOrsMatrix(
     if (http.counter) http.counter.calls += 1;
     if (!response.ok) {
       if (http.counter) http.counter.failures += 1;
+      noteOrsResponse(response, await response.text().catch(() => ''));
       return null;
     }
+    noteOrsResponse(response);
     const parsed = orsMatrixSchema.safeParse(await response.json());
     if (!parsed.success || !parsed.data.durations) return null;
     const durations = parsed.data.durations;
@@ -174,6 +233,7 @@ export interface OrsRouteResult {
 export async function computeOrsRoute(input: { from: { lat: number; lng: number }; to: { lat: number; lng: number }; profile: OrsProfile }, http: OrsHttp = {}): Promise<OrsRouteResult> {
   const apiKey = http.apiKey ?? process.env[ORS_KEY_ENV];
   if (!apiKey) return { found: false, minutes: null, km: null, reason: 'provider_error', provider: 'openrouteservice' };
+  if (!orsOpen()) return { found: false, minutes: null, km: null, reason: 'rate_limited', provider: 'openrouteservice' };
   const doFetch = http.fetchImpl ?? fetch;
   if (http.counter) http.counter.calls += 1;
   let response: Response;
@@ -189,6 +249,7 @@ export async function computeOrsRoute(input: { from: { lat: number; lng: number 
     return { found: false, minutes: null, km: null, reason: 'provider_error', provider: 'openrouteservice' };
   }
   if (response.status === 429) {
+    noteOrsResponse(response);
     if (http.counter) http.counter.failures += 1;
     return { found: false, minutes: null, km: null, reason: 'rate_limited', provider: 'openrouteservice' };
   }
@@ -202,9 +263,11 @@ export async function computeOrsRoute(input: { from: { lat: number; lng: number 
   if (!response.ok) {
     if (http.counter) http.counter.failures += 1;
     const parsed = orsErrorSchema.safeParse(body);
+    noteOrsResponse(response, parsed.success ? parsed.data.error?.message : JSON.stringify(body ?? ''));
     const code = parsed.success ? parsed.data.error?.code : undefined;
     return { found: false, minutes: null, km: null, reason: code === ORS_NO_ROUTE_CODE ? 'not_found' : code === ORS_NO_ROUTABLE_POINT_CODE ? 'insufficient_evidence' : 'provider_error', provider: 'openrouteservice' };
   }
+  noteOrsResponse(response);
   const parsed = orsResponseSchema.safeParse(body);
   if (!parsed.success) {
     if (http.counter) http.counter.failures += 1;
@@ -249,6 +312,7 @@ export async function computeOrsTrailStage(input: { from: { lat: number; lng: nu
   const none = (reason: ProviderGapReason): OrsTrailResult => ({ found: false, km: null, ascentM: null, minutes: null, reason, provider: 'openrouteservice' });
   const apiKey = http.apiKey ?? process.env[ORS_KEY_ENV];
   if (!apiKey) return none('provider_error');
+  if (!orsOpen()) return none('rate_limited');
   const doFetch = http.fetchImpl ?? fetch;
   if (http.counter) http.counter.calls += 1;
   let response: Response;
@@ -264,6 +328,7 @@ export async function computeOrsTrailStage(input: { from: { lat: number; lng: nu
     return none('provider_error');
   }
   if (response.status === 429) {
+    noteOrsResponse(response);
     if (http.counter) http.counter.failures += 1;
     return none('rate_limited');
   }
@@ -277,9 +342,11 @@ export async function computeOrsTrailStage(input: { from: { lat: number; lng: nu
   if (!response.ok) {
     if (http.counter) http.counter.failures += 1;
     const parsed = orsErrorSchema.safeParse(body);
+    noteOrsResponse(response, parsed.success ? parsed.data.error?.message : JSON.stringify(body ?? ''));
     const code = parsed.success ? parsed.data.error?.code : undefined;
     return none(code === ORS_NO_ROUTE_CODE ? 'not_found' : code === ORS_NO_ROUTABLE_POINT_CODE ? 'insufficient_evidence' : 'provider_error');
   }
+  noteOrsResponse(response);
   const parsed = orsTrailSchema.safeParse(body);
   if (!parsed.success) {
     if (http.counter) http.counter.failures += 1;

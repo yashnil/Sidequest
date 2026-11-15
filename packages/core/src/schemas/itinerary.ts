@@ -1332,6 +1332,23 @@ export const tripPackageSchema = z.object({
       scheduled: z.object({ traveller: z.number().int().min(0), sidequest: z.number().int().min(0), maybe: z.number().int().min(0), filler: z.number().int().min(0) }).optional(),
       weatherMoves: z.array(z.object({ name: z.string().min(1), avoidedDate: z.string().min(1), chosenDate: z.string().min(1) })).default([]),
       mustConflicts: z.array(z.object({ name: z.string().min(1), detail: z.string().min(1) })).default([]),
+      /**
+       * Final pass — how much of the trip's geography a router answered
+       * (`apps/web/src/lib/planning/routing-evidence.ts`). `degraded`: a router
+       * was asked and mostly went quiet (quota, outage); `keptOverComposition`:
+       * the planner's plan shipped rather than a model composition bound by
+       * neither the pillars nor the stay decision. Absent on older plans.
+       */
+      routing: z
+        .object({
+          measuredPairs: z.number().int().min(0),
+          totalPairs: z.number().int().min(0),
+          baseRowsMeasured: z.number().int().min(0),
+          baseRowsTotal: z.number().int().min(0),
+          degraded: z.boolean(),
+          keptOverComposition: z.boolean().optional(),
+        })
+        .optional(),
       /** Release candidate — why the trip sleeps where it does, with the numbers (`decision.sentence` is one line a screen can show). */
       stay: stayDecisionSchema.optional(),
       /** A base the scan proposed that would reach the traveller's picks this plan could not; the traveller decides. */

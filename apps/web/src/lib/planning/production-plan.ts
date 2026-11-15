@@ -76,6 +76,7 @@ import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
 import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, plannerUnplacedMustDos, plannerUnscheduledPicks, type PlannerComposition } from './planner-composer';
 import { getScanProposalExtras } from '../db/scan-repository';
+import { plannerSurvivesDegradedRouting, routingEvidenceOf } from './routing-evidence';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
 import { capability } from '../providers/registry';
 import { MAX_PROVIDER_REQUEST_MS, withGenerationDeadline } from '../net/generation-deadline';
@@ -625,7 +626,32 @@ async function generatePlan(
             : plannerAttempt
               ? plannerFallbackReasonOf(plannerAttempt)
               : 'planner_internal_failure';
-  const plannerTooThin = Boolean(plannerAttempt && plannerFallbackReason);
+  /*
+   * FINAL PASS — A ROUTING FAILURE NEVER HANDS THE TRIP TO AN UNBOUND MODEL.
+   *
+   * When the router was asked and mostly went quiet, a day the planner could
+   * not fill is a fact about missing measurements, not about a thin board.
+   * Composition cannot make it feasible — it only ignores the evidence, the
+   * pillars and the stay decision (eval v3: Zanzibar added, the Serengeti days
+   * empty). The planner's plan ships, its light days say why, and the legs say
+   * they were not measured. A thin board still goes to composition as before.
+   */
+  const routingEvidence = region ? routingEvidenceOf(region.compiled.travelTimes, new Set(region.compiled.bases.map((b) => b.id))) : null;
+  const keptOverComposition = Boolean(plannerAttempt) && plannerSurvivesDegradedRouting(plannerFallbackReason, routingEvidence);
+  if (keptOverComposition) console.warn('Planner plan kept: routing was degraded, composition would not honour the evidence', { tripId, plannerFallbackReason, measured: routingEvidence?.baseRows });
+  const routingRecord = routingEvidence
+    ? {
+        routing: {
+          measuredPairs: routingEvidence.measuredPairs,
+          totalPairs: routingEvidence.totalPairs,
+          baseRowsMeasured: routingEvidence.baseRows.measured,
+          baseRowsTotal: routingEvidence.baseRows.total,
+          degraded: routingEvidence.degraded,
+          ...(keptOverComposition ? { keptOverComposition: true } : {}),
+        },
+      }
+    : {};
+  const plannerTooThin = Boolean(plannerAttempt && plannerFallbackReason) && !keptOverComposition;
   if (plannerFallbackReason && plannerFallbackReason !== 'reverified_existing_draft') console.warn('Planner fallback', { tripId, plannerFallbackReason, pool: plannerAttempt?.poolSize ?? board?.candidates.length ?? 0 });
   if (options.useDraft) {
     const supplied = options.useDraft;
@@ -1255,7 +1281,7 @@ async function generatePlan(
         package: {
           ...applied.itinerary.package,
           ...(reality ? { reality } : {}),
-          planning: plannerComposition ? planningRecordOf(plannerComposition) : { mode: 'model_composed' as const, ...(plannerFallbackReason ? { fallbackReason: plannerFallbackReason } : {}), reason: options.useDraft || options.reuseStoredDraft ? 'Re-verified an existing draft.' : plannerTooThin ? 'The Discovery Board had too few places to fill every day, so a model composed the draft.' : region ? 'Composed by the model at the traveller\u2019s request (regression mode).' : 'No Discovery Board existed for this trip, so a model composed the draft.', weatherMoves: [], mustConflicts: [] },
+          planning: plannerComposition ? { ...planningRecordOf(plannerComposition), ...routingRecord } : { mode: 'model_composed' as const, ...(plannerFallbackReason ? { fallbackReason: plannerFallbackReason } : {}), reason: options.useDraft || options.reuseStoredDraft ? 'Re-verified an existing draft.' : plannerTooThin ? 'The Discovery Board had too few places to fill every day, so a model composed the draft.' : region ? 'Composed by the model at the traveller\u2019s request (regression mode).' : 'No Discovery Board existed for this trip, so a model composed the draft.', weatherMoves: [], mustConflicts: [] },
           feasibility,
           preservation: {
             version: 1 as const,

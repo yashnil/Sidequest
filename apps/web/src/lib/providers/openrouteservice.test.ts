@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { ORS_BASE, computeOrsRoute, createOrsRouting, routeCacheKey } from './openrouteservice';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ORS_BASE, computeOrsRoute, createOrsRouting, orsHealth, resetOrsBreaker, routeCacheKey } from './openrouteservice';
 import { recordedRouteKey, recordedRoutesFetch } from './openrouteservice-fixture';
 import { parseRoutingCoverage } from './routing-coverage';
 import { createCompositeRouting } from './routing-composite';
@@ -41,6 +41,9 @@ function stub(handler: (url: string, init?: RequestInit) => { status: number; bo
   return { fetchImpl, calls };
 }
 
+/* The quota breaker is process-wide; a 429 one test provokes must not shut the service for the next. */
+beforeEach(() => resetOrsBreaker());
+
 describe('openrouteservice adapter', () => {
   it('uses the current hosted base, sends lon/lat and the key, and reads duration, distance and geometry', async () => {
     const http = stub(() => ({ status: 200, body: geojson(5460, 91_200, [[-7.8906, 52.52], [-8.2, 52.2], [-8.4748, 51.8979]]) }));
@@ -58,6 +61,8 @@ describe('openrouteservice adapter', () => {
     expect((await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { fetchImpl: answer(404, 2009), apiKey: 'k' })).reason).toBe('not_found');
     expect((await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { fetchImpl: answer(404, 2010), apiKey: 'k' })).reason).toBe('insufficient_evidence');
     expect((await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { fetchImpl: answer(429, 0), apiKey: 'k' })).reason).toBe('rate_limited');
+    /* The 429 shut the breaker (asserted on its own below); open it so the next answer is read. */
+    resetOrsBreaker();
     expect((await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { fetchImpl: answer(500, 0), apiKey: 'k' })).reason).toBe('provider_error');
     const thrown = (async () => { const e = new Error('aborted'); e.name = 'TimeoutError'; throw e; }) as unknown as typeof fetch;
     expect((await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { fetchImpl: thrown, apiKey: 'k' })).found).toBe(false);
@@ -280,5 +285,56 @@ describe('composite routing', () => {
     await composite.matrix({ points: [{ id: 'c', ...REYKJAVIK }, { id: 'd', ...VIK }], mode: 'car', maxElements: 10 });
     /* An island pair with genuinely no road must not disable a working router. */
     expect(log).toEqual(['valhalla:matrix:a,b', 'valhalla:matrix:c,d']);
+  });
+});
+
+describe('openrouteservice quota breaker', () => {
+  const headers = (h: Record<string, string>) => ({ 'content-type': 'application/json', ...h });
+  const respond = (status: number, body: unknown, h: Record<string, string> = {}) =>
+    (async () => new Response(JSON.stringify(body), { status, headers: headers(h) })) as unknown as typeof fetch;
+
+  it('a 429 shuts the service until the announced reset, and nothing is sent meanwhile', async () => {
+    resetOrsBreaker();
+    const reset = Math.floor(Date.now() / 1000) + 3600;
+    const first = await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { apiKey: 'k', fetchImpl: respond(429, { error: 'Rate Limit Exceeded' }, { 'x-ratelimit-reset': String(reset) }) });
+    expect(first.reason).toBe('rate_limited');
+    let sent = 0;
+    const counting = (async () => {
+      sent += 1;
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const second = await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { apiKey: 'k', fetchImpl: counting });
+    expect(second).toMatchObject({ found: false, reason: 'rate_limited' });
+    expect(sent).toBe(0);
+    const health = orsHealth();
+    expect(health.open).toBe(false);
+    expect(health.reopensAt).toBe(new Date(reset * 1000).toISOString());
+    expect(health.skipped).toBe(1);
+    resetOrsBreaker();
+  });
+
+  it('a 403 that names the quota is a spent allowance, never a statement about the road', async () => {
+    resetOrsBreaker();
+    const result = await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { apiKey: 'k', fetchImpl: respond(403, { error: 'Daily quota reached or API key unauthorized' }) });
+    expect(result.reason).toBe('provider_error');
+    expect(result.reason).not.toBe('not_found');
+    expect(orsHealth()).toMatchObject({ open: false, reason: 'quota_exhausted' });
+    resetOrsBreaker();
+  });
+
+  it('a successful answer reporting zero remaining shuts the breaker for later requests', async () => {
+    resetOrsBreaker();
+    const body = geojson(4800, 92_000, [[CASHEL.lng, CASHEL.lat], [CORK.lng, CORK.lat]]);
+    const ok = await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { apiKey: 'k', fetchImpl: respond(200, body, { 'x-ratelimit-remaining': '0' }) });
+    expect(ok.found).toBe(true);
+    expect(orsHealth()).toMatchObject({ open: false, reason: 'quota_exhausted' });
+    resetOrsBreaker();
+    expect(orsHealth().open).toBe(true);
+  });
+
+  it('an ordinary error opens nothing', async () => {
+    resetOrsBreaker();
+    await computeOrsRoute({ from: CASHEL, to: CORK, profile: 'driving-car' }, { apiKey: 'k', fetchImpl: respond(500, { error: { code: 2099, message: 'boom' } }) });
+    expect(orsHealth().open).toBe(true);
   });
 });
