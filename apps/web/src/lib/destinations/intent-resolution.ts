@@ -977,7 +977,8 @@ export interface ConceptCache {
  */
 /* 4 — production pass: a bare name two cities answer reads the one ten times larger (`promoteProminentNamesake`). 5 — only own, English and untagged names are aliases (Paris was "Bali"). 6 — a tenfold-prominent leader is not a question, a city and its same-named district are one reading, and an English-name match is exact ("Lisbon"). 7 — candidates carry the geocoder's importance and Wikidata item; a famous city abroad settles over small namesakes of another country ("Florence"), and rows of one Wikidata item or a same-named island inside its province are one reading ("Paris", "Bali"). */
 /* 8 — final pass: an `unknown` reading is never kept or served (staging served "Tanzania safari" as a settlement-scale unknown for thirty days, and its Serengeti fell outside the trip). */
-const CONCEPT_CACHE_EPOCH = 8;
+/* 9 — final pass: route words, interest tails and a head-word retry change readings, and a phrase naming many places asks for each. */
+const CONCEPT_CACHE_EPOCH = 9;
 
 /** The cache key: the phrase, normalised, plus the resolution and semantics versions so a shape change invalidates everything. */
 export function conceptCacheKeyFor(text: string): string {
