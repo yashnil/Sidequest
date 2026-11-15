@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { DIETARY_NEED_LABELS, FUNCTIONAL_NEED_LABELS, dietaryRulesOf, learnedHints } from '@sidequest/core';
 import { currentUser } from '@/lib/auth/session';
 import { listTravelers } from '@/lib/db/party-repository';
-import { learnedWithDismissals } from '@/lib/db/preference-evidence-repository';
+import { learnedWithDismissals, learningPaused } from '@/lib/db/preference-evidence-repository';
 import { sessionToken } from '@/lib/net/caller';
 import { listTripsFor } from '@/lib/db/repository';
 import { authProviders } from '@/lib/auth/config';
@@ -163,7 +163,7 @@ export default async function ProfilePage() {
           Sidequest noticed
         </h2>
         <p className="mt-1 type-small text-ink-muted">Leanings from what you chose and changed on earlier trips. Each one nudges the next plan and can be traded away; dismiss it and it is never read again.</p>
-        <LearnedPreferences rows={learnedRows} />
+        <LearnedPreferences rows={learnedRows} paused={learningPaused(user.id)} />
       </section>
 
       <DataControls trips={dataTrips({ userId: user.id, ownerToken })} signedIn />

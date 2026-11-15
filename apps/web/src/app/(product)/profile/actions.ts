@@ -12,7 +12,7 @@ import { anyTripBusy, deleteOwnerData, ownedTripIds } from '@/lib/db/data-rights
 import { guardAction, presentedSessionToken, secureCookiesEnabled } from '@/lib/net/caller';
 import { updateUserProfile } from '@/lib/db/auth-repository';
 import { dismissFeature, restoreFeature } from '@/lib/db/execution-repository';
-import { learnedWithDismissals, recordPreferenceEvidence } from '@/lib/db/preference-evidence-repository';
+import { LEARNING_PAUSED_FEATURE, learnedWithDismissals, recordPreferenceEvidence } from '@/lib/db/preference-evidence-repository';
 
 export type ProfileResult = { ok: true } | { ok: false; error: string };
 
@@ -81,6 +81,20 @@ export async function restoreLearnedAction(feature: string): Promise<ProfileResu
   if (!parsed.success || !featureIsLearnable(parsed.data)) return { ok: false, error: 'That is not something Sidequest learned.' };
   restoreFeature(user.id, parsed.data);
   recordConfirmation(user.id, parsed.data, 'restored');
+  revalidatePath('/profile');
+  return { ok: true };
+}
+
+/**
+ * Final pass — switch learning off (or back on) for the whole account. Off,
+ * nothing learned reaches the board, the planner or the brief; the ledger is
+ * kept, so switching back on restores exactly what was there.
+ */
+export async function setLearningPausedAction(paused: boolean): Promise<ProfileResult> {
+  const user = await currentUser();
+  if (!user) return { ok: false, error: 'Sign in to change what Sidequest remembers.' };
+  if (paused) dismissFeature(user.id, LEARNING_PAUSED_FEATURE);
+  else restoreFeature(user.id, LEARNING_PAUSED_FEATURE);
   revalidatePath('/profile');
   return { ok: true };
 }

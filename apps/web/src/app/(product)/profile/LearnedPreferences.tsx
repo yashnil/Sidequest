@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass, cx } from '@/components/ui';
-import { confirmLearnedAction, dismissLearnedAction, restoreLearnedAction } from './actions';
+import { confirmLearnedAction, dismissLearnedAction, restoreLearnedAction, setLearningPausedAction } from './actions';
 
 /**
  * V9 §18 — "SIDEQUEST NOTICED": leanings, each with a sentence and two answers.
@@ -23,7 +23,7 @@ export interface LearnedRow {
   dismissed: boolean;
 }
 
-export function LearnedPreferences({ rows }: { rows: LearnedRow[] }) {
+export function LearnedPreferences({ rows, paused = false }: { rows: LearnedRow[]; paused?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -42,8 +42,23 @@ export function LearnedPreferences({ rows }: { rows: LearnedRow[] }) {
     });
   };
 
+  /* Final pass — one switch for the whole account: off, nothing learned reaches any plan; the ledger is kept for when it comes back on. */
+  const toggle = (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-rule)] pt-3" data-testid="learning-switch" data-paused={paused ? 'true' : 'false'}>
+      <p className="min-w-0 flex-1 type-small text-ink-muted">{paused ? 'Off: new plans ignore everything listed here.' : 'On: new plans lean on what is listed here, never over what you answer for a trip.'}</p>
+      <button type="button" className={buttonClass('ghost', 'sm')} disabled={pending} onClick={() => run(() => setLearningPausedAction(!paused))} data-testid="learning-switch-button">
+        {paused ? 'Use what Sidequest noticed' : 'Stop using what Sidequest noticed'}
+      </button>
+    </div>
+  );
+
   if (rows.length === 0) {
-    return <p className="mt-4 type-body text-ink-muted">Nothing yet. Leanings appear here after a few trips, and only ever as leanings.</p>;
+    return (
+      <>
+        <p className="mt-4 type-body text-ink-muted">Nothing yet. Leanings appear here after a few trips, and only ever as leanings.</p>
+        {paused ? toggle : null}
+      </>
+    );
   }
 
   return (
@@ -86,6 +101,7 @@ export function LearnedPreferences({ rows }: { rows: LearnedRow[] }) {
           </li>
         ))}
       </ul>
+      {toggle}
     </div>
   );
 }

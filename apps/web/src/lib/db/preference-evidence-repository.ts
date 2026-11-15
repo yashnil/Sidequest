@@ -85,6 +85,17 @@ export function listTripEvidence(tripId: string): PreferenceEvidenceRow[] {
 }
 
 /**
+ * Final pass — the account-wide off switch, stored as a reserved dismissal so
+ * it needs no schema change and inherits the dismissal table's ownership and
+ * "delete all my data" cascade. `featureIsLearnable` can never produce it.
+ */
+export const LEARNING_PAUSED_FEATURE = '*';
+
+export function learningPaused(userId: string | null): boolean {
+  return userId ? listDismissedFeatures(userId).includes(LEARNING_PAUSED_FEATURE) : false;
+}
+
+/**
  * V9 §18 — every learned leaning, with the account's dismissals beside it.
  *
  * The profile page reads this: it shows what Sidequest noticed *and* what
@@ -109,6 +120,8 @@ export function learnedWithDismissals(owner: { userId: string | null; ownerToken
  */
 export function learnedForOwner(owner: { userId: string | null; ownerToken: string | null }, now: Date = new Date()): { learned: LearnedPreference[]; hints: string[] } {
   const all = learnedWithDismissals(owner, now);
+  /* Final pass — "Stop using what you learned" switches every leaning off at once, for every reader (board, planner, brief). */
+  if (all.dismissed.includes(LEARNING_PAUSED_FEATURE)) return { learned: [], hints: [] };
   const dismissed = new Set(all.dismissed);
   const learned = all.learned.filter((p) => !dismissed.has(p.feature));
   return { learned, hints: learnedHints(learned) };

@@ -126,3 +126,37 @@ describe('restoring or confirming a leaning', () => {
     expect(listPreferenceEvidence({ userId, ownerToken: null })).toEqual([]);
   });
 });
+
+describe('switching learning off for the whole account', () => {
+  it('silences every leaning for the planner, keeps the ledger, and comes back exactly on', async () => {
+    const userId = await signedInUserId();
+    const { recordPreferenceEvidence, learnedForOwner, learningPaused, listPreferenceEvidence } = await import('@/lib/db/preference-evidence-repository');
+    recordPreferenceEvidence([row(userId, 'interest:hiking', '2026-08-01T00:00:00.000Z'), row(userId, 'interest:hiking', '2026-08-10T00:00:00.000Z')]);
+    const owner = { userId, ownerToken: null };
+    const before = learnedForOwner(owner, NOW).learned;
+    expect(before.length).toBeGreaterThan(0);
+
+    const { setLearningPausedAction } = await import('@/app/(product)/profile/actions');
+    expect((await setLearningPausedAction(true)).ok).toBe(true);
+    expect(learningPaused(userId)).toBe(true);
+    expect(learnedForOwner(owner, NOW)).toEqual({ learned: [], hints: [] });
+    expect(listPreferenceEvidence(owner).length).toBe(2);
+
+    expect((await setLearningPausedAction(false)).ok).toBe(true);
+    expect(learningPaused(userId)).toBe(false);
+    expect(learnedForOwner(owner, NOW).learned).toEqual(before);
+  });
+
+  it('one account switching off never touches another account', async () => {
+    const userId = await signedInUserId();
+    const { recordPreferenceEvidence, learnedForOwner } = await import('@/lib/db/preference-evidence-repository');
+    const { dismissFeature } = await import('@/lib/db/execution-repository');
+    const { getDb } = await import('@/lib/db/client');
+    const other = 'other-user';
+    getDb().prepare("INSERT INTO users (id, provider, provider_subject, created_at, last_seen_at) VALUES (?, 'fixture', ?, ?, ?)").run(other, other, NOW.toISOString(), NOW.toISOString());
+    recordPreferenceEvidence([row(userId, 'interest:hiking', '2026-08-01T00:00:00.000Z'), row(userId, 'interest:hiking', '2026-08-10T00:00:00.000Z'), row(other, 'interest:hiking', '2026-08-01T00:00:00.000Z'), row(other, 'interest:hiking', '2026-08-10T00:00:00.000Z')]);
+    dismissFeature(other, '*');
+    expect(learnedForOwner({ userId: other, ownerToken: null }, NOW).learned).toEqual([]);
+    expect(learnedForOwner({ userId, ownerToken: null }, NOW).learned.length).toBeGreaterThan(0);
+  });
+});
