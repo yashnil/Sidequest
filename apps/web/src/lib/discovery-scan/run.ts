@@ -186,6 +186,15 @@ export function placementReachKm(scale: string | undefined, nights: number): num
   return Math.max(base, Math.min(base * 2, 60 * Math.max(1, nights)));
 }
 
+/** Beyond the farthest named part of the destination, how far a place may still be placed. */
+const PART_REACH_MARGIN_KM = 60;
+
+/** The placement reach, never short of the destination's own named parts. */
+export function scanPlacementReachKm(scale: string | undefined, nights: number, center: { lat: number; lng: number } | null | undefined, parts: readonly { center?: { lat: number; lng: number } | null }[]): number {
+  const partReach = Math.max(0, ...parts.flatMap((part) => (part.center && center ? [haversineKm(center, part.center) + PART_REACH_MARGIN_KM] : [])));
+  return Math.max(placementReachKm(scale, nights), partReach);
+}
+
 /** How long the timing stage may wait on a router or a lookup. A live Tanzania scan spent 280 s here and left the food stage no time at all. */
 const TIMING_STAGE_BUDGET_MS = 45_000;
 
@@ -332,7 +341,13 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
 
     /* The traveller's priority interests: personal fit for the open-data ranking and recovery now, sufficiency below. */
     const priorities = (Object.entries(profile.interests) as [Interest, string][]).filter(([, level]) => level === 'core' || level === 'frequent').map(([interest]) => interest);
-    const reach = placementReachKm(envelope.scale, days - 1);
+    /*
+     * Final pass — the reach always covers the destination's own named parts.
+     * Live Mode 3: "Tokyo, Kyoto, Osaka and Sapporo" refused Sapporo, a stay the
+     * traveller typed, as outside the envelope, because a region-scale reach
+     * around the centre stopped short of Hokkaido.
+     */
+    const reach = scanPlacementReachKm(envelope.scale, days - 1, envelope.center, concept?.parts ?? []);
     /* What the open-data proposer is asked — as the fallback for an unavailable model, or as the free top-up for a thin board. */
     const openCenter = envelope.center;
     const openDataInput = (): Parameters<typeof proposeFromOpenData>[0] => ({ envelope: { name: envelope.name, center: openCenter, ...(envelope.scale ? { scale: envelope.scale } : {}) }, days, priorities, carAvailable: canonical.movement.carAvailable, reachKm: reach, countries: conceptCountries, parts: (concept?.parts ?? []).flatMap((part) => (part.center ? [{ label: part.label, center: part.center }] : [])), ...(concept?.type === 'island' && (concept.parts ?? []).length < 2 && (concept.travelExtent?.bounds ?? (concept.extent?.source === 'published' ? concept.extent.bounds : undefined)) ? { island: (concept.travelExtent?.bounds ?? concept.extent!.bounds) } : {}) });
