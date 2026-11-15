@@ -7,12 +7,14 @@ import {
   isKnownTimeZone,
   licence,
   yearsBetween,
+  zoneFitsLongitude,
   type BookedPlanItem,
   type CalendarEvent,
   type Itinerary,
   type ItineraryItem,
   type Trip,
 } from '@sidequest/core';
+import { zoneAtPoint } from '@sidequest/core/zone-lookup';
 import { loadTripIntelligence } from '@/lib/intelligence/load';
 import { destinationTimeZone } from './destination-zone';
 import { currentVersion } from '@/lib/refine/version-repository';
@@ -140,9 +142,10 @@ export function calendarEventsFor(source: TripCalendarSource): TripCalendarEvent
     eventDates.push(booking.date, endDate);
     const startMinute = timeToMinute(start);
     const endMinute = end ? timeToMinute(end) : Math.min(23 * 60 + 59, startMinute + 120);
-    const timeZone = isKnownTimeZone(booking.timeZone) ? booking.timeZone : zoneOfDate(booking.date);
-    zones.add(timeZone);
     const geo = booking.placeId ? source.coordinates[booking.placeId] : booking.baseId ? source.coordinates[booking.baseId] : undefined;
+    /* The zone typed on the booking, else the zone at the booked place itself, else the day's. A confirmation's times are local to where it happens. */
+    const timeZone = isKnownTimeZone(booking.timeZone) ? booking.timeZone : (zoneAtPoint(geo) ?? zoneOfDate(booking.date));
+    zones.add(timeZone);
     events.push({
       uid: `${tripId}-booked-${booking.id}@sidequest`,
       date: booking.date,
@@ -234,20 +237,24 @@ export interface LoadedTripCalendar {
  * The order is the whole point, and it is stated once so the Today view and
  * the calendar can never disagree about it:
  *
- *   1. a compiled base's own published zone (a region the compiler built);
- *   2. the destination's civil zone from the resolved intent — a regionless
- *      build has no compiled bases, and this is what stops Iceland reading as
- *      `Etc/GMT+1`;
- *   3. solar time from the base's longitude (`deriveTimeZoneFromLongitude`),
- *      the last resort, reached only when nothing above knows a zone — and
+ *   1. the zone at the base's own coordinates, read from the IANA zone
+ *      boundaries (`zoneAtPoint`) — the authority whenever a position exists,
+ *      so a trip crossing a zone line runs each base on its own clock and a
+ *      country default (New York on Kauai) can never reach the file;
+ *   2. a compiled base's own published zone (a region the compiler built);
+ *   3. the destination's civil zone from the resolved intent — a regionless
+ *      build has no compiled bases — refused for a base whose longitude it
+ *      cannot fit (`zoneFitsLongitude`, the last-resort sanity check);
+ *   4. solar time from the base's longitude (`deriveTimeZoneFromLongitude`),
+ *      reached only when nothing above knows a zone (a base at sea) — and
  *      recorded as such by the `Etc/GMT±N` name a client sees;
- *   4. `UTC`, when a base has no coordinates either.
+ *   5. `UTC`, when a base has no coordinates either.
  *
  * `primaryTimeZone` is the trip's wall clock: the itinerary base's zone, then
  * the destination's, then the first base's, then UTC.
  */
 export interface CalendarZoneInput {
-  compiledBases: readonly { id: string; timeZone?: string }[];
+  compiledBases: readonly { id: string; timeZone?: string; coordinates?: { lat: number; lng: number } }[];
   packageBases: readonly { id: string; coordinates?: { lat: number; lng: number } }[];
   destinationZone: string | undefined;
   itineraryBaseId: string;
@@ -262,12 +269,24 @@ export interface CalendarZones {
 
 export function calendarZonesFor(input: CalendarZoneInput): CalendarZones {
   const zonesByBaseId: Record<string, string> = {};
-  for (const base of input.compiledBases) if (base.timeZone) zonesByBaseId[base.id] = base.timeZone;
-  let timeZone = input.compiledBases.find((base) => base.id === input.itineraryBaseId)?.timeZone;
+  /* The zone a base's own position names, from the boundaries; the authority wherever it answers. */
+  const located: Record<string, string> = {};
+  for (const base of [...input.compiledBases, ...input.packageBases]) {
+    if (located[base.id] || !base.coordinates) continue;
+    const zone = zoneAtPoint(base.coordinates);
+    if (zone) located[base.id] = zone;
+  }
+  for (const base of input.compiledBases) {
+    const zone = located[base.id] ?? base.timeZone;
+    if (zone) zonesByBaseId[base.id] = zone;
+  }
+  let timeZone = located[input.itineraryBaseId] ?? input.compiledBases.find((base) => base.id === input.itineraryBaseId)?.timeZone;
   if (!timeZone && input.destinationZone) timeZone = input.destinationZone;
   for (const base of input.packageBases) {
     if (zonesByBaseId[base.id]) continue;
-    if (input.destinationZone) zonesByBaseId[base.id] = input.destinationZone;
+    const destinationFits = input.destinationZone && (!base.coordinates || zoneFitsLongitude(input.destinationZone, base.coordinates.lng));
+    if (located[base.id]) zonesByBaseId[base.id] = located[base.id]!;
+    else if (destinationFits) zonesByBaseId[base.id] = input.destinationZone!;
     else if (base.coordinates) zonesByBaseId[base.id] = deriveTimeZoneFromLongitude(base.coordinates.lng);
   }
   const primaryTimeZone = timeZone ?? zonesByBaseId[input.itineraryBaseId] ?? Object.values(zonesByBaseId)[0] ?? 'UTC';
@@ -288,11 +307,11 @@ export function loadTripCalendarSource(trip: Trip, itinerary: Itinerary, now: Da
 async function loadSource(trip: Trip, itinerary: Itinerary, now: Date): Promise<LoadedTripCalendar> {
   const coordinates: Record<string, { lat: number; lng: number }> = {};
   let attributions: readonly string[] = [];
-  let compiledBases: readonly { id: string; timeZone?: string }[] = [];
+  let compiledBases: readonly { id: string; timeZone?: string; coordinates?: { lat: number; lng: number } }[] = [];
   try {
     const resolved = await resolveTripRegion(trip);
     if (resolved.ok) {
-      compiledBases = resolved.context.compiled.bases.map((base) => ({ id: base.id, ...(base.timeZone ? { timeZone: base.timeZone } : {}) }));
+      compiledBases = resolved.context.compiled.bases.map((base) => ({ id: base.id, ...(base.timeZone ? { timeZone: base.timeZone } : {}), coordinates: { lat: base.coordinates.lat, lng: base.coordinates.lng } }));
       for (const base of resolved.context.compiled.bases) coordinates[base.id] = { lat: base.coordinates.lat, lng: base.coordinates.lng };
       for (const place of resolved.context.compiled.places) coordinates[place.id] = { lat: place.coordinates.lat, lng: place.coordinates.lng };
       attributions = resolved.context.compiled.sourceManifest.attributions ?? [];

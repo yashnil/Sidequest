@@ -3,6 +3,7 @@ import { loadTripIntelligence } from '@/lib/intelligence/load';
 import { renderInstant } from '@/lib/clock';
 import { providerRegistry } from '@/lib/providers/registry';
 import { buildRecheckManifest, buildTodayView, descriptionAboutThePlace, type RecheckManifest, type TodayView } from '@sidequest/core';
+import { zoneAtPoint } from '@sidequest/core/zone-lookup';
 import { buildLedger, buildNextActions, buildPreflight, buildTripStateGraph, deriveDecisions, readLifecycle, summariseObservations, volatileFacts, type BookingResolution, type FactObservation, type NextActions, type Preflight, type TripDecision, type TripLedger, type TripLifecycle, type TripStateGraph, type VolatileFact } from '@sidequest/core';
 import { listDecisions, listObservations, listPendingImports, type BookingImport } from '@/lib/db/execution-repository';
 import { destinationTimeZone } from '@/lib/execution/destination-zone';
@@ -327,7 +328,8 @@ export async function itineraryViewModel(
       }
       const base = resolved.context.compiled.bases.find((entry) => entry.id === itinerary.baseId);
       baseNames = base?.names;
-      timeZone = base?.timeZone;
+      /* The zone at the base's own position, from the boundaries, before the zone the region carried. */
+      timeZone = (base ? zoneAtPoint(base.coordinates) : null) ?? base?.timeZone;
       countryCode = resolved.context.compiled.scope.countryCode;
       attributions = resolved.context.compiled.sourceManifest.attributions ?? [];
       for (const place of resolved.context.compiled.places) {

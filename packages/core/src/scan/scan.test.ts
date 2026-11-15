@@ -57,7 +57,7 @@ function positionsFor(proposal: ScanProposal): Map<string, ResolvedPosition | nu
 
 const DATES = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07'];
 
-function assemble(maxBaseChanges = 2) {
+function assemble(maxBaseChanges = 2, zoneAt?: (point: { lat: number; lng: number }) => string | null) {
   const normalized = normalizeScanProposal(rawProposal());
   if (!normalized.ok) throw new Error(normalized.reason);
   const proposal = normalized.proposal;
@@ -72,6 +72,7 @@ function assemble(maxBaseChanges = 2) {
     center: { lat: 43.5, lng: 8.2 },
     countryCode: 'IT',
     timeZone: 'Europe/Rome',
+    ...(zoneAt ? { zoneAt } : {}),
     dates: DATES,
     carAvailable: true,
     maxBaseChanges,
@@ -105,6 +106,22 @@ describe('discovery scan — region assembly', () => {
   it('produces a region that passes the integrity gate', () => {
     const { assembly } = assemble();
     expect(() => validateCompiledRegion(assembly.region)).not.toThrow();
+  });
+
+  it('gives each base and forecast point the zone at its own coordinates when a resolver is supplied, the destination zone otherwise', () => {
+    /* A synthetic boundary at 43.5°N: the north side on one clock, the south on another. */
+    const zoneAt = (point: { lat: number; lng: number }) => (point.lat > 43.5 ? 'Europe/Zurich' : point.lat < 43.5 ? 'Europe/Monaco' : null);
+    const { assembly } = assemble(2, zoneAt);
+    expect(() => validateCompiledRegion(assembly.region)).not.toThrow();
+    /* A point the resolver cannot answer for (on the line) falls back to the destination's zone. */
+    const zoneOf = (lat: number) => zoneAt({ lat, lng: 0 }) ?? 'Europe/Rome';
+    for (const base of assembly.region.bases) expect(base.timeZone, base.name).toBe(zoneOf(base.coordinates.lat));
+    for (const location of assembly.region.weatherLocations) expect(location.timeZone, location.label).toBe(zoneOf(location.coordinates.lat));
+    expect(new Set(assembly.region.bases.map((b) => b.timeZone))).toEqual(new Set(['Europe/Zurich', 'Europe/Monaco', 'Europe/Rome']));
+    expect(assembly.region.scope.timeZones.length).toBeGreaterThanOrEqual(2);
+    const without = assemble(2).assembly;
+    expect(new Set(without.region.bases.map((b) => b.timeZone))).toEqual(new Set(['Europe/Rome']));
+    expect(without.region.scope.timeZones).toEqual(['Europe/Rome']);
   });
 
   it('carries the Wikidata item a placing source named, and invents none for the rest', () => {

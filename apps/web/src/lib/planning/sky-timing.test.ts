@@ -56,7 +56,9 @@ describe('sky timing — the real sun, not a table', () => {
   it('unknown ≠ false: no point, a null-island point or an untrusted UTC fallback far from Greenwich gives no sky at all', () => {
     expect(daySkyFor(null, COAST_MAY.date, COAST_MAY.zone)).toBeNull();
     expect(daySkyFor({ lat: 0, lng: 0 }, COAST_MAY.date, 'UTC')).toBeNull();
-    expect(daySkyFor(PACIFIC_SEPT.point, PACIFIC_SEPT.date, 'UTC')).toBeNull();
+    /* At sea the boundaries name no civil zone, so the carried UTC fallback is still refused far from Greenwich. */
+    expect(daySkyFor({ lat: 0, lng: -140 }, PACIFIC_SEPT.date, 'UTC')).toBeNull();
+    expect(trustedZone('UTC', -140)).toBeNull();
     expect(trustedZone('UTC', -9)).toBe('UTC');
     expect(skyStartFor('sunset', null).kind).toBe('unknown');
   });
@@ -220,8 +222,21 @@ describe('sky timing — through the reconciler', () => {
 });
 
 describe('a zone that cannot be this point’s clock (eval v3, Kauai)', () => {
-  it('gives no sky rather than a sunset at midnight', () => {
-    expect(daySkyFor({ lat: 21.874, lng: -159.45 }, '2027-09-10', 'America/New_York')).toBeNull();
-    expect(daySkyFor({ lat: 21.874, lng: -159.45 }, '2027-09-10', 'Pacific/Honolulu')?.sunsetMinute).toBeGreaterThan(18 * 60);
+  it('reads the point’s own zone from the boundaries, so a country default carried in still gives an evening sunset', () => {
+    const kauai = { lat: 21.874, lng: -159.45 };
+    for (const carried of ['America/New_York', 'UTC', undefined]) {
+      const sky = daySkyFor(kauai, '2027-09-10', carried)!;
+      expect(sky, `carried ${carried}`).not.toBeNull();
+      /* Hawaii in September: sunset about 18:45, sunrise about 06:15 — never midnight. */
+      expect(sky.sunsetMinute).toBeGreaterThanOrEqual(18 * 60 + 30);
+      expect(sky.sunsetMinute).toBeLessThanOrEqual(19 * 60);
+      expect(sky.sunriseMinute).toBeGreaterThanOrEqual(6 * 60);
+      expect(sky.sunriseMinute).toBeLessThanOrEqual(6 * 60 + 30);
+    }
+    expect(daySkyFor(kauai, '2027-09-10', 'Pacific/Honolulu')?.sunsetMinute).toBe(daySkyFor(kauai, '2027-09-10', 'America/New_York')?.sunsetMinute);
+  });
+
+  it('still refuses a carried zone that cannot fit the longitude where the boundaries cannot answer (open ocean)', () => {
+    expect(daySkyFor({ lat: 0, lng: -140 }, '2027-09-10', 'America/New_York')).toBeNull();
   });
 });

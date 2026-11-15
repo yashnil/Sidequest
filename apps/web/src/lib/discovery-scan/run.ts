@@ -1,4 +1,5 @@
 import 'server-only';
+import { zoneAtPoint } from '@sidequest/core/zone-lookup';
 import { after } from 'next/server';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import { matchNamedMustDos } from './match';
@@ -726,6 +727,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       center: envelope.center,
       ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
       timeZone: envelope.timeZone ?? 'UTC',
+      /* Each base, forecast point and trail stage reads its own zone from the boundaries; the envelope's is the fallback. */
+      zoneAt: zoneAtPoint,
       dates,
       carAvailable: canonical.movement.carAvailable,
       /* Within the journey archetype's range; the traveller's own explicit cap wins where it is lower. */

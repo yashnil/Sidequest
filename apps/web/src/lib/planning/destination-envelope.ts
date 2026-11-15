@@ -1,5 +1,6 @@
 import 'server-only';
 import { countNights, countryFacts, decomposeDestination, describeRouteShape, needsDecomposition, readRouteShape, routeObjectivesFor, type DestinationCandidate, type RouteShape, type Trip, type TravelerProfile } from '@sidequest/core';
+import { zoneForPlace } from '@sidequest/core/zone-lookup';
 import type { getIntent } from '../db/compiler-repository';
 import type { RegionContext } from '../region';
 import { accessConstraintsFor } from '../providers/access-constraints';
@@ -114,15 +115,26 @@ export function destinationEnvelopeFor(input: {
     }
     return null;
   })();
+  const envelopeCenter = candidate?.center ?? region?.region.baseCoordinates ?? { lat: 0, lng: 0 };
+  const wholeCountry = candidate?.breadth === 'country';
+  const envelopeZone =
+    zoneForPlace({ center: envelopeCenter, published: candidate?.timeZones?.[0] ?? null, wholeCountry }) ??
+    zoneForPlace({ center: envelopeCenter, published: referenceTimeZone, wholeCountry });
   const envelope: DestinationEnvelope = {
     name: destinationName,
     ...(candidate?.qualifiedName ? { qualifiedName: candidate.qualifiedName } : {}),
     ...(candidate?.countryCode ? { countryCode: candidate.countryCode } : {}),
     ...(candidate?.countryName ? { countryName: candidate.countryName } : {}),
     ...(candidate?.breadth ? { scale: candidate.breadth } : {}),
-    center: candidate?.center ?? region?.region.baseCoordinates ?? { lat: 0, lng: 0 },
-    /* The candidate's zone, else the first named country's reference zone: a sunset computed in UTC is a wrong sunset, not a missing one. */
-    ...(candidate?.timeZones?.[0] ? { timeZone: candidate.timeZones[0] } : referenceTimeZone ? { timeZone: referenceTimeZone } : {}),
+    center: envelopeCenter,
+    /*
+     * The zone at the centre, read from the zone boundaries, is the authority;
+     * the candidate's zone and then the first named country's reference zone
+     * are fallbacks for a destination with no coordinates. A country default
+     * (the United States' is New York) is how Kauai got a midnight sunset, so it
+     * must still fit the centre's longitude when there is a centre at all.
+     */
+    ...(envelopeZone ? { timeZone: envelopeZone } : {}),
     ...(region ? { knownAreas: region.compiled.subregions.map((s) => s.name).slice(0, 8) } : {}),
     ...(storedIntent && storedIntent.interpretationType !== 'unresolved' ? { interpretation: storedIntent.interpretationType } : {}),
     /* The resolved place, when it did not earn the destination's name: a centre, labelled as one. */

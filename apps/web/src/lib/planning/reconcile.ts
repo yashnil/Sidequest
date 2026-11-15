@@ -3694,6 +3694,15 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       const final = provisional.window && start !== clock ? assessOperational({ evidence: anchor.operationalEvidence, placeClass: anchor.operationalClass, date: input.date, startMinute: start, endMinute: start + anchor.durationMinutes, daysUntil: Math.round((Date.parse(`${input.date}T00:00:00Z`) - (context.now ?? new Date()).getTime()) / 86_400_000) }) : provisional;
       operational = final.outcome === 'not_applicable' ? undefined : (start !== clock && final.outcome === 'open_at_time' ? { ...final.persisted, outcome: 'opens_later', note: `Arrival moved to opening time on its regular schedule (read ${final.persisted.checkedAt.slice(0, 10)}).${final.persisted.recheck ? ' Regular hours can change; check again within a week of the visit.' : ''}`, recheck: true } : final.persisted);
     }
+    /*
+     * A stop that waits for its hour (the real sky, a time-of-day floor, an
+     * opening) across the lunch window leaves lunch in the wait, not lost to it:
+     * a dawn drive and a sunset drive bracket a midday at camp, and that midday
+     * is where the packed lunch goes.
+     */
+    if (!hadLunch && start > clock && clock <= LUNCH_LATEST && Math.max(clock, LUNCH_EARLIEST) + MEAL_MINUTES.lunch <= start) {
+      hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
+    }
     const end = start + anchor.durationMinutes;
     const verificationCopy =
       anchor.verification === 'verified' || anchor.kind !== 'named_place'

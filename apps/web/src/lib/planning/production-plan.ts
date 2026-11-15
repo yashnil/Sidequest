@@ -40,6 +40,7 @@ import { recordBuiltVersion } from '../refine/version-repository';
 import { boardFor, resolveTripRegion, withRefreshedWeather, type RegionContext } from '../region';
 import { ensureWeatherForPlanning, weatherTargetFor } from '../weather/refresh';
 import { getWeatherSnapshot, weatherScopeKey } from '../weather/snapshot-repository';
+import { zoneAtPoint } from '@sidequest/core/zone-lookup';
 import { weatherAvailability, type TripPackage, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
@@ -952,7 +953,7 @@ async function generatePlan(
     if (deadlineReached() || locations.length === 0) return null;
     const regionId = region?.region.id ?? `draft-region:${trip.id}`;
     const centre = envelope.center ?? { lat: 0, lng: 0 };
-    const bounded = locations.slice(0, 8).map((l) => ({ id: `${regionId}:base:${l.id}`, label: l.label, coordinates: l.coordinates, elevationMetres: 0, timeZone: envelope.timeZone ?? 'UTC', placeIds: [l.id], limitation: 'One point for this base and the days around it.' }));
+    const bounded = locations.slice(0, 8).map((l) => ({ id: `${regionId}:base:${l.id}`, label: l.label, coordinates: l.coordinates, elevationMetres: 0, timeZone: zoneAtPoint(l.coordinates) ?? envelope.timeZone ?? 'UTC', placeIds: [l.id], limitation: 'One point for this base and the days around it.' }));
     const all: WeatherLocation[] = [...bounded, { ...regionlessWeatherLocation(regionId, { ...envelope, center: centre }) }];
     const dates = tripDates(trip.basics.startDate, trip.basics.endDate);
     const scopeKey = weatherScopeKey({ regionId, dates, locations: all });
@@ -1738,7 +1739,7 @@ export function regionlessWeatherLocation(regionId: string, envelope: Destinatio
     label: envelope.name,
     coordinates: envelope.center ?? { lat: 0, lng: 0 },
     elevationMetres: 0,
-    timeZone: envelope.timeZone ?? 'UTC',
+    timeZone: zoneAtPoint(envelope.center) ?? envelope.timeZone ?? 'UTC',
     placeIds: [`${regionId}:centre`],
     limitation: 'One point for the whole destination; conditions vary across it.',
   };

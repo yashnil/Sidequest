@@ -71,9 +71,17 @@ describe('destinationTimeZoneOf: what the resolved intent knows', () => {
   });
 
   it('never returns a fixed offset as a destination’s clock, and falls back to a resolved part of the intent graph', () => {
-    expect(destinationTimeZoneOf(intentWith({ resolution: resolution([candidate('is', ['Etc/GMT+1'])], 'is') }))).toBeUndefined();
-    const withGraph = intentWith({ resolution: resolution([candidate('is', [])], 'is'), destinationIntent: { graph: { children: [{ resolution: { timeZone: 'Etc/GMT-9' } }, { resolution: { timeZone: 'Asia/Tokyo' } }] } } as never });
+    const atSea = (c: ReturnType<typeof candidate>) => ({ ...c, center: { lat: 0, lng: 0 } });
+    expect(destinationTimeZoneOf(intentWith({ resolution: resolution([atSea(candidate('is', ['Etc/GMT+1']))], 'is') }))).toBeUndefined();
+    const withGraph = intentWith({ resolution: resolution([atSea(candidate('is', []))], 'is'), destinationIntent: { graph: { children: [{ resolution: { timeZone: 'Etc/GMT-9' } }, { resolution: { timeZone: 'Asia/Tokyo' } }] } } as never });
     expect(destinationTimeZoneOf(withGraph)).toBe('Asia/Tokyo');
+  });
+
+  it('the zone at a non-country candidate’s centre outranks the zone the geocoder carried; a country keeps its published civil zone', () => {
+    const kauai = { ...candidate('k', ['America/New_York']), displayName: 'Kauai', entityType: 'island', breadth: 'region', center: { lat: 22.07, lng: -159.5 } } as ReturnType<typeof candidate>;
+    expect(destinationTimeZoneOf(intentWith({ resolution: resolution([kauai], 'k') }))).toBe('Pacific/Honolulu');
+    /* A fixed offset carried by the source is overruled by the boundaries at the centre. */
+    expect(destinationTimeZoneOf(intentWith({ resolution: resolution([candidate('is', ['Etc/GMT+1'])], 'is') }))).toBe('Atlantic/Reykjavik');
   });
 });
 
@@ -86,11 +94,24 @@ describe('calendarZonesFor: compiled base → destination → solar time → UTC
     expect(new Set(Object.values(zones.zonesByBaseId))).toEqual(new Set(['Atlantic/Reykjavik']));
   });
 
-  it('solar time is the last resort, reached only when nothing knows a zone, and it names itself as a fixed offset', () => {
+  it('the zone at each base’s own coordinates is the authority, even when nothing else knows a zone', () => {
     const zones = calendarZonesFor({ compiledBases: [], packageBases: icelandBases(), destinationZone: undefined, itineraryBaseId: 'reykjavik' });
+    expect(zones.timeZone).toBe('Atlantic/Reykjavik');
+    expect(new Set(Object.values(zones.zonesByBaseId))).toEqual(new Set(['Atlantic/Reykjavik']));
+    expect(zones.primaryTimeZone).toBe('Atlantic/Reykjavik');
+    /* A country default carried as the destination zone never reaches a base whose position says otherwise (Kauai is not New York). */
+    const hawaii = calendarZonesFor({ compiledBases: [{ id: 'k', timeZone: 'America/New_York' }], packageBases: [{ id: 'k', coordinates: { lat: 22.07, lng: -159.5 } }, { id: 'o', coordinates: { lat: 21.31, lng: -157.86 } }], destinationZone: 'America/New_York', itineraryBaseId: 'k' });
+    expect(hawaii).toEqual({ zonesByBaseId: { k: 'Pacific/Honolulu', o: 'Pacific/Honolulu' }, primaryTimeZone: 'Pacific/Honolulu', timeZone: 'Pacific/Honolulu' });
+  });
+
+  it('solar time is the last resort, reached only when nothing knows a zone (a base at sea), and it names itself as a fixed offset', () => {
+    const atSea = [{ id: 'ship', coordinates: { lat: 0, lng: -140 } }];
+    const zones = calendarZonesFor({ compiledBases: [], packageBases: atSea, destinationZone: undefined, itineraryBaseId: 'ship' });
     expect(zones.timeZone).toBeUndefined();
-    expect(new Set(Object.values(zones.zonesByBaseId))).toEqual(new Set(['Etc/GMT+1']));
-    expect(zones.primaryTimeZone).toBe('Etc/GMT+1');
+    expect(zones.zonesByBaseId).toEqual({ ship: 'Etc/GMT+9' });
+    expect(zones.primaryTimeZone).toBe('Etc/GMT+9');
+    /* A destination zone that cannot fit the base's longitude is refused there, too. */
+    expect(calendarZonesFor({ compiledBases: [], packageBases: atSea, destinationZone: 'Europe/Paris', itineraryBaseId: 'ship' }).zonesByBaseId).toEqual({ ship: 'Etc/GMT+9' });
     expect(calendarZonesFor({ compiledBases: [], packageBases: [{ id: 'x' }], destinationZone: undefined, itineraryBaseId: 'x' })).toEqual({ zonesByBaseId: {}, primaryTimeZone: 'UTC', timeZone: undefined });
   });
 
@@ -286,7 +307,7 @@ describe('loadTripCalendarSource on a regionless Iceland trip', () => {
     expect(ics).not.toContain('Etc/GMT');
   });
 
-  it('control: with no intent the loader does fall to solar time, so the silence above is proof', async () => {
+  it('control: with no intent the loader still never reaches solar time — every base reads its own zone from the boundaries', async () => {
     const { trip, itinerary } = await seedRegionlessIceland(false);
     const core = await import('@sidequest/core');
     const spy = core.deriveTimeZoneFromLongitude as unknown as Mock;
@@ -295,8 +316,30 @@ describe('loadTripCalendarSource on a regionless Iceland trip', () => {
     const { loadTripCalendarSource } = await import('./calendar-events');
     expect(destinationTimeZone(trip.id)).toBeUndefined();
     const loaded = await loadTripCalendarSource(trip, itinerary, new Date('2026-09-11T10:00:00Z'));
-    expect(spy).toHaveBeenCalledTimes(DRAFT.bases.length);
-    expect(loaded.timeZone).toBeUndefined();
-    expect(new Set(Object.values(loaded.source.zonesByBaseId))).toEqual(new Set(['Etc/GMT+1']));
+    expect(spy).not.toHaveBeenCalled();
+    expect(loaded.source.primaryTimeZone).toBe('Atlantic/Reykjavik');
+    expect(new Set(Object.values(loaded.source.zonesByBaseId))).toEqual(new Set(['Atlantic/Reykjavik']));
+  });
+});
+
+/* ---- a country default carried in, overruled by the boundaries at each base ------------------------------- */
+
+describe('a trip whose carried zone is a country default (eval v3, Kauai), through the pure calendar', () => {
+  const itinerary = { tripId: 'trip-hi', version: 3, regionId: 'dynamic', baseId: 'kauai', baseName: 'Kauai', startDate: '2027-09-10', endDate: '2027-09-11', status: 'ready', summary: 's', days: [day(1, '2027-09-10', 'kauai', 'Kauai', 'Coast', [item({ id: 'd1-a', title: 'Headland at sunset', startMinute: 18 * 60, endMinute: 19 * 60 })])], issues: [], unscheduled: [], package: { bases: [], anchors: [] } } as unknown as Itinerary;
+  const zones = calendarZonesFor({ compiledBases: [{ id: 'kauai', timeZone: 'America/New_York', coordinates: { lat: 22.07, lng: -159.5 } }], packageBases: [], destinationZone: 'America/New_York', itineraryBaseId: 'kauai' });
+  const source = { tripId: 'trip-hi', itinerary, booked: [], zonesByBaseId: zones.zonesByBaseId, primaryTimeZone: zones.primaryTimeZone, coordinates: {}, sequence: 1 };
+
+  it('writes Pacific/Honolulu in TZID and VTIMEZONE, and New York never reaches the file', () => {
+    expect(zones.primaryTimeZone).toBe('Pacific/Honolulu');
+    const ics = buildTripCalendar(source, { name: 'Kauai', summary: 'Two days.', attributions: ['x'], stamp: '2027-09-01T00:00:00.000Z' });
+    expect(ics).toContain('TZID:Pacific/Honolulu');
+    expect(ics).toContain('DTSTART;TZID=Pacific/Honolulu:20270910T180000');
+    expect(ics).not.toContain('America/New_York');
+  });
+
+  it('a booking with no typed zone takes the zone at its own place, not its day’s base', () => {
+    const tour = { id: 'bk-oahu', tripId: 'trip-hi', type: 'activity', title: 'Morning tour', date: '2027-09-10', startTime: '08:00', placeId: 'p-oahu', status: 'booked', locked: true, createdAt: '2027-09-01T00:00:00.000Z' } as BookedPlanItem;
+    const derived = calendarEventsFor({ ...source, booked: [tour], zonesByBaseId: { kauai: 'America/Denver' }, primaryTimeZone: 'America/Denver', coordinates: { 'p-oahu': { lat: 21.31, lng: -157.86 } } });
+    expect(derived.events.find((e) => e.uid.includes('bk-oahu'))!.timeZone).toBe('Pacific/Honolulu');
   });
 });

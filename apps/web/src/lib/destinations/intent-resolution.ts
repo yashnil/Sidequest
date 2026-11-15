@@ -43,6 +43,7 @@ import {
   type SemanticGateway,
   type SemanticPart,
 } from '@sidequest/core';
+import { zoneForPlace } from '@sidequest/core/zone-lookup';
 import type { DestinationResolver } from '@sidequest/compiler';
 import { interpretDestinationConcept, type DestinationInterpreter } from './interpretation';
 
@@ -119,8 +120,13 @@ function resolutionFromCandidate(candidate: DestinationCandidate, source: Intent
     ...(candidate.countryCode ? { countryCode: candidate.countryCode } : {}),
     source,
     candidateId: candidate.id,
-    ...(candidate.timeZones[0] ? { timeZone: candidate.timeZones[0] } : {}),
+    ...withZone(zoneForPlace({ center: candidate.center, published: candidate.timeZones[0] ?? null, wholeCountry: candidate.breadth === 'country' })),
   };
+}
+
+/* The zone at the resolved point, from the boundaries; the geocoder's own zone only where the point cannot answer. */
+function withZone(zone: string | null): { timeZone?: string } {
+  return zone ? { timeZone: zone } : {};
 }
 
 /**

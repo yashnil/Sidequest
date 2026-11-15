@@ -1,4 +1,5 @@
 import { solarEventsFor, twilightFor, TWILIGHT_DEPRESSION_DEGREES, utcOffsetMinutesOn, zoneFitsLongitude } from '@sidequest/core';
+import { zoneAtPoint } from '@sidequest/core/zone-lookup';
 
 /**
  * THE SKY A STOP IS FOR — SUNRISE, SUNSET AND DARKNESS AT THE REAL HOUR.
@@ -90,10 +91,15 @@ function fmt(minute: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-/** The sky for one date at one point, in the zone's local clock. Null when the inputs cannot honestly produce it. */
+/** The sky for one date at one point, in the point's local clock (read from the zone boundaries; `timeZone` is the fallback). Null when the inputs cannot honestly produce it. */
 export function daySkyFor(point: { lat: number; lng: number } | null, date: string, timeZone: string | undefined): DaySky | null {
   if (!point || (point.lat === 0 && point.lng === 0)) return null;
-  const zone = trustedZone(timeZone, point.lng);
+  /*
+   * The point's own zone from the boundaries is the authority; the zone the
+   * caller carried (a destination's, sometimes a country default) is only the
+   * fallback, and still has to fit the longitude.
+   */
+  const zone = zoneAtPoint(point) ?? trustedZone(timeZone, point.lng);
   if (!zone) return null;
   let offset: number;
   try {

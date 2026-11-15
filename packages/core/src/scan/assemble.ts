@@ -2,6 +2,7 @@ import type { AccessKind } from './access-point';
 import { assessConfidence, type DestinationEntityType, type ScopeBreadth } from '../schemas/geography';
 import { GEOGRAPHIC_SCOPE_VERSION, scopeFingerprint, type GeographicScope } from '../schemas/scope';
 import { licence } from '../schemas/licence';
+import type { ZoneResolver } from '../time/zone';
 import {
   COMPILED_REGION_VERSION,
   computeBlocking,
@@ -237,6 +238,11 @@ export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 
   };
 }
 
+/** The civil zone at a point: the boundary lookup when the caller supplied one, else the destination's zone. */
+function zoneOfPoint(input: Pick<AssembleScanRegionInput, 'timeZone' | 'zoneAt'>, point: { lat: number; lng: number }): string {
+  return input.zoneAt?.(point) ?? input.timeZone;
+}
+
 function fallbackMinutes(a: ScanPoint, b: ScanPoint, mode: 'car' | 'foot'): number {
   const km = haversineKm(a.coordinates, b.coordinates) * 1.3;
   return (km / (mode === 'car' ? 50 : 4.5)) * 60;
@@ -250,7 +256,15 @@ export interface AssembleScanRegionInput {
   center: { lat: number; lng: number };
   countryCode?: string;
   regionCode?: string;
+  /** The destination's zone: the fallback for any point `zoneAt` cannot answer for. */
   timeZone: string;
+  /**
+   * The civil zone at a point, from the zone boundaries (`zoneAtPoint` from
+   * `@sidequest/core/zone-lookup`). When present it is the authority for every
+   * base, forecast point and trail stage, so a trip that crosses a zone line
+   * runs each place on its own clock; `timeZone` is only the fallback.
+   */
+  zoneAt?: ZoneResolver;
   /** Trip calendar dates, first to last, inclusive. */
   dates: readonly string[];
   /** V1 — where the trip starts and ends (the arrival gateway, else the destination centre) and the usable minutes of each edge day. */
@@ -863,7 +877,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       coordinates: position.coordinates,
       role: id === primaryBaseId ? 'primary_base' : kept ? 'secondary_base' : 'satellite',
       routingId: id,
-      timeZone: input.timeZone,
+      timeZone: zoneOfPoint(input, position.coordinates),
       suggestedNights: { min: 1, max: Math.max(1, Math.min(30, kept?.nights ?? Math.max(1, b.nightsHint))) },
       placesWithinReach: within,
       transportModes,
@@ -969,7 +983,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
         label: base.proposal.name,
         coordinates: positionOf(base.proposal.key)!.coordinates,
         elevationMetres: 0,
-        timeZone: input.timeZone,
+        timeZone: zoneOfPoint(input, positionOf(base.proposal.key)!.coordinates),
         placeIds: claimed,
         limitation: 'One forecast point for this base and the places around it; elevation is not accounted for.',
       };
@@ -998,7 +1012,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
       divisionIds: [],
     },
     ...(input.countryCode ? { countryCode: input.countryCode } : {}),
-    timeZones: [input.timeZone],
+    /* The primary base's clock first: consumers that want "the" zone read `[0]`, and `singleTimeZone` tells them when there is more than one. */
+    timeZones: [...new Set([zoneOfPoint(input, positionOf(firstBase.proposal.key)!.coordinates), ...weatherLocations.map((l) => l.timeZone)])],
     shape: { kind: 'radius', center: input.center, radiusKm },
     includedAreas: [],
     excludedAreas: [],
@@ -1195,7 +1210,7 @@ function planTrailStages(
     contextFor: (index, stage) => {
       const at = Math.min(index + 1, last);
       const date = input.dates[at]!;
-      return { month: Number(date.slice(5, 7)), duskMinute: civilDuskMinute(stage.end, date, input.timeZone), startMinute: trail.dayStartMinutes?.[at] ?? DEFAULT_TRAIL_START_MINUTE };
+      return { month: Number(date.slice(5, 7)), duskMinute: civilDuskMinute(stage.end, date, zoneOfPoint(input, stage.end)), startMinute: trail.dayStartMinutes?.[at] ?? DEFAULT_TRAIL_START_MINUTE };
     },
   });
   /* The split stages, written into the places. */
@@ -1252,7 +1267,7 @@ function trailRecordFor(
     const dayNumber = followed && stage.fromBaseId && stage.toBaseId ? moveDay.get(`${stage.fromBaseId}>${stage.toBaseId}`) : undefined;
     if (dayNumber === undefined) return trailStageRecord(stage, nameOf);
     const date = input.dates[Math.min(dayNumber - 1, input.dates.length - 1)]!;
-    const dusk = civilDuskMinute(stage.end, date, input.timeZone);
+    const dusk = civilDuskMinute(stage.end, date, zoneOfPoint(input, stage.end));
     const retimed = dusk === null ? stage : { ...stage, duskMinute: dusk, latestStartMinute: dusk - TRAIL_DUSK_MARGIN_MINUTES - trailDayMinutes(stage.walkMinutes) };
     return trailStageRecord(retimed, nameOf, dayNumber);
   });

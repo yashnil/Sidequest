@@ -9,12 +9,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./data": "./src/data/index.ts",
-    "./testing": "./src/testing/fixtures.ts"
+    "./testing": "./src/testing/fixtures.ts",
+    "./zone-lookup": "./src/time/zone-lookup.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@photostructure/tz-lookup": "^11.8.0",
     "@sidequest/geo": "*",
     "zod": "^4.6.6"
   }

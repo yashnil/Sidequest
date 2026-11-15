@@ -1,5 +1,6 @@
 import 'server-only';
 import { isCivilTimeZone } from '@sidequest/core';
+import { zoneForPlace } from '@sidequest/core/zone-lookup';
 import { getIntent, type TripIntentRecord } from '@/lib/db/compiler-repository';
 
 /**
@@ -25,17 +26,25 @@ export function destinationTimeZone(tripId: string): string | undefined {
  * zone counts: a fixed offset a source happened to return is not the
  * destination's clock, and returning it here would let solar time in
  * through the front door.
+ *
+ * For each, the zone at its centre from the IANA boundaries (`zoneAtPoint`)
+ * outranks the zone the source carried: a geocoder's or a country's default
+ * (the United States' is New York) is only a fallback, and it must still fit
+ * the centre's longitude when there is a centre at all.
  */
 export function destinationTimeZoneOf(intent: TripIntentRecord | null): string | undefined {
   if (!intent) return undefined;
-  const civil = (zone: string | undefined): string | undefined => (zone && isCivilTimeZone(zone) ? zone : undefined);
+  const civilAt = (zone: string | undefined, center: { lat: number; lng: number } | undefined, wholeCountry = false): string | undefined => {
+    const found = zoneForPlace({ center: center ?? null, published: zone ?? null, wholeCountry });
+    return found && isCivilTimeZone(found) ? found : undefined;
+  };
   const resolution = intent.resolution;
   const chosenId = intent.selectedCandidateId ?? resolution?.unambiguousCandidateId;
   const candidate = resolution?.candidates.find((c) => c.id === chosenId) ?? resolution?.candidates[0] ?? null;
-  const fromCandidate = civil(candidate?.timeZones?.[0]);
+  const fromCandidate = candidate ? civilAt(candidate.timeZones?.[0], candidate.center, candidate.breadth === 'country') : undefined;
   if (fromCandidate) return fromCandidate;
   for (const part of intent.destinationIntent?.graph?.children ?? []) {
-    const fromPart = civil(part.resolution?.timeZone);
+    const fromPart = civilAt(part.resolution?.timeZone, part.resolution?.center, part.resolution?.featureType === 'country');
     if (fromPart) return fromPart;
   }
   return undefined;

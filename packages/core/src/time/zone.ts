@@ -406,3 +406,10 @@ export function zoneFitsLongitude(timeZone: string, lng: number): boolean {
     return false;
   }
 }
+
+/**
+ * A point→zone resolver (`zoneAtPoint` from `@sidequest/core/zone-lookup`).
+ * Core code that needs a point's civil zone takes one of these rather than
+ * importing the boundary table, so the package root stays light for clients.
+ */
+export type ZoneResolver = (point: { lat: number; lng: number }) => string | null;
