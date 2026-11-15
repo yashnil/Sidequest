@@ -1337,7 +1337,7 @@ function planTrailStages(
   /* A trail of S stages sleeps S + 1 beds; nights beyond that are spare days a split may use. Only a followed trail has them to spend. */
   const nights = Math.max(0, input.dates.length - 1);
   const spareDays = trail.follow ? Math.max(0, nights - 1 - ordered.stages.length) : undefined;
-  const stageArgs = {
+  const stageArgs: Parameters<typeof resolveTrailStages>[0] = {
     stages: ordered.stages,
     limits,
     beds,
@@ -1362,7 +1362,7 @@ function planTrailStages(
    */
   const stageEndBedIds: string[] = [];
   if (trail.follow && waypoints.length > 0 && trailBedChain(resolved).chain.length < 2) {
-    const retry = resolveTrailStages({ ...stageArgs, beds: [...beds, ...stageArgs.waypoints] });
+    const retry = resolveTrailStages({ ...stageArgs, beds: [...beds, ...(stageArgs.waypoints ?? [])] });
     const chain = trailBedChain(retry).chain;
     if (chain.length >= 2) {
       resolved = retry;
