@@ -1,8 +1,10 @@
 'use server';
 
+import { savedPartyHint } from '@/lib/party/known-party';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
+  partyFromSaved,
   ARRIVAL_PLANNING_MINUTES,
   DEPARTURE_PLANNING_MINUTES,
   REFINEMENTS,
@@ -294,7 +296,7 @@ export async function resolveAdvisorImageryAction(id: string): Promise<AdvisorRe
  * second, advisor-only identity path. The answers are spread, never rebuilt:
  * every preference travels into the trip.
  */
-export async function adoptAdvisorPickAction(id: string, pickId: string): Promise<AdvisorResult> {
+export async function adoptAdvisorPickAction(id: string, pickId: string, party?: { adults: number; children: number; basis: 'stated' | 'assumed' }): Promise<AdvisorResult> {
   const foreign = await decisionAccessRefusal(id);
   if (foreign) return { ok: false, error: foreign };
   const session = getDecisionSession(id);
@@ -309,8 +311,23 @@ export async function adoptAdvisorPickAction(id: string, pickId: string): Promis
   const window =
     dates.startDate && dates.endDate ? { startDate: dates.startDate, endDate: dates.endDate } : datesInWindow({ month: chosen.month, year: chosen.year }, chosen.nights);
 
+  /*
+   * Never a silent two adults: a party they chose just now, then their own
+   * words in the interview, then their saved travellers; otherwise the
+   * assumption, marked so every screen labels it.
+   */
+  const chosenParty = party && Number.isInteger(party.adults) && party.adults >= 1 && party.adults <= 12 && Number.isInteger(party.children) && party.children >= 0 && party.children <= 12 ? party : null;
+  const saved = chosenParty || session.answers.partyBasis === 'stated' ? null : partyFromSaved(await savedPartyHint());
+  const resolvedParty = chosenParty
+    ? { adults: chosenParty.adults, children: chosenParty.children, partyBasis: chosenParty.basis === 'assumed' ? ('assumed' as const) : ('stated' as const) }
+    : session.answers.partyBasis === 'stated' || session.answers.partyBasis === 'profile'
+      ? { adults: session.answers.adults, children: session.answers.children, partyBasis: session.answers.partyBasis }
+      : saved
+        ? { adults: saved.adults, children: Math.max(saved.children, session.answers.children), partyBasis: 'profile' as const }
+        : { adults: session.answers.adults, children: session.answers.children, partyBasis: 'assumed' as const };
   const answers: TripComposerAnswers = {
     ...session.answers,
+    ...resolvedParty,
     mode: 'known_destination',
     destinationQuery: pick.resolveAs,
     dates: { ...dates, startDate: window.startDate, endDate: window.endDate },
@@ -326,8 +343,8 @@ export async function adoptAdvisorPickAction(id: string, pickId: string): Promis
     endDate: window.endDate,
     arrivalTime: minutesToTime(ARRIVAL_PLANNING_MINUTES.afternoon ?? 16 * 60),
     departureTime: minutesToTime(DEPARTURE_PLANNING_MINUTES.morning ?? 9 * 60),
-    adults: session.answers.adults,
-    children: session.answers.children,
+    adults: resolvedParty.adults,
+    children: resolvedParty.children,
     travelerNeeds: session.answers.travelerNeeds,
   });
   if (!basics.success) return { ok: false, error: 'We could not turn that into a trip. Try adjusting your dates.' };

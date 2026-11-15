@@ -1656,6 +1656,48 @@ export const tripPackageSchema = z.object({
           }),
         )
         .default([]),
+      /**
+       * Mode 3 — the stated itinerary the plan was held to, and what became of
+       * each stay (`contract/stated-itinerary.ts`). Persisted on the package so
+       * every version of the plan carries the stated plan it was built from.
+       */
+      statedItinerary: z
+        .object({
+          stays: z
+            .array(
+              z.object({
+                stopId: z.string().min(1),
+                label: z.string().min(1),
+                nights: z.number().int().min(0),
+                lock: z.enum(['booked_lock', 'hard_lock', 'user_explicit', 'user_soft', 'sidequest_inferred', 'model_proposed']),
+                provenance: z.enum(['stated', 'parsed', 'assumed']),
+                fixed: z.boolean(),
+                dates: z.object({ start: z.string(), end: z.string() }).nullable(),
+                mustSee: z.array(z.string()).default([]),
+                transportIn: z.string().nullable(),
+                transportLock: z.enum(['booked_lock', 'hard_lock', 'user_explicit', 'user_soft', 'sidequest_inferred', 'model_proposed']).nullable(),
+              }),
+            )
+            .default([]),
+          outcomes: z
+            .array(
+              z.object({
+                stopId: z.string().min(1),
+                label: z.string().min(1),
+                statedNights: z.number().int().min(0),
+                plannedNights: z.number().int().min(0),
+                plannedBase: z.string().nullable(),
+                lock: z.enum(['booked_lock', 'hard_lock', 'user_explicit', 'user_soft', 'sidequest_inferred', 'model_proposed']),
+                outcome: z.enum(['honoured', 'nights_changed', 'not_slept', 'reordered']),
+              }),
+            )
+            .default([]),
+          acceptedChanges: z.number().int().min(0).default(0),
+          parseConfidence: z.number().min(0).max(1),
+        })
+        .optional(),
+      /** How the party size was known when the plan was built; `assumed` is labelled wherever it is shown. */
+      partyBasis: z.enum(['stated', 'profile', 'assumed']).optional(),
     })
     .optional(),
   /**

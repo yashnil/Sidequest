@@ -1,3 +1,4 @@
+import { savedPartyHint } from '@/lib/party/known-party';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
@@ -81,6 +82,7 @@ export default async function DecideSessionPage({
           dots={sample.dots}
           sampleComplete={sample.complete}
           summary={profileChips(session.answers).map((chip) => chip.label)}
+          partyKnown={session.answers.partyBasis === 'stated' || session.answers.partyBasis === 'profile' || (await savedPartyHint()) !== null}
         />
         <p className="mt-14 rule-top pt-6 type-small text-ink-muted">
           <Link href={`/decide/${id}?edit=1`} className="underline underline-offset-4 hover:text-pine">

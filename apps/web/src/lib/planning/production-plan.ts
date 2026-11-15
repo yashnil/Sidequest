@@ -44,7 +44,7 @@ import { zoneAtPoint } from '@sidequest/core/zone-lookup';
 import { weatherAvailability, type TripPackage, type WeatherDataset, type WeatherLocation } from '@sidequest/core';
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
-import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
+import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft, statedItineraryOutcome } from './trip-contract';
 import { buildFeasibilityReport, buildStructuralMetrics, buildTripQualityReport, tripStructureOf, itineraryStatusForVerdict, modelMayOverride } from '@sidequest/core';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { FixtureComposer } from './fixture-composer';
@@ -1078,6 +1078,16 @@ async function generatePlan(
    * conflict on the itinerary — no second model call.
    */
   const applied = applyBookedFacts(reconciledRaw.itinerary, booked);
+  /*
+   * MODE 3 — THE PLAN THEY ALREADY HAD, CHECKED AGAINST THE PLAN THAT WAS BUILT.
+   * Every stated stay the itinerary does not keep is a recorded conflict and a
+   * sentence on the overview; nothing is replaced silently.
+   */
+  const stated = statedItineraryOutcome(contract, applied.itinerary.days, now);
+  if (stated.conflicts.length > 0) {
+    contractConflicts.push(...stated.conflicts);
+    console.warn('A stated stay could not be honoured', { tripId, conflicts: stated.conflicts.map((c) => `${c.contractValue} → ${c.proposedValue}`) });
+  }
   const verificationMs = since(verificationStartedMs);
   const reconciliationMs = Math.max(0, verificationMs - stage.placeResolutionMs - stage.routingMs - stage.operationalMs);
   const degraded = deadlineReached();
@@ -1300,7 +1310,7 @@ async function generatePlan(
             summary: describePreservation(preservation),
           },
           quality: { version: 1 as const, passed: quality.passed, errors: quality.errors, warnings: quality.warnings, checks: quality.checks.map((c) => ({ ...c })) },
-          contract: contractEnforcementRecord(contract, contractConflicts),
+          contract: contractEnforcementRecord(contract, contractConflicts, stated.outcomes),
           /* V10 §5 §7 §8 §9 §16 — the new audits, persisted beside the ones that came before them. */
           placement: reconciledRaw.placement,
           dayOrders: reconciledRaw.dayOrders.map(({ dayNumber, report, corrected }) => ({
@@ -1551,6 +1561,7 @@ export function travelerBriefFor(input: { input: CanonicalTripBuildInput; envelo
       ...(startDate ? { season: seasonOf(startDate, envelope.center?.lat) } : {}),
       adults: canonical.party.adults,
       children: canonical.party.children,
+      ...(canonical.partyBasis === 'assumed' ? { partyAssumed: true } : {}),
       seniors: canonical.party.seniorsInGroup,
       /* §7 — the phrase, never a clock time nobody stated. */
       arrival: canonical.arrival.phrase,

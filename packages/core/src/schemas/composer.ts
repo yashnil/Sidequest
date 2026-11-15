@@ -1,4 +1,5 @@
 import { advisorAnswersSchema } from '../advisor/answers';
+import { statedItinerarySchema } from '../contract/stated-itinerary';
 import { z } from 'zod';
 import { freeTimeAppetiteSchema, isoDateSchema, isoTimeSchema } from './common';
 import { selectedDestinationSchema } from './destination-index';
@@ -384,6 +385,20 @@ export const tripComposerAnswersSchema = z.object({
    * the plan is checked against the board (`planning/plan-critique.ts`).
    */
   existingPlan: z.string().max(2000).optional(),
+  /**
+   * Mode 3 — the plan they already had, as structure: ordered stays with
+   * nights or dates, fixed bookings, must-sees, transport between stops and
+   * per-field provenance (`contract/stated-itinerary.ts`). Additive at the same
+   * `schemaVersion`, exactly as `interpretation` was; absent means no plan.
+   */
+  statedItinerary: statedItinerarySchema.optional(),
+  /**
+   * How `adults`/`children` are known: the traveller said (`stated`), their
+   * saved travellers said (`profile`), or nobody did and Sidequest assumed
+   * (`assumed`) — which every screen showing the party labels. Absent on
+   * answers written before the field existed, read as `stated`.
+   */
+  partyBasis: z.enum(['stated', 'profile', 'assumed']).optional(),
 
   /**
    * What we made of that text, and whether they accepted it.

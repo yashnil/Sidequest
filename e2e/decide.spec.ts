@@ -140,6 +140,10 @@ test('choosing a destination carries the answers into a normal trip', async ({ p
   await adviseToShortlist(page);
   const chosen = (await page.getByTestId('advisor-pick').first().getByRole('heading', { level: 3 }).innerText()).trim();
   await page.getByRole('button', { name: `Plan a trip to ${chosen}` }).click();
+  /* Nobody said who is going: one question, answered here (never a silent two adults). */
+  const party = page.getByTestId('advisor-party-question').first();
+  await party.getByTestId('party-couple').click();
+  await party.getByTestId('advisor-party-continue').click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });

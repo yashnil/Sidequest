@@ -30,6 +30,8 @@
  * bookings are.
  */
 
+import { statedItineraryBands, type ContractStatedItinerary, type ContractStatedStay, type StatedStayOutcome } from './stated-itinerary';
+
 export const CONTRACT_VERSION = 'sidequest-trip-contract/1' as const;
 
 export const LOCK_LEVELS = ['booked_lock', 'hard_lock', 'user_explicit', 'user_soft', 'sidequest_inferred', 'model_proposed'] as const;
@@ -155,6 +157,13 @@ export interface ContractParty {
   dietaryHard: readonly string[];
   /** The union of every member's functional needs — the group's planning envelope. */
   needs: readonly string[];
+  /**
+   * How the party size is known: the traveller said it (`stated`), it came
+   * from their saved travellers (`profile`), or nobody said and Sidequest
+   * assumed it (`assumed`) — which every screen showing it must label.
+   * Absent on contracts built before the field existed, read as `stated`.
+   */
+  basis?: 'stated' | 'profile' | 'assumed';
 }
 
 export interface ContractTransport {
@@ -188,6 +197,11 @@ export interface TripContract {
   priorities: readonly ContractPriority[];
   /** Everything Sidequest decided on the traveller's behalf, so a screen can say so. */
   assumptions: readonly string[];
+  /**
+   * A plan the traveller already had (Mode 3): their stays in order, each
+   * locked by its provenance (`stated-itinerary.ts`). Absent when they had none.
+   */
+  statedItinerary?: ContractStatedItinerary;
 }
 
 /* ------------------------------------------------------------------ *
@@ -220,6 +234,10 @@ export interface ContractEnforcementRecord {
   conflicts: ContractConflict[];
   /** How many facts at `user_explicit` or above the contract held. */
   lockedFacts: number;
+  /** The stated itinerary as it was held, and what became of each stay. Recorded with every version of the plan. */
+  statedItinerary?: { stays: ContractStatedStay[]; outcomes: StatedStayOutcome[]; acceptedChanges: number; parseConfidence: number };
+  /** How the party size was known when the plan was built. */
+  partyBasis?: 'stated' | 'profile' | 'assumed';
 }
 
 /**
@@ -263,6 +281,7 @@ export function countLockedFacts(contract: TripContract): number {
     ...contract.transport.prohibitions.map((p) => p.lock),
     ...contract.hardConstraints.map((c) => c.lock),
     ...contract.booked.map((b) => b.lock),
+    ...(contract.statedItinerary?.stays.map((s) => s.lock) ?? []),
   ];
   return facts.filter((lock) => !modelMayOverride(lock)).length;
 }
@@ -287,7 +306,10 @@ export function contractBands(contract: TripContract): { mustKeep: string[]; mus
   }
   const adults = contract.party.adults.value ?? 0;
   const children = contract.party.children.value ?? 0;
-  mustKeep.push(`The party: ${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? `, ${children} child${children === 1 ? '' : 'ren'}` : ''}${contract.party.members.length > 0 ? ` — ${contract.party.members.map((m) => m.displayName).join(', ')}` : ''}. Plan for everyone named.`);
+  const partyLine = `${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? `, ${children} child${children === 1 ? '' : 'ren'}` : ''}${contract.party.members.length > 0 ? ` — ${contract.party.members.map((m) => m.displayName).join(', ')}` : ''}`;
+  if (contract.party.basis === 'assumed') mayDecide.push(`The party is not known; plan for ${partyLine} as Sidequest's assumption, and keep lodging and pricing advice easy to scale.`);
+  else mustKeep.push(`The party: ${partyLine}. Plan for everyone named.`);
+  if (contract.statedItinerary) mustKeep.push(...statedItineraryBands(contract.statedItinerary));
   for (const rule of contract.hardConstraints) if (rule.value) mustKeep.push(rule.value);
   for (const fact of contract.booked) if (fact.value) mustKeep.push(`Booked: ${fact.value}`);
   for (const p of contract.transport.prohibitions) if (p.value) mustAvoid.push(p.value);

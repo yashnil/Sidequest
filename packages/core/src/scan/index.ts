@@ -8,3 +8,4 @@ export * from './base-staleness';
 export * from './route-coverage';
 export * from './trail-stages';
 export * from './base-footprint';
+export * from './stated-bases';

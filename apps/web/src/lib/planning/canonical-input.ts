@@ -1,5 +1,6 @@
 import 'server-only';
 import { existingPlanPlaceNames } from './plan-critique';
+import { contractStatedItinerary, statedBeds, type ContractStatedItinerary } from '@sidequest/core';
 import {
   ARRIVAL_PRECISION_LABELS,
   countNights,
@@ -208,6 +209,10 @@ export interface CanonicalTripBuildInput {
   bookedFacts: readonly string[];
   /** Interests at or above "once or twice", for the audit and the brief. */
   priorities: readonly { interest: Interest; level: InterestLevel; explicit: boolean }[];
+  /** Mode 3 — the plan they already had, each stay locked by its provenance. Null when they had none. */
+  statedItinerary: ContractStatedItinerary | null;
+  /** How the party size is known; `assumed` is said wherever it is used. */
+  partyBasis: 'stated' | 'profile' | 'assumed';
 }
 
 /* ------------------------------------------------------------------ *
@@ -404,8 +409,15 @@ export function buildCanonicalTripBuildInput(input: {
   const carAvailable = profile.transport.willDrive;
   const maxDrive = profile.transport.maxDailyDriveMinutes;
   const driveExplicit = explicitly(profile.provenance, 'max_drive') || composer?.maxDailyDriveMinutes !== undefined;
-  const desiredBaseCount = baseCountFrom(profile, composer?.shape, nights.value ?? 1);
-  const baseExplicit = explicitly(profile.provenance, 'base_moves');
+  /*
+   * A stated itinerary is the strongest statement of structure there is: the
+   * places to sleep they named are the bases, and the hotel changes between
+   * them are allowed because they asked for them.
+   */
+  const stated = composer?.statedItinerary ? contractStatedItinerary(composer.statedItinerary) : null;
+  const statedBedCount = composer?.statedItinerary ? statedBeds(composer.statedItinerary).length : 0;
+  const desiredBaseCount = statedBedCount > 0 ? statedBedCount : baseCountFrom(profile, composer?.shape, nights.value ?? 1);
+  const baseExplicit = statedBedCount > 0 || explicitly(profile.provenance, 'base_moves');
 
   const preference: CanonicalMovement['preference'] =
     !carAvailable && profile.interview.guideWillingness === 'prefer'
@@ -458,20 +470,22 @@ export function buildCanonicalTripBuildInput(input: {
       maxAccessWalkMinutes: profile.transport.maxAccessWalkMinutes,
       desiredBaseCount: baseExplicit ? fact(desiredBaseCount, 'explicit', at) : fact(desiredBaseCount, 'smart_default', at, 'Derived from trip length and the shape the traveller leaned towards.'),
       maxBaseChanges: fact(
-        profile.interview.baseMoveTolerance === 'stay_put' ? 0 : profile.interview.baseMoveTolerance === 'move_once' ? 1 : Math.max(desiredBaseCount - 1, desiredBaseCount),
+        statedBedCount > 0 ? statedBedCount - 1 : profile.interview.baseMoveTolerance === 'stay_put' ? 0 : profile.interview.baseMoveTolerance === 'move_once' ? 1 : Math.max(desiredBaseCount - 1, desiredBaseCount),
         baseExplicit ? 'explicit' : 'smart_default',
         at,
-        'How many times the traveller is willing to change where they sleep.',
+        statedBedCount > 0 ? 'The hotel changes their own plan makes.' : 'How many times the traveller is willing to change where they sleep.',
       ),
     },
     profile,
     ownWords: {
-      mustDo: [...new Set([...splitFreeText(composer?.mustDo), ...existingPlanPlaceNames(composer?.existingPlan).slice(0, 20)])],
+      mustDo: [...new Set([...splitFreeText(composer?.mustDo), ...existingPlanPlaceNames(composer?.existingPlan).slice(0, 20), ...(composer?.statedItinerary?.stops.flatMap((stop) => stop.mustSee ?? []) ?? []).slice(0, 20)])],
       dislikes: splitFreeText(composer?.avoid),
       freeText: [composer?.mustDo, composer?.avoid, composer?.existingPlan].filter(Boolean).join('\n').slice(0, 2000),
     },
     bookedFacts: input.bookedFacts ?? [],
     priorities,
+    statedItinerary: stated,
+    partyBasis: composer?.partyBasis ?? 'stated',
   };
 }
 

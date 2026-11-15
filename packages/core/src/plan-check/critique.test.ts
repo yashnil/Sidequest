@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestFixedEndsOrder, critiquePlan, estimateFlightMinutes, estimateHighSpeedRailMinutes, estimateMove, type PlanCheckStopInput } from './critique';
+import { applyPlanChanges, bestFixedEndsOrder, critiquePlan, defaultAcceptedChanges, estimateFlightMinutes, estimateHighSpeedRailMinutes, estimateMove, type PlanCheckStopInput } from './critique';
 
 /**
  * Synthetic stops: invented labels at chosen coordinates, so every assertion
@@ -140,16 +140,91 @@ describe('critiquePlan — unknown is not false', () => {
   });
 });
 
-describe('critiquePlan — the improved version reshapes gently', () => {
-  it('drops at most one stop, and still offers to keep every stop with more nights', () => {
-    const result = critiquePlan({
+describe('critiquePlan — the change-aware proposal', () => {
+  const rushed = () =>
+    critiquePlan({
       totalNights: 6,
       stops: [stop('Alpha', 35.68, 139.76, 2), stop('Bravo', 38.27, 140.87, 1), stop('Charlie', 37.9, 139.02, 1), stop('Delta', 36.65, 138.18, 1), stop('Echo', 36.56, 136.65, 1)],
     });
+
+  it('optimises freely: as many cuts as the pace needs, each its own major change, none applied by default', () => {
+    const result = critiquePlan({
+      totalNights: 6,
+      stops: [0, 2, 4, 6, 8].map((lng, i) => stop(['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'][i]!, 0, lng, i === 0 ? 2 : 1, { countryCode: 'ZZ' })),
+    });
     expect(result.verdict).toBe('too_much');
-    expect(result.suggestions.filter((s) => s.kind === 'cut').length).toBeLessThanOrEqual(1);
-    expect(result.suggestions.some((s) => s.kind === 'add_nights')).toBe(true);
-    /* A day trip keeps a place in the trip; only a cut removes one. */
-    if (result.improved) expect(result.improved.stops.length).toBeGreaterThanOrEqual(4);
+    const cuts = result.proposal.changes.filter((c) => c.kind === 'cut');
+    expect(cuts.length).toBeGreaterThanOrEqual(1);
+    for (const cut of cuts) {
+      expect(cut.class).toBe('major');
+      expect(cut.touches.join(' ')).toMatch(/removes .+, a place you named/);
+    }
+    expect(result.proposal.measure.suggested.verdict).not.toBe('too_much');
+    const defaults = defaultAcceptedChanges(result.proposal.changes);
+    for (const cut of cuts) expect(defaults.has(cut.id)).toBe(false);
+    /* Nothing accepted is the plan as written. */
+    expect(applyPlanChanges(result.proposal.original, result.proposal.changes, new Set()).map((s) => [s.label, s.nights])).toEqual(result.proposal.original.map((s) => [s.label, s.nights]));
+  });
+
+  it('keeps the trip length whatever subset is accepted, and toggling a change back is the exact undo', () => {
+    const result = rushed();
+    const ids = result.proposal.changes.map((c) => c.id);
+    for (let mask = 0; mask < 1 << Math.min(ids.length, 6); mask += 1) {
+      const accepted = new Set(ids.filter((_, i) => mask & (1 << i)));
+      const version = applyPlanChanges(result.proposal.original, result.proposal.changes, accepted);
+      expect(version.reduce((n, s) => n + s.nights, 0)).toBe(6);
+    }
+    const one = new Set([ids[0]!]);
+    const after = applyPlanChanges(result.proposal.original, result.proposal.changes, one);
+    one.delete(ids[0]!);
+    expect(applyPlanChanges(result.proposal.original, result.proposal.changes, one)).toEqual(applyPlanChanges(result.proposal.original, result.proposal.changes, new Set()));
+    expect(after).not.toEqual(result.proposal.original);
+  });
+
+  it('classifies a reorder that keeps every stop and night as safe, and one that moves a booked stay as major', () => {
+    const stops = [stop('Start', 0, 0, 3, { countryCode: 'ZZ' }), stop('Far', 0, 3, 3, { countryCode: 'ZZ' }), stop('Near', 0, 1, 3, { countryCode: 'ZZ' }), stop('End', 0, 4, 3, { countryCode: 'ZZ' })];
+    const safe = critiquePlan({ totalNights: 12, stops }).proposal.changes.find((c) => c.kind === 'reorder')!;
+    expect(safe.class).toBe('safe');
+    expect(safe.saving.routeKm).toBeGreaterThan(0);
+    const booked = critiquePlan({ totalNights: 12, stops: stops.map((s) => (s.label === 'Far' ? { ...s, fixed: true } : s)) }).proposal.changes.find((c) => c.kind === 'reorder')!;
+    expect(booked.class).toBe('major');
+    expect(booked.touches[0]).toMatch(/booked stay in Far/);
+  });
+
+  it('never cuts or merges a booked stay', () => {
+    const result = critiquePlan({
+      totalNights: 6,
+      stops: [stop('Alpha', 35.68, 139.76, 2), stop('Bravo', 38.27, 140.87, 1, { fixed: true }), stop('Charlie', 37.9, 139.02, 1, { fixed: true }), stop('Delta', 36.65, 138.18, 1, { fixed: true }), stop('Echo', 36.56, 136.65, 1)],
+    });
+    expect(result.proposal.changes.filter((c) => (c.op.kind === 'cut' || c.op.kind === 'day_trip') && ['Bravo', 'Charlie', 'Delta'].includes(c.op.label))).toHaveLength(0);
+  });
+
+  it('turns a stated stay into a day trip only as a major change that says it changes their nights', () => {
+    const result = critiquePlan({
+      totalNights: 9,
+      stops: [stop('Alpha', 35.68, 139.76, 3), stop('Bravo', 35.01, 135.77, 1), stop('Charlie', 34.69, 135.5, 1), stop('Delta', 43.06, 141.35, 4)],
+    });
+    const merge = result.proposal.changes.find((c) => c.kind === 'day_trip')!;
+    expect(merge.class).toBe('major');
+    expect(merge.touches.join(' ')).toMatch(/changes the 1 night you gave/);
+    expect(merge.saving.hotelMoves).toBe(1);
+  });
+
+  it('moves a night between two stays Sidequest split as a safe change, never between stated ones', () => {
+    const spread = critiquePlan({ totalNights: 6, stops: [stop('Alpha', 35.68, 139.76, 5, { nightsBasis: 'spread' }), stop('Bravo Region', 39.7, 140.1, 1, { kind: 'admin_region', nightsBasis: 'spread' })] });
+    const shift = spread.proposal.changes.find((c) => c.kind === 'nights');
+    expect(shift?.class).toBe('safe');
+    expect(defaultAcceptedChanges(spread.proposal.changes).has(shift!.id)).toBe(true);
+    const statedOnes = critiquePlan({ totalNights: 6, stops: [stop('Alpha', 35.68, 139.76, 5), stop('Bravo Region', 39.7, 140.1, 1, { kind: 'admin_region' })] });
+    expect(statedOnes.proposal.changes.filter((c) => c.kind === 'nights')).toHaveLength(0);
+  });
+
+  it('a flight is safe where they named no way to travel and major where it replaces the train they planned', () => {
+    const free = critiquePlan({ totalNights: 8, stops: [stop('Alpha', 35.68, 139.76, 4), stop('Delta', 43.06, 141.35, 4)] });
+    expect(free.proposal.changes.find((c) => c.kind === 'transport')?.class).toBe('safe');
+    const theirs = critiquePlan({ totalNights: 8, stops: [stop('Alpha', 35.68, 139.76, 4), stop('Delta', 43.06, 141.35, 4, { transportIn: 'rail' })] });
+    const fly = theirs.proposal.changes.find((c) => c.kind === 'transport')!;
+    expect(fly.class).toBe('major');
+    expect(fly.touches[0]).toMatch(/train you planned/);
   });
 });

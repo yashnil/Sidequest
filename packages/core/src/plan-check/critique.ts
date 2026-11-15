@@ -3,6 +3,7 @@ import type { ModeConcept, ModeStatus } from '../reality/schema';
 import { jurisdictionFor } from '../reality/jurisdictions';
 import { estimateLegMinutes, haversineKm, MAX_GEO_ESTIMATE_DRIVE_KM } from '../travel/estimate';
 import type { StopNightsBasis } from './parse';
+import { STATED_TRANSPORT_LABELS, type StatedTransportMode } from '../contract/stated-itinerary';
 
 /**
  * "IS THAT TOO MUCH?" — A DETERMINISTIC CRITIQUE OF A ROUGH PLAN.
@@ -40,6 +41,13 @@ export interface PlanCheckStopInput {
   nights: number | null;
   nightsBasis: StopNightsBasis | null;
   dayTrip: boolean;
+  /** A booked stay: never cut, merged or moved by a change Sidequest applies on its own. */
+  fixed?: boolean;
+  /** Attractions they named at this stop. */
+  mustSee?: readonly string[];
+  /** How they planned to arrive here. */
+  transportIn?: StatedTransportMode | null;
+  dates?: { start: string; end: string } | null;
 }
 
 export type PlanMoveMode = 'high_speed_rail' | 'rail' | 'drive' | 'bus' | 'flight';
@@ -121,8 +129,10 @@ export interface PlanCheckResult {
   moves: PlanMove[];
   findings: PlanFinding[];
   suggestions: PlanSuggestion[];
-  /** The plan with the suggestions applied, or null when there is nothing to change. */
+  /** The plan with every change applied, or null when there is nothing to change. */
   improved: { stops: ImprovedPlanStop[]; changes: string[] } | null;
+  /** The change-aware proposal: original, suggested, and each change classified safe or major. */
+  proposal: PlanProposal;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -146,8 +156,6 @@ const FLIGHT_OFFERED_KM = 450;
 const HSR_MIN_KM = 100;
 /** Each way, the longest a day trip from a neighbouring bed reasonably takes. */
 export const DAY_TRIP_MAX_MINUTES = 120;
-/** The improved version drops at most this many stops; beyond it the traveller decides. */
-export const MAX_IMPROVEMENT_CUTS = 1;
 /** A reorder is worth saying only when it saves this share and this many straight-line km. */
 const REORDER_MIN_SHARE = 0.15;
 const REORDER_MIN_KM = 80;
@@ -484,79 +492,22 @@ export function critiquePlan(input: PlanCheckInput): PlanCheckResult {
     if (first === undefined) seen.set(key, base.index);
   }
 
-  /* ---- improve: merge short stops into day trips, cut (once) if still too much, add nights ---- */
-  let working: ImprovedPlanStop[] = (reorder ? [...reorder.map((i) => stops[i]!), ...stops.filter((s) => s.dayTrip)] : [...stops]).map((s) => ({ label: s.label, nights: s.nights ?? 0, dayTrip: s.dayTrip }));
-  const changes: string[] = [];
-  if (reorder) changes.push('Reordered to cut backtracking.');
-  const byLabel = new Map(stops.map((s) => [s.label, s] as const));
+  /* ---- improve: the optimised version, computed freely, then every change classified ---- */
+  const proposal = proposeChanges({ stops, totalNights, pace, reorder, moves, findings });
+  for (const change of proposal.changes) {
+    if (change.kind === 'day_trip') suggestions.push({ id: change.id, kind: 'merge', sentence: change.sentence });
+    if (change.kind === 'cut') suggestions.push({ id: change.id, kind: 'cut', sentence: change.sentence });
+  }
 
   if (totalNights !== null && pace.verdict !== 'comfortable' && pace.verdict !== 'unknown') {
-    const bedsNow = () => working.filter((s) => !s.dayTrip);
-    for (const short of pace.shortStops) {
-      const label = short.stop.label;
-      const beds = bedsNow();
-      const at = beds.findIndex((s) => s.label === label);
-      if (at < 0 || beds.length <= 1 || !short.stop.point) continue;
-      const neighbours = [beds[at - 1], beds[at + 1]].filter((n): n is ImprovedPlanStop => Boolean(n));
-      let bestNeighbour: { stop: ImprovedPlanStop; minutes: number } | null = null;
-      for (const neighbour of neighbours) {
-        const original = byLabel.get(neighbour.label);
-        if (!original?.point) continue;
-        const est = estimateMove({ point: original.point, countryCode: original.countryCode }, { point: short.stop.point, countryCode: short.stop.countryCode });
-        if (est.mode === 'flight' || est.minutes === null || est.minutes > DAY_TRIP_MAX_MINUTES) continue;
-        if (!bestNeighbour || est.minutes < bestNeighbour.minutes) bestNeighbour = { stop: neighbour, minutes: est.minutes };
-      }
-      if (!bestNeighbour) continue;
-      const host = bestNeighbour.stop;
-      const nights = working.find((s) => s.label === label)!.nights;
-      working = working.map((s) => (s.label === host.label && !s.dayTrip ? { ...s, nights: s.nights + nights } : s.label === label ? { ...s, nights: 0, dayTrip: true } : s));
-      const sentence = `See ${label} as a day trip from ${host.label} — about ${formatPlanMinutes(bestNeighbour.minutes)} each way (estimate) — and give its ${plural(nights, 'night')} to ${host.label}: one hotel move fewer.`;
-      suggestions.push({ id: `merge-${short.index}`, kind: 'merge', sentence });
-      changes.push(`${label} becomes a day trip from ${host.label}.`);
-    }
-
-    /*
-     * Still too many beds for the nights: drop the short stop that costs the
-     * route the most to reach — at most ONE. The critique does not know which
-     * stop is the traveller's highlight; cutting until the pace reads well
-     * turned "Seattle, Rainier, Olympic, Portland in 6 days" into a city pair
-     * with both parks gone. One cut, and "add nights" beside it, leaves the
-     * bigger reshaping to the traveller.
-     */
-    const improvedStops = (): PlanCheckStopInput[] => working.map((s) => ({ ...byLabel.get(s.label)!, nights: s.nights, dayTrip: s.dayTrip, nightsBasis: byLabel.get(s.label)!.nightsBasis }));
-    let after = readPace(improvedStops(), totalNights);
-    let cuts = 0;
-    while (cuts < MAX_IMPROVEMENT_CUTS && after.verdict === 'too_much' && after.bases.length > 2) {
-      cuts += 1;
-      const beds = working.filter((s) => !s.dayTrip);
-      const candidates = beds
-        .map((bed, i) => ({ bed, i }))
-        .filter(({ bed, i }) => i > 0 && i < beds.length - 1 && bed.nights < minNightsFor(byLabel.get(bed.label)!.kind))
-        .map(({ bed, i }) => {
-          const p = byLabel.get(beds[i - 1]!.label)!.point;
-          const s = byLabel.get(bed.label)!.point;
-          const n = byLabel.get(beds[i + 1]!.label)!.point;
-          const detour = p && s && n ? haversineKm(p, s) + haversineKm(s, n) - haversineKm(p, n) : null;
-          return { bed, i, detour };
-        })
-        .filter((c): c is { bed: ImprovedPlanStop; i: number; detour: number } => c.detour !== null)
-        .sort((a, b) => b.detour - a.detour);
-      const drop = candidates[0];
-      if (!drop) break;
-      const receiver = beds[drop.i - 1]!;
-      const onward = beds[drop.i + 1]!;
-      working = working.filter((s) => s.label !== drop.bed.label).map((s) => (s.label === receiver.label && !s.dayTrip ? { ...s, nights: s.nights + drop.bed.nights } : s));
-      suggestions.push({ id: `cut-${drop.bed.label}`, kind: 'cut', sentence: `Drop ${drop.bed.label}: it is about ${Math.round(drop.detour)} km off the line between ${receiver.label} and ${onward.label} (straight-line), and its ${plural(drop.bed.nights, 'night')} go to ${receiver.label}.` });
-      changes.push(`${drop.bed.label} is dropped; its nights go to ${receiver.label}.`);
-      after = readPace(improvedStops(), totalNights);
-    }
-
     /* What it would take to keep every stop as written. */
     const missing = pace.bases.reduce((n, b) => n + Math.max(0, minNightsFor(b.stop.kind) - (b.stop.nights ?? 0)), 0);
     if (missing > 0 && pace.bases.length > 1) {
       suggestions.push({ id: 'add-nights', kind: 'add_nights', sentence: `Or keep every stop and add ${plural(missing, 'night')} (${totalNights + missing} in all), which gives each place at least its minimum.` });
     }
   }
+
+  const improved = proposal.changes.length > 0 ? { stops: proposal.suggested.map((s) => ({ label: s.label, nights: s.nights, dayTrip: s.dayTrip })), changes: proposal.changes.map((c) => c.sentence) } : null;
 
   /* Room to spare: a long stay is where a side trip fits. */
   if (pace.verdict === 'comfortable') {
@@ -565,7 +516,6 @@ export function critiquePlan(input: PlanCheckInput): PlanCheckResult {
     }
   }
 
-  const improved = changes.length > 0 ? { stops: working, changes } : null;
 
   /* ---- headline ---- */
   const placeWord = plural(pace.bases.length, 'place');
@@ -599,5 +549,352 @@ export function critiquePlan(input: PlanCheckInput): PlanCheckResult {
     findings,
     suggestions,
     improved,
+    proposal,
   };
+}
+
+/* ------------------------------------------------------------------------- */
+/* The change-aware proposal                                                  */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * WHAT WE WOULD CHANGE, ONE CHANGE AT A TIME, EACH ONE THEIRS TO REFUSE.
+ *
+ * The improved version used to drop at most one stop (`MAX_IMPROVEMENT_CUTS`)
+ * and was offered as one package: take it or plan as written. That ceiling
+ * protected the traveller's highlights by under-optimising everybody else.
+ * Now the optimised version is computed freely — merges, as many cuts as the
+ * pace needs, the shorter order, nights where Sidequest split them — and every
+ * difference from the original is a separate `PlanChange`, classified:
+ *
+ * - **safe** — nothing they said is touched: a reorder that keeps every stop
+ *   and its nights (and moves no booked stay), a small shift of nights they
+ *   left to us, a way of travelling where they named none. Applied by default.
+ * - **major** — something they said is touched: a named place removed or
+ *   turned into a day trip, nights they gave changed, a booked stay moved, a
+ *   must-see dropped, a transport mode they chose changed. Each is its own
+ *   proposal they must accept.
+ *
+ * Changes are operations on the original, so any subset applies cleanly
+ * (`applyPlanChanges`) and toggling one back is the exact undo.
+ */
+
+export type PlanChangeKind = 'reorder' | 'day_trip' | 'cut' | 'nights' | 'transport';
+export type PlanChangeClass = 'safe' | 'major';
+
+export type PlanChangeOp =
+  | { kind: 'reorder'; order: string[] }
+  | { kind: 'day_trip'; label: string; host: string }
+  | { kind: 'cut'; label: string; receiver: string }
+  | { kind: 'nights'; shifts: { label: string; delta: number }[] }
+  | { kind: 'transport'; toLabel: string; mode: StatedTransportMode };
+
+export interface PlanChange {
+  id: string;
+  kind: PlanChangeKind;
+  class: PlanChangeClass;
+  /** What changes, in one sentence. */
+  sentence: string;
+  /** Why, with its number. */
+  why: string;
+  /** For a major change: which of their own facts it touches, in their terms. */
+  touches: string[];
+  /** Estimated against the original, this change alone: positive is a saving. Always estimates. */
+  saving: { moveMinutes: number; hotelMoves: number; routeKm: number };
+  op: PlanChangeOp;
+}
+
+/** A stop in a version of the plan, with what it carries through. */
+export interface ProposalStop {
+  label: string;
+  nights: number;
+  dayTrip: boolean;
+  nightsBasis: StopNightsBasis | null;
+  fixed: boolean;
+  mustSee: string[];
+  transportIn: StatedTransportMode | null;
+  dates: { start: string; end: string } | null;
+  /** The changes that touched this stop, by id. */
+  changedBy: string[];
+}
+
+export interface PlanVersionMeasure {
+  verdict: PlanCheckResult['verdict'];
+  bases: number;
+  hotelMoves: number;
+  moveMinutes: number;
+  moveDays: number;
+  routeKm: number | null;
+}
+
+export interface PlanProposal {
+  original: ProposalStop[];
+  /** Every change applied: the fully optimised version. */
+  suggested: ProposalStop[];
+  changes: PlanChange[];
+  /** What no change can settle: stops not placed, legs that may be a ferry or a flight. */
+  unresolved: string[];
+  measure: { original: PlanVersionMeasure; suggested: PlanVersionMeasure };
+}
+
+const stated = (basis: StopNightsBasis | null | undefined) => basis === 'stated' || basis === 'days_stated' || basis === 'day_list';
+
+export function toProposalStop(stop: PlanCheckStopInput): ProposalStop {
+  return {
+    label: stop.label,
+    nights: stop.nights ?? 0,
+    dayTrip: stop.dayTrip,
+    nightsBasis: stop.nightsBasis,
+    fixed: stop.fixed ?? false,
+    mustSee: [...(stop.mustSee ?? [])],
+    transportIn: stop.transportIn ?? null,
+    dates: stop.dates ?? null,
+    changedBy: [],
+  };
+}
+
+/**
+ * The original with the accepted changes applied, in a fixed order — cuts, day
+ * trips, the order, nights, transport — so any subset composes and the result
+ * never depends on the order they were ticked in.
+ */
+export function applyPlanChanges(original: readonly ProposalStop[], changes: readonly PlanChange[], accepted: ReadonlySet<string>): ProposalStop[] {
+  let working = original.map((s) => ({ ...s, mustSee: [...s.mustSee], changedBy: [...s.changedBy] }));
+  const chosen = changes.filter((c) => accepted.has(c.id));
+  const beds = () => working.filter((s) => !s.dayTrip);
+  /** Where nights go when the stop named to receive them is itself gone: the nearest remaining bed before, else after. */
+  const receiverFor = (wanted: string, leaving: string): ProposalStop | null => {
+    const direct = working.find((s) => s.label === wanted && !s.dayTrip);
+    if (direct) return direct;
+    const index = working.findIndex((s) => s.label === leaving);
+    for (let i = index - 1; i >= 0; i -= 1) if (!working[i]!.dayTrip && working[i]!.label !== leaving) return working[i]!;
+    for (let i = index + 1; i < working.length; i += 1) if (!working[i]!.dayTrip && working[i]!.label !== leaving) return working[i]!;
+    return null;
+  };
+  for (const change of chosen.filter((c) => c.op.kind === 'cut')) {
+    const op = change.op as Extract<PlanChangeOp, { kind: 'cut' }>;
+    const leaving = working.find((s) => s.label === op.label && !s.dayTrip);
+    if (!leaving || beds().length <= 1) continue;
+    const receiver = receiverFor(op.receiver, op.label);
+    if (receiver) {
+      receiver.nights += leaving.nights;
+      receiver.changedBy.push(change.id);
+      receiver.mustSee = [...new Set([...receiver.mustSee])];
+    }
+    working = working.filter((s) => s !== leaving);
+  }
+  for (const change of chosen.filter((c) => c.op.kind === 'day_trip')) {
+    const op = change.op as Extract<PlanChangeOp, { kind: 'day_trip' }>;
+    const visiting = working.find((s) => s.label === op.label && !s.dayTrip);
+    if (!visiting || beds().length <= 1) continue;
+    const host = receiverFor(op.host, op.label);
+    if (host) {
+      host.nights += visiting.nights;
+      host.changedBy.push(change.id);
+    }
+    visiting.nights = 0;
+    visiting.dayTrip = true;
+    visiting.changedBy.push(change.id);
+  }
+  for (const change of chosen.filter((c) => c.op.kind === 'reorder')) {
+    const op = change.op as Extract<PlanChangeOp, { kind: 'reorder' }>;
+    /* Each bed carries the day trips written after it. */
+    const groups: { bed: ProposalStop | null; trips: ProposalStop[] }[] = [];
+    for (const stop of working) {
+      if (!stop.dayTrip || groups.length === 0) groups.push({ bed: stop.dayTrip ? null : stop, trips: stop.dayTrip ? [stop] : [] });
+      else groups[groups.length - 1]!.trips.push(stop);
+    }
+    const rank = (label: string) => {
+      const i = op.order.indexOf(label);
+      return i < 0 ? Number.POSITIVE_INFINITY : i;
+    };
+    const ordered = groups.filter((g) => g.bed && rank(g.bed.label) !== Number.POSITIVE_INFINITY).sort((a, b) => rank(a.bed!.label) - rank(b.bed!.label));
+    let k = 0;
+    const next = groups.map((g) => (g.bed && rank(g.bed.label) !== Number.POSITIVE_INFINITY ? ordered[k++]! : g));
+    working = next.flatMap((g) => [...(g.bed ? [g.bed] : []), ...g.trips]);
+    for (const s of working) if (!s.dayTrip) s.changedBy.push(change.id);
+  }
+  for (const change of chosen.filter((c) => c.op.kind === 'nights')) {
+    const op = change.op as Extract<PlanChangeOp, { kind: 'nights' }>;
+    const targets = op.shifts.map((shift) => ({ shift, stop: working.find((s) => s.label === shift.label && !s.dayTrip) }));
+    /* A shift moves nights between stays; if either end is gone, it does not apply. */
+    if (targets.some((t) => !t.stop)) continue;
+    for (const { shift, stop } of targets) {
+      stop!.nights = Math.max(1, stop!.nights + shift.delta);
+      stop!.changedBy.push(change.id);
+    }
+  }
+  for (const change of chosen.filter((c) => c.op.kind === 'transport')) {
+    const op = change.op as Extract<PlanChangeOp, { kind: 'transport' }>;
+    const target = working.find((s) => s.label === op.toLabel);
+    if (!target) continue;
+    target.transportIn = op.mode;
+    target.changedBy.push(change.id);
+  }
+  return working;
+}
+
+/** The pace and route numbers of one version, from the placed originals. All estimates. */
+export function measurePlanVersion(placed: readonly PlanCheckStopInput[], version: readonly ProposalStop[], totalNights: number | null): PlanVersionMeasure {
+  const byLabel = new Map(placed.map((s) => [s.label, s] as const));
+  const inputs: PlanCheckStopInput[] = version.map((s) => ({ ...(byLabel.get(s.label) ?? { label: s.label, point: null, countryCode: null, kind: 'named_place' as IntentNodeKind, nightsBasis: s.nightsBasis }), nights: s.nights, dayTrip: s.dayTrip }));
+  const pace = readPace(inputs, totalNights);
+  const placedBeds = pace.bases.filter((b) => b.stop.point);
+  const routeKm = placedBeds.length >= 2 && placedBeds.length === pace.bases.length ? pathKm(placedBeds.map((b) => b.stop.point!), placedBeds.map((_, i) => i)) : null;
+  return { verdict: pace.verdict, bases: pace.bases.length, hotelMoves: pace.hotelMoves, moveMinutes: Math.round(pace.moveMinutes), moveDays: Math.round(pace.moveDays * 10) / 10, routeKm: routeKm === null ? null : Math.round(routeKm) };
+}
+
+function savingOf(before: PlanVersionMeasure, after: PlanVersionMeasure): PlanChange['saving'] {
+  return {
+    moveMinutes: Math.round(before.moveMinutes - after.moveMinutes),
+    hotelMoves: before.hotelMoves - after.hotelMoves,
+    routeKm: before.routeKm !== null && after.routeKm !== null ? Math.round(before.routeKm - after.routeKm) : 0,
+  };
+}
+
+/** Each way, how long a day trip from this host would take; null when it is not a reasonable day trip. */
+function dayTripMinutes(host: PlanCheckStopInput | undefined, visit: PlanCheckStopInput): number | null {
+  if (!host?.point || !visit.point) return null;
+  const est = estimateMove({ point: host.point, countryCode: host.countryCode }, { point: visit.point, countryCode: visit.countryCode });
+  if (est.mode === 'flight' || est.minutes === null || est.minutes > DAY_TRIP_MAX_MINUTES) return null;
+  return est.minutes;
+}
+
+function proposeChanges(input: { stops: readonly PlanCheckStopInput[]; totalNights: number | null; pace: PaceReading; reorder: number[] | null; moves: readonly PlanMove[]; findings: readonly PlanFinding[] }): PlanProposal {
+  const { stops, totalNights, pace } = input;
+  const original = stops.map(toProposalStop);
+  const byLabel = new Map(stops.map((s) => [s.label, s] as const));
+  const changes: PlanChange[] = [];
+  const measureOriginal = measurePlanVersion(stops, original, totalNights);
+  const add = (draft: Omit<PlanChange, 'saving'>) => {
+    const after = measurePlanVersion(stops, applyPlanChanges(original, [{ ...draft, saving: { moveMinutes: 0, hotelMoves: 0, routeKm: 0 } }], new Set([draft.id])), totalNights);
+    changes.push({ ...draft, saving: savingOf(measureOriginal, after) });
+  };
+
+  /* 1. The order. Safe when it keeps every stop and night and moves nothing booked or dated. */
+  if (input.reorder) {
+    const order = input.reorder.map((i) => stops[i]!.label);
+    const bedsBefore = stops.filter((s) => !s.dayTrip).map((s) => s.label);
+    const moved = stops.filter((s) => !s.dayTrip && (s.fixed || s.dates) && bedsBefore.indexOf(s.label) !== order.indexOf(s.label));
+    add({
+      id: 'reorder',
+      kind: 'reorder',
+      class: moved.length > 0 ? 'major' : 'safe',
+      sentence: `Visit them in this order: ${order.join(' → ')}.`,
+      why: 'The order as written doubles back; this one covers less ground, with your first and last stops kept.',
+      touches: moved.map((s) => (s.fixed ? `moves your booked stay in ${s.label}` : `moves the dates you gave ${s.label}`)),
+      op: { kind: 'reorder', order },
+    });
+  }
+
+  /* 2. Short stops: a day trip from a neighbour where one is close enough, else a cut — as many as the pace needs. */
+  if (totalNights !== null && (pace.verdict === 'too_much' || pace.verdict === 'full')) {
+    const bedLabels = pace.bases.map((b) => b.stop.label);
+    const gone = new Set<string>();
+    for (const short of pace.shortStops) {
+      const stop = short.stop;
+      if (stop.fixed || !stop.point) continue;
+      const at = bedLabels.indexOf(stop.label);
+      const neighbours = [bedLabels[at - 1], bedLabels[at + 1]].filter((n): n is string => Boolean(n) && !gone.has(n!));
+      let best: { host: string; minutes: number } | null = null;
+      for (const n of neighbours) {
+        const minutes = dayTripMinutes(byLabel.get(n), stop);
+        if (minutes !== null && (!best || minutes < best.minutes)) best = { host: n, minutes };
+      }
+      if (!best) continue;
+      gone.add(stop.label);
+      const nights = stop.nights ?? 0;
+      add({
+        id: `day-trip-${stop.label}`,
+        kind: 'day_trip',
+        class: 'major',
+        sentence: `See ${stop.label} as a day trip from ${best.host} — about ${formatPlanMinutes(best.minutes)} each way (estimate) — and give its ${plural(nights, 'night')} to ${best.host}.`,
+        why: `${stop.label} gets ${plural(nights, 'night')}; a place like this needs about ${minNightsFor(stop.kind)} to be more than a check-in and a check-out. One hotel move fewer.`,
+        touches: [`turns ${stop.label}, a place you named to sleep in, into a day trip`, ...(stated(stop.nightsBasis) ? [`changes the ${plural(nights, 'night')} you gave ${stop.label}`] : [])],
+        op: { kind: 'day_trip', label: stop.label, host: best.host },
+      });
+    }
+
+    /* Cuts, freely: while the plan with every change so far is still too much, drop the short stop that costs the route most to reach. */
+    for (let guard = 0; guard < 12; guard += 1) {
+      const current = applyPlanChanges(original, changes, new Set(changes.map((c) => c.id)));
+      const now = readPace(current.map((s) => ({ ...byLabel.get(s.label)!, nights: s.nights, dayTrip: s.dayTrip })), totalNights);
+      if (now.verdict !== 'too_much' || now.bases.length <= 2) break;
+      const beds = current.filter((s) => !s.dayTrip);
+      const candidates = beds
+        .map((bed, i) => ({ bed, i }))
+        .filter(({ bed, i }) => i > 0 && i < beds.length - 1 && !bed.fixed && bed.nights < minNightsFor(byLabel.get(bed.label)!.kind))
+        .map(({ bed, i }) => {
+          const p = byLabel.get(beds[i - 1]!.label)!.point;
+          const s = byLabel.get(bed.label)!.point;
+          const n = byLabel.get(beds[i + 1]!.label)!.point;
+          return { bed, i, detour: p && s && n ? haversineKm(p, s) + haversineKm(s, n) - haversineKm(p, n) : null };
+        })
+        .filter((c): c is { bed: ProposalStop; i: number; detour: number } => c.detour !== null)
+        .sort((a, b) => b.detour - a.detour);
+      const drop = candidates[0];
+      if (!drop) break;
+      const receiver = beds[drop.i - 1]!;
+      const onward = beds[drop.i + 1]!;
+      const source = byLabel.get(drop.bed.label)!;
+      add({
+        id: `cut-${drop.bed.label}`,
+        kind: 'cut',
+        class: 'major',
+        sentence: `Drop ${drop.bed.label}: it is about ${Math.round(drop.detour)} km off the line between ${receiver.label} and ${onward.label} (straight-line), and its ${plural(drop.bed.nights, 'night')} go to ${receiver.label}.`,
+        why: `Even with the changes above, ${plural(now.bases.length, 'place')} in ${plural(totalNights, 'night')} is too many hotel moves; ${drop.bed.label} is the stop furthest off the route.`,
+        touches: [`removes ${drop.bed.label}, a place you named`, ...(source.mustSee?.length ? [`drops what you wanted to see there: ${list(source.mustSee)}`] : []), ...(stated(source.nightsBasis) ? [`changes the ${plural(source.nights ?? 0, 'night')} you gave it`] : [])],
+        op: { kind: 'cut', label: drop.bed.label, receiver: receiver.label },
+      });
+    }
+  }
+
+  /* 3. Nights Sidequest split itself: one night from a long even-split stay to a short one is ours to move. */
+  {
+    const beds = original.filter((s) => !s.dayTrip);
+    const shortOnes = beds.filter((s) => s.nightsBasis === 'spread' && s.nights < minNightsFor(byLabel.get(s.label)!.kind));
+    const donors = beds.filter((s) => s.nightsBasis === 'spread' && s.nights - 1 >= minNightsFor(byLabel.get(s.label)!.kind));
+    const touched = new Set(changes.flatMap((c) => (c.op.kind === 'cut' || c.op.kind === 'day_trip' ? [c.op.label] : [])));
+    const left = new Map(donors.map((d) => [d.label, d.nights] as const));
+    for (const short of shortOnes) {
+      const donor = donors.find((d) => d.label !== short.label && !touched.has(d.label) && left.get(d.label)! - 1 >= minNightsFor(byLabel.get(d.label)!.kind));
+      if (!donor || touched.has(short.label)) continue;
+      left.set(donor.label, left.get(donor.label)! - 1);
+      add({
+        id: `nights-${short.label}`,
+        kind: 'nights',
+        class: 'safe',
+        sentence: `Move one night from ${donor.label} to ${short.label}.`,
+        why: `You didn’t say how long to stay in either; ${short.label} needs about ${minNightsFor(byLabel.get(short.label)!.kind)} nights to be more than arriving and leaving, and ${donor.label} keeps enough.`,
+        touches: [],
+        op: { kind: 'nights', shifts: [{ label: short.label, delta: 1 }, { label: donor.label, delta: -1 }] },
+      });
+    }
+  }
+
+  /* 4. Transport: a flight where the ground leg is long. Major when it replaces a way they chose. */
+  for (const move of input.moves) {
+    if (move.dayTrip || !move.flightSuggested || move.mode === 'flight' || move.flightMinutes === null) continue;
+    const to = stops[move.toIndex]!;
+    if (to.transportIn === 'flight') continue;
+    const theirs = to.transportIn ?? null;
+    add({
+      id: `fly-${to.label}`,
+      kind: 'transport',
+      class: theirs ? 'major' : 'safe',
+      sentence: `Fly from ${move.from} to ${move.to}.`,
+      why: `${Math.round(move.straightKm ?? 0)} km in a straight line: about ${formatPlanMinutes(move.flightMinutes)} door to door by air against about ${move.minutes !== null ? formatPlanMinutes(move.minutes) : 'an unestimated time'} by ${PLAN_MOVE_MODE_LABELS[move.mode ?? 'drive']} (both estimates).`,
+      touches: theirs ? [`changes the ${STATED_TRANSPORT_LABELS[theirs]} you planned to ${to.label}`] : [],
+      op: { kind: 'transport', toLabel: to.label, mode: 'flight' },
+    });
+  }
+
+  const suggested = applyPlanChanges(original, changes, new Set(changes.map((c) => c.id)));
+  const unresolved = input.findings.filter((f) => f.topic === 'placement' || (f.topic === 'transport' && f.id.startsWith('water'))).map((f) => f.sentence);
+  return { original, suggested, changes, unresolved, measure: { original: measureOriginal, suggested: measurePlanVersion(stops, suggested, totalNights) } };
+}
+
+/** The changes Sidequest applies unless the traveller says no: every safe one. */
+export function defaultAcceptedChanges(changes: readonly PlanChange[]): Set<string> {
+  return new Set(changes.filter((c) => c.class === 'safe').map((c) => c.id));
 }

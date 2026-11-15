@@ -3,7 +3,7 @@ import { buildTravelerProfile, contractBands, defaultAnswers, emptyComposerAnswe
 import { buildCanonicalTripBuildInput, timingIntentOf } from './canonical-input';
 import { buildCompositionTask } from './composition';
 import { adoptChosenWindow, travelerBriefFor } from './production-plan';
-import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
+import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft, statedItineraryOutcome } from './trip-contract';
 import { auditItinerary } from './quality-audit';
 import type { TripDraft } from './trip-draft';
 import { readFileSync } from 'node:fs';
@@ -201,5 +201,53 @@ describe('the audit reads the contract', () => {
     const bad = auditItinerary({ draft, itinerary: moved, profile: irelandProfile, trip, contract, contractConflicts: [] });
     expect(bad.checks.find((c) => c.id === 'locked_dates_preserved')?.ok).toBe(false);
     expect(bad.passed).toBe(false);
+  });
+});
+
+describe('the contract — a stated itinerary and how the party is known', () => {
+  const trip = tripWith({ startDate: '2027-06-13', endDate: '2027-06-20', adults: 2 });
+  const stated = {
+    version: 1 as const,
+    source: 'plan_check' as const,
+    stops: [
+      { id: 's1', label: 'Sapporo', nights: 4, nightsProvenance: 'stated' as const, dayTrip: false, fixed: false, mustSee: ['Odori Park'] },
+      { id: 's2', label: 'Furano', nights: 3, nightsProvenance: 'stated' as const, dayTrip: false, fixed: true, mustSee: [] },
+    ],
+    parseConfidence: 1,
+    acceptedChanges: [],
+    recordedAt: NOW.toISOString(),
+  };
+
+  it('holds every stated stay at its lock, makes the stated bases the base count, and checks the built days against them', () => {
+    const composer = composerWith({ statedItinerary: stated, partyBasis: 'stated', duration: { mode: 'fixed', nights: 7, wantsRecommendation: false } });
+    const input = buildCanonicalTripBuildInput({ trip, composer, profile, now: NOW });
+    expect(input.movement.desiredBaseCount).toMatchObject({ value: 2, source: 'explicit' });
+    expect(input.movement.maxBaseChanges).toMatchObject({ value: 1, source: 'explicit' });
+    expect(input.ownWords.mustDo).toContain('Odori Park');
+    const contract = buildTripContract({ trip, input, bookedFacts: [], now: NOW });
+    expect(contract.statedItinerary?.stays.map((s) => [s.label, s.nights, s.lock])).toEqual([
+      ['Sapporo', 4, 'user_explicit'],
+      ['Furano', 3, 'booked_lock'],
+    ]);
+    expect(contractBands(contract).mustKeep.join(' ')).toMatch(/Sapporo \(4 nights\), then Furano \(3 nights, booked\)/);
+    const kept = statedItineraryOutcome(contract, ['Sapporo', 'Sapporo', 'Sapporo', 'Sapporo', 'Furano', 'Furano', 'Furano', 'Furano'].map((baseName) => ({ baseName })), NOW);
+    expect(kept.conflicts).toHaveLength(0);
+    const lost = statedItineraryOutcome(contract, ['Sapporo', 'Sapporo', 'Sapporo', 'Sapporo', 'Sapporo', 'Furano', 'Furano', 'Furano'].map((baseName) => ({ baseName })), NOW);
+    expect(lost.conflicts.map((c) => c.lock)).toEqual(['user_explicit', 'booked_lock']);
+    const record = contractEnforcementRecord(contract, lost.conflicts, lost.outcomes);
+    expect(record.statedItinerary?.outcomes.map((o) => o.outcome)).toEqual(['nights_changed', 'nights_changed']);
+    expect(record.partyBasis).toBe('stated');
+  });
+
+  it('holds an assumed party where the model may plan around it, and says so', () => {
+    const composer = composerWith({ partyBasis: 'assumed' });
+    const input = buildCanonicalTripBuildInput({ trip, composer, profile, now: NOW });
+    const contract = buildTripContract({ trip, input, bookedFacts: [], now: NOW });
+    expect(contract.party.adults.lock).toBe('sidequest_inferred');
+    expect(contract.party.basis).toBe('assumed');
+    expect(contract.assumptions.join(' ')).toMatch(/party of 2 adults is assumed/);
+    const bands = contractBands(contract);
+    expect(bands.mustKeep.join(' ')).not.toMatch(/The party:/);
+    expect(bands.mayDecide.join(' ')).toMatch(/party is not known/);
   });
 });

@@ -272,9 +272,11 @@ function ProfileMark({ assumed, open }: { assumed: boolean; open: boolean }) {
 }
 
 /** The party, in people rather than a head count when a count is all there is. */
-export function partyLine(traveller: { adults: number; children: number }): string {
+export function partyLine(traveller: { adults: number; children: number; partyAssumed?: boolean }): string {
   const adults = `${traveller.adults} ${traveller.adults === 1 ? 'adult' : 'adults'}`;
-  return traveller.children > 0 ? `${adults}, ${traveller.children} ${traveller.children === 1 ? 'child' : 'children'}` : adults;
+  const counts = traveller.children > 0 ? `${adults}, ${traveller.children} ${traveller.children === 1 ? 'child' : 'children'}` : adults;
+  /* Never a silent two adults: an assumed party says so wherever it is shown. */
+  return traveller.partyAssumed ? `${counts} (assumed)` : counts;
 }
 
 export function TripProfileList({ sketch, compact = false }: { sketch: Sketch; compact?: boolean }) {

@@ -2,7 +2,10 @@ import 'server-only';
 import {
   contractFact,
   countLockedFacts,
+  plannedStaysFromNights,
+  statedStayConflicts,
   windowConflict,
+  type StatedStayOutcome,
   type ContractConflict,
   type ContractEnforcementRecord,
   type ContractFact,
@@ -143,6 +146,8 @@ export function buildTripContract(input: {
   if (timing.sidequestChooses) assumptions.push('The window is open; the composition chooses it.');
   if (b.movement.maxDailyDriveMinutes.source === 'smart_default') assumptions.push(`Daily driving ceiling of ${b.movement.maxDailyDriveMinutes.value} minutes is Sidequest's default.`);
   if (b.movement.desiredBaseCount.source === 'smart_default') assumptions.push(`About ${b.movement.desiredBaseCount.value} base(s) is Sidequest's read of the trip length.`);
+  if (b.partyBasis === 'assumed') assumptions.push(`The party of ${b.party.adults} adult${b.party.adults === 1 ? '' : 's'}${b.party.children > 0 ? ` and ${b.party.children} child${b.party.children === 1 ? '' : 'ren'}` : ''} is assumed — nobody said who is going.`);
+  for (const stay of b.statedItinerary?.stays ?? []) if (stay.lock === 'sidequest_inferred') assumptions.push(`${stay.nights} night${stay.nights === 1 ? '' : 's'} in ${stay.label} is Sidequest's split of your plan, not your number.`);
 
   return {
     version: CONTRACT_VERSION,
@@ -159,11 +164,13 @@ export function buildTripContract(input: {
       decidedBy,
     },
     party: {
-      adults: contractFact({ value: b.party.adults, source: 'traveller', lock: 'user_explicit', decidedAt: at }),
-      children: contractFact({ value: b.party.children, source: 'traveller', lock: 'user_explicit', decidedAt: at }),
+      /* An assumed party is Sidequest's, held where the model may plan around it and every screen labels it. */
+      adults: b.partyBasis === 'assumed' ? contractFact({ value: b.party.adults, source: 'sidequest_default', lock: 'sidequest_inferred', decidedAt: at, reason: 'Nobody said who is going; two adults is the assumption.' }) : contractFact({ value: b.party.adults, source: 'traveller', lock: 'user_explicit', decidedAt: at }),
+      children: b.partyBasis === 'assumed' ? contractFact({ value: b.party.children, source: 'sidequest_default', lock: 'sidequest_inferred', decidedAt: at }) : contractFact({ value: b.party.children, source: 'traveller', lock: 'user_explicit', decidedAt: at }),
       members,
       dietaryHard,
       needs,
+      basis: members.length > 0 && b.partyBasis === 'assumed' ? 'profile' : b.partyBasis,
     },
     transport: {
       preference: contractFact({ value: b.movement.preference, source: b.movement.preference === 'no_preference' ? 'unknown' : 'traveller', lock: b.movement.preference === 'no_preference' ? 'model_proposed' : 'user_explicit', decidedAt: at }),
@@ -175,6 +182,7 @@ export function buildTripContract(input: {
     booked: input.bookedFacts.map((line) => contractFact({ value: line, source: 'booking', lock: 'booked_lock', decidedAt: at })),
     priorities: [...priorities, ...avoided],
     assumptions,
+    ...(b.statedItinerary ? { statedItinerary: b.statedItinerary } : {}),
   };
 }
 
@@ -229,7 +237,7 @@ export function enforceContractOnDraft(contract: TripContract, draft: TripDraft,
   return { draft: next, conflicts };
 }
 
-export function contractEnforcementRecord(contract: TripContract, conflicts: readonly ContractConflict[]): ContractEnforcementRecord {
+export function contractEnforcementRecord(contract: TripContract, conflicts: readonly ContractConflict[], statedOutcomes: readonly StatedStayOutcome[] = []): ContractEnforcementRecord {
   return {
     version: 1,
     contractVersion: contract.version,
@@ -237,5 +245,21 @@ export function contractEnforcementRecord(contract: TripContract, conflicts: rea
     timingDecidedBy: contract.timing.decidedBy,
     conflicts: [...conflicts],
     lockedFacts: countLockedFacts(contract),
+    ...(contract.statedItinerary
+      ? { statedItinerary: { stays: contract.statedItinerary.stays.map((s) => ({ ...s, mustSee: [...s.mustSee] })), outcomes: [...statedOutcomes], acceptedChanges: contract.statedItinerary.acceptedChanges, parseConfidence: contract.statedItinerary.parseConfidence } }
+      : {}),
+    ...(contract.party.basis ? { partyBasis: contract.party.basis } : {}),
   };
+}
+
+/**
+ * THE STATED STAYS AGAINST THE PLAN THAT WAS BUILT.
+ *
+ * Read off the final itinerary's nightly bases (every day but the last). A
+ * stated stay the plan does not keep is a recorded conflict and a sentence on
+ * the overview — never a silent replacement.
+ */
+export function statedItineraryOutcome(contract: TripContract, days: readonly { baseName: string }[], now: Date): { outcomes: StatedStayOutcome[]; conflicts: ContractConflict[] } {
+  if (!contract.statedItinerary || days.length < 2) return { outcomes: [], conflicts: [] };
+  return statedStayConflicts(contract.statedItinerary, plannedStaysFromNights(days.slice(0, -1).map((d) => d.baseName)), now.toISOString());
 }

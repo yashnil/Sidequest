@@ -54,14 +54,17 @@ test('a rushed plan is called too much, with estimated moves, and the improved v
   await expect(page.getByTestId('plan-check-finding').filter({ hasText: '3 places to sleep in 3 nights' })).toHaveCount(1);
   await expect(page.getByTestId('plan-check-finding').filter({ hasText: /ferry or a flight/ }).first()).toBeVisible();
 
-  await expect(page.getByTestId('plan-check-improved')).toBeVisible();
-  const plan = page.getByTestId('plan-check-plan-improved');
+  /* The change-aware proposal: original beside the version to plan; nobody said who is going, so one question, skipped. */
+  await expect(page.getByTestId('plan-check-original')).toBeVisible();
+  await expect(page.getByTestId('plan-check-suggested')).toBeVisible();
+  await page.getByTestId('party-later').click();
+  const plan = page.getByTestId('plan-check-plan');
   await waitUntilInteractive(plan);
   await plan.click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)$/, { timeout: 20_000 });
 });
 
-test('a jump too far for a day overland is a flight, and the plan as written becomes a trip', async ({ page }) => {
+test('a jump too far for a day overland is a flight, and the plan becomes a trip', async ({ page }) => {
   await checkPlan(page, 'Day 1-3: Bariloche\nDay 4-6: El Calafate');
 
   await expect(page.getByTestId('plan-check-result')).toBeVisible({ timeout: 20_000 });
@@ -70,9 +73,10 @@ test('a jump too far for a day overland is a flight, and the plan as written bec
   await expect(page.getByTestId('plan-check-move')).toContainText('door to door by air');
   await expect(page.getByTestId('plan-check-finding').filter({ hasText: /so this is a flight/ })).toHaveCount(1);
 
-  const asWritten = page.getByTestId('plan-check-plan-as-written');
-  await waitUntilInteractive(asWritten);
-  await asWritten.click();
+  await page.getByTestId('party-solo').click();
+  const plan = page.getByTestId('plan-check-plan');
+  await waitUntilInteractive(plan);
+  await plan.click();
   await page.waitForURL(/\/trips\/[^/]+\/(plan|questionnaire)$/, { timeout: 20_000 });
 });
 

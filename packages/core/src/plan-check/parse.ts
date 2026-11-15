@@ -1,5 +1,7 @@
 import { parseDestinationIntent, type IntentNodeKind } from '../destinations/intent-graph';
 import { countriesInText } from '../reference/countries';
+import { readPartyFromText, type PartyReading } from '../party/resolve';
+import type { StatedTransportMode } from '../contract/stated-itinerary';
 
 /**
  * "I ALREADY HAVE A PLAN" — THE TRAVELLER'S ROUGH PLAN, READ DETERMINISTICALLY.
@@ -39,6 +41,20 @@ export interface ParsedPlanStop {
   kind: IntentNodeKind;
   /** ISO country the label names or sits in, when its own words say so. */
   countryCode?: string;
+  /** "booked", "reserved", "confirmed": a stay that must not move. */
+  fixed: boolean;
+  /** Attractions named at this stop: "(Fushimi Inari, Kinkaku-ji)" or a day list's activities. */
+  mustSee: string[];
+  /** How they planned to arrive here: "by train", "(ferry)", "fly to…". */
+  transportIn: StatedTransportMode | null;
+  /** A date range written against this stop. */
+  dates: { start: string; end: string } | null;
+}
+
+export interface ParsedPlanEdge {
+  place: string | null;
+  /** "15:00" when they gave a time. */
+  time: string | null;
 }
 
 export interface ParsedPlan {
@@ -57,6 +73,13 @@ export interface ParsedPlan {
   format: 'day_list' | 'list';
   /** Things the reading noticed that the traveller should see (nights that do not add up). */
   notes: string[];
+  /** "Fly into…", "landing at 3pm": where and when they arrive, when they said. */
+  arrival: ParsedPlanEdge | null;
+  departure: ParsedPlanEdge | null;
+  /** Who is going, when their words say ("for my family of four", "solo"). */
+  party: PartyReading | null;
+  /** 0–1: how much of the plan the reading understood (places with nights of their own count most). */
+  confidence: number;
 }
 
 export const PLAN_TEXT_MAX = 2000;
@@ -250,7 +273,80 @@ function cleanPlace(raw: string): string {
     .trim();
 }
 
-function annotate(piece: string): Annotated {
+/* Commas, "and" and "&" inside brackets belong to the bracket ("Kyoto (Fushimi Inari, Kinkaku-ji)"), not to the list. */
+const P_COMMA = '\u0001';
+const P_AND = '\u0002';
+const P_AMP = '\u0003';
+function protectBrackets(text: string): string {
+  return text.replace(/\(([^()]*)\)/g, (_, inner: string) => `(${inner.replace(/,/g, P_COMMA).replace(/\s+and\s+/gi, ` ${P_AND} `).replace(/&/g, P_AMP)})`);
+}
+function restoreBrackets(text: string): string {
+  return text.replace(new RegExp(P_COMMA, 'g'), ',').replace(new RegExp(`\\s*${P_AND}\\s*`, 'g'), ' and ').replace(new RegExp(P_AMP, 'g'), '&');
+}
+
+const TRANSPORT_WORDS: readonly [RegExp, StatedTransportMode][] = [
+  [/^(?:train|trains|rail|shinkansen|tgv|ice|eurostar)$/i, 'rail'],
+  [/^(?:car|road|drive|driving|rental|hire car|road trip)$/i, 'drive'],
+  [/^(?:bus|coach)$/i, 'bus'],
+  [/^(?:ferry|boat)$/i, 'ferry'],
+  [/^(?:plane|air|flight|fly|flying)$/i, 'flight'],
+  [/^(?:foot|walk|walking|hike|hiking)$/i, 'walk'],
+];
+const TRANSPORT_ALT = 'train|trains|rail|shinkansen|tgv|eurostar|car|road|drive|driving|rental car|hire car|bus|coach|ferry|boat|plane|air|flight|fly|flying|foot|walk|walking';
+function transportOf(word: string): StatedTransportMode | null {
+  const folded = word.trim().toLowerCase().replace(/^the\s+/, '');
+  for (const [re, mode] of TRANSPORT_WORDS) if (re.test(folded)) return mode;
+  return null;
+}
+
+interface StopExtras {
+  fixed: boolean;
+  transportIn: StatedTransportMode | null;
+  mustSee: string[];
+}
+
+/** Take the stop's own marks out of its words: booked, the way in, the attractions in brackets. */
+function extractExtras(raw: string): { text: string; extras: StopExtras } {
+  let text = raw;
+  let fixed = false;
+  let transportIn: StatedTransportMode | null = null;
+  const mustSee: string[] = [];
+  if (/\(\s*(?:booked|reserved|confirmed|paid)\s*\)|\b(?:already\s+)?(?:booked|reserved|confirmed)\b/i.test(text)) {
+    fixed = true;
+    text = text.replace(/\(\s*(?:booked|reserved|confirmed|paid)\s*\)/gi, ' ').replace(/[-–—,]?\s*\b(?:already\s+)?(?:booked|reserved|confirmed)\b(?:\s+(?:hotel|stay|room))?/gi, ' ');
+  }
+  const leadingMove = new RegExp(String.raw`^\s*(?:then\s+)?(?:take\s+the\s+|by\s+)?(${TRANSPORT_ALT})\s+(?:to|into)\s+`, 'i').exec(text);
+  if (leadingMove) {
+    transportIn = transportOf(leadingMove[1]!);
+    text = text.slice(leadingMove[0].length);
+  }
+  const byMode = new RegExp(String.raw`\s*[-–—,]?\s*\b(?:by|via|on\s+the|take\s+the|taking\s+the)\s+(${TRANSPORT_ALT})\b`, 'i').exec(text);
+  if (byMode) {
+    transportIn ??= transportOf(byMode[1]!);
+    text = `${text.slice(0, byMode.index)} ${text.slice(byMode.index + byMode[0].length)}`;
+  }
+  text = text.replace(/\(([^()]*)\)/g, (whole, inner: string) => {
+    const content = restoreBrackets(inner).trim();
+    const mode = transportOf(content);
+    if (mode) {
+      transportIn ??= mode;
+      return ' ';
+    }
+    /* Nights, day trips and the like stay where `annotate` reads them. */
+    if (/^\s*(?:\d|a\s|an\s|one|two|three|four|five|six|seven|eight|nine|ten|day[-\s]?trip)/i.test(content) || content.length === 0) return whole;
+    const named = content.replace(/^(?:see|visit|for|incl(?:uding|\.)?|to see)\s+/i, '').split(/\s*(?:,|&|\band\b|\+)\s*/).map((n) => n.trim()).filter((n) => /\p{L}{2,}/u.test(n) && n.length <= 80);
+    mustSee.push(...named.slice(0, 8));
+    return ' ';
+  });
+  return { text: text.replace(/\s+/g, ' ').trim(), extras: { fixed, transportIn, mustSee } };
+}
+
+function annotate(piece: string): Annotated & StopExtras {
+  const { text: stripped, extras } = extractExtras(piece);
+  return { ...annotateCore(stripped), ...extras };
+}
+
+function annotateCore(piece: string): Annotated {
   let text = cleanPlace(piece);
   let dayTrip = false;
   const trip = /^(?:(?:a|one)\s+)?day[-\s]?trips?\s+(?:to\s+)?(.+)$/i.exec(text) ?? /^(.+?)\s*\(\s*day[-\s]?trip\s*\)$/i.exec(text) ?? /^(.+?)\s+(?:as\s+a\s+)?day[-\s]?trip$/i.exec(text);
@@ -283,7 +379,9 @@ function classify(label: string): { kind: IntentNodeKind; countryCode?: string }
   return { kind: 'named_place', ...(graph.countries.length === 1 ? { countryCode: graph.countries[0]! } : {}) };
 }
 
-const looksLikePlace = (label: string): boolean => /\p{L}{2,}/u.test(label) && label.length <= 80 && label.split(/\s+/).length <= 8;
+/* Words that are never a place on their own: what is left when a phrase around a place was read out ("for the"). */
+const FUNCTION_WORDS = new Set(['for', 'the', 'with', 'and', 'a', 'an', 'of', 'us', 'we', 'me', 'my', 'our', 'in', 'to', 'then', 'also', 'plus', 'just']);
+const looksLikePlace = (label: string): boolean => /\p{L}{2,}/u.test(label) && label.length <= 80 && label.split(/\s+/).length <= 8 && !label.toLowerCase().split(/\s+/).every((w) => FUNCTION_WORDS.has(w));
 
 /* ------------------------------------------------------------------------- */
 /* The two formats                                                            */
@@ -293,7 +391,7 @@ const DAY_LINE = /^\s*(?:days?|d)\s*(\d{1,2})(?:\s*(?:-|–|—|to|&|and)\s*(?:d
 const MOVE = /^(.+?)\s+(?:to|→|->|–>|=>|⟶)\s+(.+)$/i;
 
 interface DayListReading {
-  stops: { label: string; days: number }[];
+  stops: { label: string; days: number; mustSee: string[]; fixed: boolean; transportIn: StatedTransportMode | null }[];
   totalDays: number;
 }
 
@@ -301,25 +399,30 @@ interface DayListReading {
 function readDayList(lines: string[]): DayListReading | null {
   const marked = lines.map((line) => DAY_LINE.exec(line)).filter((m): m is RegExpExecArray => m !== null && m[3]!.trim().length > 0);
   if (marked.length < 2) return null;
-  const days: { day: number; place: string }[] = [];
+  const days: { day: number; place: string; mustSee: string[]; fixed: boolean; transportIn: StatedTransportMode | null }[] = [];
   for (const m of marked) {
     const from = Number(m[1]);
     const to = m[2] ? Math.max(from, Number(m[2])) : from;
-    const body = m[3]!.trim();
+    const { text: body, extras } = extractExtras(m[3]!.trim());
     const move = MOVE.exec(body);
     const sleeping = move ? move[2]! : body;
     /* The base is the first named thing on the line; activities after a dash or a colon belong to it. */
-    const place = cleanPlace(sleeping.split(/\s+[-–—]\s+|[,:;(]|\s+\+\s+/)[0] ?? sleeping);
+    const parts = sleeping.split(/\s+[-–—]\s+|[,:;(]|\s+\+\s+/);
+    const place = cleanPlace(parts[0] ?? sleeping);
     if (!looksLikePlace(place)) continue;
-    for (let d = from; d <= Math.min(to, 60); d += 1) days.push({ day: d, place });
+    const activities = parts.slice(1).map((a) => cleanPlace(a.replace(/\)$/, ''))).filter((a) => looksLikePlace(a) && a.toLowerCase() !== place.toLowerCase());
+    for (let d = from; d <= Math.min(to, 60); d += 1) days.push({ day: d, place, mustSee: d === from ? [...extras.mustSee, ...activities] : [], fixed: extras.fixed, transportIn: d === from && move ? extras.transportIn : null });
   }
   if (days.length === 0) return null;
   days.sort((a, b) => a.day - b.day);
-  const stops: { label: string; days: number }[] = [];
-  for (const { place } of days) {
+  const stops: DayListReading['stops'] = [];
+  for (const { place, mustSee, fixed, transportIn } of days) {
     const last = stops[stops.length - 1];
-    if (last && last.label.toLowerCase() === place.toLowerCase()) last.days += 1;
-    else stops.push({ label: place, days: 1 });
+    if (last && last.label.toLowerCase() === place.toLowerCase()) {
+      last.days += 1;
+      last.mustSee.push(...mustSee.filter((m) => !last.mustSee.includes(m)));
+      last.fixed ||= fixed;
+    } else stops.push({ label: place, days: 1, mustSee: [...mustSee], fixed, transportIn });
   }
   return { stops, totalDays: Math.max(...days.map((d) => d.day)) };
 }
@@ -328,14 +431,83 @@ const SEGMENT = /\r?\n|;|→|->|=>|⟶|\s>\s|\bthen\b|\bafter\s+that\b|\bfollowe
 const PIECE = /\s*(?:,|&|\s\+\s|\s\/\s|\band\b)\s*/i;
 
 /* ------------------------------------------------------------------------- */
+/* Arrival, departure, who is going, and a stop's own dates                   */
+/* ------------------------------------------------------------------------- */
+
+function clockOf(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(raw.trim());
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  const ap = m[3]?.toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  if (!ap && !m[2]) return null;
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+const EDGE_PLACE = String.raw`([A-ZÀ-ɏ][\p{L}'’.\- ]{1,40}?)`;
+const EDGE_TIME = String.raw`(?:\s+(?:at|around|by)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?`;
+
+/** "Fly into Tokyo at 3pm", "fly home from Osaka": the edges, with the place left in the words as a stop. */
+function readEdges(text: string): { text: string; arrival: ParsedPlanEdge | null; departure: ParsedPlanEdge | null } {
+  let out = text;
+  let arrival: ParsedPlanEdge | null = null;
+  let departure: ParsedPlanEdge | null = null;
+  const arrive = new RegExp(String.raw`\b(?:fly(?:ing)?\s+in(?:to)?|arriv(?:e|ing)\s+(?:in(?:to)?|at)|land(?:ing)?\s+(?:in|at))\s+${EDGE_PLACE}${EDGE_TIME}(?=\s*(?:[,.;:\n]|\bthen\b|$))`, 'iu').exec(out);
+  if (arrive) {
+    arrival = { place: arrive[1]!.trim(), time: clockOf(arrive[2]) };
+    out = `${out.slice(0, arrive.index)}${arrive[1]!.trim()}${out.slice(arrive.index + arrive[0].length)}`;
+  }
+  const depart = new RegExp(String.raw`\b(?:fly(?:ing)?\s+(?:home\s+|back\s+)?(?:out\s+of|from)|depart(?:ing)?\s+(?:from\s+)?|leav(?:e|ing)\s+from)\s+${EDGE_PLACE}${EDGE_TIME}(?=\s*(?:[,.;:\n]|$))`, 'iu').exec(out);
+  if (depart) {
+    departure = { place: depart[1]!.trim(), time: clockOf(depart[2]) };
+    out = `${out.slice(0, depart.index)}${depart[1]!.trim()}${out.slice(depart.index + depart[0].length)}`;
+  }
+  return { text: out, arrival, departure };
+}
+
+const PARTY_PHRASES: readonly RegExp[] = [
+  /\b(?:(?:for|with)\s+)?(?:just\s+)?(?:the\s+)?two\s+of\s+us\b|\bas\s+a\s+couple\b|\b(?:for\s+)?our\s+honeymoon\b/gi,
+  /\b(?:for|with)?\s*(?:my|our|the)?\s*family\s+of\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b/gi,
+  /\b(?:with|and|plus)\s+(?:my|our|the)?\s*(?:\d{1,2}|one|two|three|four|five|six)?\s*(?:kids|children|little ones|toddlers?|teens|teenagers)\b/gi,
+  /\b(?:travell?ing\s+)?(?:solo|by myself|on my own|just me)\b/gi,
+  /\b(?:for\s+(?:the\s+)?)?(?:\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+(?:of us|people|persons|adults|friends|travell?ers)\b/gi,
+  /\b(?:with\s+)?my\s+(?:partner|wife|husband|girlfriend|boyfriend|fianc[ée]e?)\b/gi,
+];
+
+/** Who is going is not a place: their words about the party come out before the list is read. */
+function stripParty(text: string): string {
+  let out = text;
+  for (const re of PARTY_PHRASES) out = out.replace(re, ' ');
+  return out;
+}
+
+/** A date range written against one stop ("Kyoto 3–6 April"), taken out of its words. */
+function readStopDates(piece: string, now: Date): { text: string; dates: { start: string; end: string } | null } {
+  const span: Span = { text: piece };
+  const read = readDates(span, now);
+  if (read.startDate && read.endDate) return { text: span.text, dates: { start: read.startDate, end: read.endDate } };
+  return { text: piece, dates: null };
+}
+
+/* ------------------------------------------------------------------------- */
 /* The reading                                                                */
 /* ------------------------------------------------------------------------- */
 
 export function parsePlanText(raw: string, now: Date = new Date()): ParsedPlan {
   const text = String(raw ?? '').slice(0, PLAN_TEXT_MAX).replace(/\u00a0/g, ' ');
-  const { body, question } = splitQuestion(text);
+  const { body: asked, question } = splitQuestion(text);
+  const party = readPartyFromText(text);
+  const edges = readEdges(stripParty(asked));
+  /* A full stop between sentences ends a segment ("Fly into Rome. 3 nights in Rome…"); "St. Moritz" does not. */
+  const body = protectBrackets(edges.text).replace(/(?<!\b(?:St|Mt|Ste|Ft|Pt|Mr|Dr|no))\.\s+(?=[A-Z0-9])/g, '\n');
+  /* Two or more stops carrying their own date ranges: the dates are per stop, and the trip runs from the first to the last. */
+  const perStopDates = body.split(SEGMENT).flatMap((seg) => seg.split(PIECE)).filter((piece) => readStopDates(piece, now).dates !== null).length >= 2;
   const span: Span = { text: body };
-  const dates = readDates(span, now);
+  const dates = perStopDates ? { startDate: null, endDate: null, month: null } : readDates(span, now);
   const length = readUnambiguousLength(span);
   const notes: string[] = [];
   const contextCountries = new Set<string>();
@@ -365,18 +537,23 @@ export function parsePlanText(raw: string, now: Date = new Date()): ParsedPlan {
       const last = index === dayList.stops.length - 1;
       /* A day you wake up in a place is a night there, except the last day, which is the day you leave. */
       const nights = last ? Math.max(0, stop.days - 1) : stop.days;
-      return { label: stop.label, nights, nightsBasis: 'day_list' as const, dayTrip: false, ...classify(stop.label) };
+      return { label: stop.label, nights, nightsBasis: 'day_list' as const, dayTrip: false, ...classify(stop.label), fixed: stop.fixed, mustSee: stop.mustSee.slice(0, 8), transportIn: stop.transportIn, dates: null };
     });
     if (totalNights === null) {
       totalNights = Math.max(0, dayList.totalDays - 1);
       totalBasis = 'day_list';
     }
   } else {
-    const annotated: Annotated[] = [];
+    const annotated: (Annotated & StopExtras & { dates: { start: string; end: string } | null })[] = [];
     for (const segment of cleaned.split(SEGMENT)) {
-      for (const piece of segment.split(PIECE)) {
-        if (!piece.trim()) continue;
-        const reading = annotate(piece);
+      for (const rawPiece of segment.split(PIECE)) {
+        if (!rawPiece.trim()) continue;
+        const stopDates = readStopDates(rawPiece, now);
+        const reading = { ...annotate(stopDates.text), dates: stopDates.dates };
+        if (stopDates.dates && reading.count === null && !reading.dayTrip) {
+          reading.count = nightsBetween(stopDates.dates.start, stopDates.dates.end);
+          reading.unit = 'night';
+        }
         if (!reading.label && reading.count !== null && totalNights === null) {
           /* "…, 10 days" on its own: the trip's length, not a place. */
           totalNights = reading.unit === 'day' ? Math.max(0, reading.count - 1) : reading.count;
@@ -413,6 +590,10 @@ export function parsePlanText(raw: string, now: Date = new Date()): ParsedPlan {
         dayTrip: place.dayTrip,
         kind: place.kind,
         ...(place.countryCode ? { countryCode: place.countryCode } : {}),
+        fixed: place.fixed,
+        mustSee: place.mustSee,
+        transportIn: place.transportIn,
+        dates: place.dates,
       });
     }
   }
@@ -423,9 +604,13 @@ export function parsePlanText(raw: string, now: Date = new Date()): ParsedPlan {
     const prev = merged[merged.length - 1];
     if (prev && !prev.dayTrip && !stop.dayTrip && prev.label.toLowerCase() === stop.label.toLowerCase()) {
       prev.nights = prev.nights === null && stop.nights === null ? null : (prev.nights ?? 0) + (stop.nights ?? 0);
+      prev.nightsBasis ??= stop.nightsBasis;
+      prev.transportIn ??= stop.transportIn;
+      prev.fixed ||= stop.fixed;
+      prev.mustSee = [...new Set([...prev.mustSee, ...stop.mustSee])].slice(0, 8);
       continue;
     }
-    merged.push({ ...stop });
+    merged.push({ ...stop, mustSee: [...stop.mustSee] });
   }
   stops = merged.slice(0, PLAN_MAX_STOPS);
   if (merged.length > PLAN_MAX_STOPS) notes.push(`Only the first ${PLAN_MAX_STOPS} places were read; a plan longer than that is easier to check in parts.`);
@@ -457,16 +642,44 @@ export function parsePlanText(raw: string, now: Date = new Date()): ParsedPlan {
     notes.push(`Your places add up to ${statedSum} night${statedSum === 1 ? '' : 's'}, but the trip is ${totalNights} night${totalNights === 1 ? '' : 's'}.`);
   }
 
+  /* Per-stop dates make the trip's own: first arrival to last departure. */
+  let startDate = dates.startDate;
+  let endDate = dates.endDate;
+  if (perStopDates) {
+    const dated = stops.filter((s) => s.dates);
+    const first = dated[0]?.dates?.start ?? null;
+    const last = dated[dated.length - 1]?.dates?.end ?? null;
+    if (first && last && nightsBetween(first, last)) {
+      startDate = first;
+      endDate = last;
+      if (totalBasis !== 'dates') {
+        totalNights = nightsBetween(first, last);
+        totalBasis = 'dates';
+      }
+    }
+  }
+
+  /* How much was understood: every place counts, and a place with nights of its own counts twice. */
+  const bedsRead = stops.filter((s) => !s.dayTrip);
+  const own = bedsRead.filter((s) => s.nightsBasis !== null && s.nightsBasis !== 'spread').length;
+  const confidence = stops.length === 0 ? 0 : Math.max(0.2, Math.min(1, 0.4 + (bedsRead.length > 0 ? 0.5 * (own / bedsRead.length) : 0.3) + (totalNights !== null ? 0.1 : 0) - 0.1 * notes.length));
+
+  for (const stop of stops) stop.mustSee = stop.mustSee.map((m) => restoreBrackets(m));
+
   return {
     stops,
     totalNights,
     totalBasis,
-    startDate: dates.startDate,
-    endDate: dates.endDate,
+    startDate,
+    endDate,
     month: dates.month,
     contextCountries: [...contextCountries],
     question,
     format,
     notes,
+    arrival: edges.arrival,
+    departure: edges.departure,
+    party,
+    confidence: Math.round(confidence * 100) / 100,
   };
 }

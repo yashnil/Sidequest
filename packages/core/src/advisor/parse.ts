@@ -1,3 +1,4 @@
+import { readPartyFromText } from '../party/resolve';
 import type { TripComposerAnswers } from '../schemas/composer';
 import { emptyAdvisorAnswers, FOCUS_LABELS, MOOD_LABELS, PURSUIT_LABELS, type AdvisorAnswers, type FocusKey, type MoodKey, type PursuitKey } from './answers';
 import { WORLD_REGIONS, type WorldRegion } from './catalog/schema';
@@ -641,7 +642,7 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
   answers = { ...answers, travelerNeeds: [...needs] };
   /* Who is going, when it is said, answers "who's going" — even when the answer is "just adults". */
   if (/\b(solo|by myself|alone|on my own)\b/.test(t)) {
-    answers = { ...answers, adults: 1 };
+    answers = { ...answers, adults: 1, partyBasis: 'stated' };
     readings.push({ kind: 'party', label: 'Solo' });
     asked.add('party');
   } else {
@@ -649,14 +650,20 @@ export function parseTravelRequest(text: string, base: TripComposerAnswers, now:
     const couple = /\b(couple(?! of)|my (partner|wife|husband|girlfriend|boyfriend|fianc[ée]e?)|honeymoon|romantic|two of us|the two of us)\b/.test(t);
     if (group) {
       const size = group[1] ? numberOf(group[1]) : null;
-      answers = { ...answers, adults: Math.min(12, Math.max(answers.adults, size ?? 3)) };
+      answers = { ...answers, adults: Math.min(12, Math.max(answers.adults, size ?? 3)), ...(size ? { partyBasis: 'stated' as const } : {}) };
       readings.push({ kind: 'party', label: size ? `${size} adults` : 'A group of friends' });
       if (answers.children === 0) asked.add('party');
     } else if (couple) {
-      answers = { ...answers, adults: 2 };
+      answers = { ...answers, adults: 2, partyBasis: 'stated' };
       readings.push({ kind: 'party', label: 'A couple' });
       if (answers.children === 0) asked.add('party');
     }
+  }
+
+  /* "Family of four", "for 3 people": a whole party in their words, when the branches above did not read one. */
+  if (answers.partyBasis !== 'stated') {
+    const party = readPartyFromText(t);
+    if (party?.complete) answers = { ...answers, adults: party.adults, children: Math.max(answers.children, party.children), partyBasis: 'stated' };
   }
 
   // ---- adventure ----------------------------------------------------------------

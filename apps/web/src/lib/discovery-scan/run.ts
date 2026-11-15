@@ -28,6 +28,7 @@ import {
   type ScanProposal,
   type ScopeBreadth,
   JOURNEY_ARCHETYPE_LABELS,
+  withStatedBases,
 } from '@sidequest/core';
 import { getIntent, readProviderCache, writeProviderCache } from '../db/compiler-repository';
 import { getProfile, getTrip, setSelection, travellerDecisions } from '../db/repository';
@@ -269,7 +270,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     const now = new Date();
     const prepared = await scanPromptFor(tripId, now);
     if (!prepared) return fail('internal_generation_error', 'trip disappeared');
-    const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, journey, trail } = prepared;
+    const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, journey, trail, statedStays } = prepared;
     if (envelope.route) console.warn(`Discovery scan for ${tripId}: a route-shaped trip (${envelope.route.kind}, "${envelope.route.cue}").`);
     if (!envelope.center || (envelope.center.lat === 0 && envelope.center.lng === 0)) {
       return fail('destination_unplaced', 'no destination centre');
@@ -368,6 +369,9 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       rawCandidateCount = Array.isArray((raw as { candidates?: unknown } | null)?.candidates) ? (raw as { candidates: unknown[] }).candidates.length : 0;
     }
     let proposal: ScanProposal = normalized.proposal;
+    /* Mode 3 — every stay of the traveller's own plan is a proposed base, in their order, whatever the proposal named (`scan/stated-bases.ts`). */
+    const statedBases = withStatedBases(proposal, statedStays);
+    proposal = statedBases.proposal;
     {
       /*
        * Every scan says what the model returned and what the normaliser kept. A
@@ -407,6 +411,18 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           },
         });
     if (!placement) return fail('provider_unavailable', 'no geocoder or places provider is configured to place the proposal');
+    /* An open-data proposal arrives placed, but a stated stay added to it has no position yet: the geocoder places just those bases. */
+    if (openData && statedBases.keys.length > 0 && isGeocoderEnabled() && !fixtureScan()) {
+      const missing = proposal.bases.filter((b) => statedBases.keys.includes(b.key) && !placement!.positions.get(b.key));
+      if (missing.length > 0) {
+        const again = await placeScanProposal({ ...proposal, candidates: [], bases: missing }, { center: envelope.center, maxDistanceKm: reach, ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}), ...(envelope.countryName ? { countryName: envelope.countryName } : {}), placesBudget: 0, namedByTraveller: namedMustDos, priorities, deadline: () => false }).catch(() => null);
+        if (again) {
+          const positions = new Map(placement.positions);
+          for (const [key, position] of again.positions) if (position) positions.set(key, position);
+          placement = { ...placement, positions, geocoderCalls: placement.geocoderCalls + again.geocoderCalls };
+        }
+      }
+    }
     /* A place the proposal put in one of the traveller's named parts, placed in another, is unplaced rather than wrong (`withdrawCrossPartPositions`). */
     /* Whenever the phrase named two or more placed parts — the extent may be recorded as interpreted or absent while the centre is still built from those parts (staging, "Tokyo and Kyoto by train"). */
     if ((concept?.parts ?? []).filter((part) => part.center).length >= 2) {
@@ -767,6 +783,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           }
         : {}),
       mustSeeKeys: matchNamedMustDos(namedMustDos, proposal.candidates.map((c) => ({ id: c.key, name: c.name }))),
+      /* Mode 3 — the traveller's own stays are the structure; a stay whose base could not be placed is recorded, never replaced in silence. */
+      ...(statedStays.length > 0 ? { statedStays: statedStays.map((stay, i) => ({ key: statedBases.keys[i]!, label: stay.label, nights: stay.nights, lock: stay.lock })) } : {}),
       /* A journey the traveller asked for: the bases along it are their intent, and a loop is costed back to where it began (`scan/stay-objective.ts`). */
       ...(envelope.route ? { route: { kind: envelope.route.kind } } : {}),
       /* Only parts the traveller's own phrase joined ("Tokyo and Kyoto"); a model's or a geocoder's parts are not a request. */
@@ -882,8 +900,10 @@ export async function scanPromptFor(tripId: string, now: Date) {
     avoidances: canonical.ownWords.dislikes,
   });
   const trail = { trail: contract.structure === 'trail_stages', follow: contract.structure === 'trail_stages' && !(contract.transport.stated && contract.transport.mode === 'self_drive') };
-  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos, journey: { label: JOURNEY_ARCHETYPE_LABELS[journey.archetype], reason: journey.reason }, ...(trail.trail ? { trail: true } : {}) };
-  return { trip, intent, profile, candidate, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, journey, trail, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
+  /* Mode 3 — the stays of the plan they already had, in order, each with the lock its provenance gives it. */
+  const statedStays = (canonical.statedItinerary?.stays ?? []).map((stay) => ({ label: stay.label, nights: stay.nights, fixed: stay.fixed, lock: stay.lock }));
+  const promptInput = { envelope, brief, startDate: trip.basics.startDate, endDate: trip.basics.endDate, days, namedMustDos, journey: { label: JOURNEY_ARCHETYPE_LABELS[journey.archetype], reason: journey.reason }, ...(trail.trail ? { trail: true } : {}), ...(statedStays.length > 0 ? { statedStays: statedStays.map(({ label, nights, fixed }) => ({ label, nights, fixed })) } : {}) };
+  return { trip, intent, profile, candidate, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, journey, trail, statedStays, promptInput, task: buildScanTask(promptInput), untrusted: buildScanUntrusted(promptInput) };
 }
 
 /**

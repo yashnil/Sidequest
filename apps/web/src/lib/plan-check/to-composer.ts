@@ -1,4 +1,4 @@
-import { countryFacts } from '@sidequest/core';
+import { ASSUMED_PARTY, countryFacts, type StatedItineraryInput } from '@sidequest/core';
 import type { ComposerInput } from '@/app/(product)/trips/new/actions';
 
 /**
@@ -18,6 +18,10 @@ import type { ComposerInput } from '@/app/(product)/trips/new/actions';
  * - **The places are their own must-dos.** `existingPlan` carries them as one
  *   ordered line, which the canonical input reads as the traveller's own words
  *   (`existingPlanPlaceNames`) and the board checks (`plan-critique.ts`).
+ * - **The stays are theirs.** `statedItinerary` carries each stay's nights,
+ *   bookings, must-sees and transport with provenance into the trip contract
+ *   (`contract/stated-itinerary.ts`), so "3 nights in Kyoto" is a locked fact
+ *   the planner sleeps by, not a must-do it may re-split.
  * - **Dates are theirs only when they gave them.** Typed dates are `exact` and
  *   locked to the traveller; a month is a month; otherwise Sidequest is asked
  *   for the best time, exactly as "Tell me when it is best" would.
@@ -30,6 +34,10 @@ export interface PlanForComposer {
   endDate: string | null;
   month: number | null;
   contextCountries: readonly string[];
+  /** The version they chose, as the canonical stated itinerary (nights, bookings, must-sees, transport, provenance). */
+  statedItinerary?: StatedItineraryInput;
+  /** Who is going; absent or `assumed` travels as an assumption every screen labels. */
+  party?: { adults: number; children: number; basis: 'stated' | 'profile' | 'assumed' };
 }
 
 const MAX_DESTINATION = 200;
@@ -76,8 +84,11 @@ export function composerInputForPlan(plan: PlanForComposer): ComposerInput {
     nights,
     arrivalPrecision: 'not_booked',
     departurePrecision: 'not_booked',
-    adults: 2,
-    children: 0,
+    /* Never a silent two adults: the party they gave, or the assumption, marked as one. */
+    adults: plan.party?.adults ?? ASSUMED_PARTY.adults,
+    children: plan.party?.children ?? ASSUMED_PARTY.children,
+    partyBasis: plan.party?.basis ?? 'assumed',
+    ...(plan.statedItinerary ? { statedItinerary: plan.statedItinerary } : {}),
     travelerNeeds: [],
     mustDo: '',
     avoid: '',

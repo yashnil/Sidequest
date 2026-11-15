@@ -36,6 +36,8 @@ export interface TravelerBriefTripFacts {
   season?: string;
   adults: number;
   children: number;
+  /** Nobody said who is going; the counts are Sidequest's assumption and the brief marks them `[assumed]`. */
+  partyAssumed?: boolean;
   seniors?: boolean;
   /** "at 11:00", "in the afternoon", "time not stated". */
   arrival: string;
@@ -396,7 +398,7 @@ export function renderTravelerBriefXml(brief: TravelerBrief): string {
   const tripFacts = [
     `Destination: ${t.qualifiedName ?? t.destination}${t.scale ? ` (${t.scale})` : ''}${t.countryName ? `, ${t.countryName}` : ''}`,
     `Dates: ${t.startDate && t.endDate ? `${t.startDate} to ${t.endDate}` : 'not fixed'} — ${t.days} day${t.days === 1 ? '' : 's'}, ${t.nights} night${t.nights === 1 ? '' : 's'}${t.season ? ` (${t.season})` : ''}`,
-    `Party: ${partyBits.join(', ')}`,
+    `Party: ${partyBits.join(', ')}${t.partyAssumed ? ' [assumed]' : ''}`,
     `Arrival: ${t.arrival}. Departure: ${t.departure}.`,
     ...(t.origin ? [`Travelling from: ${t.origin}`] : []),
     ...(t.bookedFacts.length > 0 ? t.bookedFacts.map((fact) => `Already booked: ${fact}`) : ['Nothing booked yet']),

@@ -132,6 +132,12 @@ export interface ScanPromptInput {
    * asks for the stages in order and a bed at every stage end (rule 11a).
    */
   trail?: boolean;
+  /**
+   * Mode 3 — the stays of a plan the traveller already had, in order, with
+   * their nights. The names travel in the untrusted payload
+   * (`statedStaysAsTyped`); the task only says they exist and must be bases.
+   */
+  statedStays?: readonly { label: string; nights: number; fixed: boolean }[];
 }
 
 /** Sidequest's own words: the task. The traveller's free text never appears here; it travels in the untrusted payload. */
@@ -152,6 +158,9 @@ export function buildScanTask(input: ScanPromptInput): string {
     `</destination>`,
     ...routeBlock(envelope),
     ...(input.journey ? [`<structure>${input.journey.label}. ${input.journey.reason} Propose bases and candidates that fit this structure.</structure>`] : []),
+    ...(input.statedStays && input.statedStays.length > 0
+      ? [`<their_plan>The traveller already has a plan: ${input.statedStays.length} stay${input.statedStays.length === 1 ? '' : 's'} in a fixed order, listed with their nights in statedStaysAsTyped. Propose each of them as a base, in that order and under the name they used (a stay that is a region gets a base in its natural centre). Sidequest keeps their nights; propose candidates around every one of their stays, not only the first.</their_plan>`]
+      : []),
     `<dates>${input.startDate} to ${input.endDate} (${input.days} days)</dates>`,
     renderTravelerBriefXml(brief),
     ...(input.trail ? [`<trail>This trip is for walking the trail in stages from one overnight village to the next (rule 11a): the walkable stages that suit this party, in order, each starting where the last one ended, and a base at the start and at every stage end.</trail>`] : []),
@@ -239,6 +248,7 @@ export function buildScanUntrusted(input: ScanPromptInput): Record<string, unkno
   return {
     ...(envelope(input).travellerPhrase ? { destinationAsTyped: envelope(input).travellerPhrase } : {}),
     ...(input.namedMustDos.length > 0 ? { mustDosAsTyped: input.namedMustDos.slice(0, 24) } : {}),
+    ...(input.statedStays && input.statedStays.length > 0 ? { statedStaysAsTyped: input.statedStays.slice(0, 12).map((s) => ({ stay: s.label, nights: s.nights, ...(s.fixed ? { booked: true } : {}) })) } : {}),
   };
 }
 

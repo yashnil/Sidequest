@@ -181,6 +181,14 @@ export interface StayObjectiveInput {
    * rest day before anywhere else.
    */
   trail?: { chain: readonly string[]; restBaseIds?: readonly string[] };
+  /**
+   * Mode 3 — the traveller's own stays, in order, with their nights
+   * (`contract/stated-itinerary.ts`). When given they ARE the structure: the
+   * search still costs the alternatives for the record, and the sentence says
+   * the plan is theirs, with what Sidequest's own best structure would have
+   * saved when that is worth knowing. Never overridden by a cheaper one.
+   */
+  stated?: { stays: readonly { baseId: string; nights: number; label: string }[]; note?: string };
 }
 
 export interface TrailLink {
@@ -807,10 +815,20 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
     if (candidate.evaluation.option.totalCostMinutes + margin <= chosen.evaluation.option.totalCostMinutes) chosen = candidate;
   }
   if (trail) chosen = { evaluation: trail.evaluation, splitStay: false };
+  const statedStays = input.stated && input.stated.stays.length > 0 ? input.stated.stays : null;
+  const sidequestBest = chosen;
+  if (statedStays) chosen = { evaluation: evaluate(model, statedStays.map((s) => ({ baseId: s.baseId, nights: s.nights }))), splitStay: false };
 
   const named = (evaluation: Evaluation): StayOption => ({ ...evaluation.option, stays: evaluation.option.stays.map((s) => ({ baseId: s.baseId, baseName: nameOf.get(s.baseId) ?? s.baseId, nights: s.nights })) });
   const chosenOption = named(chosen.evaluation);
   const alternatives = ladder.filter(([, c]) => c !== chosen).map(([, c]) => named(c.evaluation));
+  /* With a stated plan, Sidequest's own best is an alternative on the record — and named in the sentence only when it would save real time. */
+  const statedNote = (() => {
+    if (!statedStays) return '';
+    const saving = chosen.evaluation.option.totalCostMinutes - sidequestBest.evaluation.option.totalCostMinutes;
+    const bestStays = sidequestBest.evaluation.option.stays.map((s) => `${nameOf.get(s.baseId) ?? s.baseId} (${s.nights})`).join(', ');
+    return saving >= 180 && sidequestBest !== chosen ? ` Sleeping at ${bestStays} instead would save about ${hours(saving)} of travel and packing up (estimate); your plan is kept as you wrote it.` : '';
+  })();
   /* The cheapest structure coverage ruled out, so the record says what naming those places cost. */
   const ruledOut = costed.filter((c) => c.evaluation.covered.length < mostCovered && c.evaluation.option.moves < chosen.evaluation.option.moves).sort((a, b) => a.evaluation.option.totalCostMinutes - b.evaluation.option.totalCostMinutes)[0];
   if (ruledOut) alternatives.push(named(ruledOut.evaluation));
@@ -886,7 +904,9 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
       maxMovesAllowed: maxMoves,
       basis,
       marginMinutes: margin,
-      sentence: trail ? trail.sentence(nameOf) : routeLead ?? `${sentenceFor(input, model, chosenOption, alternatives, capped)}${ruledOutNote}${routeNote}`,
+      sentence: statedStays
+        ? `Your own plan, as you wrote it: ${statedStays.map((s) => `${s.label} for ${s.nights} night${s.nights === 1 ? '' : 's'}`).join(', then ')}.${input.stated?.note ? ` ${input.stated.note}` : ''}${statedNote}`
+        : trail ? trail.sentence(nameOf) : routeLead ?? `${sentenceFor(input, model, chosenOption, alternatives, capped)}${ruledOutNote}${routeNote}`,
       ...(route ? { route } : {}),
     },
   };

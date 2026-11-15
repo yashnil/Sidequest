@@ -17,6 +17,7 @@ import {
   buildDestinationIntent,
   qualifiedNameFor,
   seasonMonths,
+  statedItinerarySchema,
   statedTravelMode,
   tripBasicsSchema,
   type SelectedDestination,
@@ -104,6 +105,10 @@ const inputSchema = z.object({
   mustDo: z.string().max(600),
   avoid: z.string().max(600),
   existingPlan: z.string().max(2000).optional(),
+  /* Mode 3 — the checked plan as structure, validated whole; it is the trip contract's stated itinerary. */
+  statedItinerary: statedItinerarySchema.optional(),
+  /* How the party is known; `assumed` is labelled wherever it is shown. Absent reads as the traveller's answer. */
+  partyBasis: z.enum(['stated', 'profile', 'assumed']).optional(),
   origin: z.string().max(120),
   /*
    * QUALITY V1 — the composer form no longer asks these; the interview does.
@@ -269,6 +274,8 @@ function readComposer(raw: ComposerInput, now: Date): ComposerReading {
     ...(input.mustDo ? { mustDo: input.mustDo } : {}),
     ...(input.avoid ? { avoid: input.avoid } : {}),
     ...(input.existingPlan?.trim() ? { existingPlan: input.existingPlan.trim() } : {}),
+    ...(input.statedItinerary ? { statedItinerary: input.statedItinerary } : {}),
+    ...(input.partyBasis ? { partyBasis: input.partyBasis } : {}),
     /*
      * What we made of that text, proposed and unconfirmed.
      *

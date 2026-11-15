@@ -24,6 +24,8 @@ import { outlyingBases, type FootprintContext } from './base-footprint';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
 import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller, type TrailLink } from './stay-objective';
+import { fitStatedNights } from '../contract/stated-itinerary';
+import type { LockLevel } from '../contract/trip-contract';
 import {
   civilDuskMinute,
   DEFAULT_TRAIL_START_MINUTE,
@@ -336,6 +338,13 @@ export interface AssembleScanRegionInput {
    * trip's own day starts, first to last.
    */
   trail?: { follow: boolean; party: TrailParty; dayStartMinutes?: readonly number[]; measured?: ReadonlyMap<string, MeasuredStage> };
+  /**
+   * Mode 3 — the traveller's own stays, in order: the proposal base key each
+   * was proposed under (`withStatedBases`), their nights and the lock they are
+   * held at. These are the structure (`stay-objective.ts#stated`); a stay
+   * whose base could not be placed is recorded, never silently replaced.
+   */
+  statedStays?: readonly { key: string; label: string; nights: number; lock: LockLevel }[];
 }
 
 export type ScanFoodSource = 'overture' | 'openstreetmap' | 'overture+openstreetmap' | 'fixture' | null;
@@ -415,6 +424,8 @@ export interface ChooseScanBasesInput {
   trailLinks?: readonly TrailLink[];
   /** A trail to follow from bed to bed (`stay-objective.ts`). */
   trail?: { chain: readonly string[]; restBaseIds?: readonly string[] };
+  /** The traveller's own stays, by base id (`stay-objective.ts#stated`). */
+  stated?: { stays: readonly { baseId: string; nights: number; label: string }[]; note?: string };
 }
 
 export interface ChooseScanBasesResult {
@@ -467,6 +478,67 @@ export function trailLinksFor(
   return links;
 }
 
+/**
+ * MODE 3 — THE TRAVELLER'S OWN STAYS, AS THE STRUCTURE.
+ *
+ * Each stated stay is matched to its placed base by the proposal key it was
+ * proposed under. A stay whose base could not be placed is not slept in — it
+ * is recorded with its reason and its nights go to the stay before it (or the
+ * one after), so the trip keeps its length and the plan says exactly what
+ * happened. Nights are fitted to the trip's length only where Sidequest split
+ * them (`fitStatedNights`); when every stay is held and the sum still differs,
+ * the last stay absorbs the difference and the record says so.
+ */
+export function statedStaysFor(
+  stays: readonly { key: string; label: string; nights: number; lock: LockLevel }[],
+  bases: readonly { id: string; key: string }[],
+  nights: number,
+): { stays: { baseId: string; nights: number; label: string }[]; note: string | null; record: NonNullable<StayDecision['stated']> } | null {
+  if (stays.length === 0 || nights <= 0) return null;
+  const record: NonNullable<StayDecision['stated']> = { honoured: [], unplaced: [], adjusted: [] };
+  const placed: { stopId: string; baseId: string; label: string; nights: number; statedNights: number; lock: LockLevel }[] = [];
+  /* Nights of an unplaced stay before any placed one wait for the next placed stay. */
+  let carry = 0;
+  for (const [i, stay] of stays.entries()) {
+    const base = bases.find((b) => b.key === stay.key);
+    if (base) {
+      placed.push({ stopId: `${i}`, baseId: base.id, label: stay.label, nights: stay.nights + carry, statedNights: stay.nights, lock: stay.lock });
+      carry = 0;
+      continue;
+    }
+    record.unplaced.push({ label: stay.label, nights: stay.nights, reason: 'No place to sleep could be put on the map there, so its nights are planned from the stay beside it.' });
+    const host = placed[placed.length - 1];
+    if (host) host.nights += stay.nights;
+    else carry += stay.nights;
+  }
+  if (placed.length === 0) return null;
+  const fitted = fitStatedNights(placed, nights);
+  const result = placed.map((p) => ({ ...p, nights: fitted.nights.get(p.stopId)! }));
+  if (fitted.mismatch !== 0) {
+    const last = result[result.length - 1]!;
+    last.nights = Math.max(1, last.nights + fitted.mismatch);
+  }
+  const total = result.reduce((n, s) => n + s.nights, 0);
+  if (total !== nights) {
+    /* Still off (a stay cannot drop below a night): trim from the end, never below one. */
+    let diff = total - nights;
+    for (const s of [...result].reverse()) {
+      if (diff <= 0) break;
+      const take = Math.min(diff, s.nights - 1);
+      s.nights -= take;
+      diff -= take;
+    }
+  }
+  for (const [i, s] of result.entries()) {
+    const original = placed[i]!;
+    const statedNights = original.statedNights;
+    if (s.nights !== statedNights) record.adjusted.push({ label: s.label, stated: statedNights, planned: s.nights, reason: original.lock === 'sidequest_inferred' ? 'Sidequest’s own split, fitted to the trip’s length.' : record.unplaced.length > 0 && s.nights > statedNights ? 'It also holds the nights of a stay that could not be placed.' : 'Your nights add up to a different length than the trip, so this stay was fitted to it.' });
+    else record.honoured.push({ label: s.label, nights: s.nights });
+  }
+  const note = record.unplaced.length > 0 ? `${record.unplaced.map((u) => u.label).join(' and ')} could not be placed on the map, so ${record.unplaced.length === 1 ? 'its nights are' : 'their nights are'} planned from the stay beside ${record.unplaced.length === 1 ? 'it' : 'them'}.` : null;
+  return { stays: result.map(({ baseId, nights: n, label }) => ({ baseId, nights: n, label })), note, record };
+}
+
 export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesResult {
   const { bases, places, minutes } = input;
   const nights = Math.max(0, input.nights);
@@ -493,6 +565,7 @@ export function chooseScanBases(input: ChooseScanBasesInput): ChooseScanBasesRes
     ...(input.route ? { route: input.route } : {}),
     ...(input.trailLinks && input.trailLinks.length > 0 ? { trailLinks: input.trailLinks } : {}),
     ...(input.trail ? { trail: input.trail } : {}),
+    ...(input.stated ? { stated: input.stated } : {}),
   });
   const kept = choice.stays.map((stay, i) => ({
     id: stay.baseId,
@@ -742,6 +815,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     ? trailPlan.links
     : trailLinksFor(placeEntries, baseEntries, (key) => positions.get(key) ?? null, (id) => pointAt.get(id));
   const followingTrail = Boolean(trailPlan && input.trail?.follow && trailPlan.chain.length >= 2);
+  const stated = statedStaysFor(input.statedStays ?? [], baseEntries.map((b) => ({ id: b.id, key: b.proposal.key })), nights);
   const choice = chooseScanBases({
     /* Six places to sleep enter the search, as the proposal always held; a followed trail brings every stage end. */
     bases: followingTrail ? baseEntries : baseEntries.slice(0, 6),
@@ -774,7 +848,9 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     ),
     ...(trailLinks.length > 0 ? { trailLinks } : {}),
     ...(followingTrail ? { trail: { chain: trailPlan!.chain, restBaseIds: trailPlan!.restBaseIds } } : {}),
+    ...(stated ? { stated: { stays: stated.stays, ...(stated.note ? { note: stated.note } : {}) } } : {}),
   });
+  if (stated) choice.decision = { ...choice.decision, stated: stated.record };
   /*
    * "The only place to sleep the scan proposed" is false when the scan
    * proposed four and the map placed one. The stay decision is computed over

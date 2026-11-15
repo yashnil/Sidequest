@@ -141,3 +141,57 @@ describe('parsePlanText — nothing invented', () => {
     expect(read('Lisbon, Douro Valley').stops[1]!.kind).toBe('natural_region');
   });
 });
+
+describe('parsePlanText — what a stated itinerary carries', () => {
+  it('keeps "3 nights in Kyoto" as stated, marks a booked stay fixed and reads the way in', () => {
+    const plan = read('4 nights Tokyo, 3 nights in Kyoto (booked) by train');
+    expect(plan.stops.map((s) => [s.label, s.nights, s.nightsBasis])).toEqual([
+      ['Tokyo', 4, 'stated'],
+      ['Kyoto', 3, 'stated'],
+    ]);
+    expect(plan.stops[1]!.fixed).toBe(true);
+    expect(plan.stops[1]!.transportIn).toBe('rail');
+    expect(plan.totalNights).toBe(7);
+  });
+
+  it('reads must-sees in brackets and on a day list, and arrival and departure', () => {
+    const list = read('Fly into Rome at 3pm. 3 nights in Rome (Colosseum, Vatican Museums), 2 nights Florence by train, fly home from Florence');
+    expect(list.stops.map((s) => [s.label, s.nights])).toEqual([
+      ['Rome', 3],
+      ['Florence', 2],
+    ]);
+    expect(list.stops[0]!.mustSee).toEqual(['Colosseum', 'Vatican Museums']);
+    expect(list.arrival).toEqual({ place: 'Rome', time: '15:00' });
+    expect(list.departure?.place).toBe('Florence');
+    const days = read('Day 1-3: Rome - Colosseum, Pantheon\nDay 4: Rome to Florence\nDay 5: Florence');
+    expect(days.stops[0]!.mustSee).toEqual(['Colosseum', 'Pantheon']);
+  });
+
+  it('reads per-stop date ranges as the stays and the trip', () => {
+    const plan = read('Tokyo Apr 1-4, Kyoto Apr 4-7');
+    expect(plan.stops.map((s) => [s.label, s.nights, s.dates?.start])).toEqual([
+      ['Tokyo', 3, '2027-04-01'],
+      ['Kyoto', 3, '2027-04-04'],
+    ]);
+    expect(plan.startDate).toBe('2027-04-01');
+    expect(plan.endDate).toBe('2027-04-07');
+  });
+
+  it('reads who is going and never takes it for a place', () => {
+    const family = read('Lisbon, Porto for my family of four in 8 days');
+    expect(family.stops.map((s) => s.label)).toEqual(['Lisbon', 'Porto']);
+    expect(family.party).toMatchObject({ adults: 2, children: 2, complete: true });
+    expect(read('Solo: Lisbon and Porto in 6 days').party).toMatchObject({ adults: 1 });
+    expect(read('Lisbon and Porto in 6 days').party).toBeNull();
+    const couple = read('June 10-15: 3 nights in Rome, 2 nights in Florence by train, for the two of us');
+    expect(couple.stops.map((s) => [s.label, s.nights])).toEqual([
+      ['Rome', 3],
+      ['Florence', 2],
+    ]);
+    expect(couple.party).toMatchObject({ adults: 2 });
+  });
+
+  it('says how much of the plan it understood', () => {
+    expect(read('3 nights Lisbon, 2 nights Porto').confidence).toBeGreaterThan(read('Lisbon, Porto in 5 days').confidence);
+  });
+});

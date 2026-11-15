@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { REFINEMENT_LABELS, REFINEMENTS, type Refinement } from '@sidequest/core';
 import { adoptAdvisorPickAction, refineAdvisorAction, type RefineInput } from '@/app/(product)/decide/advisor-actions';
 import { buttonClass, cx, ErrorNote } from '@/components/ui';
+import { PartyChoice, type PartyShapeChoice } from '@/components/setup/PartyChoice';
 
 /**
  * The shortlist's interactive parts. Every button is one server action that
@@ -29,22 +30,26 @@ function useRefine(sessionId: string) {
   return { pending, error, active, run };
 }
 
-export function AdvisorPickActions({ sessionId, pickId, name, primary = false }: { sessionId: string; pickId: string; name: string; primary?: boolean }) {
+export function AdvisorPickActions({ sessionId, pickId, name, primary = false, partyKnown = true }: { sessionId: string; pickId: string; name: string; primary?: boolean; partyKnown?: boolean }) {
   const { pending, error, active, run } = useRefine(sessionId);
   const [adopting, startAdopt] = useTransition();
   const [adoptError, setAdoptError] = useState<string | null>(null);
+  /* Nobody has said who is going: one question before the trip is made, with a skip that plans for two adults and says so. */
+  const [asking, setAsking] = useState(false);
+  const [party, setParty] = useState<{ shape: PartyShapeChoice | null; adults: number; children: number }>({ shape: null, adults: 2, children: 0 });
+  const adopt = (chosen?: { adults: number; children: number; basis: 'stated' | 'assumed' }) =>
+    startAdopt(async () => {
+      const result = await adoptAdvisorPickAction(sessionId, pickId, chosen);
+      if (result && !result.ok) setAdoptError(result.error ?? 'Could not start that trip.');
+    });
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           disabled={adopting}
-          onClick={() =>
-            startAdopt(async () => {
-              const result = await adoptAdvisorPickAction(sessionId, pickId);
-              if (result && !result.ok) setAdoptError(result.error ?? 'Could not start that trip.');
-            })
-          }
+          data-testid="advisor-plan-this"
+          onClick={() => (partyKnown ? adopt() : setAsking(true))}
           className={buttonClass(primary ? 'accent' : 'secondary', primary ? 'lg' : 'md')}
           aria-label={`Plan a trip to ${name}`}
         >
@@ -69,6 +74,24 @@ export function AdvisorPickActions({ sessionId, pickId, name, primary = false }:
           {active === `aside:${pickId}` ? 'Replacing…' : 'Not for me'}
         </button>
       </div>
+      {asking ? (
+        <div className="mt-4 rounded-[var(--radius-card)] border border-ink/15 p-4" data-testid="advisor-party-question">
+          <p className="sheet-label text-ink-muted">Who is going?</p>
+          <p className="mt-1 text-sm text-ink-muted">It changes rooms, prices and how long a day can be. Skip it and we’ll plan for two adults and label it.</p>
+          <div className="mt-4">
+            <PartyChoice shape={party.shape} adults={party.adults} children={party.children} onChange={(next) => setParty(next)} />
+          </div>
+          <button
+            type="button"
+            disabled={adopting || party.shape === null}
+            onClick={() => adopt({ adults: party.adults, children: party.children, basis: party.shape === 'later' ? 'assumed' : 'stated' })}
+            className={cx(buttonClass('accent', 'md'), 'mt-4')}
+            data-testid="advisor-party-continue"
+          >
+            {adopting ? 'Starting your trip…' : `Plan ${name}`}
+          </button>
+        </div>
+      ) : null}
       {error || adoptError ? (
         <div className="mt-3">
           <ErrorNote>{error ?? adoptError}</ErrorNote>

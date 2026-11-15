@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { PLAN_MOVE_MODE_LABELS, PLAN_TEXT_MAX, formatPlanMinutes, type PlanFinding, type PlanMove } from '@sidequest/core';
+import { PLAN_MOVE_MODE_LABELS, PLAN_TEXT_MAX, STATED_TRANSPORT_LABELS, applyPlanChanges, defaultAcceptedChanges, formatPlanMinutes, measurePlanVersion, statedItineraryFromPlan, type PlanChange, type PlanFinding, type PlanMove, type PlanVersionMeasure, type ProposalStop } from '@sidequest/core';
+import { PartyChoice, describeCounts, type PartyShapeChoice } from '@/components/setup/PartyChoice';
 import { checkPlanAction, planFromCheckAction, type PlanCheckView } from '@/app/(product)/improve/actions';
 import { Badge, ErrorNote, buttonClass, cx, type BadgeTone } from '@/components/ui';
 
@@ -87,25 +88,59 @@ export function PlanCheck() {
         return;
       }
       setView(response.view);
+      adopt(response.view);
       requestAnimationFrame(() => result.current?.focus());
     });
   };
 
-  const plan = (version: 'as_written' | 'improved') => {
-    if (!view) return;
-    const stops =
-      version === 'improved' && view.result.improved
-        ? view.result.improved.stops
-        : view.parsed.stops.map((s) => ({ label: s.label, nights: s.nights ?? 0, dayTrip: s.dayTrip }));
+  /*
+   * THE CHANGES, EACH ONE THEIRS TO REFUSE.
+   * Safe changes start ticked, major ones unticked; unticking is the exact undo.
+   */
+  const [accepted, setAccepted] = useState<Set<string>>(new Set());
+  const [party, setParty] = useState<{ shape: PartyShapeChoice | null; adults: number; children: number; basis: 'stated' | 'profile' | 'assumed' } | null>(null);
+  const adopt = (next: PlanCheckView) => {
+    setAccepted(defaultAcceptedChanges(next.result.proposal.changes));
+    const known = next.party;
+    setParty(known.needsQuestion ? { shape: null, adults: known.adults, children: known.children, basis: 'assumed' } : { shape: known.children > 0 ? 'family' : known.adults === 1 ? 'solo' : known.adults === 2 ? 'couple' : 'friends', adults: known.adults, children: known.children, basis: known.basis });
+  };
+  const proposal = view?.result.proposal ?? null;
+  const version = useMemo(() => (proposal ? applyPlanChanges(proposal.original, proposal.changes, accepted) : []), [proposal, accepted]);
+  const measured = useMemo(() => (view && proposal ? measurePlanVersion(view.inputs, version, view.parsed.totalNights) : null), [view, proposal, version]);
+  const toggle = (id: string) =>
+    setAccepted((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const plan = (which: 'chosen' | 'as_written') => {
+    if (!view || !proposal || !party?.shape) return;
+    const chosen = which === 'chosen' ? accepted : new Set<string>();
+    const stops = which === 'chosen' ? version : proposal.original;
+    const statedItinerary = statedItineraryFromPlan({
+      version: stops,
+      original: proposal.original,
+      changes: proposal.changes,
+      accepted: chosen,
+      placed: view.placed,
+      arrival: view.parsed.arrival,
+      departure: view.parsed.departure,
+      parseConfidence: view.parsed.confidence,
+      now: new Date(),
+    });
     setError(null);
     startPlanning(async () => {
       const response = await planFromCheckAction({
-        stops,
+        stops: stops.map((s) => ({ label: s.label, nights: s.nights, dayTrip: s.dayTrip })),
         totalNights: view.parsed.totalNights,
         startDate: view.parsed.startDate,
         endDate: view.parsed.endDate,
         month: view.parsed.month,
         contextCountries: view.parsed.contextCountries,
+        statedItinerary,
+        party: { adults: party.adults, children: party.children, basis: party.shape === 'later' ? 'assumed' : party.basis },
       });
       if (!response.ok) {
         setError(response.error);
@@ -236,11 +271,11 @@ export function PlanCheck() {
                   </li>
                 ))}
               </ul>
-              {view.result.suggestions.length > 0 ? (
+              {view.result.suggestions.some((s) => s.kind === 'add_nights' || s.kind === 'side_trip') ? (
                 <>
-                  <h3 className="mt-10 sheet-label text-ink-muted">What we’d change</h3>
+                  <h3 className="mt-10 sheet-label text-ink-muted">Other ways to shape it</h3>
                   <ul className="mt-4 space-y-3">
-                    {view.result.suggestions.map((suggestion) => (
+                    {view.result.suggestions.filter((s) => s.kind === 'add_nights' || s.kind === 'side_trip').map((suggestion) => (
                       <li key={suggestion.id} className="border-l-2 border-flare pl-4 type-body text-ink" data-testid="plan-check-suggestion" data-kind={suggestion.kind}>
                         {suggestion.sentence}
                       </li>
@@ -251,36 +286,92 @@ export function PlanCheck() {
             </div>
           </div>
 
-          {view.result.improved ? (
-            <div className="mt-12 rounded-[var(--radius-card)] border border-ink/15 p-5 sm:p-6" data-testid="plan-check-improved">
-              <h3 className="sheet-label text-ink-muted">The improved version</h3>
-              <ol className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 font-display text-lg text-ink">
-                {view.result.improved.stops.map((stop, index) => (
-                  <li key={`${stop.label}-${index}`} className="flex items-center gap-2">
-                    {index > 0 ? <span aria-hidden="true" className="text-ink-faint">→</span> : null}
-                    <span>
-                      {stop.label} <span className="font-mono text-xs text-ink-muted">{stop.dayTrip ? 'day trip' : `${stop.nights}n`}</span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-muted">
-                {view.result.improved.changes.map((change) => (
-                  <li key={change}>{change}</li>
-                ))}
-              </ul>
-            </div>
+          {proposal && measured ? (
+            <section className="mt-12" aria-labelledby="plan-check-versions" data-testid="plan-check-proposal">
+              <h3 id="plan-check-versions" className="sheet-label text-ink-muted">
+                Your plan and the version you’ll plan
+              </h3>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <VersionColumn title="As you wrote it" testId="plan-check-original" stops={proposal.original} />
+                <VersionColumn title={proposal.changes.length === 0 ? 'Nothing to change' : 'With the changes ticked below'} testId="plan-check-suggested" stops={version} highlight />
+              </div>
+              <p className="mt-4 type-small text-ink" data-testid="plan-check-savings">
+                {savingsLine(proposal.measure.original, measured)}
+              </p>
+
+              {proposal.changes.length > 0 ? (
+                <>
+                  <h3 className="mt-10 sheet-label text-ink-muted">What we’d change — tick what you agree with</h3>
+                  <p className="mt-1 type-small text-ink-muted">Safe changes touch nothing you said and start ticked. A change to something you said is yours to accept, one at a time. Untick anything to undo it.</p>
+                  <ul className="mt-4 space-y-3">
+                    {proposal.changes.map((change) => {
+                      const on = accepted.has(change.id);
+                      return (
+                        <li key={change.id} className={cx('rounded-[var(--radius-control)] border p-4', change.class === 'major' ? 'border-clay/40' : 'border-ink/15')} data-testid="plan-check-change" data-class={change.class} data-kind={change.kind} data-accepted={on ? 'true' : 'false'}>
+                          <label className="flex cursor-pointer items-start gap-3">
+                            <input type="checkbox" checked={on} onChange={() => toggle(change.id)} className="mt-1 h-5 w-5 shrink-0 accent-[var(--color-pine)]" data-testid={`plan-check-accept-${change.id}`} aria-describedby={`why-${change.id}`} />
+                            <span className="min-w-0">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <Badge tone={change.class === 'major' ? 'clay' : 'pine'}>{change.class === 'major' ? 'Changes what you said' : 'Safe'}</Badge>
+                                <span className="type-body text-ink">{change.sentence}</span>
+                              </span>
+                              <span id={`why-${change.id}`} className="mt-1 block text-sm text-ink-muted">
+                                {change.why}
+                                {changeSaving(change)}
+                              </span>
+                              {change.touches.length > 0 ? <span className="mt-1 block text-sm text-clay">This {change.touches.join('; ')}.</span> : null}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              ) : null}
+
+              {proposal.unresolved.length > 0 ? (
+                <div className="mt-8" data-testid="plan-check-unresolved">
+                  <h3 className="sheet-label text-ink-muted">Still to settle, whatever you choose</h3>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-muted">
+                    {proposal.unresolved.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {party ? (
+            <section className="mt-12 rule-top pt-6" aria-labelledby="plan-check-party-heading" data-testid="plan-check-party" data-basis={party.shape === 'later' ? 'assumed' : party.basis}>
+              <h3 id="plan-check-party-heading" className="sheet-label text-ink-muted">
+                Who is going
+              </h3>
+              {view.party.needsQuestion ? (
+                <>
+                  <p className="mt-1 type-small text-ink-muted">Nobody said, and it changes rooms, prices and how long a day can be. One question — or skip it and we’ll plan for two adults and say so.</p>
+                  <div className="mt-4 max-w-2xl">
+                    <PartyChoice shape={party.shape} adults={party.adults} children={party.children} onChange={(next) => setParty({ shape: next.shape, adults: next.adults, children: next.children, basis: next.shape === 'later' ? 'assumed' : 'stated' })} />
+                  </div>
+                </>
+              ) : (
+                <p className="mt-2 type-body text-ink" data-testid="plan-check-party-known">
+                  {describeCounts(party.adults, party.children)} <span className="text-ink-muted">· {view.party.label}</span>
+                </p>
+              )}
+            </section>
           ) : null}
 
           <div className="mt-10 flex flex-wrap items-center gap-3">
-            {view.result.improved ? (
-              <button type="button" onClick={() => plan('improved')} disabled={planning} className={buttonClass('accent', 'lg')} data-testid="plan-check-plan-improved">
-                {planning ? 'Starting your trip…' : 'Plan the improved version'}
+            <button type="button" onClick={() => plan('chosen')} disabled={planning || !party?.shape} className={buttonClass('accent', 'lg')} data-testid="plan-check-plan">
+              {planning ? 'Starting your trip…' : accepted.size > 0 ? 'Plan this version' : 'Plan this'}
+            </button>
+            {accepted.size > 0 ? (
+              <button type="button" onClick={() => plan('as_written')} disabled={planning || !party?.shape} className={buttonClass('secondary', 'lg')} data-testid="plan-check-plan-as-written">
+                Plan it exactly as written
               </button>
             ) : null}
-            <button type="button" onClick={() => plan('as_written')} disabled={planning} className={cx(buttonClass(view.result.improved ? 'secondary' : 'accent', 'lg'))} data-testid="plan-check-plan-as-written">
-              {planning && !view.result.improved ? 'Starting your trip…' : view.result.improved ? 'Plan it as written' : 'Plan this'}
-            </button>
+            {!party?.shape ? <p className="type-small text-ink-muted">Say who is going, or skip it, to plan.</p> : null}
           </div>
           <p className="mt-6 max-w-3xl type-small text-ink-muted">
             Every travel time here is Sidequest’s estimate from the straight-line distance between the places and the way the country usually moves people (trains, roads or flights) — not a timetable and not a measured route. Planning the trip measures what it can and says what it couldn’t.
@@ -297,6 +388,48 @@ function Figure({ term, value, note }: { term: string; value: string; note: stri
       <dt className="sheet-label text-ink-muted">{term}</dt>
       <dd className="mt-1 font-mono text-2xl text-ink">{value}</dd>
       <dd className="text-xs text-ink-faint">{note}</dd>
+    </div>
+  );
+}
+
+function savingsLine(before: PlanVersionMeasure, after: PlanVersionMeasure): string {
+  const parts: string[] = [];
+  parts.push(`${after.hotelMoves} hotel move${after.hotelMoves === 1 ? '' : 's'}${after.hotelMoves !== before.hotelMoves ? ` (was ${before.hotelMoves})` : ''}`);
+  const travel = before.moveMinutes - after.moveMinutes;
+  if (travel > 0) parts.push(`about ${formatPlanMinutes(travel)} less moving between beds`);
+  else if (travel < 0) parts.push(`about ${formatPlanMinutes(-travel)} more moving between beds`);
+  if (before.routeKm !== null && after.routeKm !== null && before.routeKm !== after.routeKm) parts.push(`${Math.abs(before.routeKm - after.routeKm)} km ${after.routeKm < before.routeKm ? 'less' : 'more'} in straight lines`);
+  return `The version you’ll plan: ${parts.join(', ')} — estimates, not timetables.`;
+}
+
+function changeSaving(change: PlanChange): string {
+  const bits: string[] = [];
+  if (change.saving.hotelMoves > 0) bits.push(`${change.saving.hotelMoves} hotel move${change.saving.hotelMoves === 1 ? '' : 's'} fewer`);
+  if (change.saving.moveMinutes > 0) bits.push(`about ${formatPlanMinutes(change.saving.moveMinutes)} less travel`);
+  if (change.saving.routeKm > 0) bits.push(`${change.saving.routeKm} km less (straight lines)`);
+  return bits.length > 0 ? ` Saves ${bits.join(', ')} (estimate).` : '';
+}
+
+function VersionColumn({ title, testId, stops, highlight = false }: { title: string; testId: string; stops: readonly ProposalStop[]; highlight?: boolean }) {
+  return (
+    <div className={cx('rounded-[var(--radius-card)] border p-4 sm:p-5', highlight ? 'border-ink/40' : 'border-ink/15')} data-testid={testId}>
+      <p className="sheet-label text-ink-muted">{title}</p>
+      <ol className="mt-3 space-y-2">
+        {stops.map((stop, index) => (
+          <li key={`${stop.label}-${index}`} className="flex flex-wrap items-baseline justify-between gap-x-3" data-testid="plan-check-version-stop" data-changed={highlight && stop.changedBy.length > 0 ? 'true' : 'false'}>
+            <span className="font-display text-lg text-ink">
+              <span className="mr-2 font-mono text-xs text-ink-faint">{String(index + 1).padStart(2, '0')}</span>
+              {stop.label}
+              {stop.fixed ? <span className="ml-2 font-mono text-xs text-pine">booked</span> : null}
+            </span>
+            <span className={cx('font-mono text-xs', highlight && stop.changedBy.length > 0 ? 'text-flare' : 'text-ink-muted')}>
+              {stop.dayTrip ? 'day trip' : `${stop.nights} night${stop.nights === 1 ? '' : 's'}`}
+              {stop.transportIn ? ` · by ${STATED_TRANSPORT_LABELS[stop.transportIn]}` : ''}
+            </span>
+            {stop.mustSee.length > 0 ? <span className="w-full text-xs text-ink-faint">See: {stop.mustSee.join(', ')}</span> : null}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

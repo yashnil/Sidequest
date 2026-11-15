@@ -25,7 +25,8 @@ export const SETUP_STEP_LABELS: Record<SetupStepId, string> = {
   fixed: 'Anything fixed',
 };
 
-export type PartyShape = 'solo' | 'couple' | 'friends' | 'family' | 'other';
+/** `later` is "skip — decide later": the party travels as an assumption, labelled. */
+export type PartyShape = 'solo' | 'couple' | 'friends' | 'family' | 'other' | 'later';
 
 export interface TimingPick {
   startDate: string;
@@ -65,6 +66,8 @@ export interface SetupDraft {
   wantsLengthHelp: boolean;
 
   partyShape: PartyShape | null;
+  /** How the counts are known: chosen here, read from their saved travellers or words, or assumed (skipped). Null until something is known. */
+  partyBasis: 'stated' | 'profile' | 'assumed' | null;
   adults: number;
   children: number;
   travelerNeeds: TravelerNeed[];
@@ -123,6 +126,7 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
     nights: null,
     wantsLengthHelp: false,
     partyShape: null,
+    partyBasis: null,
     adults: 2,
     children: 0,
     travelerNeeds: [],
@@ -169,7 +173,8 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
       : null,
     nights,
     wantsLengthHelp: prior.duration.wantsRecommendation,
-    partyShape: partyShapeFrom(prior.adults, prior.children),
+    partyShape: prior.partyBasis === 'assumed' ? 'later' : partyShapeFrom(prior.adults, prior.children),
+    partyBasis: prior.partyBasis ?? 'stated',
     adults: prior.adults,
     children: prior.children,
     travelerNeeds: [...prior.travelerNeeds],
@@ -184,7 +189,7 @@ export function initialDraft(defaults: { startDate: string; endDate: string }, p
   };
 }
 
-function partyShapeFrom(adults: number, children: number): PartyShape | null {
+export function partyShapeFrom(adults: number, children: number): PartyShape | null {
   if (children > 0) return 'family';
   if (adults === 1) return 'solo';
   if (adults === 2) return 'couple';
@@ -382,7 +387,7 @@ export function summaryOf(draft: SetupDraft): SetupSummary {
     else if (draft.wantsLengthHelp) lines.push({ label: 'Length', value: 'Sidequest suggests one', assumed: true });
   }
 
-  if (has('who') && draft.partyShape) lines.push({ label: 'Who', value: describeParty(draft), assumed: false });
+  if (has('who') && draft.partyShape) lines.push({ label: 'Who', value: draft.partyShape === 'later' ? `${describeParty(draft)} (assumed)` : describeParty(draft), assumed: draft.partyShape === 'later' });
 
   const short = destination ? [destination, nights !== null ? `${nights} nights` : null].filter(Boolean).join(' · ') : 'Start with where';
   return { short, lines };
@@ -433,6 +438,8 @@ export function payloadFor(draft: SetupDraft): ComposerInput {
     departurePrecision: draft.knowsFlightTimes ? draft.departure : 'not_booked',
     adults: draft.adults,
     children: draft.children,
+    /* Never a silent two adults: a skipped question travels as an assumption every screen labels. */
+    partyBasis: draft.partyShape === 'later' ? 'assumed' : draft.partyShape === null ? 'assumed' : draft.partyBasis ?? 'stated',
     travelerNeeds: draft.travelerNeeds,
     mustDo: draft.mustDo,
     avoid: draft.avoid,

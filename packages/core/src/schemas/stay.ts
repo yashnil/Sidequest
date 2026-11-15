@@ -124,5 +124,17 @@ export const stayDecisionSchema = z.object({
    * honestly that the trip could not be planned as a walk from inn to inn.
    */
   trail: trailRecordSchema.optional(),
+  /**
+   * Mode 3 — the stays came from the traveller's own plan. Which stated stays
+   * were slept in as written, which could not be (a place nobody could put a
+   * bed in), and any nights fitted to the trip's length, with why.
+   */
+  stated: z
+    .object({
+      honoured: z.array(z.object({ label: z.string().min(1), nights: z.number().int().nonnegative() })).default([]),
+      unplaced: z.array(z.object({ label: z.string().min(1), nights: z.number().int().nonnegative(), reason: z.string().min(1) })).default([]),
+      adjusted: z.array(z.object({ label: z.string().min(1), stated: z.number().int().nonnegative(), planned: z.number().int().nonnegative(), reason: z.string().min(1) })).default([]),
+    })
+    .optional(),
 });
 export type StayDecision = z.infer<typeof stayDecisionSchema>;

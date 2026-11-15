@@ -367,7 +367,7 @@ export default async function DiscoverPage({ params }: { params: Promise<{ id: s
         facts={{
           dates: formatDateRange(trip.basics.startDate, trip.basics.endDate),
           days,
-          travellers: `${trip.basics.adults} adult${trip.basics.adults === 1 ? '' : 's'}${trip.basics.children > 0 ? `, ${trip.basics.children} ${trip.basics.children === 1 ? 'child' : 'children'}` : ''}`,
+          travellers: `${trip.basics.adults} adult${trip.basics.adults === 1 ? '' : 's'}${trip.basics.children > 0 ? `, ${trip.basics.children} ${trip.basics.children === 1 ? 'child' : 'children'}` : ''}${getIntent(id)?.composer?.partyBasis === 'assumed' ? ' (assumed)' : ''}`,
           base: region.baseName,
           /* The radius in the mode this traveller actually moves in; the raw figure is a driving one. */
           reach: profile.transport.willDrive

@@ -745,6 +745,10 @@ export function ItineraryView({
   /* The structure's own reasoning, shown only while it still describes these stays: a refinement can change them. */
   const stayRecord = itinerary.package?.planning?.stay;
   const staySentence = stayRecord && new Set(stayRecord.chosen.stays.map((stay) => stay.baseId)).size === baseSequence.length ? stayRecord.sentence : null;
+  /* Mode 3 — the plan they already had, and what became of each stay; a stay not kept says why, never silently. */
+  const statedRecord = itinerary.package?.contract?.statedItinerary ?? null;
+  const statedConflicts = (itinerary.package?.contract?.conflicts ?? []).filter((c) => c.field.startsWith('stated.'));
+  const partyAssumed = itinerary.package?.contract?.partyBasis === 'assumed';
   /* Sparse-itinerary pass — a plan thinned by a discovery gap says so once, beside where it sleeps; a relaxed one says nothing. */
   const densityLine = tripDensityLine(itinerary.package?.planning?.density);
   const lengthLine = tripLengthLine(itinerary.package?.planning?.density);
@@ -789,6 +793,36 @@ export function ItineraryView({
               <div className="mt-3" data-testid="route-bases">
                 <BaseCards bases={baseSequence} />
               </div>
+              {statedRecord && statedRecord.stays.length > 0 ? (
+                <div className="mt-3 max-w-[62ch] border-l-2 border-pine pl-3" data-testid="stated-plan">
+                  <p className="sheet-label text-ink-muted">Your plan</p>
+                  <ul className="mt-1 space-y-0.5 type-small text-ink">
+                    {statedRecord.stays.map((stay) => {
+                      const outcome = statedRecord.outcomes.find((o) => o.stopId === stay.stopId);
+                      return (
+                        <li key={stay.stopId} data-testid="stated-stay" data-outcome={outcome?.outcome ?? 'unchecked'}>
+                          {stay.label} · {stay.nights} night{stay.nights === 1 ? '' : 's'}
+                          <span className="text-ink-muted">{stay.fixed ? ' · booked' : stay.provenance === 'assumed' ? ' · Sidequest’s split' : ' · as you said'}</span>
+                          {outcome && outcome.outcome !== 'honoured' ? <span className="text-clay"> · {outcome.outcome === 'not_slept' ? 'not slept in' : outcome.outcome === 'reordered' ? 'order changed' : `planned ${outcome.plannedNights}`}</span> : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {statedConflicts.map((conflict) => (
+                    <p key={conflict.field} className="mt-1 type-small text-clay" data-testid="stated-conflict">
+                      {conflict.detail}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+              {tripId && partyAssumed ? (
+                <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="party-assumed">
+                  Planned for {party ? `${party.adults} adult${party.adults === 1 ? '' : 's'}${party.children > 0 ? `, ${party.children} child${party.children === 1 ? '' : 'ren'}` : ''}` : 'two adults'} (assumed) — nobody said who is going.{' '}
+                  <Link href={`/trips/${tripId}/party`} className="underline underline-offset-4 hover:text-pine">
+                    Say who is going
+                  </Link>
+                </p>
+              ) : null}
               {itinerary.package.planning?.baseSuggestion ? <p className="mt-2 max-w-[62ch] type-small text-ink" data-testid="stay-suggestion">{itinerary.package.planning.baseSuggestion}</p> : null}
               {/* One plain caution when travel times are mostly estimates; the counts and the reason are in the fold below. */}
               {routingLine ? (

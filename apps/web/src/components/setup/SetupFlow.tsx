@@ -9,6 +9,7 @@ import {
   ARRIVAL_PRECISION_LABELS,
   TRAVELER_NEEDS,
   TRAVELER_NEED_LABELS,
+  readPartyFromText,
   type TripComposerAnswers,
 } from '@sidequest/core';
 import { DestinationCanvas } from '../DestinationCanvas';
@@ -17,7 +18,7 @@ import type { MapBasemap } from '../map-adapter';
 import { DestinationField, type DestinationSuggestionView } from './DestinationField';
 import { TimingStep } from './TimingStep';
 import { StagePath } from '../interview/StagePath';
-import { onRadioGroupKeys, rovingTabIndex } from './radio-keys';
+import { PartyChoice } from './PartyChoice';
 import { ACCENT_WAITING, StepHeading } from './StepHeading';
 import { QUESTION_S, QUESTION_VARIANTS, timing, type Direction } from '../interview/choreography';
 import { ErrorNote, FOCUS_RING, buttonClass, cx } from '../ui';
@@ -25,7 +26,7 @@ import { scopeWords } from './destination-prefill';
 import { createTripFromComposer, updateTripFromComposer, type ComposerResult } from '@/app/(product)/trips/new/actions';
 import { placeDestinationAction } from '@/app/(product)/trips/new/place-actions';
 import type { SetupDraft, SetupStepId } from './setup-draft';
-import { SETUP_STEPS, SETUP_STEP_LABELS, describeParty, initialDraft, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf, advanceDraft } from './setup-draft';
+import { SETUP_STEPS, SETUP_STEP_LABELS, initialDraft, partyShapeFrom, isStepAnswered, nextStep, previousStep, payloadFor, stepIsRelevant, summaryOf, advanceDraft } from './setup-draft';
 
 /**
  * ONE QUESTION AT A TIME, FROM THE FIRST SCREEN.
@@ -72,6 +73,7 @@ export function SetupFlow({
   tiles = null,
   initialStep,
   initialDestination = null,
+  knownParty = null,
 }: {
   defaults: { startDate: string; endDate: string };
   editing?: { tripId: string; answers: TripComposerAnswers };
@@ -80,13 +82,16 @@ export function SetupFlow({
   initialStep?: SetupStepId;
   /** V8 — `?destination=` from the home page's example prompts: the field starts with these words and they are placed like typed ones. */
   initialDestination?: string | null;
+  /** Who usually travels with this person, from their saved travellers: the who step starts answered, labelled as theirs. */
+  knownParty?: { adults: number; children: number } | null;
 }) {
   const router = useRouter();
   const reduced = useReducedMotion();
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<SetupDraft>(() => {
     const base = initialDraft(defaults, editing?.answers);
-    return initialDestination && !editing ? { ...base, destinationText: initialDestination } : base;
+    const withParty = knownParty && !editing ? { ...base, partyShape: partyShapeFrom(knownParty.adults, knownParty.children) ?? ('other' as const), adults: knownParty.adults, children: knownParty.children, partyBasis: 'profile' as const } : base;
+    return initialDestination && !editing ? { ...withParty, destinationText: initialDestination } : withParty;
   });
   const [step, setStep] = useState<SetupStepId>(initialStep ?? 'where');
   /* V8 — which way the next screen enters: forward on Continue, back on Back and on the browser's own Back. */
@@ -339,10 +344,18 @@ export function SetupFlow({
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
-  function advance(extra?: Partial<SetupDraft>) {
+  function advance(given?: Partial<SetupDraft>) {
+    let extra = given;
     const current = { ...draftRef.current, ...(extra ?? {}) };
     /* Leaving "where" with typed text nobody has placed yet: ask, and keep going. */
     if (step === 'where' && current.destinationCenter === null) place(current.destinationText);
+    /* Who is going, when their own words already say ("…, solo", "family of four"): the who step starts answered with it. */
+    if (step === 'where' && current.partyShape === null) {
+      const reading = readPartyFromText(current.destinationText);
+      if (reading?.complete) {
+        extra = { ...(extra ?? {}), partyShape: partyShapeFrom(reading.adults, reading.children) ?? 'other', adults: reading.adults, children: reading.children, partyBasis: 'stated' };
+      }
+    }
     // Answering is what makes a step count, so the summary can never show a default.
     const answeredDraft = advanceDraft(current, step);
     setDraft((previous) => ({ ...previous, ...(extra ?? {}), answered: answeredDraft.answered }));
@@ -707,14 +720,6 @@ function NightsStep({
 // Who
 // ---------------------------------------------------------------------------
 
-const PARTY_SHAPES = [
-  { value: 'solo', label: 'Just me', adults: 1, children: 0 },
-  { value: 'couple', label: 'Two of us', adults: 2, children: 0 },
-  { value: 'friends', label: 'A group of friends', adults: 4, children: 0 },
-  { value: 'family', label: 'Family with children', adults: 2, children: 2 },
-  { value: 'other', label: 'Something else', adults: 2, children: 0 },
-] as const;
-
 function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRef: React.RefObject<HTMLHeadingElement | null>; onChange: (patch: Partial<SetupDraft>) => void }) {
   const shape = draft.partyShape;
   return (
@@ -722,41 +727,17 @@ function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRe
       <StepHeading number={4} kicker="The trip · who" headingRef={headingRef}>
         Who is going?
       </StepHeading>
-
-      <div className="ob-rows mt-8" role="radiogroup" aria-label="Who is going" onKeyDown={onRadioGroupKeys}>
-        {PARTY_SHAPES.map((option, index) => {
-          const on = shape === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              tabIndex={rovingTabIndex(on, index, Boolean(shape))}
-              onClick={() => onChange({ partyShape: option.value, adults: option.adults, children: option.children })}
-              className="ob-row w-full text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
-              data-on={on ? 'true' : 'false'}
-              data-testid={`party-${option.value}`}
-            >
-              <span aria-hidden="true" className="ob-letter">
-                {String.fromCharCode(65 + index)}
-              </span>
-              <span className="ob-row-label">{option.label}</span>
-              <span className="ob-row-why type-figure">{option.value === 'other' ? 'set the counts' : `${option.adults} ${option.adults === 1 ? 'adult' : 'adults'}${option.children ? ` · ${option.children} children` : ''}`}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {shape ? (
-        <div className="rise mt-8 flex flex-wrap items-end gap-8">
-          <Counter label="Adults" min={1} value={draft.adults} onChange={(adults) => onChange({ adults })} />
-          <Counter label="Children" min={0} value={draft.children} onChange={(children) => onChange({ children })} />
-          <p className="coordbar pb-3 text-ink-muted">{describeParty(draft)}</p>
-        </div>
+      {draft.partyBasis === 'profile' && shape && shape !== 'later' ? (
+        <p className="mt-3 type-small text-ink-muted" data-testid="party-known-note">
+          From the travellers you have saved — change it if this trip is different.
+        </p>
       ) : null}
 
-      {shape ? (
+      <div className="mt-8">
+        <PartyChoice shape={shape} adults={draft.adults} children={draft.children} onChange={(next) => onChange({ partyShape: next.shape, adults: next.adults, children: next.children, partyBasis: next.shape === 'later' ? 'assumed' : 'stated' })} />
+      </div>
+
+      {shape && shape !== 'later' ? (
         <fieldset className="rise mt-8 border-t border-ink/20 pt-3">
           <legend className="sheet-label float-left mb-3 w-full text-ink-muted">Anything that changes what a day can hold?</legend>
           <div className="clear-both flex flex-wrap gap-2">
@@ -778,26 +759,6 @@ function WhoStep({ draft, headingRef, onChange }: { draft: SetupDraft; headingRe
           </div>
         </fieldset>
       ) : null}
-    </div>
-  );
-}
-
-function Counter({ label, min, value, onChange }: { label: string; min: number; value: number; onChange: (value: number) => void }) {
-  const clamp = (next: number) => Math.max(min, Math.min(12, next));
-  return (
-    <div>
-      <p className="sheet-label text-ink-muted">{label}</p>
-      <div className="mt-1.5 flex items-stretch border-[1.5px] border-ink">
-        <button type="button" aria-label={`One fewer ${label.toLowerCase().replace(/s$/, '')}`} disabled={value <= min} onClick={() => onChange(clamp(value - 1))} className={cx('flex h-12 w-12 items-center justify-center text-xl text-ink hover:bg-ink/5 disabled:opacity-35', FOCUS_RING)}>
-          −
-        </button>
-        <span className="ob-cell-big type-figure flex w-14 items-center justify-center border-x border-ink/35 text-ink" aria-live="polite" data-testid={`count-${label.toLowerCase()}`}>
-          {value}
-        </span>
-        <button type="button" aria-label={`One more ${label.toLowerCase().replace(/s$/, '')}`} disabled={value >= 12} onClick={() => onChange(clamp(value + 1))} className={cx('flex h-12 w-12 items-center justify-center text-xl text-ink hover:bg-ink/5 disabled:opacity-35', FOCUS_RING)}>
-          +
-        </button>
-      </div>
     </div>
   );
 }

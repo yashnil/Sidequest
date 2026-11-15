@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { SetupFlow } from '@/components/setup/SetupFlow';
+import { partyFromSaved } from '@sidequest/core';
+import { savedPartyHint } from '@/lib/party/known-party';
 import { resolveMapBasemap } from '@/components/map-adapter';
 import { destinationPrefillFrom } from '@/components/setup/destination-prefill';
 import { SETUP_STEPS, type SetupStepId } from '@/components/setup/setup-draft';
@@ -39,6 +41,8 @@ export default async function NewTripPage({ searchParams }: { searchParams: Prom
   const rawStep = typeof params.step === 'string' ? params.step : undefined;
   const initialStep = rawStep && (SETUP_STEPS as readonly string[]).includes(rawStep) ? (rawStep as SetupStepId) : undefined;
   const prefill = destinationPrefillFrom(params);
+  /* Who usually travels with them, when they have described anybody: the who step starts answered, never a silent default. */
+  const known = partyFromSaved(await savedPartyHint());
 
   return (
     <SetupFlow
@@ -47,6 +51,7 @@ export default async function NewTripPage({ searchParams }: { searchParams: Prom
       tiles={resolveMapBasemap(process.env)}
       {...(initialStep ? { initialStep } : {})}
       {...(prefill ? { initialDestination: prefill } : {})}
+      {...(known ? { knownParty: { adults: known.adults, children: known.children } } : {})}
     />
   );
 }

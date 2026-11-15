@@ -111,6 +111,8 @@ export interface InterviewTraveller {
   tripDays: number;
   adults: number;
   children: number;
+  /** Nobody said who is going: the counts are an assumption, and every surface that shows them says so. */
+  partyAssumed?: boolean;
   offeredInterests: readonly Interest[];
   composerThemes?: readonly string[];
   /** Answer fields the composer already settled and the stored answers still agree with. */

@@ -261,5 +261,8 @@ test('an artifact with no imagery still renders every card', async ({ page }) =>
 
   // And the journey onward is unaffected: choosing still produces a trip.
   await page.getByRole('button', { name: /Plan a trip to/ }).first().click();
+  const party = page.getByTestId('advisor-party-question').first();
+  await party.getByTestId('party-couple').click();
+  await party.getByTestId('advisor-party-continue').click();
   await page.waitForURL(/\/trips\/[^/]+\/plan/, { timeout: 30_000 });
 });

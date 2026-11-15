@@ -107,7 +107,7 @@ function Sources({ pick }: { pick: AdvisorPick }) {
  * catch that matters most — and everything else behind "More about it", where
  * it stays available and checkable.
  */
-function PickCard({ pick, index, media, sessionId }: { pick: AdvisorPick; index: number; media: SelectedMedia | null; sessionId: string }) {
+function PickCard({ pick, index, media, sessionId, partyKnown }: { pick: AdvisorPick; index: number; media: SelectedMedia | null; sessionId: string; partyKnown: boolean }) {
   const kind = kindWords(pick);
   const editorial = pick.basis === 'editorial';
   const [catchLine, ...moreCatches] = pick.tradeoffs;
@@ -230,14 +230,14 @@ function PickCard({ pick, index, media, sessionId }: { pick: AdvisorPick; index:
         </details>
 
         <div className="mt-auto pt-6">
-          <AdvisorPickActions sessionId={sessionId} pickId={pick.id} name={pick.name} primary />
+          <AdvisorPickActions sessionId={sessionId} pickId={pick.id} name={pick.name} partyKnown={partyKnown} primary />
         </div>
       </div>
     </article>
   );
 }
 
-function AlternateCard({ pick, sessionId }: { pick: AdvisorPick; sessionId: string }) {
+function AlternateCard({ pick, sessionId, partyKnown }: { pick: AdvisorPick; sessionId: string; partyKnown: boolean }) {
   const kind = kindWords(pick);
   return (
     <article className="flex min-w-0 flex-col rounded-[var(--radius-card)] border border-ink/15 p-4" aria-labelledby={`alt-${pick.id}`}>
@@ -256,7 +256,7 @@ function AlternateCard({ pick, sessionId }: { pick: AdvisorPick; sessionId: stri
       {pick.seasonNote ? <p className="mt-1 text-[0.8125rem] leading-snug text-ink-muted">{pick.seasonNote}</p> : null}
       <Provenance pick={pick} className="mt-2" />
       <div className="mt-auto pt-4">
-        <AdvisorPickActions sessionId={sessionId} pickId={pick.id} name={pick.name} />
+        <AdvisorPickActions sessionId={sessionId} pickId={pick.id} name={pick.name} partyKnown={partyKnown} />
       </div>
     </article>
   );
@@ -317,9 +317,12 @@ export function AdvisorShortlistView({
   dots,
   sampleComplete,
   summary,
+  partyKnown = true,
 }: {
   sessionId: string;
   shortlist: AdvisorShortlist;
+  /** Whether who is going is already known (their words or saved travellers); when not, "Plan this trip" asks once, with a skip. */
+  partyKnown?: boolean;
   /** Legacy destination records; the cards now read `media`. Kept so callers need not change together. */
   images: Record<string, ImageRecord>;
   /** Per-frame card photographs by Wikidata id (`lib/media/repository#selectedMediaFor`). */
@@ -413,7 +416,7 @@ export function AdvisorShortlistView({
 
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         {shortlist.picks.map((pick, index) => (
-          <PickCard key={pick.id} pick={pick} index={index} media={(pick.wikidataId && media[pick.wikidataId]) || null} sessionId={sessionId} />
+          <PickCard key={pick.id} pick={pick} index={index} media={(pick.wikidataId && media[pick.wikidataId]) || null} sessionId={sessionId} partyKnown={partyKnown} />
         ))}
       </div>
 
@@ -434,7 +437,7 @@ export function AdvisorShortlistView({
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {shortlist.alternates.map((pick) => (
-              <AlternateCard key={pick.id} pick={pick} sessionId={sessionId} />
+              <AlternateCard key={pick.id} pick={pick} sessionId={sessionId} partyKnown={partyKnown} />
             ))}
           </div>
         </section>

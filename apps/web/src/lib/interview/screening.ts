@@ -257,6 +257,7 @@ export function interviewContextFor(input: ScreeningInputs & { offeredInterests:
       tripDays: countTripDays(input.trip.basics.startDate, input.trip.basics.endDate),
       adults: input.trip.basics.adults,
       children: input.trip.basics.children,
+      ...(composer?.partyBasis === 'assumed' ? { partyAssumed: true } : {}),
       offeredInterests: input.offeredInterests,
       ...(composer?.themes && composer.themes.length > 0 ? { composerThemes: composer.themes } : {}),
       carried: carriedFieldsFor(composer, input.carried),
