@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { InteractiveMap, type MapConnector, type MapMarker } from '../InteractiveMap';
 import type { MapBasemap } from '../map-adapter';
 import type { GeoPoint } from '../map-projection';
@@ -238,6 +238,88 @@ export function MapWorkspace({
     if (marker) window.location.hash = `day-${marker.dayNumber}`;
   };
 
+  /* The list's own press: mark the stop on the map (and for the timeline) without covering the map with its sheet. */
+  const select = (id: string) => {
+    setFocusedId(id);
+    const marker = markers.find((m) => m.id === id);
+    selection?.chooseStop(id, { source: 'map', ...(marker ? { day: marker.dayNumber } : {}) });
+  };
+  const dayModel = view.mode === 'day' ? days.find((d) => d.dayNumber === view.day) ?? null : null;
+  /*
+   * FINAL COMPLETION — THE DAY, AS A LIST BESIDE ITS MAP.
+   *
+   * The day mode drew numbered pins with nothing to read them against: the
+   * names lived only in labels the map might drop for space. The list carries
+   * the same numbers in the same order, presses mark the pin, a pin pressed on
+   * the map marks the row, and a stop nobody could place is named as such
+   * rather than missing.
+   */
+  const unplaced = dayModel && selection ? (selection.days.find((d) => d.dayNumber === dayModel.dayNumber)?.stops ?? []).filter((stop) => !stop.placed) : [];
+  const stopList = dayModel ? (
+    <section className="min-w-0" aria-labelledby="map-day-stops-heading" data-testid="map-day-stops">
+      <h2 id="map-day-stops-heading" className="eyebrow">
+        Day {dayModel.dayNumber} · in order
+      </h2>
+      {dayModel.base ? (
+        <p className="mt-2 flex items-center gap-2 type-small text-ink-muted">
+          <span aria-hidden="true" className="inline-block h-2.5 w-2.5 shrink-0 bg-ink" />
+          From and back to {dayModel.baseName}
+        </p>
+      ) : null}
+      <ol className="mt-2 divide-y divide-rule border-y border-rule">
+        {[...dayModel.markers]
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map((marker) => {
+            const on = focusedId === marker.id;
+            return (
+              <li key={marker.id} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => select(marker.id)}
+                  className={cx(
+                    'pressable flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 pr-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-pine',
+                    on && 'bg-[color-mix(in_srgb,var(--color-flare)_10%,transparent)] shadow-[inset_3px_0_0_var(--color-flare)]',
+                  )}
+                  data-testid="map-day-stop"
+                  data-stop-id={marker.id}
+                >
+                  <span aria-hidden="true" className="stop-pin ml-2">{marker.order}</span>
+                  <span className="min-w-0 flex-1 truncate text-[0.95rem] text-ink">{marker.name}</span>
+                  <span className="sr-only">{on ? ', marked on the map' : ', show on the map'}</span>
+                </button>
+                {sheets[marker.id] ? (
+                  <button type="button" onClick={() => open(marker.id)} className="pressable inline-flex min-h-11 shrink-0 items-center px-2 type-small text-accent-strong underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-pine" data-testid="map-day-stop-details">
+                    Details<span className="sr-only"> about {marker.name}</span>
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+      </ol>
+      {unplaced.length > 0 ? (
+        <p className="mt-2 type-small text-ink-muted" data-testid="map-day-unplaced">
+          Not on the map (no confirmed position): {unplaced.map((stop) => stop.name).join(', ')}.
+        </p>
+      ) : null}
+      <a href={`#day-${dayModel.dayNumber}`} className="mt-3 inline-flex min-h-11 items-center type-small font-medium text-accent-strong underline underline-offset-4" data-testid="map-day-open-itinerary">
+        Open day {dayModel.dayNumber} in the itinerary <span aria-hidden="true" className="ml-1">→</span>
+      </a>
+    </section>
+  ) : null;
+
+  /* Arrow keys move between the modes and days, as a tab list should; Home and End jump to the ends. */
+  const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const index = tabs.findIndex((tab) => tab === document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next]?.focus();
+    tabs[next]?.click();
+  };
+
   const captionText =
     view.mode === 'overview'
       ? 'Where you arrive, where you sleep and what the trip is built around.'
@@ -363,15 +445,15 @@ export function MapWorkspace({
 
   return (
     <div className="relative" data-testid="map-workspace" data-day={String(day)} data-map-mode={view.mode} data-camera-basis={frame.ok ? frame.basis : 'nothing_placed'}>
-      <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0" role="tablist" aria-label="What to draw">
-        <button type="button" role="tab" aria-selected={view.mode === 'overview'} onClick={() => setView({ mode: 'overview', day: null })} className={chip(view.mode === 'overview')} data-testid="map-day-all">
+      <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 pb-3 sm:mx-0 sm:px-0" role="tablist" aria-label="What to draw" onKeyDown={onTabKey}>
+        <button type="button" role="tab" aria-selected={view.mode === 'overview'} tabIndex={view.mode === 'overview' ? 0 : -1} onClick={() => setView({ mode: 'overview', day: null })} className={chip(view.mode === 'overview')} data-testid="map-day-all">
           Overview
         </button>
-        <button type="button" role="tab" aria-selected={view.mode === 'explore'} onClick={() => setView({ mode: 'explore', day: null })} className={chip(view.mode === 'explore')} data-testid="map-mode-explore">
+        <button type="button" role="tab" aria-selected={view.mode === 'explore'} tabIndex={view.mode === 'explore' ? 0 : -1} onClick={() => setView({ mode: 'explore', day: null })} className={chip(view.mode === 'explore')} data-testid="map-mode-explore">
           Explore
         </button>
         {days.map((d) => (
-          <button key={d.dayNumber} type="button" role="tab" aria-selected={view.mode === 'day' && view.day === d.dayNumber} onClick={() => setView({ mode: 'day', day: d.dayNumber })} className={chip(view.mode === 'day' && view.day === d.dayNumber)} data-testid={`map-day-${d.dayNumber}`} title={d.theme}>
+          <button key={d.dayNumber} type="button" role="tab" aria-selected={view.mode === 'day' && view.day === d.dayNumber} tabIndex={view.mode === 'day' && view.day === d.dayNumber ? 0 : -1} onClick={() => setView({ mode: 'day', day: d.dayNumber })} className={chip(view.mode === 'day' && view.day === d.dayNumber)} data-testid={`map-day-${d.dayNumber}`} title={d.theme}>
             <span className="type-figure">{String(d.dayNumber).padStart(2, '0')}</span>
             <span className="hidden sm:inline">{shortTheme(d.theme)}</span>
           </button>
@@ -409,14 +491,19 @@ export function MapWorkspace({
         </div>
       ) : null}
 
-      {stage ? (
-        <div className="relative -mx-5 h-[calc(100dvh_-_var(--chrome-height)_-_8.5rem)] min-h-[460px] overflow-hidden sm:mx-0" data-testid="map-workspace-stage">
-          {stage}
-          <p className="pointer-events-none absolute bottom-10 left-4 z-10 max-w-[44ch] text-xs text-bone/70">{captionText}</p>
+      <div className={cx(stopList && 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start')}>
+        <div className="min-w-0">
+          {stage ? (
+            <div className="relative -mx-5 h-[calc(100dvh_-_var(--chrome-height)_-_8.5rem)] min-h-[460px] overflow-hidden sm:mx-0" data-testid="map-workspace-stage">
+              {stage}
+              <p className="pointer-events-none absolute bottom-10 left-4 z-10 max-w-[44ch] text-xs text-bone/70">{captionText}</p>
+            </div>
+          ) : (
+            figure
+          )}
         </div>
-      ) : (
-        figure
-      )}
+        {stopList}
+      </div>
     </div>
   );
 }

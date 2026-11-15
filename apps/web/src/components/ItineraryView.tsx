@@ -58,7 +58,7 @@ import { HubShell, type HubViewId } from './hub/HubShell';
 import { DayRail } from './hub/DayRail';
 import { BaseCards, CautionsCard, CONVENIENCE_LABELS, CONVENIENCE_TONE, STRESS_LABELS, STRESS_TONE, TimingCard, TransportCard } from './hub/OverviewCards';
 import { fixNumberArticles, sameSentence } from './hub/article';
-import { clock, firstSentence, humanDate, span, timelineClock, travelSpan } from './hub/plan-format';
+import { clock, compactSpan, firstSentence, humanDate, span, timelineClock, travelSpan } from './hub/plan-format';
 import type { MapWorkspaceSheet } from './hub/MapWorkspace';
 import { DayFocusMap, DayFocusProvider, DayFocusTarget, StopFocusHandle, StopPinButton, type DayFocusModel } from './hub/DayFocus';
 import { TripSelectionProvider } from './hub/TripSelection';
@@ -789,11 +789,14 @@ export function ItineraryView({
               <div className="mt-3" data-testid="route-bases">
                 <BaseCards bases={baseSequence} />
               </div>
-              {staySentence ? <p className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="stay-decision">{staySentence}</p> : null}
               {itinerary.package.planning?.baseSuggestion ? <p className="mt-2 max-w-[62ch] type-small text-ink" data-testid="stay-suggestion">{itinerary.package.planning.baseSuggestion}</p> : null}
-              {densityLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="density-gap">{densityLine}</p> : null}
-              {lengthLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="trip-length-verdict">{lengthLine}</p> : null}
-              {routingLine ? <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="routing-degraded">{routingLine}</p> : null}
+              {/* One plain caution when travel times are mostly estimates; the counts and the reason are in the fold below. */}
+              {routingLine ? (
+                <p className="mt-2 max-w-[62ch] type-small text-ink-muted" data-testid="routing-caution">
+                  <span aria-hidden="true" className="mr-1.5 text-amber">▲</span>
+                  Most travel times on this trip are estimates (marked ≈).
+                </p>
+              ) : null}
               {contractGaps.length > 0 ? (
                 <div className="mt-3 max-w-[62ch] border-l-2 border-clay pl-3" data-testid="contract-gap">
                   <p className="sheet-label text-clay">What this plan still lacks</p>
@@ -821,6 +824,8 @@ export function ItineraryView({
               <NextActionCard nextActions={visibleActions} moreHref={visibleActions.phase === 'book' ? '#book' : '#prepare'} />
             </div>
           ) : null}
+          {/* Only what would change a decision — blockers and dependencies — stays in sight; every caution is on Prepare. */}
+          {feasibility ? <CautionsCard items={feasibility.items} /> : null}
           {overviewModel.markers.length > 0 ? <TripSnapshot itinerary={itinerary} coordinates={coordinates} rationale={rationale} tiles={tiles} /> : null}
         </div>
       </div>
@@ -833,11 +838,25 @@ export function ItineraryView({
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 type-body text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
           <span aria-hidden="true" className="text-ink-faint">+</span>
           <span className="font-medium text-ink">Why it is shaped this way</span>
-          <span className="type-small max-sm:hidden">the route, the dates, how you get around and what to watch</span>
+          <span className="type-small max-sm:hidden">the route, how the stays were chosen, the dates and how you get around</span>
         </summary>
         <div className="mt-4 grid gap-8 pb-4 lg:grid-cols-[minmax(0,7fr)_minmax(20rem,5fr)] lg:gap-12">
           <div className="min-w-0">
             {itinerary.package?.routeRationale ? <p className="max-w-[62ch] type-body text-ink-muted" data-testid="route-rationale">{itinerary.package.routeRationale}</p> : null}
+            {/*
+              FINAL COMPLETION — the planner's own working, folded. How the stays
+              were chosen (with its numbers), how full the days could be made, how
+              long the trip is for what it holds and why travel times are
+              estimates: true and worth reading, but reference rather than the trip.
+            */}
+            {staySentence || densityLine || lengthLine || routingLine ? (
+              <div className="mt-3 max-w-[62ch] space-y-2 type-small text-ink-muted" data-testid="overview-planner-notes">
+                {staySentence ? <p data-testid="stay-decision">{staySentence}</p> : null}
+                {densityLine ? <p data-testid="density-gap">{densityLine}</p> : null}
+                {lengthLine ? <p data-testid="trip-length-verdict">{lengthLine}</p> : null}
+                {routingLine ? <p data-testid="routing-degraded">{routingLine}</p> : null}
+              </div>
+            ) : null}
             {planningLine ? (
               <div className="mt-3 max-w-[62ch] type-small text-ink-muted" data-testid="planning-line" data-planning-mode={itinerary.package?.planning?.mode}>
                 <p>{planningLine.summary}</p>
@@ -865,7 +884,6 @@ export function ItineraryView({
             ) : null}
             <TimingCard dateLabel={dateLabel} decidedBy={timingOwner} rationale={itinerary.package?.timingRationale ?? null} seasonLine={seasonLine} />
             <TransportCard strategy={itinerary.transportStrategy} />
-            {feasibility ? <CautionsCard items={feasibility.items} /> : null}
           </div>
         </div>
       </details>
@@ -2405,6 +2423,8 @@ function DayCard({
       ? `${travelApprox ? '≈' : ''}${travelSpan(drivingMinutes > 0 ? drivingMinutes : day.totals.travelMinutes)} ${drivingMinutes > 0 ? 'driving' : 'travelling'}`
       : null;
   const backup = dayBackup(day, backups);
+  /* Which kinds of travel figure this day carries, in a fixed order, for the key under its timeline. */
+  const legKinds = (['measured', 'estimated', 'bounded', 'unmeasured'] as const).filter((kind) => day.items.some((item) => item.travel && legEvidence(item.travel) === kind));
   const notesAvailable = day.items.length > 0 && (day.totals.travelMinutes > 0 || day.items.some((item) => item.food) || placedStops.length > 0 || day.window.note || caveat || routineNotes.length > 0);
 
   return (
@@ -2442,8 +2462,8 @@ function DayCard({
               {stateBadge}
             </div>
             {/* 2026-11 — a short title; the rest of an old joined-up theme is a quiet second line, never a three-line heading. */}
-            <p className="mt-1.5 font-display text-[clamp(1.5rem,1.15rem+1.1vw,2.1rem)] leading-[1.08] font-light tracking-[-0.02em] text-ink text-balance" data-testid={`day-title-${day.dayNumber}`}>{splitDayTheme(day.theme).title}</p>
-            {splitDayTheme(day.theme).places ? <p className="mt-1 type-small text-ink-muted">{splitDayTheme(day.theme).places}</p> : null}
+            <p className="mt-1.5 line-clamp-2 font-display text-[clamp(1.5rem,1.15rem+1.1vw,2.1rem)] leading-[1.12] font-light tracking-[-0.02em] text-ink text-balance [overflow-wrap:anywhere]" title={splitDayTheme(day.theme).title} data-testid={`day-title-${day.dayNumber}`}>{splitDayTheme(day.theme).title}</p>
+            {splitDayTheme(day.theme).places ? <p className="mt-1 line-clamp-2 type-small text-ink-muted [overflow-wrap:anywhere]">{splitDayTheme(day.theme).places}</p> : null}
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 type-small text-ink-muted" data-testid={`day-facts-${day.dayNumber}`}>
               <span className="inline-flex items-center gap-1.5 text-ink">
                 <span aria-hidden="true" className="inline-block h-2.5 w-2.5 border-[1.5px] border-ink" />
@@ -2531,6 +2551,18 @@ function DayCard({
             V11 §D — the night, as its own thing at the foot of the day. No
             clock: nothing here knows when anybody checks in.
           */}
+          {legKinds.length > 1 || (legKinds.length === 1 && legKinds[0] !== 'measured') ? (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-1 pb-1 type-meta text-ink-faint sm:px-5" data-testid={`day-leg-key-${day.dayNumber}`}>
+              <span className="w-12 shrink-0 sm:w-16" aria-hidden="true" />
+              <span className="sr-only">How the travel times on this day were worked out: </span>
+              {legKinds.map((kind) => (
+                <span key={kind} className="inline-flex items-center gap-1.5">
+                  <span aria-hidden="true" className={cx('leg-key', `leg-${kind}`)} />
+                  {LEG_EVIDENCE_KEY[kind]}
+                </span>
+              ))}
+            </p>
+          ) : null}
           {!isLast || endsWithNight ? (
             <p className="flex items-center gap-3 px-3 pt-2 pb-3 sm:px-5" data-testid={`day-overnight-${day.dayNumber}`}>
               <span aria-hidden="true" className="ml-[3.25rem] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] border-[1.5px] border-ink bg-bone text-xs sm:ml-[5rem]">⌂</span>
@@ -3069,10 +3101,25 @@ function timePrecisionByItem(day: ItineraryDay): Record<string, TimePrecisionWor
  * The same four words the Plan view and the map legend use.
  */
 /** Which of the three evidence marks a leg is drawn with. */
-function legEvidence(travel: TravelSegment): 'measured' | 'estimated' | 'unmeasured' {
+function legEvidence(travel: TravelSegment): 'measured' | 'estimated' | 'bounded' | 'unmeasured' {
+  if (travel.feasibility === 'bounded_estimate' && travel.minutes !== null) return 'bounded';
   if (travelState(travel).word === 'measured') return 'measured';
   return travel.provenance === 'modelled' || travel.provenance === 'estimated' ? 'estimated' : 'unmeasured';
 }
+
+/** What each leg mark means, spoken after the leg and printed in the day's key. */
+const LEG_EVIDENCE_WORDS: Record<ReturnType<typeof legEvidence>, string> = {
+  measured: 'measured route time',
+  estimated: 'estimated from map distance',
+  bounded: 'at least this long, not measured directly',
+  unmeasured: 'not measured',
+};
+const LEG_EVIDENCE_KEY: Record<ReturnType<typeof legEvidence>, string> = {
+  measured: 'measured',
+  estimated: '≈ estimate',
+  bounded: '≥ at least',
+  unmeasured: 'not measured',
+};
 
 function travelState(travel: TravelSegment): { word: string; tone: BadgeTone } {
   /*
@@ -3369,6 +3416,7 @@ function TimelineRow({
             {line}
             {/* The destination is the row below; a screen reader hears it here too, so a leg is never an orphaned duration. */}
             {line.includes(item.title) ? null : <span className="sr-only">, {item.title}</span>}
+            <span className="sr-only">, {LEG_EVIDENCE_WORDS[legEvidence(item.travel)]}</span>
           </span>
           {chip ? (
             <Badge tone={state.tone} title={travelProvenanceLabel(item.travel)}>
@@ -3392,7 +3440,12 @@ function TimelineRow({
           {timelineClock(item.startMinute, 'later')}
         </time>
       )}
-      {item.kind === 'activity' ? <span className="type-figure mt-0.5 block text-[11px] text-ink-faint">{span(item.durationMinutes)}</span> : null}
+      {item.kind === 'activity' ? (
+        <span className="type-figure mt-0.5 block whitespace-nowrap text-[11px] text-ink-faint" title={span(item.durationMinutes)}>
+          <span aria-hidden="true">{compactSpan(item.durationMinutes)}</span>
+          <span className="sr-only">for {span(item.durationMinutes)}</span>
+        </span>
+      ) : null}
     </div>
   );
 

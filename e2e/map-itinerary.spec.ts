@@ -114,6 +114,54 @@ test.describe('phone', () => {
   });
 });
 
+/*
+ * FINAL COMPLETION — the Map tab's day has its own list, numbered as the pins
+ * are, and the day chips answer the arrow keys.
+ */
+test('the Map tab lists the day in pin order, and a list press marks the pin', async ({ page }) => {
+  test.setTimeout(180_000);
+  await buildFixtureTrip(page);
+  await openHubView(page, 'map');
+  const view = page.locator('#hub-view-map');
+  const workspace = view.getByTestId('map-workspace');
+
+  await test.step('arrow keys move between the day chips and draw the day', async () => {
+    await view.getByTestId('map-day-all').click();
+    await view.getByTestId('map-day-all').focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(view.getByTestId('map-mode-explore')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(view.getByTestId('map-day-1')).toBeFocused();
+    await expect(workspace).toHaveAttribute('data-day', '1');
+    await page.keyboard.press('ArrowRight');
+    await expect(workspace).toHaveAttribute('data-day', '2');
+  });
+
+  await test.step('the list carries the pins’ numbers, in order, and marks the pressed one', async () => {
+    const list = view.getByTestId('map-day-stops');
+    await expect(list).toBeVisible();
+    const stops = list.getByTestId('map-day-stop');
+    const count = await stops.count();
+    expect(count).toBeGreaterThan(0);
+    for (let index = 0; index < count; index += 1) await expect(stops.nth(index)).toContainText(String(index + 1));
+    const last = stops.nth(count - 1);
+    const id = (await last.getAttribute('data-stop-id'))!;
+    await last.click();
+    await expect(last).toHaveAttribute('aria-pressed', 'true');
+    await expect(pinOf(view.getByTestId('trip-overview-map'), id)).toHaveAttribute('aria-pressed', 'true');
+    /* Every row is a full-size touch target. */
+    expect((await last.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  await test.step('a pin pressed on the map marks its row', async () => {
+    const first = view.getByTestId('map-day-stop').first();
+    const id = (await first.getAttribute('data-stop-id'))!;
+    await pinOf(view.getByTestId('trip-overview-map'), id).focus();
+    await page.keyboard.press('Enter');
+    await expect(first).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
 test('an edit says what it did, can be taken back, and a rebuild asks before replacing it', async ({ page }) => {
   test.setTimeout(240_000);
   const tripId = await buildFixtureTrip(page);

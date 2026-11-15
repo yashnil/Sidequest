@@ -7,7 +7,7 @@ import { MAX_MERCATOR_LATITUDE, fitMercator, geodesicRing, toWorld, type GeoPoin
 import { labelBudget, selectLabels, type MapMode } from './map-camera';
 import { cx } from './ui';
 import { drawnLegStyle, legPath, legendForConnectors, lineStyleOf, type DrawnLegStyle } from './hub/route-styles';
-import { CLUSTER_RADIUS_PX, clusterLabel, clusterMarkers, dayColour, daysText, type MarkerCluster } from './map-clusters';
+import { CLUSTER_RADIUS_PX, clusterLabel, clusterMarkers, dayColour, daysText, fanOffsets, type MarkerCluster } from './map-clusters';
 
 /**
  * ONE INTERACTIVE MAP FOR THE BOARD AND THE ITINERARY.
@@ -81,7 +81,8 @@ const MARKER_STYLE: Record<MapMarkerKind, { radius: number; fill: string; stroke
   base: { radius: 5.5, fill: 'var(--color-ink)', stroke: 'var(--color-paper-raised)', shape: 'square', rank: 1 },
   signature: { radius: 8.5, fill: 'var(--color-accent)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 2 },
   overnight_experience: { radius: 7, fill: 'var(--color-pine)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 3 },
-  stop: { radius: 8.5, fill: 'var(--color-ink)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 4 },
+  /* Flare with night figures, exactly like the numbered pin on the timeline row, so a list number and its map mark are visibly one thing. */
+  stop: { radius: 8.5, fill: 'var(--color-flare)', stroke: 'var(--color-night)', shape: 'circle', rank: 4 },
   place: { radius: 3.5, fill: 'var(--color-ink-faint)', stroke: 'var(--color-paper-raised)', shape: 'circle', rank: 5 },
   unresolved: { radius: 5, fill: 'none', stroke: 'var(--color-ink-faint)', shape: 'ring', rank: 6 },
 };
@@ -104,6 +105,8 @@ export type MapConnectorStyle =
   | 'measured_transit'
   | 'measured_walk'
   | 'estimated'
+  /** Eval v3 — a floor proved from measured legs ("at least …"), drawn apart from a distance estimate. */
+  | 'bounded'
   | 'unmeasured'
   | 'sightline'
   /**
@@ -413,14 +416,43 @@ export function InteractiveMap({
   }
 
   // --- placed marks ------------------------------------------------------------------
+  /*
+   * FINAL COMPLETION — A NUMBERED PIN KEEPS ITS SIZE ON A PHONE.
+   *
+   * The drawing is laid out in a 1120-unit viewBox and scaled to the screen, so
+   * on a 390 px phone a stop's 8.5-unit badge became a 3 px dot with an
+   * unreadable number. Numbered marks are drawn in screen pixels instead:
+   * their radius, figure and the space kept between them grow with the scale.
+   */
+  const pinScale = Math.min(3.4, Math.max(1, width / Math.max(1, renderedWidth ?? width)));
   const placed = useMemo(() => {
-    const ordered = [...markers].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    /* Numbered stops first, in their order, so stop 1 keeps its true spot and a later stop is the one seated beside it. */
+    const ordered = [...markers].sort((a, b) => (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const taken: { x: number; y: number }[] = [];
     return ordered.map((marker) => {
       const at = viewport.project(marker.coordinates);
       let { x, y } = at;
       let overlapping = 0;
-      if (marker.kind === 'place') {
+      /*
+       * FINAL COMPLETION — TWO NUMBERED PINS NEVER SIT ON ONE ANOTHER.
+       *
+       * A café and the viewpoint beside it are 40 m apart, which at a day's
+       * zoom is the same pixel, and "3" was drawn exactly over "2". A numbered
+       * mark that would cover another is seated on a small ring around its own
+       * position (`fanOffsets`); the coordinate is never moved, only where the
+       * badge is drawn.
+       */
+      if (marker.kind === 'stop' || marker.kind === 'signature') {
+        const clear = (MARKER_STYLE[marker.kind].radius * 2 + 1) * pinScale;
+        if (taken.some((other) => Math.hypot(other.x - x, other.y - y) < clear)) {
+          const seats = fanOffsets(8).map(([dx, dy]) => [dx * 1.05 * pinScale, dy * 1.05 * pinScale] as const);
+          const seat = seats.find(([dx, dy]) => !taken.some((other) => Math.hypot(other.x - (at.x + dx), other.y - (at.y + dy)) < clear));
+          if (seat) {
+            x = at.x + seat[0];
+            y = at.y + seat[1];
+          }
+        }
+      } else if (marker.kind === 'place') {
         while (taken.some((other) => Math.hypot(other.x - x, other.y - y) < NUDGE_STEP_PX)) {
           overlapping += 1;
           const step = Math.ceil(overlapping / 4) * NUDGE_STEP_PX;
@@ -431,10 +463,10 @@ export function InteractiveMap({
         }
       }
       taken.push({ x, y });
-      return { marker, x, y };
+      return { marker, x, y, ax: at.x, ay: at.y };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markers, view.cx, view.cy, view.scale, width, height]);
+  }, [markers, view.cx, view.cy, view.scale, width, height, pinScale]);
 
   /*
    * THE WHOLE TRIP, GROUPED. Screen-space grouping in viewBox units, with the
@@ -709,17 +741,26 @@ export function InteractiveMap({
               </g>
             ) : null}
 
-            {visible.map(({ marker, x, y }) => {
+            {visible.map(({ marker, x, y, ax, ay }) => {
               const isFocused = marker.id === focusedId;
               const label = pinLabel ? pinLabel(marker) : defaultPinLabel(marker);
+              /* A pin seated beside its true position keeps a hairline back to it, so the badge never claims a spot it is not at. */
+              const seated = Math.hypot(ax - x, ay - y) > 0.5;
               const style = MARKER_STYLE[marker.kind];
               const fill = dayFill(marker);
               /* Drawn by day, every stop is the same size: the colour and the number carry it. */
-              const baseRadius = fill ? Math.max(style.radius, 7.5) : style.radius;
+              const numbered = marker.kind === 'stop' && marker.order !== undefined;
+              const baseRadius = (fill ? Math.max(style.radius, 7.5) : style.radius) * (numbered ? pinScale : 1);
               const radius = (baseRadius * (isFocused ? FOCUS_GROWTH : 1)) * (marker.kind === 'place' && marker.chosen ? 1.4 : 1);
               const stop = marker.kind === 'stop';
               return (
-                <g key={marker.id} data-marker={marker.id} {...(marker.dayNumber !== undefined ? { 'data-day': marker.dayNumber } : {})}>
+                <g key={marker.id} data-marker={marker.id} {...(marker.dayNumber !== undefined ? { 'data-day': marker.dayNumber } : {})} {...(seated ? { 'data-seated': 'true' } : {})}>
+                  {seated ? (
+                    <g aria-hidden="true" pointerEvents="none">
+                      <line x1={ax} y1={ay} x2={x} y2={y} stroke="var(--color-ink)" strokeWidth={pinScale} opacity={0.55} />
+                      <circle cx={ax} cy={ay} r={2 * pinScale} fill="var(--color-ink)" />
+                    </g>
+                  ) : null}
                   <circle
                     cx={x}
                     cy={y}
@@ -777,7 +818,7 @@ export function InteractiveMap({
                       {marker.dayNumber}
                     </text>
                   ) : stop && marker.order !== undefined ? (
-                    <text x={x} y={y + 3.2} textAnchor="middle" fontSize={9} fontWeight={600} fill="var(--color-paper-raised)" pointerEvents="none">
+                    <text x={x} y={y + 3.2 * pinScale} textAnchor="middle" fontSize={9 * pinScale} fontWeight={600} fill="var(--color-night)" pointerEvents="none">
                       {marker.order}
                     </text>
                   ) : null}
@@ -831,7 +872,7 @@ export function InteractiveMap({
                   const placement = labelPlacement.get(marker.id);
                   if (!placement) return null;
                   const style = MARKER_STYLE[marker.kind];
-                  const radius = style.radius * (marker.kind === 'place' && marker.chosen ? 1.4 : 1);
+                  const radius = style.radius * (marker.kind === 'place' && marker.chosen ? 1.4 : 1) * (marker.kind === 'stop' && marker.order !== undefined ? pinScale : 1);
                   /*
                    * MVP V3 — A LABEL THAT RUNS OFF THE MAP IS NOT A LABEL.
                    *

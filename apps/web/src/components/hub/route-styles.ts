@@ -30,6 +30,7 @@ export const LEG_LINE_STYLE: Record<MapConnectorStyle, LegLineStyle> = {
   measured_transit: { stroke: 'var(--color-map-route)', dash: '9 5', width: 3, opacity: 0.95, shape: 'straight', legend: 'By bus or shuttle — timed', basis: 'measured' },
   measured_walk: { stroke: 'var(--color-pine)', dash: '1 5', width: 2.5, opacity: 0.9, shape: 'straight', legend: 'On foot — timed', basis: 'measured' },
   estimated: { stroke: 'var(--color-map-secondary)', dash: '4 4', width: 1.5, opacity: 0.85, shape: 'straight', legend: 'Straight connection, not the road — estimated from map distance, not timed', basis: 'estimated' },
+  bounded: { stroke: 'var(--color-amber)', dash: '9 3', width: 1.75, opacity: 0.85, shape: 'straight', legend: 'Straight connection — at least this long by road, not measured directly', basis: 'estimated' },
   unmeasured: { stroke: 'var(--color-ink-faint)', dash: '3 4', width: 1.5, opacity: 0.7, shape: 'straight', legend: 'Straight connector, not a route — nobody timed it', basis: 'untimed' },
   sightline: { stroke: 'var(--color-pine)', dash: '3 4', width: 1.5, opacity: 0.55, shape: 'straight', legend: 'A sightline from your base, not a route', basis: 'untimed' },
   conceptual: { stroke: 'var(--color-map-route)', dash: '7 6', width: 2, opacity: 0.65, shape: 'straight', legend: 'An idea, not a route — nothing is placed until the plan is built', basis: 'conceptual' },
@@ -72,7 +73,7 @@ export function lineStyleOf(style: DrawnLegStyle): LegLineStyle {
   return style === 'straight_timed' ? STRAIGHT_TIMED_STYLE : LEG_LINE_STYLE[style];
 }
 
-const DRAWN_LEGEND_ORDER: DrawnLegStyle[] = ['measured_drive', 'measured_transit', 'measured_walk', 'rail', 'boat', 'flight', 'trail', 'straight_timed', 'estimated', 'unmeasured', 'sightline', 'conceptual'];
+const DRAWN_LEGEND_ORDER: DrawnLegStyle[] = ['measured_drive', 'measured_transit', 'measured_walk', 'rail', 'boat', 'flight', 'trail', 'straight_timed', 'estimated', 'bounded', 'unmeasured', 'sightline', 'conceptual'];
 
 /** The legend for exactly the lines as drawn — a timed leg without a shape is listed as the straight connection it is drawn as. */
 export function legendForConnectors(connectors: readonly { style: MapConnectorStyle; path?: readonly unknown[] | undefined }[]): { style: DrawnLegStyle; legend: string; basis: LegLineStyle['basis'] }[] {
@@ -81,7 +82,7 @@ export function legendForConnectors(connectors: readonly { style: MapConnectorSt
 }
 
 /** The legend order: what was timed first, then what was estimated, then what nobody timed. */
-const LEGEND_ORDER: MapConnectorStyle[] = ['measured_drive', 'measured_transit', 'measured_walk', 'rail', 'boat', 'flight', 'trail', 'estimated', 'unmeasured', 'sightline', 'conceptual'];
+const LEGEND_ORDER: MapConnectorStyle[] = ['measured_drive', 'measured_transit', 'measured_walk', 'rail', 'boat', 'flight', 'trail', 'estimated', 'bounded', 'unmeasured', 'sightline', 'conceptual'];
 
 /** The legend entries for exactly the styles on the drawing, in a fixed order, once each. */
 export function legendFor(styles: readonly MapConnectorStyle[]): { style: MapConnectorStyle; legend: string; basis: LegLineStyle['basis'] }[] {

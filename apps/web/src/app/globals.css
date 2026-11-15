@@ -1306,6 +1306,30 @@
     left: calc(50% - 1px);
     background: repeating-linear-gradient(to bottom, var(--color-ink-faint) 0 2px, transparent 2px 6px);
   }
+  /* A floor proved from measured legs: long dash, short gap, in the estimate colour — never as solid as a measured route. */
+  .leg-bounded::before {
+    background: repeating-linear-gradient(to bottom, var(--color-amber) 0 9px, transparent 9px 12px);
+  }
+  /* The day's key draws each leg mark horizontally, exactly as the thread draws it vertically. */
+  .leg-key {
+    display: inline-block;
+    width: 1.25rem;
+    height: 2.5px;
+    flex-shrink: 0;
+  }
+  .leg-key.leg-measured {
+    background: var(--color-flare);
+  }
+  .leg-key.leg-estimated {
+    background: repeating-linear-gradient(to right, var(--color-flare) 0 5px, transparent 5px 9px);
+  }
+  .leg-key.leg-bounded {
+    background: repeating-linear-gradient(to right, var(--color-amber) 0 9px, transparent 9px 12px);
+  }
+  .leg-key.leg-unmeasured {
+    height: 2px;
+    background: repeating-linear-gradient(to right, var(--color-ink-faint) 0 2px, transparent 2px 6px);
+  }
   .stop-pin {
     display: inline-flex;
     align-items: center;

@@ -36,7 +36,9 @@ export interface DayMapModel {
  * drawing it as a faint straight connector would say "we do not know how you get
  * there", which is false.
  */
-function styleFor(segment: Pick<TravelSegment, 'mode' | 'provenance' | 'episodeMode' | 'hint'>): MapConnectorStyle {
+function styleFor(segment: Pick<TravelSegment, 'mode' | 'provenance' | 'episodeMode' | 'hint' | 'feasibility' | 'minutes'>): MapConnectorStyle {
+  /* A floor proved from measured legs is neither a route nor a distance guess: it has its own line. */
+  const bounded = segment.feasibility === 'bounded_estimate' && segment.minutes !== null;
   const journey = journeyFromSegment(segment as TravelSegment);
   switch (journeyLineKind(journey)) {
     case 'air':
@@ -49,11 +51,12 @@ function styleFor(segment: Pick<TravelSegment, 'mode' | 'provenance' | 'episodeM
       return 'trail';
     case 'operator':
       /* An arranged transfer runs on roads the traveller does not choose; drawn as road when timed, as an untimed connector otherwise. */
-      return segment.provenance === 'measured' ? 'measured_drive' : segment.provenance === 'estimated' ? 'estimated' : 'unmeasured';
+      return bounded ? 'bounded' : segment.provenance === 'measured' ? 'measured_drive' : segment.provenance === 'estimated' ? 'estimated' : 'unmeasured';
     case 'pedestrian':
       return segment.provenance === 'measured' ? 'measured_walk' : segment.provenance === 'estimated' ? 'estimated' : 'unmeasured';
     case 'road':
     default:
+      if (bounded) return 'bounded';
       if (segment.provenance === 'unmeasured') return 'unmeasured';
       if (segment.provenance === 'estimated') return 'estimated';
       return segment.mode === 'public_bus' || segment.mode === 'shuttle' ? 'measured_transit' : 'measured_drive';

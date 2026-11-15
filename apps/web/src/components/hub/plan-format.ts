@@ -36,6 +36,19 @@ export function span(minutes: number): string {
   return formatMinutes(roundedDuration(minutes));
 }
 
+/**
+ * A span short enough for the timeline's clock column: "45 min", "4 hr",
+ * "2h 30". The column is four characters of figures wide, and "2 hr 30 min"
+ * wrapped there onto three lines under the clock. Rounded down, like `span`.
+ */
+export function compactSpan(minutes: number): string {
+  const rounded = roundedDuration(minutes);
+  if (rounded < 60) return `${rounded} min`;
+  const hours = Math.floor(rounded / 60);
+  const rest = rounded % 60;
+  return rest === 0 ? `${hours} hr` : `${hours}h ${String(rest).padStart(2, '0')}`;
+}
+
 /** A span of travel: rounded *up*, so it never understates the journey. */
 export function travelSpan(minutes: number): string {
   return formatMinutes(roundedTravel(minutes));

@@ -44,7 +44,7 @@ export function DayMap({
       onFocus={(id) => {
         setFocusedId(id);
         const row = document.querySelector(`[data-timeline-place="${CSS.escape(id)}"][data-day="${dayNumber}"]`) ?? document.querySelector(`[data-timeline-place="${CSS.escape(id)}"]`);
-        row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
         (row as HTMLElement | null)?.focus?.({ preventScroll: true });
       }}
       tiles={tiles}

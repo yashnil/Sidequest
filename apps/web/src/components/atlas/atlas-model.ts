@@ -146,6 +146,7 @@ const CONNECTOR_STYLE: Record<string, AtlasLineStyle> = {
   measured_transit: 'measured',
   measured_walk: 'measured',
   estimated: 'estimated',
+  bounded: 'estimated',
   unmeasured: 'unmeasured',
   sightline: 'unmeasured',
   conceptual: 'unmeasured',
