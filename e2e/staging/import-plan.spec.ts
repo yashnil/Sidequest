@@ -63,6 +63,9 @@ test('imported itinerary: stated nights survive into a live-built trip', async (
   await defaults.click();
   await expect(page).toHaveURL(/\/itinerary(#[a-z-]+)?$/, { timeout: 900_000 });
   const seconds = Math.round((Date.now() - started) / 1000);
+  /* Read the overview once it has rendered; allInnerTexts never waits. */
+  await expect(page.getByTestId('route-overview')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('stated-plan')).toBeVisible({ timeout: 60_000 });
   const bases = await page.getByTestId('base-card').allInnerTexts();
   const stated = await page.getByTestId('stated-stay').evaluateAll((nodes) => nodes.map((n) => ({ text: (n as HTMLElement).innerText, outcome: n.getAttribute('data-outcome') })));
   const conflicts = await page.getByTestId('stated-conflict').allInnerTexts();
