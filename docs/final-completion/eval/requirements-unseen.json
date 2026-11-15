@@ -1,0 +1,58 @@
+[
+ {
+  "scenario": "faroe-roadtrip",
+  "defining": [
+   {"id": "mulafossur", "label": "Múlafossur waterfall at Gásadalur (Vágar)", "anyOf": ["Múlafossur", "Mulafossur", "Gásadalur", "Gasadalur"]},
+   {"id": "saksun-tjornuvik", "label": "Northern Streymoy villages: Saksun lagoon and/or Tjørnuvík", "anyOf": ["Saksun", "Tjørnuvík", "Tjornuvik", "Risin og Kellingin", "Risin and Kellingin", "Giant and the Witch"]},
+   {"id": "gjogv-slaettaratindur", "label": "Eysturoy north: Gjógv gorge village and/or Slættaratindur", "anyOf": ["Gjógv", "Gjogv", "Slættaratindur", "Slaettaratindur", "Eiði", "Eidi", "Funningur"]},
+   {"id": "sorvagsvatn", "label": "Sørvágsvatn / Leitisvatn 'lake over the ocean' hike (Trælanípan)", "anyOf": ["Sørvágsvatn", "Sorvagsvatn", "Leitisvatn", "Trælanípan", "Traelanipan", "Bøsdalafossur", "Slave Cliff"]},
+   {"id": "mykines-or-north", "label": "Puffins on Mykines or the Northern Isles (Klaksvík, Kalsoy Kallur lighthouse)", "anyOf": ["Mykines", "puffin", "Kalsoy", "Kallur", "Trøllanes", "Trollanes", "Klaksvík", "Klaksvik", "Klakkur", "Viðoy", "Vidoy", "Villingadalsfjall"]},
+   {"id": "torshavn-kirkjubour", "label": "Tórshavn old town (Tinganes) and Kirkjubøur", "anyOf": ["Tórshavn", "Torshavn", "Tinganes", "Kirkjubøur", "Kirkjubour", "Magnus Cathedral"]}
+  ],
+  "redFlags": [
+   {"id": "drive-to-suduroy", "label": "Driving to Suðuroy as a road leg with no ferry", "anyOf": ["drive to Suðuroy", "drive to Suduroy", "Suðuroy by road", "Tvøroyri drive from Tórshavn"]},
+   {"id": "drive-to-mykines", "label": "Driving to Mykines (ferry or helicopter only)", "anyOf": ["drive to Mykines", "Mykines by car", "Mykines road"]},
+   {"id": "wrong-country", "label": "Confusing with Iceland/Norway/Denmark, or aurora as a June activity", "anyOf": ["Reykjavík", "Reykjavik", "Ring Road", "Copenhagen day trip", "northern lights", "aurora"]},
+   {"id": "rail", "label": "Trains or metro (none exist)", "anyOf": ["train to", "metro", "rail pass", "railway"]},
+   {"id": "drangarnir-self-hike", "label": "Independent hike to Drangarnir (guided/boat only)", "anyOf": ["hike to Drangarnir independently", "walk to Drangarnir"]}
+  ],
+  "notes": "Compact islands: one base in Tórshavn (or Tórshavn + one night on Vágar/Eysturoy), 0–1 hotel moves, self-drive rental from Vágar Airport. Subsea tunnels carry tolls; Kalsoy and Mykines need ferries (Mykines books out and weather-cancels; landing/hiking fee). Near-24h June daylight: sunset/night timing irrelevant, stargazing impossible; many hikes on private land charge fees."
+ },
+ {
+  "scenario": "oaxaca-food-culture",
+  "defining": [
+   {"id": "dia-de-muertos", "label": "Día de Muertos observances: cemetery vigils, altars, comparsas, Oct 31–Nov 2", "anyOf": ["Día de Muertos", "Dia de Muertos", "Day of the Dead", "Xoxocotlán", "Xoxocotlan", "Panteón General", "Panteon General", "San Felipe del Agua", "comparsa", "muerteada", "ofrenda", "altar"]},
+   {"id": "markets", "label": "Oaxaca markets: Benito Juárez / 20 de Noviembre, Abastos", "anyOf": ["20 de Noviembre", "Benito Juárez market", "Mercado Benito Juarez", "Pasillo de Humo", "Abastos", "Mercado de la Merced", "Tlacolula market"]},
+   {"id": "monte-alban", "label": "Monte Albán archaeological site", "anyOf": ["Monte Albán", "Monte Alban"]},
+   {"id": "mezcal-valley", "label": "Mezcal palenque / Tlacolula valley day", "anyOf": ["mezcal", "palenque", "Matatlán", "Matatlan", "Mitla", "Hierve el Agua", "Teotitlán", "Teotitlan", "Tlacolula", "Santa María del Tule", "Tule tree", "Árbol del Tule"]},
+   {"id": "santo-domingo", "label": "Templo de Santo Domingo, ethnobotanical garden and cultural museum", "anyOf": ["Santo Domingo", "Jardín Etnobotánico", "Jardin Etnobotanico", "Museo de las Culturas", "Andador Macedonio Alcalá", "Zócalo", "Zocalo"]},
+   {"id": "mole-cooking", "label": "Oaxacan cuisine: cooking class, tlayudas, chocolate, notable restaurants", "anyOf": ["mole", "cooking class", "tlayuda", "chocolate", "Casa Oaxaca", "Criollo", "Levadura de Olla", "Origen", "Los Danzantes", "Mayordomo", "chapulines", "memelas"]}
+  ],
+  "redFlags": [
+   {"id": "self-drive", "label": "Self-drive / rental car plan for a no-car trip", "anyOf": ["rent a car", "rental car", "self-drive", "pick up your car"]},
+   {"id": "coast-day-trip", "label": "Day trip to the Pacific coast (6+ hours each way)", "anyOf": ["Puerto Escondido day trip", "Mazunte", "Huatulco", "Zipolite"]},
+   {"id": "wrong-place", "label": "Confusing with Mexico City, Guelaguetza (July) or Michoacán's Day of the Dead", "anyOf": ["Guelaguetza", "Pátzcuaro", "Patzcuaro", "Janitzio", "Teotihuacan", "Frida Kahlo Museum"]},
+   {"id": "rail", "label": "Train/metro (no passenger rail serves Oaxaca city)", "anyOf": ["train to", "metro", "railway"]},
+   {"id": "tlacolula-wrong-day", "label": "Tlacolula market on a day other than Sunday", "anyOf": ["Tlacolula market on Monday", "Tlacolula market on Friday"]}
+  ],
+  "notes": "Single base in Oaxaca centro, zero hotel moves; walking, taxis, colectivos and booked tours for Monte Albán and the valley. Muertos week is peak demand; cemetery vigils are night events, so late nights and gentle mornings. Hierve el Agua has intermittent community closures: verify-before-going with fallbacks."
+ },
+ {
+  "scenario": "madeira-levada-hiking",
+  "defining": [
+   {"id": "pico-ruivo", "label": "Pico do Arieiro to Pico Ruivo (PR1) ridge hike", "anyOf": ["Pico do Arieiro", "Pico Arieiro", "Pico Ruivo", "PR1", "Achada do Teixeira", "PR1.2"]},
+   {"id": "25-fontes-risco", "label": "Rabaçal: Levada das 25 Fontes and Risco (PR6/PR6.1)", "anyOf": ["25 Fontes", "Vinte e Cinco Fontes", "Risco", "Rabaçal", "Rabacal", "PR6"]},
+   {"id": "caldeirao-verde", "label": "Levada do Caldeirão Verde (PR9)", "anyOf": ["Caldeirão Verde", "Caldeirao Verde", "Caldeirão do Inferno", "Queimadas", "PR9"]},
+   {"id": "sao-lourenco", "label": "Ponta de São Lourenço (PR8)", "anyOf": ["São Lourenço", "Sao Lourenco", "PR8", "Casa do Sardinha"]},
+   {"id": "another-levada", "label": "Another classic levada (Rei, Furado, Balcões, Fanal, Alecrim)", "anyOf": ["Levada do Rei", "Levada do Furado", "Ribeiro Frio", "Balcões", "Balcoes", "Portela", "Levada do Alecrim", "Fanal", "Levada da Serra"]},
+   {"id": "funchal", "label": "Funchal old town, Mercado dos Lavradores, poncha, Cabo Girão", "anyOf": ["Funchal", "Mercado dos Lavradores", "Zona Velha", "poncha", "Cabo Girão", "Cabo Girao"]}
+  ],
+  "redFlags": [
+   {"id": "rail", "label": "Trains or metro (none on Madeira) or walking from Funchal to trailheads", "anyOf": ["train to", "metro", "walk from Funchal to Pico"]},
+   {"id": "one-way-no-return", "label": "Linear PR1 with the car at the start and no return noted", "anyOf": ["park at Arieiro and finish at Achada do Teixeira"]},
+   {"id": "wrong-island", "label": "Confusion with the Azores/Canaries or driving to Porto Santo", "anyOf": ["Sete Cidades", "Teide", "Ponta Delgada", "drive to Porto Santo", "Lisbon day trip"]},
+   {"id": "rabacal-road", "label": "Driving down the closed Rabaçal access road", "anyOf": ["drive to Rabaçal house", "drive down to Rabaçal"]}
+  ],
+  "notes": "One base (Funchal, or Funchal plus a north-coast night) with 0–1 moves; rental car or booked transfers since trailhead buses are sparse. Classified trails need IFCN registration and a fee; check closures (PR1 sections closed after 2024 fires); Rabaçal shuttle from the ER110 car park; headtorch for tunnels."
+ }
+]

@@ -47,6 +47,10 @@ const SCENARIOS: readonly Scenario[] = [
   { key: 'mountain-hiking', title: 'Mountain hiking vacation', destination: 'Dolomites hiking', start: '2027-07-01', end: '2027-07-08', party: 'friends' },
   { key: 'mountain-road-trip', title: 'Mountain road trip', destination: 'Scottish Highlands road trip', start: '2027-06-06', end: '2027-06-13', party: 'couple' },
   { key: 'point-to-point-trek', title: 'Point-to-point trek', destination: 'Tour du Mont Blanc trek', start: '2027-07-10', end: '2027-07-19', party: 'friends' },
+  /* Final pass — destinations never evaluated before; requirements written before any run (docs/final-completion/eval/requirements-unseen.json). */
+  { key: 'faroe-roadtrip', title: 'Faroe Islands road trip (unseen)', destination: 'Faroe Islands road trip', start: '2027-06-07', end: '2027-06-13', party: 'couple' },
+  { key: 'oaxaca-food-culture', title: 'Oaxaca food and culture (unseen)', destination: 'Oaxaca food and culture', start: '2027-10-28', end: '2027-11-03', party: 'couple' },
+  { key: 'madeira-levada-hiking', title: 'Madeira levada hiking (unseen)', destination: 'Madeira levada hiking', start: '2027-05-10', end: '2027-05-16', party: 'friends' },
   { key: 'multigenerational', title: 'Multi-generational family holiday', destination: 'Algarve, Portugal', start: '2027-06-20', end: '2027-06-27', party: 'family', mustDo: 'Travelling with our children and their grandparents; easy days.' },
 ];
 const wanted = (process.env.STAGING_SCENARIOS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
