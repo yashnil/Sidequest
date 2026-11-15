@@ -152,10 +152,15 @@ function referenceResolution(node: IntentNode): IntentNodeResolution | null {
 }
 
 /** What to ask the resolver for one part: the part, qualified by its country when the phrase gave one. */
+/** Route words stay on the part (route-shape reading needs them) but are never part of what the geocoder is asked, nor what its rows are judged against: "Faroe Islands road trip" found no row. */
+export function lookupLabel(label: string): string {
+  return label.replace(/^(the)\s+/i, '').replace(/\s+(?:road ?trips?|self[- ]drive|drive|driving|tour)$/i, '').trim() || label;
+}
+
 export function resolverQueryFor(node: IntentNode): string {
   if (node.kind === 'country' && node.countryCode) return countryFacts(node.countryCode)?.name ?? node.label;
   const country = node.countryCode ? countryFacts(node.countryCode)?.name : null;
-  const label = node.label.replace(/^(the)\s+/i, '');
+  const label = lookupLabel(node.label);
   const within = node.within && !new RegExp(`\\b${node.within.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(label) ? `, ${node.within}` : '';
   return country && !new RegExp(`\\b${country}\\b`, 'i').test(label) ? `${label}${within}, ${country}` : `${label}${within}`;
 }
@@ -257,8 +262,31 @@ export async function resolveIntentGraph(input: {
     if (!input.resolver || calls >= budget) break;
     if (child.kind === 'vague_region') continue; // "rural Japan" has no row anywhere; the country point is the honest anchor.
     let answer = await ask(resolverQueryFor(child));
+    /* The label the rows answered: the part's words without route words, and without any tail a retry below drops. */
+    let askedLabel = lookupLabel(child.label);
     /* Asked inside the container the phrase named and found nothing there: ask for the part on its own, once. */
     if (child.within && (!answer || answer.candidates.length === 0) && calls < budget) answer = await ask(resolverQueryFor({ ...child, within: undefined }));
+    /*
+     * Final pass — nothing found for the words as typed: drop trailing words
+     * (at most two), because the tail is usually how the trip should feel, not
+     * where it is. Live staging: "Faroe Islands road trip" found no row ("road
+     * trip" is kept for route-shape reading) and the trip had no centre;
+     * "Faroe Islands" is the place. Whatever answers is gated like any row.
+     */
+    /* "Madeira levada" answered with a neighbourhood called Levada: a row that does not carry the phrase's first word is not the place either. */
+    const head = normalizeDestinationQuery(child.label.replace(/^(the)\s+/i, '').split(/\s+/)[0] ?? '');
+    /* A label qualified by a nationality ("Scottish Highlands") leads with the demonym, not the map name: the phrase's country stands in for the head word there. */
+    const carriesHead = (a: DestinationResolution | null) => Boolean(a && a.candidates.length > 0 && (child.countryCode ? true : a.candidates.some((c) => normalizeDestinationQuery(c.displayName).includes(head))));
+    for (let dropped = 1; dropped <= 2 && !carriesHead(answer) && calls < budget; dropped += 1) {
+      const words = child.label.trim().split(/\s+/);
+      if (words.length - dropped < 1) break;
+      const shorter = words.slice(0, words.length - dropped).join(' ');
+      const again = await ask(resolverQueryFor({ ...child, label: shorter }));
+      if (again && (carriesHead(again) || !answer || answer.candidates.length === 0)) {
+        answer = again;
+        askedLabel = lookupLabel(shorter);
+      }
+    }
     if (!answer) continue;
     partResolutions.set(child.id, answer);
     if (child.kind === 'country') {
@@ -267,7 +295,7 @@ export async function resolveIntentGraph(input: {
       if (leading && leading.entityType === 'country' && (!child.countryCode || !leading.countryCode || leading.countryCode === child.countryCode)) resolutions.set(child.id, resolutionFromCandidate(leading));
       continue;
     }
-    let ranked = rankCandidates(child, answer.candidates);
+    let ranked = rankCandidates({ ...child, label: askedLabel }, answer.candidates);
     for (const r of ranked) if (r.assessment.verdict === 'incompatible') refused.push({ label: r.candidate.displayName, reason: r.assessment.reasons[r.assessment.reasons.length - 1] ?? 'incompatible' });
     let chosen = ranked.find((r) => r.assessment.verdict !== 'incompatible') ?? null;
     /* One more way to ask for a landscape: its map form, without the nationality. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { statedTravelMode } from './stated-mode';
+import { statedTravelMode, withoutModeClause } from './stated-mode';
 
 describe('statedTravelMode — a mode written into the destination', () => {
   it('reads public transport from an explicit clause', () => {
@@ -53,5 +53,15 @@ describe('withoutModeClause — the places, without how the traveller moves betw
     const { parseDestinationIntent } = await import('./intent-graph');
     const graph = parseDestinationIntent('Tokyo and Kyoto by train');
     expect(graph.children.map((c) => c.label)).toEqual(['Tokyo', 'Kyoto']);
+  });
+});
+
+describe('a trailing list of interests is how the trip should feel, not a place (final pass)', () => {
+  it('drops "food and culture" and friends from the end, and nothing else', () => {
+    expect(withoutModeClause('Oaxaca food and culture')).toBe('Oaxaca');
+    expect(withoutModeClause('Lyon food & wine')).toBe('Lyon');
+    expect(withoutModeClause('Kyoto culture')).toBe('Kyoto');
+    expect(withoutModeClause('Food Island')).toBe('Food Island');
+    expect(withoutModeClause('Tokyo and Kyoto')).toBe('Tokyo and Kyoto');
   });
 });

@@ -45,12 +45,19 @@ const CAR_FREE_PREFIX = /^\s*car[- ]free\s+/i;
  * route-shape reading depends on.
  */
 const TRIP_KIND_SUFFIX = /\s+(?:safari|safaris|hiking|hike|hikes|trekking|trek|treks|adventure|adventures|holiday|holidays|vacation|getaway|honeymoon|ski(?:ing)?(?: trip| holiday)?|beach holiday|city break|break|tour|retreat|trip)$/i;
+/**
+ * Final pass — a trailing list of interests is how the trip should feel, not a
+ * second place: "Oaxaca food and culture" was split on "and" into the parts
+ * "Oaxaca food" and "culture". Generic interest nouns only, only at the end.
+ */
+const INTEREST_NOUN = '(?:food|foodie|culture|cultural|wine|wines|history|art|arts|nature|wildlife|nightlife|shopping|architecture|markets|cuisine)';
+const INTEREST_SUFFIX = new RegExp(`\\s+${INTEREST_NOUN}(?:\\s*(?:,|and|&)\\s*${INTEREST_NOUN})*$`, 'i');
 
 export function withoutModeClause(text: string): string {
   let stripped = text.replace(CAR_FREE_PREFIX, '').replace(MODE_CLAUSE, ' ').replace(/\s+/g, ' ').trim();
   if (!/\broad ?trip$/i.test(stripped)) {
     for (let guard = 0; guard < 3; guard += 1) {
-      const next = stripped.replace(TRIP_KIND_SUFFIX, '').trim();
+      const next = stripped.replace(TRIP_KIND_SUFFIX, '').replace(INTEREST_SUFFIX, '').trim();
       if (next === stripped || next.length === 0) break;
       stripped = next;
     }
