@@ -33,6 +33,8 @@ export interface FictionalTrailOptions {
   intermediateVillage?: boolean;
   /** Propose Fernhollow as a small town worth a look — on the scan, but not as a place to sleep. */
   townBetween?: boolean;
+  /** Only these villages are proposed as places to sleep (the stages still end at every village, placed). */
+  bedsOnly?: Village[];
   /** Give the third stage the usual bus round it. */
   busAlternative?: boolean;
   /** Propose no stages at all: the walks come back as ordinary loops. */
@@ -91,7 +93,7 @@ export function fictionalTrailProposal(options: FictionalTrailOptions = {}): { p
     ...(options.townBetween ? [{ name: TRAIL_VILLAGES.fern.name, locality: TRAIL_VILLAGES.fern.name, kind: 'small_town', at: TRAIL_VILLAGES.fern.at, durationMinutes: 45 }] : []),
   ];
   const raw = {
-    bases: villages.map((v) => ({ name: TRAIL_VILLAGES[v].name, locality: TRAIL_VILLAGES[v].name, nightsHint: 1, why: 'An inn at the end of a stage.' })),
+    bases: (options.bedsOnly ?? villages).map((v) => ({ name: TRAIL_VILLAGES[v].name, locality: TRAIL_VILLAGES[v].name, nightsHint: 1, why: 'An inn at the end of a stage.' })),
     candidates: [
       ...stageCandidates,
       ...extras.map((e) => ({ name: e.name, locality: e.locality, kind: e.kind, tier: 'hidden_gem', durationMinutes: e.durationMinutes, intensity: 'easy', costLevel: 1, exposure: e.kind === 'museum' ? 'indoor' : 'outdoor', bestTime: 'any', crowd: 'quiet', booking: 'none', rainyDayOk: e.kind === 'museum', interests: e.kind === 'hot_spring' ? ['hot_springs'] : ['history_and_culture'], why: 'Close to the trail.' })),

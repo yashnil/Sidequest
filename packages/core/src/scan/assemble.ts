@@ -1337,7 +1337,7 @@ function planTrailStages(
   /* A trail of S stages sleeps S + 1 beds; nights beyond that are spare days a split may use. Only a followed trail has them to spend. */
   const nights = Math.max(0, input.dates.length - 1);
   const spareDays = trail.follow ? Math.max(0, nights - 1 - ordered.stages.length) : undefined;
-  const resolved = resolveTrailStages({
+  const stageArgs = {
     stages: ordered.stages,
     limits,
     beds,
@@ -1349,9 +1349,36 @@ function planTrailStages(
       const date = input.dates[at]!;
       return { month: Number(date.slice(5, 7)), duskMinute: civilDuskMinute(stage.end, date, zoneOfPoint(input, stage.end)), startMinute: trail.dayStartMinutes?.[at] ?? DEFAULT_TRAIL_START_MINUTE };
     },
-  });
+  };
+  let resolved = resolveTrailStages(stageArgs);
+  /*
+   * Final pass — A TRAIL THE STAYS SHOULD FOLLOW, WHOSE STAGES END AT PLACED
+   * VILLAGES NOBODY PROPOSED AS A BED. Live Kumano (family, March): every
+   * stage ended at a placed settlement, none at a proposed bed, so the chain
+   * had fewer than two beds and the trip became one base and a rental car.
+   * The placed stage ends are tried as beds; the ones the chain uses become
+   * places to sleep, said to be booked like any stage end. Nothing is
+   * invented: only points the geocoder placed for the trail's own stages.
+   */
+  const stageEndBedIds: string[] = [];
+  if (trail.follow && waypoints.length > 0 && trailBedChain(resolved).chain.length < 2) {
+    const retry = resolveTrailStages({ ...stageArgs, beds: [...beds, ...stageArgs.waypoints] });
+    const chain = trailBedChain(retry).chain;
+    if (chain.length >= 2) {
+      resolved = retry;
+      stageEndBedIds.push(...chain.filter((id) => waypoints.some((w) => w.id === id)));
+    }
+  }
   /* The nights on the way that are not proposed beds become places to sleep. */
   const addedBedIds: string[] = [];
+  for (const id of stageEndBedIds) {
+    if (baseEntries.some((b) => b.id === id)) continue;
+    const w = waypoints.find((x) => x.id === id)!;
+    baseEntries.push({ id: w.id, proposal: { key: w.id, name: w.name, locality: w.name, nightsHint: 1, why: 'Where a trail stage ends. Book a bed here like any stage end.' } });
+    positions.set(w.id, { ...w.position, locality: w.position.locality ?? w.name });
+    pointAt.set(w.id, w.coordinates);
+    addedBedIds.push(w.id);
+  }
   for (const stage of resolved) {
     if (stage.resolution !== 'split' || !stage.splitAt || baseEntries.some((b) => b.id === stage.splitAt!.baseId)) continue;
     const w = waypoints.find((x) => x.id === stage.splitAt!.baseId);

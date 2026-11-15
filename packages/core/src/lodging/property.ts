@@ -150,8 +150,22 @@ export function nameSaysHotSpring(name: string): boolean {
  */
 const NOT_A_PROPERTY = /バス停|停留所|bus ?stop|\bstation\b|駅$|parking lot|駐車場$|商店$|car park|vacanc(y|ies)|求人/i;
 
-export function isNotAProperty(name: string): boolean {
-  return NOT_A_PROPERTY.test(name);
+/**
+ * Final pass — A BUSINESS FILED UNDER LODGING. Live Tanzania showed "Arusha
+ * Website Design" among the places to stay: a source category is a claim,
+ * and a name that says what else the business is outranks it — unless the
+ * name also says it is somewhere to sleep ("Design Hotel", "Agency Lodge").
+ * Language data about trades, never a place or a property.
+ */
+const OTHER_TRADE = /\b(web ?site|web design|design studio|graphic design|software|digital marketing|marketing|advertising|consult(ancy|ants?|ing)|solutions|IT services|computer|printing|insurance|accountants?|law (firm|office)|solicitors?|attorneys?|real estate|estate agents?|bank|pharmacy|clinic|dental|hospital|school|academy|college|university|church|mosque|supermarket|hardware|garage|car (hire|rental)|logistics|freight|construction|engineering)\b/i;
+const SLEEP_WORD = /hotel|hostel|lodge|inn\b|motel|guest ?house|b ?& ?b|bed and breakfast|camp|resort|suites?|apartments?|villa|chalet|cottage|cabin|hut|refug|rifugio|gîte|gite|pension|hostal|posada|ryokan|minshuku|旅館|民宿|ホテル|宿/i;
+
+export function isNotAProperty(name: string, context: { locality?: string | undefined } = {}): boolean {
+  if (NOT_A_PROPERTY.test(name)) return true;
+  if (OTHER_TRADE.test(name) && !SLEEP_WORD.test(name)) return true;
+  /* A listing named only for its own town ("Les Houches") is the town, not a property we can stand behind. */
+  if (context.locality && propertyNameKey(name) === propertyNameKey(context.locality) && !SLEEP_WORD.test(name)) return true;
+  return false;
 }
 
 /** A key that stays the same across spellings of one property's name. */

@@ -120,7 +120,8 @@ export function overtureLodgingRow(row: Record<string, unknown>): LodgingPropert
   if (!usable(row)) return null;
   const names = row.names as { primary?: unknown; common?: unknown } | null | undefined;
   const name = cleanName(names?.primary);
-  if (name.length < 2 || name.length > 120 || isNotAProperty(name)) return null;
+  const firstAddress = Array.isArray(row.addresses) ? (row.addresses as { locality?: unknown }[])[0] : undefined;
+  if (name.length < 2 || name.length > 120 || isNotAProperty(name, { locality: cleanName(firstAddress?.locality) || undefined })) return null;
   const coordinates = pointOf(row);
   const id = typeof row.id === 'string' ? row.id : null;
   if (!coordinates || !id) return null;

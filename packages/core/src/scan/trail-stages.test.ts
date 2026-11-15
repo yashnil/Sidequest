@@ -271,6 +271,18 @@ describe('the stays follow the trail', () => {
     expect(first.typicalDurationMinutes).toBe(Math.round(210 * 1.15));
   });
 
+  it('a trail whose stages end at placed villages nobody proposed as beds still follows the trail, sleeping at the stage ends', () => {
+    /* Final pass — live Kumano: one proposed base, every stage ending at a placed village, became one base and a rental car. */
+    const assembled = fictionalTrailRegion({ bedsOnly: ['alder'] });
+    const portfolio = assembled.region.basePortfolio!;
+    const trail = portfolio.decision!.trail!;
+    expect(trail.followed).toBe(true);
+    expect(portfolio.bases.map((b) => b.baseName)).toEqual(['Alder Gate', 'Brackenford', 'Corrie Mill', 'Dunmere', 'Eskwater']);
+    expect(trail.stages.every((s) => s.resolution === 'walk' && s.dayNumber !== undefined)).toBe(true);
+    /* The villages the trail sleeps in were never proposed as beds: each says to book a bed there. */
+    expect(trail.stages.filter((s) => s.addedBed).length).toBeGreaterThanOrEqual(3);
+  });
+
   it('splits a too-long stage at the village between and sleeps there', () => {
     const assembled = fictionalTrailRegion({ longThirdStage: true, intermediateVillage: true, dates: ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17'] });
     const trail = assembled.region.basePortfolio!.decision!.trail!;

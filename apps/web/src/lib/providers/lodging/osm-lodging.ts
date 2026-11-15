@@ -81,7 +81,7 @@ export function osmLodgingCandidate(element: OsmLodgingElement): LodgingProperty
   if (!sourceType) return null;
   if (tags.disused === 'yes' || tags['disused:tourism'] || tags.abandoned === 'yes') return null;
   const name = tags.name?.trim().replace(/\s+/g, ' ') ?? '';
-  if (name.length < 2 || name.length > 120 || isNotAProperty(name)) return null;
+  if (name.length < 2 || name.length > 120 || isNotAProperty(name, { locality: tags['addr:city'] ?? tags['addr:place'] ?? tags['is_in:city'] })) return null;
   const coordinates = point(element);
   if (!coordinates) return null;
 

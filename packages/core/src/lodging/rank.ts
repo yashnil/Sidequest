@@ -1,3 +1,4 @@
+import { isNotAProperty } from './property';
 import { haversineKm } from '../travel/estimate';
 import { bookingComSearchUrl, propertyMapUrl } from './links';
 import {
@@ -501,6 +502,11 @@ export function rankLodgingProperties(
     const placed = Number.isFinite(candidate.coordinates?.lat) && Number.isFinite(candidate.coordinates?.lng) && Math.abs(candidate.coordinates.lat) <= 90 && Math.abs(candidate.coordinates.lng) <= 180;
     if (!named || !placed) {
       drop('no name or no position');
+      continue;
+    }
+    /* Final pass — a business filed under lodging, or a row that is only the stay's own town name. */
+    if (isNotAProperty(candidate.name, { locality: candidate.locality ?? base.name })) {
+      drop('not somewhere to sleep');
       continue;
     }
     if (haversineKm(base.coordinates, candidate.coordinates) > radiusKm) {
