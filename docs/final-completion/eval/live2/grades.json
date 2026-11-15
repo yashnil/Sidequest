@@ -1,0 +1,389 @@
+[
+ {
+  "scenario": "kumano-kodo",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "nakahechi-walk": {
+    "present": true,
+    "stage": null
+   },
+   "hongu-taisha": {
+    "present": true,
+    "stage": null
+   },
+   "nachi-hayatama": {
+    "present": true,
+    "stage": null
+   },
+   "onsen-village-stay": {
+    "present": true,
+    "stage": null
+   },
+   "luggage-transfer": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [
+   "no-walking"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 110,
+  "total_travel": 657,
+  "days_over_limit": 0,
+  "bases": 2,
+  "stops": 27,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 36,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "Guest house and onsen Wadama",
+   "わたらせ温泉 ホテルやまゆり",
+   "熊野 四季亭 - Kumano Shikitei",
+   "温泉民宿大村屋"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 239
+ },
+ {
+  "scenario": "tanzania-safari",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "serengeti": {
+    "present": true,
+    "stage": null
+   },
+   "ngorongoro": {
+    "present": true,
+    "stage": null
+   },
+   "tarangire-manyara": {
+    "present": true,
+    "stage": null
+   },
+   "guided-vehicle": {
+    "present": true,
+    "stage": null
+   },
+   "gateway": {
+    "present": false,
+    "stage": "selection"
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 235,
+  "total_travel": 907,
+  "days_over_limit": 0,
+  "bases": 2,
+  "stops": 10,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 4,
+  "board_size": 41,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Peak Hotel",
+   "Karatu Hill Top Tourist Hotel",
+   "Ngorongoro Forest Tented Lodge",
+   "Karatu safari lodge hostel"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 221
+ },
+ {
+  "scenario": "tokyo-kyoto-transit",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "shinkansen": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "sakura": {
+    "present": true,
+    "stage": null
+   },
+   "kyoto-core": {
+    "present": true,
+    "stage": null
+   },
+   "tokyo-core": {
+    "present": true,
+    "stage": null
+   },
+   "two-bases": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 280,
+  "total_travel": 960,
+  "days_over_limit": 1,
+  "bases": 2,
+  "stops": 18,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 3,
+  "board_size": 33,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "涸沢ヒュッテ",
+   "Tokyo Kaikan",
+   "ふふ 東京 銀座 FUFU Tokyo Ginza",
+   "みやぎ移住サポートセンター"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 147
+ },
+ {
+  "scenario": "faroe-roadtrip",
+  "run": null,
+  "build": null,
+  "defining_present": 5,
+  "defining_total": 6,
+  "defining": {
+   "mulafossur": {
+    "present": true,
+    "stage": null
+   },
+   "saksun-tjornuvik": {
+    "present": true,
+    "stage": null
+   },
+   "gjogv-slaettaratindur": {
+    "present": false,
+    "stage": "selection"
+   },
+   "sorvagsvatn": {
+    "present": true,
+    "stage": null
+   },
+   "mykines-or-north": {
+    "present": true,
+    "stage": null
+   },
+   "torshavn-kirkjubour": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 250,
+  "total_travel": 865,
+  "days_over_limit": 0,
+  "bases": 3,
+  "stops": 16,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 39,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Hotel Hafnia",
+   "Hotel Tórshavn",
+   "Tórshavn Camping",
+   "TORA Guesthouse"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 229
+ },
+ {
+  "scenario": "oaxaca-food-culture",
+  "run": null,
+  "build": null,
+  "defining_present": 5,
+  "defining_total": 6,
+  "defining": {
+   "dia-de-muertos": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "markets": {
+    "present": true,
+    "stage": null
+   },
+   "monte-alban": {
+    "present": true,
+    "stage": null
+   },
+   "mezcal-valley": {
+    "present": true,
+    "stage": null
+   },
+   "santo-domingo": {
+    "present": true,
+    "stage": null
+   },
+   "mole-cooking": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [
+   "self-drive"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 155,
+  "total_travel": 432,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 18,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 22,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [
+   "hire car on a no-self-drive trip"
+  ],
+  "slow_measured_rides": [],
+  "hard_n": 2,
+  "lodging_names": [
+   "Motel and Suites Urban",
+   "Hotel Marqués Del Valle",
+   "Hotel Gala Oaxaca",
+   "Hostal Don Miguel"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 170
+ },
+ {
+  "scenario": "madeira-levada-hiking",
+  "run": null,
+  "build": null,
+  "defining_present": 3,
+  "defining_total": 6,
+  "defining": {
+   "pico-ruivo": {
+    "present": true,
+    "stage": null
+   },
+   "25-fontes-risco": {
+    "present": false,
+    "stage": "selection"
+   },
+   "caldeirao-verde": {
+    "present": false,
+    "stage": "selection"
+   },
+   "sao-lourenco": {
+    "present": false,
+    "stage": "selection"
+   },
+   "another-levada": {
+    "present": true,
+    "stage": null
+   },
+   "funchal": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [
+   "rail"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 210,
+  "total_travel": 843,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 19,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 34,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "Residencial Chafariz",
+   "Apartamentos Ferreiros",
+   "Funchal109 Hostel",
+   "The Marketplace by Storytellers"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 198
+ },
+ {
+  "scenario": "imported-itinerary",
+  "stated_stays": 4,
+  "honoured": 2,
+  "conflicts": 2,
+  "changes": [],
+  "bases": [
+   "1\nTokyo\n4\nnights",
+   "2\nKyoto\n3\nnights",
+   "3\nOsaka\n3\nnights"
+  ],
+  "seconds": 266
+ }
+]

@@ -13,18 +13,19 @@ Source of truth for "what the product does", reconciled against `sidequest_maste
 |---|---|---|---|
 | Mode 1 — I know where I want to go | Verified | `app/(product)/page.tsx`, `trips/new/`, `e2e/composer.spec.ts`, `e2e/intake.spec.ts` | — |
 | Mode 2 — help me choose | Limited | `decide/advisor-actions.ts`, `packages/atlas` (~36.8k destinations), `e2e/decide.spec.ts`, benchmark harness | Niche requests can rank weak estimators; question selection is CPU-heavy (~100 ms/step) |
-| Mode 3 — optimise my existing plan | Limited (final pass) | `/improve`, `packages/core/src/plan-check/{parse,critique}.ts`, `lib/plan-check/resolve.ts`, `e2e/plan-check.spec.ts` | Deterministic, zero model calls; per-place nights do not yet carry into the built trip (no contract field), party defaults to two adults |
+| Mode 3 — optimise my existing plan | Verified (live) | `/improve`, `plan-check/{parse,critique}.ts`, `contract/stated-itinerary.ts`, `e2e/stated-plan.spec.ts`, live `eval/live3` (4/4 stated stays honoured) | No tick-able reshaping proposal when every night was stated |
 | Natural-language input | Verified | `lib/destinations/interpretation.ts`, `advisor/parse.ts`, `e2e/destination-semantics.spec.ts` | — |
 | Adaptive questionnaire | Verified | `trips/[id]/questionnaire`, `advisor/interview-policy.ts`, `e2e/interview*.spec.ts` | — |
 | Persistent traveller profile | Limited | `(product)/profile/actions.ts`, `e2e/accounts.spec.ts` | No spec aimed at the profile page itself |
-| Party, diet, accessibility | Limited | `trips/[id]/party`, `packages/core/src/party/traveler.ts`, brief `<party>` | Days over a traveller's limit are stated, not always repaired (eval v3) |
+| Party, diet, accessibility | Limited | `party/resolve.ts` (never a silent two adults, all three doors), `trips/[id]/party` | Daily-limit choices recorded, no control applies them yet |
 | Discovery scan | Limited | `lib/discovery-scan/run.ts`, open-data fallback, `e2e/discovery-scan.spec.ts` | Model proposal varies run to run; open-data fallback needs `SIDEQUEST_POI_PROVIDER=overpass` |
 | Discovery Board, Auto-pick, hide, must-do | Limited | `planner-autopick.ts`, `e2e/must-do.spec.ts`, `e2e/board-integrity.spec.ts` | "Hide every place" spec is intermittent (races the background compile) |
 | Itinerary generation (planner-first) | Verified | `structure-planner.ts`, `production-plan.ts`, `e2e/itinerary.spec.ts`, `e2e/build-lifecycle.spec.ts` | — |
 | Degraded routing keeps the trip | Verified (final pass) | `providers/openrouteservice.ts` quota breaker, `planning/routing-evidence.ts`, `package.planning.routing` | A thin board still uses the labelled model fallback |
+| Destination understanding | Limited | `lib/destinations/intent-resolution.ts` (unseen live: Faroe, Oaxaca, Madeira resolve) | Islands off a national rail network inherit the country's rail facts |
 | Route order and topology | Limited | `route/spatial-order.ts` (incl. move-day backtracks, final pass), `travel/feasibility.ts` | A point no router reaches stays a labelled straight-line estimate |
 | Bases and stays | Limited | `scan/stay-objective.ts`, `scan/base-footprint.ts` (final pass) | A town keeps one base by archetype even at a region's edge |
-| Trails and treks | Limited | `scan/trail-stages.ts`, `discovery-scan/trail-measure.ts` | An over-long stage with no bed on the way is flagged, not split |
+| Trails and treks | Limited | `scan/trail-stages.ts` (corridor splits, early starts, stage-end beds), `discovery-scan/trail-measure.ts` | Trail-following still varies run to run (live Kumano) |
 | Time zones | Verified (final pass) | `packages/core/src/time/zone-lookup.ts` (IANA boundaries), sky timing, ICS | Within-day calendar items use the day's base zone |
 | Meals | Limited | `food/meal-rank.ts`, `e2e/food.spec.ts` | Restaurant hours are rarely known and never implied |
 | Weather and seasonality | Limited | `e2e/weather.spec.ts`, BEST_TIME, `atlas/seasonality.ts` | Forecast only inside the horizon; climate normals beyond |
@@ -42,7 +43,7 @@ Source of truth for "what the product does", reconciled against `sidequest_maste
 | Responsive web | Verified | `e2e/viewports.spec.ts`, desktop/mobile/tablet suites | Mobile LCP ~3.5 s; hydration warning #418 not located |
 | PWA installability and offline | Limited | `app/manifest.ts`, `public/trip-offline-sw.js`, `e2e/v9-cross-device.spec.ts` | No real-device install test |
 | Native iOS / Android apps | Missing | no `apps/mobile` | Future deliverable — path below |
-| Feedback-based learning | Limited (final pass) | `preference/apply.ts`, `region.ts#boardFor` | Learned taste fills unstated interests only; no learned ranking model |
+| Feedback-based learning | Limited | `preference/apply.ts`, `region.ts#boardFor`, profile off switch, `region.learned.test.ts` | Fills unstated interests only; no learned ranking model |
 | Data layer | External | `lib/db/client.ts` (SQLite) | Supabase/Postgres move not made; single-instance deployment |
 | Accounts and auth | External | `api/auth/google/*` | Google OAuth only; needs Google credentials per deployment |
 

@@ -1,0 +1,430 @@
+[
+ {
+  "scenario": "family-wellness-march",
+  "run": null,
+  "build": null,
+  "defining_present": 1,
+  "defining_total": 4,
+  "defining": {
+   "restful-outdoors": {
+    "present": false,
+    "stage": "selection"
+   },
+   "restorative": {
+    "present": false,
+    "stage": "selection"
+   },
+   "family-suitable": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "free-time": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [
+   "strenuous"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 155,
+  "total_travel": 1305,
+  "days_over_limit": 7,
+  "bases": 1,
+  "stops": 24,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 1,
+  "board_size": 31,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 4,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "Orlando Blanco Apartment",
+   "Sunset Bay 45 - Two Bed",
+   "Fund Grube Plaza del Duque",
+   "Orlando'85 Complex, Costa adeje"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 165
+ },
+ {
+  "scenario": "kumano-kodo",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "nakahechi-walk": {
+    "present": true,
+    "stage": null
+   },
+   "hongu-taisha": {
+    "present": true,
+    "stage": null
+   },
+   "nachi-hayatama": {
+    "present": true,
+    "stage": null
+   },
+   "onsen-village-stay": {
+    "present": true,
+    "stage": null
+   },
+   "luggage-transfer": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [
+   "no-walking",
+   "rental-car",
+   "overlong-stage"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 130,
+  "total_travel": 752,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 27,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 30,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [
+   "hire car on a no-self-drive trip",
+   "trek with no forwarded luggage"
+  ],
+  "slow_measured_rides": [],
+  "hard_n": 5,
+  "lodging_names": [
+   "Guest house and onsen Wadama",
+   "わたらせ温泉 ホテルやまゆり",
+   "熊野 四季亭 - Kumano Shikitei",
+   "温泉民宿大村屋"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 179
+ },
+ {
+  "scenario": "kyrgyzstan",
+  "run": null,
+  "build": null,
+  "defining_present": 6,
+  "defining_total": 6,
+  "defining": {
+   "song-kul-yurt": {
+    "present": true,
+    "stage": null
+   },
+   "karakol-trek": {
+    "present": true,
+    "stage": null
+   },
+   "issyk-kul": {
+    "present": true,
+    "stage": null
+   },
+   "karakol": {
+    "present": true,
+    "stage": null
+   },
+   "ala-archa": {
+    "present": true,
+    "stage": null
+   },
+   "horse": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 430,
+  "total_travel": 1672,
+  "days_over_limit": 1,
+  "bases": 3,
+  "stops": 19,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 4,
+  "board_size": 46,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Park Hotel",
+   "Plaza Hotel Bishkek",
+   "Eсo resort Kara-Bulak",
+   "Compass Hostel"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 230
+ },
+ {
+  "scenario": "tanzania-safari",
+  "run": null,
+  "build": null,
+  "defining_present": 3,
+  "defining_total": 5,
+  "defining": {
+   "serengeti": {
+    "present": false,
+    "stage": "selection"
+   },
+   "ngorongoro": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "tarangire-manyara": {
+    "present": true,
+    "stage": null
+   },
+   "guided-vehicle": {
+    "present": true,
+    "stage": null
+   },
+   "gateway": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 230,
+  "total_travel": 745,
+  "days_over_limit": 0,
+  "bases": 2,
+  "stops": 10,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 5,
+  "board_size": 21,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Rich Hotel",
+   "Shamba Lodge Arusha",
+   "Briston Hotel",
+   "Arusha Website Design"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 449
+ },
+ {
+  "scenario": "tokyo-kyoto-transit",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "shinkansen": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "sakura": {
+    "present": true,
+    "stage": null
+   },
+   "kyoto-core": {
+    "present": true,
+    "stage": null
+   },
+   "tokyo-core": {
+    "present": true,
+    "stage": null
+   },
+   "two-bases": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 250,
+  "total_travel": 1201,
+  "days_over_limit": 1,
+  "bases": 2,
+  "stops": 25,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 46,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "新宿区役所前カプセルホテル",
+   "Citadines Central Shinjuku Tokyo",
+   "Onsen Ryokan Yuen Shinjuku",
+   "アパホテル"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 176
+ },
+ {
+  "scenario": "beach-island",
+  "run": null,
+  "build": null,
+  "defining_present": 5,
+  "defining_total": 5,
+  "defining": {
+   "na-pali": {
+    "present": true,
+    "stage": null
+   },
+   "waimea-canyon": {
+    "present": true,
+    "stage": null
+   },
+   "north-shore": {
+    "present": true,
+    "stage": null
+   },
+   "south-shore": {
+    "present": true,
+    "stage": null
+   },
+   "beach-time": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 155,
+  "total_travel": 713,
+  "days_over_limit": 3,
+  "bases": 2,
+  "stops": 22,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 30,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 1,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Club Wyndham Bali Hai Villas",
+   "Alii Kai Resort 5102",
+   "The surfshack Kauai",
+   "The Cliffs at Princeville"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 135
+ },
+ {
+  "scenario": "point-to-point-trek",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 6,
+  "defining": {
+   "tmb-walk": {
+    "present": true,
+    "stage": null
+   },
+   "italy-section": {
+    "present": true,
+    "stage": null
+   },
+   "swiss-section": {
+    "present": false,
+    "stage": "selection"
+   },
+   "french-return": {
+    "present": true,
+    "stage": null
+   },
+   "refuge-nights": {
+    "present": true,
+    "stage": null
+   },
+   "booking-ahead": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [
+   "closed-refuge"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 185,
+  "total_travel": 1005,
+  "days_over_limit": 5,
+  "bases": 3,
+  "stops": 19,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 2,
+  "board_size": 30,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "Gite Michel Fagot",
+   "Les Chalets Elena",
+   "Les Houches",
+   "Chalet Pic Rouge"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 793
+ }
+]
