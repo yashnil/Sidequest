@@ -7,6 +7,8 @@ export default tseslint.config(
   {
     ignores: ['.routing-cache/**', 
       '**/node_modules/**',
+      /* Agent worktrees: whole copies of the repo whose tsconfigs make every file's root ambiguous. */
+      '.claude/**',
       '**/.next/**',
       '**/dist/**',
       '**/coverage/**',
