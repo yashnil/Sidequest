@@ -182,3 +182,34 @@ describe('a trip to a city sleeps in the city (eval v2)', () => {
     expect(choice.stays.map((s) => s.baseId)).not.toEqual(['town']);
   });
 });
+
+describe('a hard daily travel limit', () => {
+  /* Two far ends 330 km apart (about 6 h 36 by road at 50 km/h) and a small town halfway with nothing to see; every place at the far end is a must-see. */
+  const ends: Geometry = { bases: { west: { x: 0, y: 0 }, midway: { x: 165, y: 0 }, east: { x: 330, y: 0 } }, places: { ...around('w', { x: 0, y: 0 }, 8, 10), ...around('e', { x: 330, y: 0 }, 8, 10) } };
+  const build = (g: Geometry, traveller: Partial<StayTraveller>) => {
+    const i = input(g, 8, { maxDailyTravelMinutes: 240, ...traveller });
+    return { ...i, places: i.places.map((p) => (p.id.startsWith('e') ? { ...p, mustSee: true } : p)) };
+  };
+
+  it('as a default, a single over-long move may win on cost, and is costed as over the limit', () => {
+    const choice = chooseStays(build(ends, { moveTolerance: 'move_freely' }));
+    expect(choice.stays.map((s) => s.baseId)).toEqual(['west', 'east']);
+    expect(choice.decision.chosen.overLimitTransferMinutes).toBeGreaterThan(0);
+  });
+
+  it('as the traveller’s own rule, the stays break the move with a night between whenever a proposed base allows it', () => {
+    const choice = chooseStays(build(ends, { moveTolerance: 'move_freely', travelLimitHard: true }));
+    expect(choice.stays.map((s) => s.baseId)).toEqual(['west', 'midway', 'east']);
+    expect(choice.decision.chosen.overLimitTransferMinutes).toBe(0);
+  });
+
+  it('with no base between, the hard limit cannot invent one: the long move stays, for the planner to offer as a choice', () => {
+    const twoEnds: Geometry = { bases: { west: { x: 0, y: 0 }, east: { x: 330, y: 0 } }, places: ends.places };
+    /* Everything at both ends is a must-see, so no single base complies without losing what was named. */
+    const i = build(twoEnds, { moveTolerance: 'move_freely', travelLimitHard: true });
+    const choice = chooseStays({ ...i, places: i.places.map((p) => ({ ...p, mustSee: true })) });
+    expect(choice.stays.map((s) => s.baseId)).toEqual(['west', 'east']);
+    /* With only the far end named, staying there is the compliant structure, and the hard limit takes it. */
+    expect(chooseStays(build(twoEnds, { moveTolerance: 'move_freely', travelLimitHard: true })).stays.map((s) => s.baseId)).toEqual(['east']);
+  });
+});

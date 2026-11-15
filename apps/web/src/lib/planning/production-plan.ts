@@ -45,7 +45,7 @@ import { weatherAvailability, type TripPackage, type WeatherDataset, type Weathe
 import { composerModel } from './composition-model';
 import { buildCanonicalTripBuildInput, compositionTimingBriefOf, type CanonicalTripBuildInput } from './canonical-input';
 import { buildTripContract, contractEnforcementRecord, enforceContractOnDraft } from './trip-contract';
-import { buildFeasibilityReport, buildStructuralMetrics, buildTripQualityReport, tripStructureOf, itineraryStatusForVerdict } from '@sidequest/core';
+import { buildFeasibilityReport, buildStructuralMetrics, buildTripQualityReport, tripStructureOf, itineraryStatusForVerdict, modelMayOverride } from '@sidequest/core';
 import { COMPOSITION_PROMPT_VERSION, buildCompositionTask, compositionEffort, compositionUntrustedPayload, compositionWireDecision, generateTripDraft, seasonOf, type BoardSignals, type CompositionContext, type DestinationEnvelope } from './composition';
 import { FixtureComposer } from './fixture-composer';
 import { reconcileTripDraft, type ReconcileContext, type ReconcileResult } from './reconcile';
@@ -75,7 +75,7 @@ import { journeyFor } from './journey';
 import { deriveExperienceGraph } from './experience-graph';
 import { accessConstraintsFor } from '../providers/access-constraints';
 import { destinationEnvelopeFor } from './destination-envelope';
-import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, plannerUnplacedMustDos, plannerUnscheduledPicks, type PlannerComposition } from './planner-composer';
+import { composeWithPlanner, planningRecordOf, plannerFallbackReasonOf, plannerUnplacedMustDos, plannerUnscheduledPicks, trailEarlyStarts, type PlannerComposition } from './planner-composer';
 import { getScanProposalExtras } from '../db/scan-repository';
 import { plannerSurvivesDegradedRouting, routingEvidenceOf } from './routing-evidence';
 import { mobilityCapabilities } from '../providers/mobility-capabilities';
@@ -599,6 +599,8 @@ async function generatePlan(
           ...(input.movement.maxDailyDriveMinutes.value ? { maxDailyDriveMinutes: input.movement.maxDailyDriveMinutes.value } : {}),
           locks: getItineraryLocks(tripId),
           essentialIds,
+          /* The daily limit is a hard rule when the traveller set it (or accepted it), never when it is Sidequest's default. */
+          ...(!modelMayOverride(contract.transport.maxDailyTravelMinutes.lock) || (input.movement.carAvailable !== false && input.movement.maxDailyDriveMinutes.value && !modelMayOverride(contract.transport.maxDailyDriveMinutes.lock)) ? { travelLimitHard: true } : {}),
           /* The journey archetype's ground arrangement: an operator safari is written as one, whatever car the traveller could have. */
           ...(journey ? { groundArrangement: journey.strategy.ground } : qualityContract ? { groundArrangement: qualityContract.transport.mode } : {}),
         });
@@ -1036,6 +1038,7 @@ async function generatePlan(
         subregionGeometries: productionSubregionGeometries(region.compiled),
         deadlineReached,
         mustIncludeNames,
+        ...((early) => (early.size > 0 ? { earlyStartByDay: early } : {}))(trailEarlyStarts(plannerComposition?.stay?.trail ?? null)),
         ...worldContext,
         ...placementContext,
         ...timedSeams,

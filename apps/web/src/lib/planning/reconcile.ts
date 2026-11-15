@@ -260,6 +260,13 @@ export interface ReconcileContext extends SkeletonPlanningContext {
   /** Names the traveller explicitly asked for (board must-includes, free-text must-dos); losing one is a decision, not a caution. */
   mustIncludeNames?: readonly string[];
   /**
+   * 2026-11 — days that must start earlier than the traveller's usual morning,
+   * by day number, minutes from local midnight: a long trail stage set off
+   * early enough for its length and for dusk (`trail-stages.ts#trailStartMinute`).
+   * Only ever earlier, never on the arrival day; the day says why.
+   */
+  earlyStartByDay?: ReadonlyMap<number, { minute: number; reason: string }>;
+  /**
    * V10 §5 — the published name of the destination's country, and the
    * first-level divisions it sits in, for the placement ladder. A bare town name
    * is the worst way to ask a geocoder; these are the context that disambiguates
@@ -1286,7 +1293,14 @@ export async function reconcileTripDraft(input: { draft: TripDraft; context: Rec
     const isLastDay = index === all.length - 1;
     /* Not the arrival day, and not the day home unless the traveller asked for that sunrise by name. */
     const early = index === 0 ? null : index === all.length - 1 ? (((draft.days.find((entry) => entry.dayNumber === day.dayNumber)?.anchors ?? []).some((anchor) => anchor.timeOfDay === 'sunrise' && askedFor.has(normalizeName(anchor.name)))) ? DAWN_START : null) : earliestFor(day.dayNumber);
-    if (early !== null && early < day.window.startMinute) {
+    const asked = index === 0 ? undefined : context.earlyStartByDay?.get(day.dayNumber);
+    if (asked && asked.minute < day.window.startMinute && (early === null || asked.minute < early)) {
+      day = {
+        ...day,
+        window: { ...day.window, startMinute: asked.minute, usableMinutes: day.window.endMinute - asked.minute, note: [day.window.note, asked.reason].filter(Boolean).join(' ') },
+        capacityMinutes: day.capacityMinutes + (day.window.startMinute - asked.minute),
+      };
+    } else if (early !== null && early < day.window.startMinute) {
       day = {
         ...day,
         window: { ...day.window, startMinute: early, usableMinutes: day.window.endMinute - early, note: [day.window.note, 'This day starts before dawn for something that only happens then.'].filter(Boolean).join(' ') },

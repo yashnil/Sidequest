@@ -5,6 +5,7 @@ import type { RegionContext } from '../region';
 import type { ScanProposalExtras } from '../db/scan-repository';
 import { matchNamedMustDos } from '../discovery-scan/match';
 import { archetypeFor, planStructure, transportFor, type DropReason, type PlannerBase, type PlannerCandidate, type PlannerDayWeather, type PlannerDayWindow, type PlannerFoodArea, type PlannerStatus, type StructurePlan, type StructurePlannerInput } from './structure-planner';
+import type { TravelLimitRecord } from './structure-repair';
 import { classifyDayDensity, densityNote, discoveryLossesOf, type TripDensity } from './day-density';
 import { DRAFT_SOFT_PROSE_CAPS, tripDraftSchema, type AnchorCategory, type DraftAnchor, type DraftDay, type TripDraft } from './trip-draft';
 
@@ -120,6 +121,13 @@ export interface PlannerComposeInput {
    * a self-drive rental just because the traveller could drive.
    */
   groundArrangement?: 'operator' | 'self_drive' | 'public_transport' | 'undecided';
+  /**
+   * 2026-11 — the daily travel limit is the traveller's own rule (the trip
+   * contract holds it at `user_explicit` or above), not Sidequest's default:
+   * nothing of Sidequest's may take a day past it, and what cannot be helped is
+   * offered as a choice (`package.planning.travelLimit`).
+   */
+  travelLimitHard?: boolean;
 }
 
 /**
@@ -213,12 +221,19 @@ export function trailNotes(args: { trail: TrailRecord; plan: StructurePlan; base
       notes.push({ dayNumber: stage.dayNumber, code: 'trail_alternative', note: `${route}: ${stage.note ?? 'covered the usual other way, not walked.'}` });
       continue;
     }
+    /* A stage nobody can walk as written is said on its day whether or not the walk made the plan: it is the traveller's decision, and the trip is not ready without it. */
+    if (stage.resolution === 'unresolved' && stage.note) notes.push({ dayNumber: stage.dayNumber, code: 'trail_unresolved', note: `${route} is a long day for this party: ${stage.note}` });
     if (!scheduled.has(stage.placeId)) continue;
     const figures = [stage.km !== null ? `${stage.km} km` : null, stage.ascentM !== null ? `${Math.round(stage.ascentM)} m of climbing` : null].filter(Boolean).join(' and ');
     const basis = stage.distanceBasis === 'measured' ? 'measured on the trail by openrouteservice' : stage.distanceBasis === 'proposal' ? "Sidequest's research, not measured" : 'from the time the walk usually takes, not measured';
-    const timing = stage.latestStartMinute !== undefined && stage.duskMinute !== undefined ? `; set off by ${trailClock(Math.floor(stage.latestStartMinute / 15) * 15)} to reach ${stage.toName ?? 'the next bed'} at least an hour before dusk (about ${trailClock(stage.duskMinute)})` : '';
-    notes.push({ dayNumber: stage.dayNumber, code: 'trail_stage', note: `Stage ${stage.order} of ${total}: ${route}${figures ? `, ${figures}` : ''} (${basis}) — about ${trailHours(stage.walkMinutes)} of walking${timing}.${stage.resolution === 'split' && stage.note ? ` ${stage.note}` : ''}` });
-    if (stage.resolution === 'unresolved' && stage.note) notes.push({ dayNumber: stage.dayNumber, code: 'trail_unresolved', note: `${route} is a long day for this party: ${stage.note}` });
+    const setOff = stage.startMinute ?? (stage.latestStartMinute !== undefined ? Math.floor(stage.latestStartMinute / 15) * 15 : undefined);
+    const timing = setOff !== undefined && stage.duskMinute !== undefined
+      ? `; set off at ${trailClock(setOff)} to reach ${stage.toName ?? 'the next bed'} at least an hour before dusk (about ${trailClock(stage.duskMinute)})`
+      : setOff !== undefined && stage.startMinute !== undefined
+        ? `; set off at ${trailClock(setOff)}`
+        : '';
+    const addedBed = stage.addedBed && stage.toName ? ` ${stage.toName} was not one of the proposed beds: book a bed there before you go.` : '';
+    notes.push({ dayNumber: stage.dayNumber, code: 'trail_stage', note: `Stage ${stage.order} of ${total}: ${route}${figures ? `, ${figures}` : ''} (${basis}) — about ${trailHours(stage.walkMinutes)} of walking${timing}.${stage.resolution === 'split' && stage.note && stage.part === 1 ? ` ${stage.note}` : ''}${addedBed}` });
   }
   for (const baseId of trail.restBaseIds) {
     const day = plan.days.find((d, i) => d.baseId === baseId && !d.relocation && i > 0 && i < plan.days.length - 1);
@@ -327,6 +342,11 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
   for (const c of pool) coordinates.set(c.id, c.coordinates);
   const walkEnds = new Map(pool.filter((c) => c.walkEnd).map((c) => [c.id, c.walkEnd!] as const));
   for (const b of bases) coordinates.set(b.id, b.coordinates);
+  /* The proposed places to sleep the stays do not use: only ever named as a night that would break a move over the limit. */
+  const otherBases = compiled.bases
+    .map((b) => ({ id: b.routingId ?? b.id, name: b.name, coordinates: b.coordinates }))
+    .filter((b) => !bases.some((x) => x.id === b.id) && b.coordinates);
+  for (const b of otherBases) if (!coordinates.has(b.id)) coordinates.set(b.id, b.coordinates);
   const matrix = region.matrix as unknown as { mode?: string; ids: string[]; minutes: number[][]; feasibility?: string[][] };
   const index = new Map(matrix.ids.map((id: string, i: number) => [id, i]));
   /*
@@ -400,6 +420,12 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
     const anchor = scanned && cityLike ? scope?.center : undefined;
     const first = bases[0];
     const last = bases[bases.length - 1];
+    /*
+     * 2026-11 — a followed trail ends somewhere other than where the traveller
+     * leaves: the way home from its last bed is real time on the last day, the
+     * same estimate the trail record states (`trail.returnLeg`).
+     */
+    if (!anchor && trailFollowed && trail?.returnLeg && last && trail.returnLeg.fromBaseId === last.id) return { edgeTransfers: { arrivalMinutes: 0, departureMinutes: Math.round(trail.returnLeg.minutes) } };
     if (!anchor || !first || !last) return {};
     const leg = (to: { lat: number; lng: number }) => {
       const km = haversineKm(anchor, to);
@@ -423,6 +449,8 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
     maxStopsPerDay: Math.max(1, Math.round(profile.derived.activitySlotsPerDay)),
     carAvailable: input.carAvailable,
     maxDailyTravelMinutes: input.carAvailable && input.maxDailyDriveMinutes ? Math.min(input.maxDailyTravelMinutes, input.maxDailyDriveMinutes) : input.maxDailyTravelMinutes,
+    ...(input.travelLimitHard ? { travelLimitHard: true } : {}),
+    ...(otherBases.length > 0 ? { otherBases } : {}),
     maxPhysicalIntensity: profile.derived.maxPhysicalIntensity,
     dailyIntensity: profile.dailyIntensity,
     frequencyCaps: profile.derived.frequencyCaps,
@@ -644,7 +672,10 @@ function draftFromPlan(args: {
        * day printed "≈9 hr 15 min bus". High-speed only where the country's facts
        * make it the backbone and the hop is long enough to be one.
        */
-      ...(day.relocation && !input.carAvailable
+      /* A trail stage walked from one bed to the next is the day's move: on foot, the bags sent ahead — never a bus between the two beds as well. */
+      ...(day.relocation && day.stops.some((s) => s.candidate.trailStage)
+        ? { move: { how: 'walk' as const } }
+        : day.relocation && !input.carAvailable
         ? ((move) => (move ? { move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), input.region.compiled.scope.countryCode, day.stops.map((s) => args.coordinates.get(s.candidate.id) ?? s.candidate.coordinates)))
         : {}),
       anchors,
@@ -752,6 +783,7 @@ export function planningRecordOf(composed: PlannerComposition): {
   dayRepairs: { dayNumber: number; code: string; note: string }[];
   dayNotes: { dayNumber: number; code: string; note: string }[];
   density?: TripDensity;
+  travelLimit?: TravelLimitRecord;
 } {
   const scheduled = { traveller: 0, sidequest: 0, maybe: 0, filler: 0 };
   for (const day of composed.plan.days) {
@@ -775,6 +807,7 @@ export function planningRecordOf(composed: PlannerComposition): {
     /* A discovery gap leads its day — on an empty day the first note is the one the day shows. */
     dayNotes: [...(composed.densityNotes ?? []).filter((n) => n.code === 'density_discovery_gap'), ...composed.plan.dayNotes.map((n) => ({ ...n })), ...(composed.densityNotes ?? []).filter((n) => n.code !== 'density_discovery_gap')],
     ...(composed.density ? { density: composed.density } : {}),
+    ...(composed.plan.travelLimit ? { travelLimit: composed.plan.travelLimit } : {}),
   };
 }
 
@@ -991,4 +1024,22 @@ function unscheduledCodeFor(reason: DropReason, blockedCode: string | undefined)
     default:
       return 'no_time_left';
   }
+}
+
+/**
+ * 2026-11 — the walking days of a followed trail that set off before the
+ * trip's usual morning: each walked stage's own start (`trailStartMinute`,
+ * early enough for its length and for dusk), by day number. A stage covered
+ * the usual other way sets no hour.
+ */
+export function trailEarlyStarts(trail: { followed: boolean; stages: readonly { dayNumber?: number; startMinute?: number; resolution: string; walkMinutes: number; toName: string | null }[] } | null): Map<number, { minute: number; reason: string }> {
+  const out = new Map<number, { minute: number; reason: string }>();
+  if (!trail?.followed) return out;
+  for (const stage of trail.stages) {
+    if (stage.dayNumber === undefined || stage.startMinute === undefined || stage.resolution === 'alternative') continue;
+    const held = out.get(stage.dayNumber);
+    if (held && held.minute <= stage.startMinute) continue;
+    out.set(stage.dayNumber, { minute: stage.startMinute, reason: `A long walking day: set off at ${trailClock(stage.startMinute)} to reach ${stage.toName ?? 'the next bed'} with daylight to spare.` });
+  }
+  return out;
 }

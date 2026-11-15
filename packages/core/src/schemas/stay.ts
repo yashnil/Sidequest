@@ -61,8 +61,12 @@ export const trailStageRecordSchema = z.object({
   duskMinute: z.number().optional(),
   /** What the day says about it: why it was split or replaced, or what is still unresolved. */
   note: z.string().min(1).optional(),
-  /** Which half of a split stage this is. */
-  part: z.union([z.literal(1), z.literal(2)]).optional(),
+  /** Which piece of a split stage this is, 1 first (a stage too long for one day is walked over two or three). */
+  part: z.number().int().positive().optional(),
+  /** When this walking day sets off, minutes from local midnight (`trail-stages.ts#trailStartMinute`): early enough for its length and for dusk. */
+  startMinute: z.number().optional(),
+  /** Where a split stage stops for the night when it is not one of the proposal's beds: a point on the way the traveller books a bed at. */
+  addedBed: z.boolean().optional(),
 });
 export type TrailStageRecord = z.infer<typeof trailStageRecordSchema>;
 

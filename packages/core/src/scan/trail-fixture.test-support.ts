@@ -31,6 +31,8 @@ export interface FictionalTrailOptions {
   longThirdStage?: boolean;
   /** Propose Fernhollow, between Corrie Mill and Dunmere, as a place to sleep. */
   intermediateVillage?: boolean;
+  /** Propose Fernhollow as a small town worth a look — on the scan, but not as a place to sleep. */
+  townBetween?: boolean;
   /** Give the third stage the usual bus round it. */
   busAlternative?: boolean;
   /** Propose no stages at all: the walks come back as ordinary loops. */
@@ -86,6 +88,7 @@ export function fictionalTrailProposal(options: FictionalTrailOptions = {}): { p
     { name: 'Brackenford Shrine', locality: 'Brackenford', kind: 'temple_or_shrine', at: { lat: 34.016, lng: 135.59 }, durationMinutes: 60 },
     { name: 'Corrie Falls', locality: 'Corrie Mill', kind: 'waterfall', at: { lat: 34.028, lng: 135.672 }, durationMinutes: 60 },
     { name: 'Eskwater Museum', locality: 'Eskwater', kind: 'museum', at: { lat: 34.046, lng: 135.828 }, durationMinutes: 75 },
+    ...(options.townBetween ? [{ name: TRAIL_VILLAGES.fern.name, locality: TRAIL_VILLAGES.fern.name, kind: 'small_town', at: TRAIL_VILLAGES.fern.at, durationMinutes: 45 }] : []),
   ];
   const raw = {
     bases: villages.map((v) => ({ name: TRAIL_VILLAGES[v].name, locality: TRAIL_VILLAGES[v].name, nightsHint: 1, why: 'An inn at the end of a stage.' })),

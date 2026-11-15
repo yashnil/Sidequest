@@ -80,6 +80,13 @@ export interface StayTraveller {
   pace: 'slow' | 'balanced' | 'fast';
   /** The traveller's ceiling on travel in a day, in the trip's mode. */
   maxDailyTravelMinutes: number;
+  /**
+   * 2026-11 — the ceiling is the traveller's own rule, not Sidequest's default.
+   * Then a structure with fewer moves over it always wins (after the places
+   * they named), before any cost is compared: an intermediate stay that breaks
+   * a long transfer is chosen whenever one exists among the proposed bases.
+   */
+  travelLimitHard?: boolean;
   /** Daytime stops a day holds at this pace. */
   stopsPerDay: number;
   children: number;
@@ -297,6 +304,8 @@ interface Evaluation {
   home: Map<string, string>;
   /** Named parts of the destination this structure sleeps in. */
   covered: string[];
+  /** Moves between stays whose transfer alone is over the traveller's daily ceiling. */
+  overLimitMoves: number;
 }
 
 interface Model {
@@ -396,6 +405,7 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
   const departure = days > 1 ? input.edges?.toDeparture(stays[stays.length - 1]!.baseId) ?? 0 : 0;
   let transferMinutes = arrival + departure;
   let overLimitTransfer = 0;
+  let overLimitMoves = 0;
   const buffer = BUFFER_BY_PACE[input.traveller.pace];
   const dayTransfer = new Array<number>(days).fill(0);
   let moves = 0;
@@ -416,6 +426,7 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
     const transfer = model.leg(from, to);
     transferMinutes += transfer;
     overLimitTransfer += Math.max(0, transfer - model.limit);
+    if (transfer > model.limit) overLimitMoves += 1;
     dayTransfer[d] = transfer + model.move.overheadMinutes;
   }
   dayTransfer[0] = dayTransfer[0]! + arrival;
@@ -527,6 +538,7 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
   return {
     home,
     covered,
+    overLimitMoves,
     option: {
       stays: stays.map((s) => ({ ...s })),
       moves,
@@ -608,6 +620,8 @@ export function stayTravellerFor(input: {
   carAvailable: boolean;
   maxDailyTravelMinutes: number;
   maxDailyDriveMinutes?: number | null;
+  /** Whether the ceiling is the traveller's own (explicit or an accepted recommendation) rather than Sidequest's default. */
+  travelLimitHard?: boolean;
 }): StayTraveller {
   const needs = input.trip.basics.travelerNeeds;
   return {
@@ -619,6 +633,7 @@ export function stayTravellerFor(input: {
     youngChildren: needs.includes('kids_under_12'),
     reducedMobility: needs.includes('mobility_limited') || needs.includes('seniors_in_group') || input.profile.accessibility.mobilityLimited,
     carAvailable: input.carAvailable,
+    ...(input.travelLimitHard ? { travelLimitHard: true } : {}),
   };
 }
 
@@ -777,9 +792,12 @@ export function chooseStays(input: StayObjectiveInput): StayChoice {
   }
   /* Only one structure is guaranteed to exist: a single base, with every night. A trip with no structure at all has no base, which is refused above. */
   const mostCovered = Math.max(0, ...costed.map((c) => c.evaluation.covered.length));
+  /* A hard daily ceiling: among the structures that cover the most, only those with the fewest moves over it compete. */
+  const fewestOverLimit = input.traveller.travelLimitHard ? Math.min(...costed.filter((c) => c.evaluation.covered.length >= mostCovered).map((c) => c.evaluation.overLimitMoves)) : Number.POSITIVE_INFINITY;
   const bestByMoves = new Map<number, { evaluation: Evaluation; splitStay: boolean }>();
   for (const candidate of costed) {
     if (candidate.evaluation.covered.length < mostCovered) continue;
+    if (candidate.evaluation.overLimitMoves > fewestOverLimit) continue;
     const held = bestByMoves.get(candidate.evaluation.option.moves);
     if (!held || better(model, candidate.evaluation, held.evaluation)) bestByMoves.set(candidate.evaluation.option.moves, candidate);
   }

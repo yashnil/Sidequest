@@ -115,8 +115,8 @@ export interface TrailStage {
   seasonalNote?: string;
   alternative?: ScanStageAlternative;
   unsuitable?: string;
-  /** Which half of a split stage this is; the second half's `placeId` and `key` are the first's with `~2`. */
-  part?: 1 | 2;
+  /** Which piece of a split stage this is, 1 first; a later piece's `placeId` and `key` are the first's with `~2`, `~3`. */
+  part?: number;
   /** Where a split stage breaks: the intermediate overnight. */
   splitAt?: { baseId: string; name: string; at: Point };
 }
@@ -288,6 +288,14 @@ export interface TrailBed {
   coordinates: Point;
 }
 
+/**
+ * A point a long stage could break at for the night that is not one of the
+ * proposal's beds: where another proposed walk starts or ends, or a small town
+ * the scan placed. Splitting there adds a place to sleep the traveller has to
+ * book; the assembler makes it a stay of its own (`assemble.ts`).
+ */
+export type TrailWaypoint = TrailBed;
+
 function nearestBed(point: Point, beds: readonly TrailBed[], limitKm: number, not?: string | null): TrailBed | null {
   let best: { bed: TrailBed; km: number } | null = null;
   for (const bed of beds) {
@@ -301,22 +309,149 @@ function nearestBed(point: Point, beds: readonly TrailBed[], limitKm: number, no
 const capitalise = (s: string) => (s.length > 0 ? s[0]!.toUpperCase() + s.slice(1) : s);
 
 /**
- * Each stage judged for this party, in order. A stage that does not suit is
- * split at an intermediate overnight when one lies on the way and both halves
- * suit; else covered the usual way the proposal named, when that way is open
- * that month (unknown ≠ closed); else left as it is and said so on the day.
+ * Where a point sits against the straight line from `start` to `end`: how far
+ * along it (0 at the start, 1 at the end) and how far off it, in km. A local
+ * flat projection; a stage is tens of kilometres, where that is exact enough.
+ */
+export function corridorPosition(start: Point, end: Point, point: Point): { along: number; offKm: number } {
+  const kmPerLat = 111.32;
+  const kmPerLng = 111.32 * Math.cos((((start.lat + end.lat) / 2) * Math.PI) / 180);
+  const ex = (end.lng - start.lng) * kmPerLng;
+  const ey = (end.lat - start.lat) * kmPerLat;
+  const px = (point.lng - start.lng) * kmPerLng;
+  const py = (point.lat - start.lat) * kmPerLat;
+  const length2 = ex * ex + ey * ey;
+  if (length2 === 0) return { along: 0, offKm: Math.hypot(px, py) };
+  const along = (px * ex + py * ey) / length2;
+  const t = Math.max(0, Math.min(1, along));
+  return { along, offKm: Math.hypot(px - t * ex, py - t * ey) };
+}
+
+/** A split point must lie between a tenth and nine tenths of the way along the stage… */
+const SPLIT_ALONG_MIN = 0.1;
+/** …and within this corridor of the straight line: a fifth of the stage's length, never less than 2 km. */
+const SPLIT_CORRIDOR_SHARE = 0.2;
+const SPLIT_CORRIDOR_MIN_KM = 2;
+/** A stage too long for one day is broken into at most this many walking days. */
+export const MAX_STAGE_PARTS = 3;
+/** Between two nearly equally balanced splits, one at a proposed bed wins unless the other is this much better balanced. */
+const BED_PREFERENCE = 0.1;
+
+type SplitPoint = TrailBed & { bed: boolean };
+type Part = Pick<TrailStage, 'km' | 'ascentM' | 'walkMinutes'> & { start: Point; end: Point };
+
+/** The points that lie on the way along a stage, in walking order. Pure geometry: nothing is measured here. */
+export function splitPointsAlong(stage: Pick<TrailStage, 'start' | 'end'>, points: readonly SplitPoint[]): (SplitPoint & { along: number })[] {
+  const straight = haversineKm(stage.start, stage.end);
+  if (straight <= 2) return [];
+  const corridor = Math.max(SPLIT_CORRIDOR_MIN_KM, SPLIT_CORRIDOR_SHARE * straight);
+  const seen = new Set<string>();
+  return points
+    .map((p) => ({ ...p, ...corridorPosition(stage.start, stage.end, p.coordinates), a: haversineKm(stage.start, p.coordinates), b: haversineKm(p.coordinates, stage.end) }))
+    .filter((p) => p.along >= SPLIT_ALONG_MIN && p.along <= 1 - SPLIT_ALONG_MIN && p.a > 1 && p.b > 1 && (p.offKm <= corridor || p.a + p.b <= SPLIT_DETOUR_RATIO * straight))
+    .sort((x, y) => x.along - y.along || Number(y.bed) - Number(x.bed) || x.id.localeCompare(y.id))
+    /* Two points in the same square kilometre or so are one place to break, the bed first. */
+    .filter((p) => {
+      const key = `${Math.round(p.coordinates.lat * 100)}:${Math.round(p.coordinates.lng * 100)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map(({ a: _a, b: _b, offKm: _off, ...p }) => p);
+}
+
+/** The figures of one piece of a stage: its share of the distance and climb (stated as a share, never measured), the walking time from them. */
+function partOf(stage: TrailStage, from: number, to: number, start: Point, end: Point): Part {
+  const share = Math.max(0, to - from);
+  const km = stage.km !== null ? Math.round(stage.km * share * 10) / 10 : null;
+  const ascentM = stage.ascentM !== null ? Math.round(stage.ascentM * share) : null;
+  return { km, ascentM, walkMinutes: km !== null ? walkingMinutes(km, ascentM ?? 0) : Math.round(stage.walkMinutes * share), start, end };
+}
+
+/** How hard the hardest day of a split is against the party's limits: 1 is exactly at a limit. Lower is better balanced. */
+function heaviest(parts: readonly Part[], limits: TrailLimits): number {
+  return Math.max(...parts.map((p) => Math.max(p.walkMinutes / limits.walkMinutes, p.ascentM !== null ? p.ascentM / limits.ascentM : 0)));
+}
+
+function joinNames(names: readonly string[]): string {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and then ${names[names.length - 1]}`;
+}
+
+/**
+ * The best way to break a stage: one night on the way if any single point
+ * makes both days walkable, else two. Among the walkable splits, the one whose
+ * hardest day is lightest, a proposed bed preferred when it is nearly as good.
+ */
+function bestStageSplit(stage: TrailStage, along: readonly (SplitPoint & { along: number })[], limits: TrailLimits, contextAt: (offset: number) => StageContext): { parts: Part[]; at: SplitPoint[] } | null {
+  const shareOf = (p: SplitPoint) => {
+    const a = haversineKm(stage.start, p.coordinates);
+    return a / (a + haversineKm(p.coordinates, stage.end));
+  };
+  const walkable = (parts: readonly Part[]) => parts.every((part, i) => assessTrailStage({ ...stage, ...part }, limits, contextAt(i)).ok);
+  type Option = { parts: Part[]; at: SplitPoint[]; load: number; beds: number };
+  const pick = (options: readonly Option[]): Option | null => {
+    if (options.length === 0) return null;
+    const lightest = Math.min(...options.map((o) => o.load));
+    return [...options].filter((o) => o.load <= lightest + BED_PREFERENCE).sort((x, y) => y.beds - x.beds || x.load - y.load || x.at.map((p) => p.id).join().localeCompare(y.at.map((p) => p.id).join()))[0]!;
+  };
+  const singles: Option[] = [];
+  for (const p of along) {
+    const s = shareOf(p);
+    const parts = [partOf(stage, 0, s, stage.start, p.coordinates), partOf(stage, s, 1, p.coordinates, stage.end)];
+    if (walkable(parts)) singles.push({ parts, at: [p], load: heaviest(parts, limits), beds: Number(p.bed) });
+  }
+  const one = pick(singles);
+  if (one) return { parts: one.parts, at: one.at };
+  if (MAX_STAGE_PARTS < 3) return null;
+  const doubles: Option[] = [];
+  for (let i = 0; i < along.length; i += 1) {
+    for (let j = i + 1; j < along.length; j += 1) {
+      const p = along[i]!;
+      const q = along[j]!;
+      const s1 = shareOf(p);
+      /* The second point's share of the whole stage, along the way through the first. */
+      const a = haversineKm(stage.start, p.coordinates) + haversineKm(p.coordinates, q.coordinates);
+      const s2 = a / (a + haversineKm(q.coordinates, stage.end));
+      if (s2 <= s1) continue;
+      const parts = [partOf(stage, 0, s1, stage.start, p.coordinates), partOf(stage, s1, s2, p.coordinates, q.coordinates), partOf(stage, s2, 1, q.coordinates, stage.end)];
+      if (walkable(parts)) doubles.push({ parts, at: [p, q], load: heaviest(parts, limits), beds: Number(p.bed) + Number(q.bed) });
+    }
+  }
+  const two = pick(doubles);
+  return two ? { parts: two.parts, at: two.at } : null;
+}
+
+/**
+ * Each stage judged for this party, in order. A stage that does not suit for
+ * length, climbing or daylight is split for the night at a point on the way —
+ * a proposed bed, or a point where another walk starts or ends, or a placed
+ * small town — choosing the split whose hardest day is lightest, into at most
+ * `MAX_STAGE_PARTS` days. A split needs a spare day in the trip (a free or
+ * rest day it uses up); without one the usual way round the proposal named is
+ * taken first, and only then the split, which then costs the trail's last
+ * stage. Else the stage is covered the usual way the proposal named, when that
+ * way is open that month (unknown ≠ closed); else left as it is and said so on
+ * the day, which is then not ready.
  */
 export function resolveTrailStages(input: {
   stages: readonly TrailStage[];
   limits: TrailLimits;
   beds: readonly TrailBed[];
+  /** Points on the way that are not proposed beds; a split there adds a night the traveller books. */
+  waypoints?: readonly TrailWaypoint[];
+  /** Days the trip has beyond one per stage; each extra walking day a split adds uses one. Absent: unknown, never a reason not to split. */
+  spareDays?: number;
   contextFor: (index: number, stage: TrailStage) => StageContext;
 }): ResolvedTrailStage[] {
   const out: ResolvedTrailStage[] = [];
+  const points: SplitPoint[] = [...input.beds.map((b) => ({ ...b, bed: true })), ...(input.waypoints ?? []).map((w) => ({ ...w, bed: false }))];
+  let spare = input.spareDays ?? Number.POSITIVE_INFINITY;
+  /* Waypoints a split chose sleep a night: they join the beds the stages are matched to. */
+  const sleptAt: TrailBed[] = [];
   input.stages.forEach((stage, index) => {
     const context = input.contextFor(index, stage);
     const assessment = assessTrailStage(stage, input.limits, context);
-    const timing = (a: StageAssessment) => ({ ...(a.latestStartMinute !== null ? { latestStartMinute: a.latestStartMinute } : {}), ...(context.duskMinute !== null ? { duskMinute: context.duskMinute } : {}) });
+    const timing = (a: StageAssessment, c: StageContext = context) => ({ ...(a.latestStartMinute !== null ? { latestStartMinute: a.latestStartMinute } : {}), ...(c.duskMinute !== null ? { duskMinute: c.duskMinute } : {}) });
     const reasons = assessment.problems.map((p) => p.detail).join('; ');
     if (assessment.ok) {
       out.push({ ...stage, resolution: 'walk', fromBaseId: null, toBaseId: null, ...timing(assessment) });
@@ -324,33 +459,46 @@ export function resolveTrailStages(input: {
     }
     /* Only length, climbing and daylight are mended by an extra night: a closed or unsuitable section is not walked at all. */
     const splittable = assessment.problems.every((p) => p.code === 'too_long' || p.code === 'too_much_ascent' || p.code === 'after_dusk');
-    if (splittable) {
-      const straight = haversineKm(stage.start, stage.end);
-      const options = input.beds
-        .map((bed) => ({ bed, a: haversineKm(stage.start, bed.coordinates), b: haversineKm(bed.coordinates, stage.end) }))
-        .filter((o) => straight > 2 && o.a > 1 && o.b > 1 && o.a + o.b <= SPLIT_DETOUR_RATIO * straight)
-        .sort((x, y) => Math.abs(x.a / (x.a + x.b) - 0.5) - Math.abs(y.a / (y.a + y.b) - 0.5) || x.bed.id.localeCompare(y.bed.id));
-      for (const option of options) {
-        const share = option.a / (option.a + option.b);
-        const half = (s: number): Pick<TrailStage, 'km' | 'ascentM' | 'walkMinutes'> => {
-          const km = stage.km !== null ? Math.round(stage.km * s * 10) / 10 : null;
-          const ascentM = stage.ascentM !== null ? Math.round(stage.ascentM * s) : null;
-          return { km, ascentM, walkMinutes: km !== null ? walkingMinutes(km, ascentM ?? 0) : Math.round(stage.walkMinutes * s) };
-        };
-        const first = { ...stage, ...half(share) };
-        const second = { ...stage, ...half(1 - share) };
-        const a1 = assessTrailStage(first, input.limits, context);
-        const a2 = assessTrailStage(second, input.limits, input.contextFor(index + 1, stage));
-        if (!a1.ok || !a2.ok) continue;
-        const at = { baseId: option.bed.id, name: option.bed.name, at: option.bed.coordinates };
-        const note = `Split with a night in ${option.bed.name}: walked in one day it is ${reasons}.`;
-        out.push({ ...first, end: option.bed.coordinates, endName: option.bed.name, name: `${stage.name} (to ${option.bed.name})`, part: 1, splitAt: at, resolution: 'split', note, fromBaseId: null, toBaseId: null, ...timing(a1) });
-        out.push({ ...second, start: option.bed.coordinates, placeId: `${stage.placeId}~2`, key: `${stage.key}~2`, name: `${stage.name} (from ${option.bed.name})`, part: 2, splitAt: at, resolution: 'split', note, fromBaseId: null, toBaseId: null, ...timing(a2) });
-        return;
-      }
-    }
+    const split = splittable ? bestStageSplit(stage, splitPointsAlong(stage, points), input.limits, (offset) => input.contextFor(index + offset, stage)) : null;
     const alt = stage.alternative;
-    const altOpen = alt && (!alt.openMonths || alt.openMonths.length === 0 || alt.openMonths.includes(context.month));
+    const altOpen = Boolean(alt && (!alt.openMonths || alt.openMonths.length === 0 || alt.openMonths.includes(context.month)));
+    const extraDays = split ? split.at.length : 0;
+    /* A split that needs a day the trip does not have yields to the usual way round, when there is one. */
+    if (split && (extraDays <= spare || !altOpen)) {
+      const fits = extraDays <= spare;
+      if (fits) spare -= extraDays;
+      const note = `Split with a night in ${joinNames(split.at.map((p) => p.name))}: walked in one day it is ${reasons}.${fits ? '' : ' The trip has no spare day for the extra walking day, so the trail ends a stage earlier.'}`;
+      split.parts.forEach((part, i) => {
+        const fromName = i === 0 ? null : split.at[i - 1]!.name;
+        const toName = i < split.at.length ? split.at[i]!.name : null;
+        const label = fromName && toName ? `${fromName} to ${toName}` : toName ? `to ${toName}` : `from ${fromName}`;
+        const c = input.contextFor(index + i, stage);
+        const a = assessTrailStage({ ...stage, ...part }, input.limits, c);
+        const at = split.at[Math.min(i, split.at.length - 1)]!;
+        const { endName: _endName, ...rest } = stage;
+        out.push({
+          ...rest,
+          km: part.km,
+          ascentM: part.ascentM,
+          walkMinutes: part.walkMinutes,
+          start: part.start,
+          end: part.end,
+          ...(toName ? { endName: toName } : stage.endName ? { endName: stage.endName } : {}),
+          name: `${stage.name} (${label})`,
+          placeId: i === 0 ? stage.placeId : `${stage.placeId}~${i + 1}`,
+          key: i === 0 ? stage.key : `${stage.key}~${i + 1}`,
+          part: i + 1,
+          splitAt: { baseId: at.id, name: at.name, at: at.coordinates },
+          resolution: 'split',
+          note,
+          fromBaseId: null,
+          toBaseId: null,
+          ...timing(a, c),
+        });
+      });
+      for (const p of split.at) if (!p.bed && !sleptAt.some((b) => b.id === p.id)) sleptAt.push({ id: p.id, name: p.name, coordinates: p.coordinates });
+      return;
+    }
     if (alt && altOpen) {
       const instead = alt.mode === 'skip' ? 'skip this section' : `take the ${alt.mode} instead`;
       out.push({ ...stage, resolution: 'alternative', fromBaseId: null, toBaseId: null, note: `${capitalise(reasons)} for this party, so ${instead}: ${alt.note.replace(/\.$/, '')}.`, ...timing(assessment) });
@@ -361,16 +509,36 @@ export function resolveTrailStages(input: {
       resolution: 'unresolved',
       fromBaseId: null,
       toBaseId: null,
-      note: `${capitalise(reasons)}.${alt ? ` The usual alternative (${alt.mode}) does not run this month either.` : ' No usual alternative was proposed: ask the inn about a taxi for part of the way, or plan a shorter day.'}`,
+      note: `${capitalise(reasons)}.${splittable ? ' Nowhere to sleep was found on the way to break it.' : ''}${alt ? ` The usual alternative (${alt.mode}) does not run this month either.` : ' No usual alternative was proposed: ask the inn about a taxi or bus for part of the way, or plan a shorter day.'}`,
       ...timing(assessment),
     });
   });
   /* Which bed each stage leaves from and arrives at. */
+  const beds = [...input.beds, ...sleptAt];
   return out.map((stage, i) => {
-    const from = nearestBed(stage.start, input.beds, TRAIL_START_NEAR_BED_KM);
-    const to = nearestBed(stage.end, input.beds, TRAIL_END_AT_BED_KM, from?.id ?? null);
+    const from = nearestBed(stage.start, beds, TRAIL_START_NEAR_BED_KM);
+    const to = nearestBed(stage.end, beds, TRAIL_END_AT_BED_KM, from?.id ?? null);
     return { ...stage, order: i + 1, fromBaseId: from?.id ?? null, toBaseId: to?.id ?? null };
   });
+}
+
+/**
+ * When a walking day sets off. Never later than the trip's own start; a long
+ * day (five hours or more on the clock) by 08:00 and a very long one (seven or
+ * more) by 07:30, whatever the trip's usual morning; and always early enough to
+ * reach the next bed before civil dusk with the margin and half an hour to
+ * spare, when dusk is known. Never before `EARLIEST_TRAIL_START_MINUTE`: a
+ * day that would need that is already not walkable (`after_dusk`).
+ */
+export const LONG_STAGE_DAY_MINUTES = 300;
+export const VERY_LONG_STAGE_DAY_MINUTES = 420;
+export function trailStartMinute(stage: { walkMinutes: number; latestStartMinute?: number | null }, dayStartMinute: number): number {
+  const day = trailDayMinutes(stage.walkMinutes);
+  let start = dayStartMinute;
+  if (day >= VERY_LONG_STAGE_DAY_MINUTES) start = Math.min(start, 7 * 60 + 30);
+  else if (day >= LONG_STAGE_DAY_MINUTES) start = Math.min(start, 8 * 60);
+  if (stage.latestStartMinute !== undefined && stage.latestStartMinute !== null) start = Math.min(start, stage.latestStartMinute - 30);
+  return Math.max(EARLIEST_TRAIL_START_MINUTE, Math.floor(start / 15) * 15);
 }
 
 /**
@@ -407,7 +575,7 @@ export function trailBedChain(stages: readonly ResolvedTrailStage[]): { chain: s
 }
 
 /** The record the stay decision carries. */
-export function trailStageRecord(stage: ResolvedTrailStage, nameOf: (baseId: string) => string | undefined, dayNumber?: number): TrailStageRecord {
+export function trailStageRecord(stage: ResolvedTrailStage, nameOf: (baseId: string) => string | undefined, dayNumber?: number, extra: { startMinute?: number; addedBed?: boolean } = {}): TrailStageRecord {
   return {
     placeId: stage.placeId,
     name: stage.name,
@@ -426,5 +594,7 @@ export function trailStageRecord(stage: ResolvedTrailStage, nameOf: (baseId: str
     ...(stage.duskMinute !== undefined ? { duskMinute: stage.duskMinute } : {}),
     ...(stage.note ? { note: stage.note } : {}),
     ...(stage.part ? { part: stage.part } : {}),
+    ...(extra.startMinute !== undefined ? { startMinute: extra.startMinute } : {}),
+    ...(extra.addedBed ? { addedBed: true } : {}),
   };
 }

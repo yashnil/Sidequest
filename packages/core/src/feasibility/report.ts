@@ -316,6 +316,28 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
   for (const note of pkg?.planning?.dayNotes ?? []) {
     if (note.code === 'walk_luggage' && /send your bags ahead/.test(note.note)) items.push({ area: 'booking', severity: 'dependency', dayNumber: note.dayNumber, detail: note.note });
     else if (note.code === 'walk_return') items.push({ area: 'transport', severity: 'caution', dayNumber: note.dayNumber, detail: note.note });
+    /*
+     * 2026-11 — a trail stage longer than the party can walk, with nowhere on
+     * the way to break it and no usual way round, cannot be done as written:
+     * the traveller has to choose a taxi for part of it, a shorter day or a
+     * skipped section, so the trip is never "Ready" around it. A stage covered
+     * the usual other way (a bus, a lift) works, and is a caution to confirm.
+     */
+    else if (note.code === 'trail_unresolved') items.push({ area: 'physical', severity: 'dependency', dayNumber: note.dayNumber, detail: note.note });
+    else if (note.code === 'trail_alternative') items.push({ area: 'transport', severity: 'caution', dayNumber: note.dayNumber, detail: note.note });
+  }
+  /*
+   * 2026-11 — THE TRAVELLER'S DAILY TRAVEL LIMIT. A day over a limit the
+   * traveller set themselves, after the planner tried every compliant
+   * structure it could find, is a choice only they can make (accept the long
+   * day, add a night, drop the move) — a dependency they own. Over Sidequest's
+   * own default it is a caution: a preference traded off, and said.
+   */
+  const travelLimit = pkg?.planning?.travelLimit;
+  for (const day of travelLimit?.days ?? []) {
+    const choices = (travelLimit?.choices ?? []).filter((c) => c.dayNumber === day.dayNumber).map((c) => c.label);
+    const detail = `Day ${day.dayNumber} has about ${Math.round(day.travelMinutes)} minutes of travel, over the ${travelLimit!.limitMinutes} a day ${travelLimit!.hard ? 'you set' : 'Sidequest assumed'}.${choices.length > 0 ? ` Choose: ${choices.join('; ')}.` : ''}`;
+    items.push({ area: 'transport', severity: travelLimit!.hard ? 'dependency' : 'caution', dayNumber: day.dayNumber, detail });
   }
   const bookedRespected = input.audit?.checks.find((c) => c.id === 'booked_respected');
   if (bookedRespected && !bookedRespected.ok) items.push({ area: 'booking', severity: 'blocker', detail: bookedRespected.detail });

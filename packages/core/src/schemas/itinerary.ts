@@ -1358,6 +1358,45 @@ export const tripPackageSchema = z.object({
       /** What is still wrong with a day after repair, as it is written on that day. */
       dayNotes: z.array(z.object({ dayNumber: z.number().int().positive(), code: z.string().min(1), note: z.string().min(1) })).optional(),
       /**
+       * 2026-11 — THE TRAVELLER'S DAILY TRAVEL LIMIT, COUNTED.
+       *
+       * The planner's own figures for every day over the limit after it looked
+       * for a compliant structure (a stay sequence with no over-limit move, no
+       * detour added to a long move under a hard limit), why each is over, and
+       * — where the limit is the traveller's own (`hard`) — the explicit
+       * choices a screen can offer instead of exceeding it silently. `daysOver`
+       * is the count an evaluation reads. Absent on model-composed plans.
+       */
+      travelLimit: z
+        .object({
+          version: z.literal(1),
+          limitMinutes: z.number().int().positive(),
+          hard: z.boolean(),
+          daysOver: z.number().int().min(0),
+          days: z.array(
+            z.object({
+              dayNumber: z.number().int().positive(),
+              travelMinutes: z.number().min(0),
+              /** `transfer`: the move between stays (or the arrival/departure leg) alone is over; `traveller_pick`: a place the traveller chose; `stops`: Sidequest's own stops (only ever under a soft limit). */
+              cause: z.enum(['transfer', 'traveller_pick', 'stops']),
+            }),
+          ),
+          choices: z
+            .array(
+              z.object({
+                dayNumber: z.number().int().positive(),
+                kind: z.enum(['accept_long_day', 'add_night', 'stay_on', 'drop_stop', 'faster_mode']),
+                label: z.string().min(1),
+                detail: z.string().min(1),
+                /** The place a night would be added in, or the stop that would go. */
+                subject: z.string().min(1).optional(),
+                travelMinutes: z.number().min(0).optional(),
+              }),
+            )
+            .default([]),
+        })
+        .optional(),
+      /**
        * Sparse-itinerary pass (2026-11) — why each light day is light, with the
        * figures (`apps/web/src/lib/planning/day-density.ts`). A deliberately
        * relaxed day and a day thinned by a discovery gap read the same on a

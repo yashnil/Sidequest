@@ -1,7 +1,7 @@
 import type { Interest, PhysicalIntensity, TimeOfDay } from '@sidequest/core';
 import type { AnchorCategory, DraftAnchor, DraftDay, DraftTransport, TripArchetype } from './trip-draft';
 import { evaluateObjective, improveStructure, type ImproveOptions, type StructureObjective } from './structure-improve';
-import { describeDays, repairDays, type DayNote, type DayRepair } from './structure-repair';
+import { describeDays, repairDays, travelLimitRecord, type DayNote, type DayRepair, type TravelLimitRecord } from './structure-repair';
 
 /**
  * V1 CONVERGENCE — THE DETERMINISTIC STRUCTURE PLANNER.
@@ -129,6 +129,13 @@ export interface StructurePlannerInput {
   destinationName: string;
   windows: readonly PlannerDayWindow[];
   bases: readonly PlannerBase[];
+  /**
+   * 2026-11 — the places to sleep the scan proposed that the stays do not use.
+   * Read only to name a night that would break a move over the traveller's
+   * limit (`structure-repair.ts#travelLimitRecord`); the planner never sleeps
+   * there on its own.
+   */
+  otherBases?: readonly { id: string; name: string; coordinates: { lat: number; lng: number } }[];
   candidates: readonly PlannerCandidate[];
   /** Door-to-door minutes between two ids (bases and candidates) in the trip's mode, measured or estimated; null when unknown. */
   minutes: (fromId: string, toId: string) => number | null;
@@ -144,6 +151,15 @@ export interface StructurePlannerInput {
   maxStopsPerDay: number;
   carAvailable: boolean;
   maxDailyTravelMinutes: number;
+  /**
+   * 2026-11 — the limit is the traveller's own rule (their answer, at
+   * `user_explicit` or above), not Sidequest's default. Then nothing of
+   * Sidequest's may take a day past it: a moving day gets no roadside detour
+   * beyond what the limit leaves after the move, and no loop after a move that
+   * already spends it. What the move itself costs over the limit is offered as
+   * a choice (`structure-repair.ts#travelLimitRecord`), never hidden.
+   */
+  travelLimitHard?: boolean;
   maxPhysicalIntensity: PhysicalIntensity;
   /**
    * The traveller's daily effort answer. `light` (like a `slow` pace) means a
@@ -207,6 +223,8 @@ export interface StructurePlan {
   repairs: DayRepair[];
   /** What is still wrong with a day, in words, with its figures. Written on the day. */
   dayNotes: DayNote[];
+  /** Every day over the traveller's daily travel limit, why, and (under their own limit) the choices instead. */
+  travelLimit?: TravelLimitRecord;
 }
 
 export const INTENSITY_RANK: Record<PhysicalIntensity, number> = { none: 0, easy: 1, moderate: 2, strenuous: 3 };
@@ -523,7 +541,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     /* What is left of an edge day after a long transfer is not a sightseeing window: under ninety minutes, the day is the journey. */
     const capacity = Math.max(0, (isFirst || isLast) && edgeTransfer > 0 && raw < 90 ? 0 : raw);
     /* A transfer is travel: it comes off the traveller's limit, and a day that spends it all still gets a short loop near where it ends. */
-    const travelBudget = transfer > 0 ? (transfer >= input.maxDailyTravelMinutes ? MOVE_DAY_LOOP_MINUTES : Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_ROADSIDE_MINUTES, Math.round(transfer * MOVE_DAY_ROADSIDE_SHARE))) : input.maxDailyTravelMinutes;
+    const travelBudget = transfer > 0 && input.travelLimitHard ? Math.max(0, input.maxDailyTravelMinutes - transfer) : transfer > 0 ? (transfer >= input.maxDailyTravelMinutes ? MOVE_DAY_LOOP_MINUTES : Math.max(input.maxDailyTravelMinutes - transfer, MOVE_DAY_ROADSIDE_MINUTES, Math.round(transfer * MOVE_DAY_ROADSIDE_SHARE))) : input.maxDailyTravelMinutes;
     return { index: i, dayNumber: i + 1, date, baseId: base.id, ...(relocation ? { previousBaseId: previousBase.id } : {}), relocation, capacityMinutes: capacity, windowMinutes: span, transferMinutes: transfer, travelBudgetMinutes: travelBudget, weather: weatherByDate.get(date) ?? null, isFirst, isLast };
   });
 
@@ -601,7 +619,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const out = leg(day.previousBaseId, s.id);
     const on = leg(s.id, day.baseId);
     const roadside = Math.max(MOVE_DAY_ROADSIDE_MINUTES, Math.round(day.transferMinutes * MOVE_DAY_ROADSIDE_SHARE));
-    const allowance = day.transferMinutes >= input.maxDailyTravelMinutes ? roadside : day.travelBudgetMinutes;
+    const allowance = day.transferMinutes >= input.maxDailyTravelMinutes && !input.travelLimitHard ? roadside : day.travelBudgetMinutes;
     return out !== null && on !== null && out + on - day.transferMinutes <= allowance;
   }
 
@@ -1075,7 +1093,8 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
     day.intensity = peak >= 3 || (!edge && load > 0.95) ? 'intense' : peak >= 2 || (!edge && load > 0.6) ? 'moderate' : 'light';
   }
 
-  return { days, dropped, weatherMoves, mustConflicts, repairs, dayNotes: describeDays(kernel, days.map((d) => d.stops.map((s) => s.candidate))) };
+  const finalState = days.map((d) => d.stops.map((s) => s.candidate));
+  return { days, dropped, weatherMoves, mustConflicts, repairs, dayNotes: describeDays(kernel, finalState), travelLimit: travelLimitRecord(kernel, finalState) };
 }
 
 /**

@@ -199,6 +199,50 @@ function fillThinDays(kernel: PlannerKernel, state: PlanState): void {
   }
 }
 
+/** A night that would break a move over the limit into two legs inside it: a proposed place to sleep the stays do not use first, else a town on this trip's own board. */
+function nightOnTheWay(kernel: PlannerKernel, index: number, state: PlanState): { where: string; out: number; on: number; proposedBed: boolean } | null {
+  const day = kernel.days[index]!;
+  const input = kernel.input;
+  const from = day.previousBaseId;
+  if (!from || !day.relocation) return null;
+  const limit = input.maxDailyTravelMinutes;
+  const basesByName = new Set(input.bases.map((b) => b.name.toLowerCase()));
+  const fits = (out: number | null, on: number | null) => out !== null && on !== null && out <= limit && on <= limit && out >= 45 && on >= 45 && out + on <= day.transferMinutes + 45;
+  const beds = (input.otherBases ?? [])
+    .flatMap((b) => {
+      const out = input.minutes(from, b.id);
+      const on = input.minutes(b.id, day.baseId);
+      return fits(out, on) && !basesByName.has(b.name.toLowerCase()) ? [{ where: b.name, out: out!, on: on!, proposedBed: true }] : [];
+    })
+    .sort((a, b) => Math.max(a.out, a.on) - Math.max(b.out, b.on) || a.where.localeCompare(b.where));
+  if (beds[0]) return beds[0];
+  const places = [...kernel.plannable, ...state.flat()];
+  /* A locality half the board shares names a region, not somewhere to stay the night. */
+  const sharedBy = new Map<string, number>();
+  for (const c of input.candidates) if (c.locality) sharedBy.set(c.locality.trim().toLowerCase(), (sharedBy.get(c.locality.trim().toLowerCase()) ?? 0) + 1);
+  const isTown = (where: string) => where.toLowerCase() !== input.destinationName.trim().toLowerCase() && (sharedBy.get(where.toLowerCase()) ?? 0) <= Math.max(3, Math.floor(input.candidates.length / 5));
+  return (
+    places
+      .flatMap((c) => {
+        const out = input.minutes(from, c.id);
+        const on = input.minutes(c.id, day.baseId);
+        const where = (c.locality || c.name).trim();
+        if (!where || basesByName.has(where.toLowerCase()) || !isTown(where) || !fits(out, on)) return [];
+        return [{ where, out: out!, on: on!, proposedBed: false }];
+      })
+      .sort((a, b) => Math.max(a.out, a.on) - Math.max(b.out, b.on) || a.where.localeCompare(b.where))[0] ?? null
+  );
+}
+
+/** How many of the stops planned from tonight's base would be out of reach from last night's, were the move dropped. */
+function outOfReachIfStaying(kernel: PlannerKernel, index: number, state: PlanState): number {
+  const day = kernel.days[index]!;
+  const from = day.previousBaseId;
+  if (!from) return 0;
+  const limit = kernel.input.maxDailyTravelMinutes;
+  return state.flatMap((stops, i) => (kernel.days[i]!.baseId === day.baseId ? stops : [])).filter((c) => (kernel.input.minutes(from, c.id) ?? 0) > Math.max(45, limit / 2)).length;
+}
+
 /**
  * A MOVE OVER THE LIMIT, AND WHAT COULD BE DONE ABOUT IT.
  *
@@ -212,31 +256,96 @@ function moveAlternative(kernel: PlannerKernel, index: number, state: PlanState)
   const input = kernel.input;
   const from = day.previousBaseId;
   if (!from || !day.relocation) return '';
-  const limit = input.maxDailyTravelMinutes;
-  const basesByName = new Set(input.bases.map((b) => b.name.toLowerCase()));
-  const places = [...kernel.plannable, ...state.flat()];
-  /* A locality half the board shares names a region, not somewhere to stay the night. */
-  const sharedBy = new Map<string, number>();
-  for (const c of kernel.input.candidates) if (c.locality) sharedBy.set(c.locality.trim().toLowerCase(), (sharedBy.get(c.locality.trim().toLowerCase()) ?? 0) + 1);
-  const isTown = (where: string) => where.toLowerCase() !== input.destinationName.trim().toLowerCase() && (sharedBy.get(where.toLowerCase()) ?? 0) <= Math.max(3, Math.floor(kernel.input.candidates.length / 5));
-  const onTheWay = places
-    .flatMap((c) => {
-      const out = input.minutes(from, c.id);
-      const on = input.minutes(c.id, day.baseId);
-      const where = (c.locality || c.name).trim();
-      if (out === null || on === null || out > limit || on > limit || !where || basesByName.has(where.toLowerCase()) || !isTown(where)) return [];
-      if (out + on > day.transferMinutes + 45 || out < 45 || on < 45) return [];
-      return [{ where, out, on }];
-    })
-    .sort((a, b) => Math.max(a.out, a.on) - Math.max(b.out, b.on) || a.where.localeCompare(b.where))[0];
+  const onTheWay = nightOnTheWay(kernel, index, state);
   if (onTheWay) return ` A night around ${onTheWay.where} would break it into about ${clock(onTheWay.out)} and ${clock(onTheWay.on)}, each inside your limit.`;
   const fromBase = input.bases.find((b) => b.id === from);
   const toBase = input.bases.find((b) => b.id === day.baseId);
   const km = fromBase && toBase ? haversineKm({ id: fromBase.id, ...fromBase.coordinates }, { id: toBase.id, ...toBase.coordinates }) : 0;
   if (km >= 200) return ` ${input.carAvailable ? 'A train or a flight' : 'A flight'} between them may be quicker; Sidequest has not timed one, so check before you book.`;
-  const out = state.flatMap((stops, i) => (kernel.days[i]!.baseId === day.baseId ? stops : [])).filter((c) => (input.minutes(from, c.id) ?? 0) > Math.max(45, limit / 2)).length;
+  const out = outOfReachIfStaying(kernel, index, state);
   const name = fromBase?.name ?? 'the last base';
   return out > 0 ? ` Staying on in ${name} would save the move, but ${out} of the planned stops would then be out of reach.` : ` Staying on in ${name} would save the move and keep today's stops within reach.`;
+}
+
+export interface TravelLimitDay {
+  dayNumber: number;
+  travelMinutes: number;
+  cause: 'transfer' | 'traveller_pick' | 'stops';
+}
+
+export interface TravelLimitChoice {
+  dayNumber: number;
+  kind: 'accept_long_day' | 'add_night' | 'stay_on' | 'drop_stop' | 'faster_mode';
+  label: string;
+  detail: string;
+  subject?: string;
+  travelMinutes?: number;
+}
+
+export interface TravelLimitRecord {
+  version: 1;
+  limitMinutes: number;
+  hard: boolean;
+  daysOver: number;
+  days: TravelLimitDay[];
+  choices: TravelLimitChoice[];
+}
+
+/**
+ * 2026-11 — EVERY DAY OVER THE TRAVELLER'S DAILY LIMIT, COUNTED, AND — WHERE
+ * THE LIMIT IS THEIR OWN — WHAT THEY CAN CHOOSE INSTEAD.
+ *
+ * By the time this runs the planner has already looked for a compliant
+ * structure: the stays prefer a sequence with no move over a hard limit
+ * (`stay-objective.ts`), and the day validator adds no detour to a move a hard
+ * limit cannot afford. What is left over is one of three things, and the record
+ * says which: the move itself (or the arrival or departure leg) is longer than
+ * the limit; a place the traveller picked takes the day over; or, under
+ * Sidequest's default limit only, its own stops do. Under a hard limit each day
+ * carries explicit choices — accept the long day, add a night on the way
+ * (named, from the proposed beds or the trip's own board), stay on and skip the
+ * move (with what that costs), a faster mode (unmeasured, said so), or drop the
+ * pick that takes the day over — which the feasibility report turns into a
+ * decision the traveller owns. Pure: the planner's own figures, no provider.
+ */
+export function travelLimitRecord(kernel: PlannerKernel, state: PlanState): TravelLimitRecord {
+  const limit = kernel.input.maxDailyTravelMinutes;
+  const hard = kernel.input.travelLimitHard === true;
+  const nameOf = new Map(kernel.input.bases.map((b) => [b.id, b.name] as const));
+  const days: TravelLimitDay[] = [];
+  const choices: TravelLimitChoice[] = [];
+  state.forEach((stops, index) => {
+    const day = kernel.days[index]!;
+    /* A trail stage's day is judged on the party's walking limits, not the travel limit (`trail-stages.ts`). */
+    if (stops.some((s) => s.trailStage)) return;
+    const load = loadOf(kernel, index, stops);
+    const total = load.travel + day.transferMinutes;
+    if (total <= limit) return;
+    const picks = stops.filter((s) => s.status === 'must');
+    const cause: TravelLimitDay['cause'] = day.transferMinutes > limit ? 'transfer' : picks.length > 0 ? 'traveller_pick' : 'stops';
+    days.push({ dayNumber: day.dayNumber, travelMinutes: Math.round(total), cause });
+    if (!hard) return;
+    const n = day.dayNumber;
+    choices.push({ dayNumber: n, kind: 'accept_long_day', label: `Accept about ${clock(total)} of travel on day ${n}`, detail: `Keep day ${n} as planned: about ${clock(total)} of travel, ${clock(total - limit)} past your ${clock(limit)} a day.`, travelMinutes: Math.round(total) });
+    if (cause === 'transfer' && day.relocation && day.previousBaseId) {
+      const night = nightOnTheWay(kernel, index, state);
+      if (night) choices.push({ dayNumber: n, kind: 'add_night', label: `Add a night in ${night.where}`, detail: `Break the move to ${nameOf.get(day.baseId) ?? 'the next base'} with a night in ${night.where}: about ${clock(night.out)} then ${clock(night.on)}, each inside your limit. It takes a night from another stay.`, subject: night.where, travelMinutes: Math.round(Math.max(night.out, night.on)) });
+      const from = kernel.input.bases.find((b) => b.id === day.previousBaseId);
+      const to = kernel.input.bases.find((b) => b.id === day.baseId);
+      const lost = outOfReachIfStaying(kernel, index, state);
+      if (from) choices.push({ dayNumber: n, kind: 'stay_on', label: `Stay on in ${from.name} and skip the move`, detail: lost > 0 ? `No move on day ${n}; ${lost} of the stops planned from ${to?.name ?? 'the next base'} would then be out of reach.` : `No move on day ${n}; the stops planned after it stay within reach.`, subject: from.name });
+      const km = from && to ? haversineKm({ id: from.id, ...from.coordinates }, { id: to.id, ...to.coordinates }) : 0;
+      if (km >= 200) choices.push({ dayNumber: n, kind: 'faster_mode', label: kernel.input.carAvailable ? 'Take a train or a flight for the move' : 'Take a flight for the move', detail: 'Possibly quicker; Sidequest has not timed one, so check before you book.' });
+    } else if (cause === 'traveller_pick') {
+      for (const pick of picks) {
+        const without = stops.filter((s) => s !== pick);
+        const travel = loadOf(kernel, index, without).travel + day.transferMinutes;
+        if (travel >= total) continue;
+        choices.push({ dayNumber: n, kind: 'drop_stop', label: `Drop ${pick.name} from day ${n}`, detail: `Without it day ${n} has about ${clock(travel)} of travel${travel <= limit ? ', inside your limit' : ''}.`, subject: pick.name, travelMinutes: Math.round(travel) });
+      }
+    }
+  });
+  return { version: 1, limitMinutes: limit, hard, daysOver: days.length, days, choices };
 }
 
 /** A day nothing could fill, said on the day. An empty day is never left to explain itself. */

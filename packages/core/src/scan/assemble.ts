@@ -33,6 +33,7 @@ import {
   trailDayMinutes,
   trailLimitsFor,
   trailStageRecord,
+  trailStartMinute,
   TRAIL_DUSK_MARGIN_MINUTES,
   TRAIL_END_AT_BED_KM,
   TRAIL_START_NEAR_BED_KM,
@@ -1199,31 +1200,73 @@ interface TrailPlan {
   links: TrailLink[];
   restBaseIds: string[];
   limits: ReturnType<typeof trailLimitsFor>;
+  /** Places to sleep a split added on the way (not proposed as beds): the traveller books them like any stage end. */
+  addedBedIds: string[];
+}
+
+/** A point on the way within this distance of a proposed bed is that bed. */
+const WAYPOINT_IS_BED_KM = 1.5;
+
+/**
+ * The points a long stage could stop at for the night that are not proposed
+ * beds: where each proposed one-way walk starts and ends (a stage end is a
+ * place walkers sleep, by what a stage is), and the small towns the scan
+ * placed. Positions only from what was placed; nothing invented.
+ */
+function trailWaypoints(placeEntries: readonly { id: string; proposal: ScanCandidateProposal }[], positions: ReadonlyMap<string, ResolvedPosition | null>, beds: readonly { coordinates: { lat: number; lng: number } }[]): { id: string; name: string; coordinates: { lat: number; lng: number }; position: ResolvedPosition }[] {
+  const out: { id: string; name: string; coordinates: { lat: number; lng: number }; position: ResolvedPosition }[] = [];
+  const add = (name: string | undefined, position: ResolvedPosition | null | undefined) => {
+    if (!name || !position || position.approximate) return;
+    if (beds.some((b) => haversineKm(b.coordinates, position.coordinates) <= WAYPOINT_IS_BED_KM)) return;
+    if (out.some((w) => haversineKm(w.coordinates, position.coordinates) <= WAYPOINT_IS_BED_KM)) return;
+    const slug = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'stop';
+    let id = `scan-base-trail-${slug}`;
+    for (let n = 2; out.some((w) => w.id === id); n += 1) id = `scan-base-trail-${slug}-${n}`;
+    out.push({ id, name, coordinates: position.coordinates, position });
+  };
+  for (const { proposal: c } of placeEntries) {
+    if (c.walk?.shape === 'point_to_point') {
+      add(c.walk.endName, positions.get(`${c.key}#end`));
+      add(c.locality, positions.get(c.key));
+    } else if (c.kind === 'small_town') {
+      add(c.name, positions.get(c.key));
+    }
+  }
+  return out;
 }
 
 /**
- * The trail's stages, judged and joined to beds. A split stage becomes two
- * walks: the first keeps its place and now ends at the intermediate overnight;
- * the second is added to the places (`<id>~2`), starting there and ending
- * where the stage always did. Mutates `placeEntries` and `positions` (the
- * assembler's own overlay) for that, and nothing else.
+ * The trail's stages, judged and joined to beds. A split stage becomes two or
+ * three walks: the first keeps its place and now ends at the first night on
+ * the way; each later piece is added to the places (`<id>~2`, `<id>~3`),
+ * starting where the last one stopped. A night on the way that is not a
+ * proposed bed becomes a place to sleep of its own. Mutates `placeEntries`,
+ * `baseEntries`, `positions` and `pointAt` (the assembler's own overlays) for
+ * that, and nothing else.
  */
 function planTrailStages(
   input: AssembleScanRegionInput,
   placeEntries: { id: string; proposal: ScanCandidateProposal }[],
-  baseEntries: readonly { id: string; proposal: ScanBaseProposal }[],
+  baseEntries: { id: string; proposal: ScanBaseProposal }[],
   positions: Map<string, ResolvedPosition | null>,
-  pointAt: ReadonlyMap<string, { lat: number; lng: number }>,
+  pointAt: Map<string, { lat: number; lng: number }>,
 ): TrailPlan {
   const trail = input.trail!;
   const limits = trailLimitsFor(trail.party);
   const ordered = orderTrailStages({ candidates: placeEntries, positionOf: (key) => positions.get(key)?.coordinates ?? null, ...(trail.measured ? { measured: trail.measured } : {}) });
   const beds = baseEntries.flatMap((b) => (pointAt.get(b.id) ? [{ id: b.id, name: b.proposal.name, coordinates: pointAt.get(b.id)! }] : []));
+  /* Only a trail the stays follow sleeps on the way; one walked as day walks from a base never adds a place to sleep. */
+  const waypoints = trail.follow ? trailWaypoints(placeEntries, positions, beds) : [];
   const last = Math.max(0, input.dates.length - 1);
+  /* A trail of S stages sleeps S + 1 beds; nights beyond that are spare days a split may use. Only a followed trail has them to spend. */
+  const nights = Math.max(0, input.dates.length - 1);
+  const spareDays = trail.follow ? Math.max(0, nights - 1 - ordered.stages.length) : undefined;
   const resolved = resolveTrailStages({
     stages: ordered.stages,
     limits,
     beds,
+    waypoints: waypoints.map(({ id, name, coordinates }) => ({ id, name, coordinates })),
+    ...(spareDays !== undefined ? { spareDays } : {}),
     /* Before the stays are chosen, stage n is assumed walked on day n + 1; the record is re-timed for the real day once they are. */
     contextFor: (index, stage) => {
       const at = Math.min(index + 1, last);
@@ -1231,23 +1274,34 @@ function planTrailStages(
       return { month: Number(date.slice(5, 7)), duskMinute: civilDuskMinute(stage.end, date, zoneOfPoint(input, stage.end)), startMinute: trail.dayStartMinutes?.[at] ?? DEFAULT_TRAIL_START_MINUTE };
     },
   });
+  /* The nights on the way that are not proposed beds become places to sleep. */
+  const addedBedIds: string[] = [];
+  for (const stage of resolved) {
+    if (stage.resolution !== 'split' || !stage.splitAt || baseEntries.some((b) => b.id === stage.splitAt!.baseId)) continue;
+    const w = waypoints.find((x) => x.id === stage.splitAt!.baseId);
+    if (!w) continue;
+    baseEntries.push({ id: w.id, proposal: { key: w.id, name: w.name, locality: w.name, nightsHint: 1, why: 'A night on the trail, to break a stage too long for one day. Book a bed here like any stage end.' } });
+    positions.set(w.id, { ...w.position, locality: w.position.locality ?? w.name });
+    pointAt.set(w.id, w.coordinates);
+    addedBedIds.push(w.id);
+  }
   /* The split stages, written into the places. */
   for (const stage of resolved) {
-    if (stage.resolution !== 'split' || !stage.splitAt) continue;
-    const originalKey = stage.part === 2 ? stage.key.replace(/~2$/, '') : stage.key;
+    if (stage.resolution !== 'split' || !stage.part) continue;
+    const originalKey = stage.key.replace(/~\d+$/, '');
     const entry = placeEntries.find((p) => p.proposal.key === originalKey);
     const start = positions.get(originalKey);
     if (!entry || !start) continue;
     const { accessPoint: _accessPoint, ...plain } = start;
-    const mid: ResolvedPosition = { ...plain, coordinates: stage.splitAt.at, approximate: false, method: 'geocoder', locality: stage.splitAt.name };
-    const walk = { ...entry.proposal.walk!, ...(stage.km !== null ? { km: stage.km } : {}), ...(stage.ascentM !== null ? { ascentM: stage.ascentM } : {}) };
+    const at = (coordinates: { lat: number; lng: number }, locality: string | undefined): ResolvedPosition => ({ ...plain, coordinates, approximate: false, method: 'geocoder', ...(locality ? { locality } : {}) });
+    const walk = { ...entry.proposal.walk!, ...(stage.km !== null ? { km: stage.km } : {}), ...(stage.ascentM !== null ? { ascentM: stage.ascentM } : {}), ...(stage.endName ? { endName: stage.endName } : {}) };
     if (stage.part === 1) {
-      entry.proposal = { ...entry.proposal, name: stage.name, walk: { ...walk, endName: stage.splitAt.name } };
-      positions.set(`${originalKey}#end`, mid);
+      entry.proposal = { ...entry.proposal, name: stage.name, walk };
+      positions.set(`${originalKey}#end`, at(stage.end, stage.endName));
     } else {
       placeEntries.push({ id: stage.placeId, proposal: { ...entry.proposal, key: stage.key, name: stage.name, walk, defining: false } });
-      positions.set(stage.key, mid);
-      positions.set(`${stage.key}#end`, { ...mid, coordinates: stage.end, locality: stage.endName ?? mid.locality ?? stage.splitAt.name });
+      positions.set(stage.key, at(stage.start, stage.splitAt?.name));
+      positions.set(`${stage.key}#end`, at(stage.end, stage.endName));
     }
   }
   const { chain, stages: chained } = trailBedChain(resolved);
@@ -1257,10 +1311,10 @@ function planTrailStages(
     .map((stage) => ({ fromBaseId: stage.fromBaseId!, toBaseId: stage.toBaseId!, walkMinutes: stage.walkMinutes, placeId: stage.placeId }));
   const springs = placeEntries.filter((p) => p.proposal.kind === 'hot_spring').map((p) => positions.get(p.proposal.key)?.coordinates).filter((c): c is { lat: number; lng: number } => Boolean(c));
   const restBaseIds = chain.filter((id) => {
-    const at = pointAt.get(id);
-    return at !== undefined && springs.some((spring) => haversineKm(at, spring) <= REST_SPRING_KM);
+    const point = pointAt.get(id);
+    return point !== undefined && springs.some((spring) => haversineKm(point, spring) <= REST_SPRING_KM);
   });
-  return { stages: resolved, dropped: ordered.dropped, chain, links, restBaseIds, limits };
+  return { stages: resolved, dropped: ordered.dropped, chain, links, restBaseIds, limits, addedBedIds };
 }
 
 /** What the stay decision records about the trail, once the stays are chosen: each stage's day, its daylight on that day, and the way home. */
@@ -1283,11 +1337,14 @@ function trailRecordFor(
   const limits = trail.limits;
   const stages = trail.stages.map((stage) => {
     const dayNumber = followed && stage.fromBaseId && stage.toBaseId ? moveDay.get(`${stage.fromBaseId}>${stage.toBaseId}`) : undefined;
-    if (dayNumber === undefined) return trailStageRecord(stage, nameOf);
+    const addedBed = Boolean(stage.toBaseId && trail.addedBedIds.includes(stage.toBaseId));
+    if (dayNumber === undefined) return trailStageRecord(stage, nameOf, undefined, { addedBed });
     const date = input.dates[Math.min(dayNumber - 1, input.dates.length - 1)]!;
     const dusk = civilDuskMinute(stage.end, date, zoneOfPoint(input, stage.end));
     const retimed = dusk === null ? stage : { ...stage, duskMinute: dusk, latestStartMinute: dusk - TRAIL_DUSK_MARGIN_MINUTES - trailDayMinutes(stage.walkMinutes) };
-    return trailStageRecord(retimed, nameOf, dayNumber);
+    /* When the walking day sets off: early enough for its length and for dusk, never later than the trip's own morning. */
+    const startMinute = trailStartMinute(retimed, input.trail?.dayStartMinutes?.[dayNumber - 1] ?? DEFAULT_TRAIL_START_MINUTE);
+    return trailStageRecord(retimed, nameOf, dayNumber, { startMinute, addedBed });
   });
   const lastBed = followed ? kept[kept.length - 1]!.id : null;
   const lastAt = lastBed ? pointAt.get(lastBed) : undefined;

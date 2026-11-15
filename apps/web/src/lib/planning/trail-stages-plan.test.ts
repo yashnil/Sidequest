@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildTripQualityContract, evaluateTripQualityContract, type DiscoveryCandidate, type Trip } from '@sidequest/core';
 import { fictionalTrailRegion, TRAIL_DATES, type FictionalTrailOptions } from '../../../../../packages/core/src/scan/trail-fixture.test-support';
-import { composeWithPlanner } from './planner-composer';
+import { composeWithPlanner, trailEarlyStarts } from './planner-composer';
 import { defaultProfileFor } from './default-profile';
 import type { RegionContext } from '../region';
 
@@ -76,7 +76,7 @@ describe('a trail followed from inn to inn', () => {
     const { composed } = plannedTrail();
     const stages = notesOn(composed, 'trail_stage');
     expect(stages.map((n) => n.dayNumber)).toEqual([2, 3, 4, 6]);
-    expect(stages[0]!.note).toMatch(/^Stage 1 of 4: Alder Gate → Brackenford, 12 km and 500 m of climbing \(Sidequest's research, not measured\) — about 3 h 30 of walking; set off by \d\d:\d\d to reach Brackenford at least an hour before dusk \(about 17:\d\d\)\.$/);
+    expect(stages[0]!.note).toMatch(/^Stage 1 of 4: Alder Gate → Brackenford, 12 km and 500 m of climbing \(Sidequest's research, not measured\) — about 3 h 30 of walking; set off at \d\d:\d\d to reach Brackenford at least an hour before dusk \(about 17:\d\d\)\.$/);
     expect(notesOn(composed, 'trail_rest')).toEqual([{ dayNumber: 5, code: 'trail_rest', note: 'A rest day in Dunmere: no stage today, and a hot spring close by.' }]);
     expect(notesOn(composed, 'trail_return')[0]).toMatchObject({ dayNumber: 7 });
     expect(notesOn(composed, 'trail_return')[0]!.note).toMatch(/The trail ends in Eskwater: .*estimated/);
@@ -112,5 +112,61 @@ describe('a trail followed from inn to inn', () => {
     /* A followed trail raises no such gap. */
     const followed = plannedTrail().compiled.basePortfolio!.decision!.trail!;
     expect(evaluateTripQualityContract(contract, { days: [], board: [], selfDriveRequested: false, trail: followed }).violations.some((v) => v.id === 'trail_stages')).toBe(false);
+  });
+});
+
+describe('a trail followed from inn to inn — the stage split, the move and the clock (2026-11)', () => {
+  const eight = ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17'];
+
+  it('a walked stage day moves on foot: the draft never sends a bus between the two beds as well', () => {
+    const { composed } = plannedTrail();
+    for (const day of composed.draft.days) {
+      const walked = composed.plan.days.find((d) => d.dayNumber === day.dayNumber)!.stops.some((s) => s.candidate.trailStage);
+      if (walked && day.relocation) expect(day.move).toEqual({ how: 'walk' });
+    }
+  });
+
+  it('every walking day sends the bags ahead: a booking need on that day', () => {
+    const { composed } = plannedTrail();
+    const luggageDays = notesOn(composed, 'walk_luggage').filter((n) => /send your bags ahead/.test(n.note)).map((n) => n.dayNumber);
+    const walkingDays = composed.plan.days.filter((d) => d.relocation && d.stops.some((s) => s.candidate.trailStage)).map((d) => d.dayNumber);
+    expect(walkingDays.length).toBeGreaterThan(0);
+    expect(luggageDays).toEqual(walkingDays);
+  });
+
+  it('the way home from the trail’s last bed is time on the last day, not free', () => {
+    const { composed, compiled } = plannedTrail();
+    const returnLeg = compiled.basePortfolio!.decision!.trail!.returnLeg!;
+    expect(returnLeg.minutes).toBeGreaterThan(0);
+    expect(composed.plannerInput.edgeTransfers).toEqual({ arrivalMinutes: 0, departureMinutes: Math.round(returnLeg.minutes) });
+  });
+
+  it('a too-long stage with only a town on the scan between is split there, and the day says to book a bed in it', () => {
+    const { composed } = plannedTrail({ longThirdStage: true, townBetween: true, dates: eight });
+    expect(stagesOn(composed, 4)).toEqual(['Corrie Mill to Dunmere (to Fernhollow)']);
+    expect(stagesOn(composed, 5)).toEqual(['Corrie Mill to Dunmere (from Fernhollow)']);
+    const day4 = notesOn(composed, 'trail_stage').find((n) => n.dayNumber === 4)!;
+    expect(day4.note).toMatch(/Split with a night in Fernhollow/);
+    expect(day4.note).toMatch(/Fernhollow was not one of the proposed beds: book a bed there before you go\./);
+    expect(notesOn(composed, 'trail_unresolved')).toEqual([]);
+  });
+
+  it('a long walking day opens before the trip’s usual morning, never late; a short one keeps it', () => {
+    const { compiled } = plannedTrail({ longThirdStage: true, townBetween: true, dates: eight });
+    const trail = compiled.basePortfolio!.decision!.trail!;
+    const early = trailEarlyStarts(trail);
+    /* The two halves of the split stage are each over five hours on the clock: off by 08:00. */
+    expect(early.get(4)).toEqual({ minute: 8 * 60, reason: 'A long walking day: set off at 08:00 to reach Fernhollow with daylight to spare.' });
+    expect(early.get(5)?.minute).toBe(8 * 60);
+    /* A three-and-a-half-hour stage keeps the trip's own 08:30. */
+    expect(early.get(2)?.minute).toBe(8 * 60 + 30);
+    expect(trailEarlyStarts({ ...trail, followed: false }).size).toBe(0);
+  });
+
+  it('a too-long stage with nowhere to break it and no usual way round is stated on its day, as something to decide', () => {
+    const { composed } = plannedTrail({ longThirdStage: true });
+    const unresolved = notesOn(composed, 'trail_unresolved');
+    expect(unresolved).toHaveLength(1);
+    expect(unresolved[0]!.note).toMatch(/Nowhere to sleep was found on the way to break it/);
   });
 });

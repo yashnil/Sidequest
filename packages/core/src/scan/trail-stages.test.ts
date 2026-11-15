@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeScanProposal } from './proposal';
-import { assessTrailStage, civilDuskMinute, orderTrailStages, resolveTrailStages, trailBedChain, trailLimitsFor, type TrailStage } from './trail-stages';
+import { assessTrailStage, civilDuskMinute, corridorPosition, orderTrailStages, resolveTrailStages, splitPointsAlong, trailBedChain, trailLimitsFor, trailStartMinute, type TrailStage } from './trail-stages';
 import { fictionalTrailProposal, fictionalTrailRegion, TRAIL_VILLAGES } from './trail-fixture.test-support';
 import { deriveBookings } from '../intelligence/booking-derive';
 import type { Itinerary, TripPackage } from '../schemas/itinerary';
@@ -140,6 +140,106 @@ describe('a stage that does not suit is split, replaced or said so', () => {
     expect(trailBedChain(resolved).chain.map((id) => beds.find((b) => b.id === id)!.name)).toEqual(['Alder Gate', 'Brackenford', 'Corrie Mill', 'Dunmere', 'Eskwater']);
   });
 });
+
+describe('an over-long stage is split generically, at the best point on the way', () => {
+  const limits = trailLimitsFor({ intensity: 'moderate', children: 0, youngChildren: false, reducedMobility: false });
+  /* A synthetic straight stage due east, 0.4 degrees of longitude (about 37 km at 34°N), 42 km and 1,800 m of climbing by the proposal. */
+  const start = { lat: 34, lng: 135 };
+  const end = { lat: 34, lng: 135.4 };
+  const lng = (share: number) => 135 + 0.4 * share;
+  const long: TrailStage = { placeId: 'p1', key: 'c1', name: 'West Col to East Col', order: 1, start, end, km: 42, ascentM: 1800, distanceBasis: 'proposal', walkMinutes: 740 };
+  const endBeds = [
+    { id: 'bed-w', name: 'West Col', coordinates: start },
+    { id: 'bed-e', name: 'East Col', coordinates: end },
+  ];
+  const context = () => ({ month: 7, duskMinute: null, startMinute: 510 });
+
+  it('places points against the straight line: how far along, how far off', () => {
+    const mid = corridorPosition(start, end, { lat: 34.02, lng: lng(0.5) });
+    expect(mid.along).toBeCloseTo(0.5, 2);
+    expect(mid.offKm).toBeCloseTo(2.2, 1);
+    const along = splitPointsAlong(long, [
+      { id: 'a', name: 'On the way', coordinates: { lat: 34.01, lng: lng(0.4) }, bed: false },
+      { id: 'b', name: 'Far off the line', coordinates: { lat: 34.3, lng: lng(0.5) }, bed: false },
+      { id: 'c', name: 'Behind the start', coordinates: { lat: 34, lng: 134.95 }, bed: false },
+    ]);
+    expect(along.map((p) => p.id)).toEqual(['a']);
+  });
+
+  it('splits at a refuge on the way that is not a proposed bed, and sleeps there', () => {
+    const refuge = { id: 'scan-base-trail-refuge', name: 'Col Refuge', coordinates: { lat: 34.01, lng: lng(0.5) } };
+    const resolved = resolveTrailStages({ stages: [long], limits, beds: endBeds, waypoints: [refuge], contextFor: context });
+    expect(resolved.map((s) => [s.resolution, s.part, s.fromBaseId, s.toBaseId])).toEqual([
+      ['split', 1, 'bed-w', 'scan-base-trail-refuge'],
+      ['split', 2, 'scan-base-trail-refuge', 'bed-e'],
+    ]);
+    expect(resolved.every((s) => s.walkMinutes <= limits.walkMinutes && (s.ascentM ?? 0) <= limits.ascentM)).toBe(true);
+    expect(resolved[0]!.note).toMatch(/Split with a night in Col Refuge/);
+  });
+
+  it('chooses the split whose hardest day is lightest, not the first that fits', () => {
+    const early = { id: 'w-early', name: 'Early Hut', coordinates: { lat: 34, lng: lng(0.45) } };
+    const middle = { id: 'w-mid', name: 'Middle Hut', coordinates: { lat: 34, lng: lng(0.5) } };
+    const resolved = resolveTrailStages({ stages: [long], limits, beds: endBeds, waypoints: [early, middle], contextFor: context });
+    expect(resolved[0]!.toBaseId).toBe('w-mid');
+  });
+
+  it('a stage too long for two days is walked over three, at two points on the way', () => {
+    const longer: TrailStage = { ...long, km: 60, ascentM: 2400, walkMinutes: walkMinutesOf(60, 2400) };
+    const points = [0.2, 0.33, 0.5, 0.66, 0.8].map((share, i) => ({ id: `w-${i}`, name: `Hut ${i}`, coordinates: { lat: 34, lng: lng(share) } }));
+    const resolved = resolveTrailStages({ stages: [longer], limits, beds: endBeds, waypoints: points, contextFor: context });
+    expect(resolved.map((s) => s.part)).toEqual([1, 2, 3]);
+    expect(resolved.map((s) => s.toBaseId)).toEqual(['w-1', 'w-3', 'bed-e']);
+    expect(resolved.map((s) => s.placeId)).toEqual(['p1', 'p1~2', 'p1~3']);
+    expect(resolved.every((s) => s.walkMinutes <= limits.walkMinutes)).toBe(true);
+  });
+
+  it('with no spare day, the usual bus wins over a split; with neither, the split still beats an impossible day and says what it costs', () => {
+    const refuge = { id: 'w-r', name: 'Col Refuge', coordinates: { lat: 34, lng: lng(0.5) } };
+    const withBus: TrailStage = { ...long, alternative: { mode: 'bus', note: 'A bus runs over the col road.' } };
+    const [bus] = resolveTrailStages({ stages: [withBus], limits, beds: endBeds, waypoints: [refuge], spareDays: 0, contextFor: context });
+    expect(bus!.resolution).toBe('alternative');
+    const spare = resolveTrailStages({ stages: [withBus], limits, beds: endBeds, waypoints: [refuge], spareDays: 1, contextFor: context });
+    expect(spare.map((s) => s.resolution)).toEqual(['split', 'split']);
+    const tight = resolveTrailStages({ stages: [long], limits, beds: endBeds, waypoints: [refuge], spareDays: 0, contextFor: context });
+    expect(tight.map((s) => s.resolution)).toEqual(['split', 'split']);
+    expect(tight[0]!.note).toMatch(/no spare day/);
+  });
+
+  it('with nowhere to break it and no usual way round, it stays unresolved and says so', () => {
+    const [r] = resolveTrailStages({ stages: [long], limits, beds: endBeds, contextFor: context });
+    expect(r!.resolution).toBe('unresolved');
+    expect(r!.note).toMatch(/Nowhere to sleep was found on the way/);
+  });
+
+  it('a long walking day sets off early: never late morning, and early enough for dusk', () => {
+    expect(trailStartMinute({ walkMinutes: 200 }, 9 * 60)).toBe(9 * 60);
+    expect(trailStartMinute({ walkMinutes: 300 }, 9 * 60 + 30)).toBe(8 * 60);
+    expect(trailStartMinute({ walkMinutes: 400 }, 10 * 60)).toBe(7 * 60 + 30);
+    /* Dusk leaves a latest start of 08:10: set off by 07:30 (half an hour to spare, on the quarter). */
+    expect(trailStartMinute({ walkMinutes: 200, latestStartMinute: 8 * 60 + 10 }, 9 * 60)).toBe(7 * 60 + 30);
+    /* Never before seven; a day that would need that is already not walkable. */
+    expect(trailStartMinute({ walkMinutes: 200, latestStartMinute: 6 * 60 }, 9 * 60)).toBe(7 * 60);
+  });
+
+  it('in the assembled trip: a town on the scan (not a proposed bed) becomes the night on the way, booked like any stage end', () => {
+    const assembled = fictionalTrailRegion({ longThirdStage: true, townBetween: true, dates: ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17'] });
+    const trail = assembled.region.basePortfolio!.decision!.trail!;
+    expect(assembled.region.basePortfolio!.bases.map((b) => b.baseName)).toEqual(['Alder Gate', 'Brackenford', 'Corrie Mill', 'Fernhollow', 'Dunmere', 'Eskwater']);
+    const split = trail.stages.filter((s) => s.resolution === 'split');
+    expect(split.map((s) => [s.part, s.toName, s.addedBed ?? false])).toEqual([
+      [1, 'Fernhollow', true],
+      [2, 'Dunmere', false],
+    ]);
+    expect(assembled.region.bases.some((b) => b.name === 'Fernhollow')).toBe(true);
+    /* Every walked stage carries the hour it sets off. */
+    expect(trail.stages.filter((s) => s.dayNumber !== undefined).every((s) => typeof s.startMinute === 'number')).toBe(true);
+  });
+});
+
+function walkMinutesOf(km: number, ascentM: number): number {
+  return Math.round((km / 4.5) * 60 + (ascentM / 600) * 60);
+}
 
 describe('the stays follow the trail', () => {
   it('sleeps at every stage end in walking order, each move the day’s walk, a rest day by the hot spring, and the way home estimated', () => {

@@ -734,7 +734,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     // --- 4. assemble, validate, adopt ------------------------------------------------
     markScanStage(tripId, scanId, 'assembling', new Date());
     stageStartedAt.assembling = Date.now();
-    const stayTraveller = stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null });
+    const stayTraveller = stayTravellerFor({ trip, profile, carAvailable: mode === 'car', maxDailyTravelMinutes: canonical.movement.maxDailyTravelMinutes.value ?? profile.transport.maxDailyTransportMinutes, maxDailyDriveMinutes: canonical.movement.maxDailyDriveMinutes.value ?? null, travelLimitHard: travellerSetLimit(canonical.movement.maxDailyTravelMinutes.source) || (mode === 'car' && Boolean(canonical.movement.maxDailyDriveMinutes.value) && travellerSetLimit(canonical.movement.maxDailyDriveMinutes.source)) });
     const dailyWindows = buildDailyWindows(trip.basics, profile, resolveConfig());
     const assembly = assembleScanRegion({
       regionId,
@@ -1006,4 +1006,9 @@ async function linkScanIdentities(proposal: { candidates: readonly { key: string
     console.warn('Discovery scan: Wikidata identities unavailable', error instanceof Error ? error.message : error);
     return new Map();
   }
+}
+
+/** The daily limit is the traveller's own rule when they gave it or accepted it (the trip contract's `user_explicit`), never when it is Sidequest's default. */
+function travellerSetLimit(source: string | undefined): boolean {
+  return source === 'explicit' || source === 'accepted_recommendation';
 }

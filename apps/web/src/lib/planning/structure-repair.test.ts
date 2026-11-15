@@ -145,3 +145,58 @@ describe('repair: an include parked where it does not fit', () => {
     expect(plan.dayNotes.filter((n) => n.code === 'day_overfull')).toEqual([]);
   });
 });
+
+describe('a hard daily travel limit (2026-11)', () => {
+  it('Sidequest adds no roadside detour that a hard limit cannot afford; under its own default it may, and counts it', () => {
+    /* A 145-minute move on a 150-minute limit; a stop 20 minutes off the road. */
+    const table = { 'b|c': 145, 'b|way': 80, 'way|c': 85 };
+    const way = stop('way', { fit: 90 });
+    const soft = createPlannerKernel(input({ ...twoBases(145), candidates: [way] }, table));
+    expect(soft.days[2]!.travelBudgetMinutes).toBe(22);
+    expect(soft.checkDay(2, [way], () => [], 'way')).toEqual({ ok: true });
+    const hard = createPlannerKernel(input({ ...twoBases(145), candidates: [way], travelLimitHard: true }, table));
+    expect(hard.days[2]!.travelBudgetMinutes).toBe(5);
+    expect(hard.checkDay(2, [way], () => [], 'way')).toMatchObject({ ok: false, reason: 'too_far' });
+    /* A move that already spends the limit leaves nothing for a loop after it. */
+    expect(createPlannerKernel(input({ ...twoBases(200), candidates: [], travelLimitHard: true })).days[2]!.travelBudgetMinutes).toBe(0);
+  });
+
+  it('counts every day over the limit, and why, on the planner’s own figures', () => {
+    const way = stop('way', { fit: 90 });
+    const table = { 'b|c': 145, 'b|way': 80, 'way|c': 85 };
+    const soft = planStructure(input({ ...twoBases(145), candidates: [way] }, table));
+    const day3 = soft.days.find((d) => d.dayNumber === 3)!;
+    expect(day3.stops.map((s) => s.candidate.id)).toEqual(['way']);
+    expect(soft.travelLimit).toMatchObject({ hard: false, daysOver: 1, days: [{ dayNumber: 3, cause: 'stops' }], choices: [] });
+    const hard = planStructure(input({ ...twoBases(145), candidates: [way], travelLimitHard: true }, table));
+    expect(hard.travelLimit!.days.filter((d) => d.cause === 'stops')).toEqual([]);
+  });
+
+  it('a move longer than the traveller’s own limit becomes an explicit choice: accept it, add a night on the way, stay on, or a faster mode', () => {
+    const plan = planStructure(
+      input(
+        {
+          ...twoBases(300),
+          candidates: [stop('near-b'), stop('near-c')],
+          travelLimitHard: true,
+          otherBases: [{ id: 'mid', name: 'Midtown', coordinates: { lat: 0, lng: 0.5 } }],
+        },
+        { 'b|c': 300, 'b|mid': 140, 'mid|c': 150, 'b|near-b': 20, 'c|near-c': 20, 'b|near-c': 300, 'c|near-b': 300 },
+      ),
+    );
+    const record = plan.travelLimit!;
+    expect(record).toMatchObject({ hard: true, limitMinutes: 150, daysOver: 1, days: [{ dayNumber: 3, cause: 'transfer', travelMinutes: 300 }] });
+    const kinds = record.choices.filter((c) => c.dayNumber === 3).map((c) => c.kind);
+    expect(kinds).toEqual(expect.arrayContaining(['accept_long_day', 'add_night', 'stay_on']));
+    const night = record.choices.find((c) => c.kind === 'add_night')!;
+    expect(night.subject).toBe('Midtown');
+    expect(night.label).toBe('Add a night in Midtown');
+    /* The day says it too, in words. */
+    expect(plan.dayNotes.find((n) => n.dayNumber === 3 && n.code === 'transfer_over_limit')!.note).toMatch(/A night around Midtown would break it/);
+  });
+
+  it('under Sidequest’s default limit the same move is counted and stated, with no choice forced on the traveller', () => {
+    const plan = planStructure(input({ ...twoBases(300), candidates: [stop('near-b')] }, { 'b|c': 300, 'b|near-b': 20 }));
+    expect(plan.travelLimit).toMatchObject({ hard: false, daysOver: 1, choices: [] });
+  });
+});

@@ -43,6 +43,14 @@ export interface StructuralMetrics {
   /** Transfers or gateways that reached the days as activities. Must be 0. */
   transfersAsStops: number;
   silentAnchorLoss: number;
+  /**
+   * 2026-11 — days whose ground travel (measured + estimated + allowance) is
+   * over the traveller's daily travel limit, as the itinerary shows them; null
+   * when no limit is known. `plannerDaysOverTravelLimit` is the planner's own
+   * count (`package.planning.travelLimit`), null on a model-composed plan.
+   */
+  daysOverTravelLimit: number | null;
+  plannerDaysOverTravelLimit: number | null;
 }
 
 export interface MetricsInput {
@@ -54,6 +62,8 @@ export interface MetricsInput {
   /** Per-person fit per scheduled activity, when a party was described: values 0–1. */
   partyFit?: readonly number[] | null;
   silentAnchorLoss?: number;
+  /** The traveller's daily travel limit, minutes, when the caller knows it better than the contract. */
+  maxDailyTravelMinutes?: number | null;
 }
 
 const CATEGORY_FAMILIES: Record<string, string> = {
@@ -130,5 +140,7 @@ export function buildStructuralMetrics(input: MetricsInput): StructuralMetrics {
     unverifiedCriticalDependencies: (itinerary.package?.feasibility?.items ?? []).filter((i) => i.severity === 'dependency').length + itinerary.issues.filter((i) => i.code === 'gateway_unresolved').length,
     transfersAsStops,
     silentAnchorLoss: input.silentAnchorLoss ?? itinerary.package?.preservation?.silentLoss ?? 0,
+    daysOverTravelLimit: ((limit) => (limit ? days.filter((d) => d.totals.travelMinutes > limit).length : null))(input.maxDailyTravelMinutes ?? itinerary.package?.planning?.travelLimit?.limitMinutes ?? input.contract?.transport.maxDailyTravelMinutes.value ?? null),
+    plannerDaysOverTravelLimit: itinerary.package?.planning?.travelLimit?.daysOver ?? null,
   };
 }
