@@ -617,7 +617,14 @@ function draftFromPlan(args: {
   /* A trail corridor can read as "local" scope; a hop between its villages is a bus, never a metro (eval v3: "≈30 min train · ~4 km" to Chikatsuyu-oji). */
   const onTrail = input.region.basePortfolio?.decision?.trail?.followed === true;
   const network = { ...countryNetwork, metro: countryNetwork.metro && cityScale && !onTrail };
-  const inMetroArea = (point: { lat: number; lng: number } | undefined) => Boolean(point && (input.metroAreas ?? []).some((c) => haversineKm(c, point) <= METRO_AREA_KM));
+  /*
+   * A stay is in a city when a named part that is a city is near it, or — the
+   * geocoder files Tokyo as a prefecture, not a city — when the board placed
+   * many places close around it (density, never a name).
+   */
+  const placedPoints = [...args.coordinates.entries()].filter(([id]) => !bases.some((b) => b.id === id)).map(([, point]) => point);
+  const dense = (point: { lat: number; lng: number }) => placedPoints.filter((p) => haversineKm(p, point) <= URBAN_RADIUS_KM).length >= URBAN_MIN_PLACES;
+  const inMetroArea = (point: { lat: number; lng: number } | undefined) => Boolean(point && ((input.metroAreas ?? []).some((c) => haversineKm(c, point) <= METRO_AREA_KM) || dense(point)));
   const days: DraftDay[] = plan.days.map((day, i) => {
     const dayNetwork = !network.metro && countryNetwork.metro && !onTrail && inMetroArea(args.coordinates.get(day.baseId)) ? { ...network, metro: true } : network;
     const isFirst = i === 0;
@@ -921,6 +928,10 @@ const MIN_STOP_WINDOW_MINUTES = 60;
 
 /** How far from a named city's centre a stay still counts as in that city, for naming the metro. */
 const METRO_AREA_KM = 25;
+/** Places the board put within this distance of a stay… */
+const URBAN_RADIUS_KM = 5;
+/** …at least this many, and the stay is in a city for naming the metro. */
+const URBAN_MIN_PLACES = 8;
 
 export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFallbackReason | null {
   /*
