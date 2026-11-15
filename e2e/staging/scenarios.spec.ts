@@ -36,7 +36,7 @@ interface Scenario {
 }
 
 const SCENARIOS: readonly Scenario[] = [
-  { key: 'family-wellness-march', title: 'Family wellness retreat in March (Help me choose)', advisor: 'I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.', start: '2027-03-19', end: '2027-03-29' },
+  { key: 'family-wellness-march', title: 'Family wellness retreat in March (Help me choose)', advisor: 'I want to go on a trip with my family over spring, March 19-29. Preferably a nice retreat. I want to feel good because life has been stressful recently. Outdoors stuff.', start: '2027-03-19', end: '2027-03-29', party: 'family' },
   { key: 'kumano-kodo', title: 'Kumano Kodo pilgrimage', destination: 'Kumano Kodo, Japan', start: '2027-03-19', end: '2027-03-29', party: 'family' },
   { key: 'iceland-ring-road', title: 'Iceland Ring Road', destination: 'Iceland Ring Road', start: '2027-06-14', end: '2027-06-22', party: 'couple' },
   { key: 'kyrgyzstan', title: 'Kyrgyzstan adventure', destination: 'Kyrgyzstan', start: '2027-07-10', end: '2027-07-20', party: 'friends' },
@@ -64,6 +64,13 @@ async function fromAdvisor(page: Page, scenario: Scenario): Promise<{ pick: stri
   const first = page.getByTestId('advisor-pick').first();
   const pick = (await first.getByRole('heading', { level: 3 }).innerText()).trim();
   await first.getByRole('button', { name: /Plan a trip to/ }).click();
+  /* Final pass — the advisor asks who is going only when the request never said; answer with the scenario's own party. */
+  const question = page.getByTestId('advisor-party-question').first();
+  await Promise.race([page.waitForURL(/\/trips\/[0-9a-f-]{36}\//, { timeout: 120_000 }), question.waitFor({ timeout: 120_000 })]).catch(() => undefined);
+  if (await question.isVisible().catch(() => false)) {
+    await question.getByTestId(`party-${scenario.party ?? 'couple'}`).click();
+    await question.getByTestId('advisor-party-continue').click();
+  }
   await page.waitForURL(/\/trips\/[0-9a-f-]{36}\//, { timeout: 120_000 });
   return { pick, shortlist };
 }
