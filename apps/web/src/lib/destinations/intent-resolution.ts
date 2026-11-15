@@ -107,6 +107,8 @@ export interface GraphResolutionOutcome {
 }
 
 const MAX_GEOCODER_CALLS = 3;
+/** The most a phrase naming many places may ask the geocoder (one per named part, about a second each). */
+const MAX_PART_GEOCODER_CALLS = 8;
 const REGION_TYPE_SET = new Set<GeographicSemanticType>(['admin_area', 'country', 'multi_country', 'mountain_region', 'natural_region', 'coast', 'island_group', 'protected_area', 'informal_region', 'city_region']);
 /** Extra geocoder calls the interpreter's names may spend: four areas, two gateways. */
 const MAX_INTERPRETATION_CALLS = 6;
@@ -231,7 +233,15 @@ export async function resolveIntentGraph(input: {
     if (!subnational.has(candidate.regionCode)) subnational.set(candidate.regionCode, { name: candidate.regionName, countryCode: candidate.countryCode });
   };
   let calls = 0;
-  const budget = input.maxGeocoderCalls ?? MAX_GEOCODER_CALLS;
+  /*
+   * Final pass — a phrase that names more places than the default budget asks
+   * about each of them: "Tokyo, Kyoto, Osaka and Sapporo" never asked for
+   * Sapporo, the union of the parts stopped at Osaka, and the traveller's own
+   * Sapporo stay was refused as outside the trip. One call per named part,
+   * bounded (`MAX_PART_GEOCODER_CALLS`).
+   */
+  const namedParts = input.graph.children.filter((c) => c.kind !== 'country' && c.kind !== 'vague_region').length;
+  const budget = input.maxGeocoderCalls ?? Math.min(MAX_PART_GEOCODER_CALLS, Math.max(MAX_GEOCODER_CALLS, namedParts + 1));
 
   for (const child of input.graph.children) {
     const reference = referenceResolution(child);

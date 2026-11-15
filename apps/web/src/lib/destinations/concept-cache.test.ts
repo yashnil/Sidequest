@@ -36,3 +36,13 @@ describe('the thirty-day concept cache', () => {
     expect(hit.semantics.type).toBe('multi_country');
   });
 });
+
+describe('a phrase naming more places than the default lookup budget (final pass)', () => {
+  it('asks for every named place, so the union reaches the last one', async () => {
+    const log: string[] = [];
+    const r = await resolveDestinationPhrase({ text: 'Rome, Florence, Venice and Milan', resolver: recordedResolver(log), now: NOW, interpreter: null });
+    /* Every named place is asked for (recorded answers exist only for some; asking is the claim). */
+    for (const city of ['Rome', 'Florence', 'Venice', 'Milan']) expect(log.some((q) => q.startsWith(city)), `${city} in ${log.join(' | ')}`).toBe(true);
+    expect(r.semantics.parts.length).toBeGreaterThanOrEqual(2);
+  });
+});
