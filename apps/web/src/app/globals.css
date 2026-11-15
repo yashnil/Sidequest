@@ -1510,6 +1510,9 @@
     display: inline-block;
     overflow: hidden;
     vertical-align: bottom;
+    /* Room for descenders and capital accents under a tight display line-height, given back so layout is unchanged. */
+    padding-block: 0.14em;
+    margin-block: -0.14em;
   }
   .mask-rise > span {
     display: inline-block;

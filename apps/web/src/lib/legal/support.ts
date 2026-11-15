@@ -12,4 +12,4 @@ export function supportEmail(env: Record<string, string | undefined> = process.e
   return EMAIL.test(raw) && raw.length <= 254 ? raw : null;
 }
 
-export const NO_SUPPORT_EMAIL_COPY = 'A support address has not been published for this deployment yet. If you were invited to the alpha, reply to your invitation.';
+export const NO_SUPPORT_EMAIL_COPY = 'A support address has not been published for this deployment yet. If you were invited to the beta, reply to your invitation.';
