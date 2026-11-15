@@ -776,10 +776,17 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
    * proposed four and the map placed one. The stay decision is computed over
    * the bases that were placed; its sentence says so when others were lost.
    */
-  const lostBases = plan.unplaced.filter((u) => u.code === 'not_placed' && proposal.bases.some((b) => b.key === u.key)).map((u) => u.name);
+  /* A base refused because it landed far outside the trip (`base-footprint.ts`) is a lost base too, and the sentence says which loss it was. */
+  const lostBases = plan.unplaced.filter((u) => (u.code === 'not_placed' || u.code === 'outside_footprint') && proposal.bases.some((b) => b.key === u.key));
   if (baseEntries.length === 1 && lostBases.length > 0) {
-    const list = lostBases.length === 1 ? lostBases[0]! : `${lostBases.slice(0, -1).join(', ')} and ${lostBases[lostBases.length - 1]!}`;
-    choice.decision = { ...choice.decision, sentence: `One base, ${baseEntries[0]!.proposal.name}: the scan also proposed ${list}, but ${lostBases.length === 1 ? 'it' : 'they'} could not be placed on the map, so every day is planned from here.` };
+    const names = lostBases.map((u) => u.name);
+    const list = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]!}`;
+    const why = lostBases.every((u) => u.code === 'outside_footprint')
+      ? `the map put ${names.length === 1 ? 'it' : 'them'} far from everything else on this trip`
+      : lostBases.some((u) => u.code === 'outside_footprint')
+        ? `${names.length === 1 ? 'it' : 'they'} could not be placed where the trip is`
+        : `${names.length === 1 ? 'it' : 'they'} could not be placed on the map`;
+    choice.decision = { ...choice.decision, sentence: `One base, ${baseEntries[0]!.proposal.name}: the scan also proposed ${list}, but ${why}, so every day is planned from here.` };
   }
   const keptIds = choice.kept.map((k) => k.id);
   if (trailPlan && input.trail) choice.decision = { ...choice.decision, trail: trailRecordFor(input, trailPlan, choice.kept, baseEntries, pointAt) };
