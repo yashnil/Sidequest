@@ -108,6 +108,20 @@ export interface LodgingPropertyCandidate {
   nearbyHotSpring?: { name: string; metres: number };
   licence: LodgingLicence;
   attribution: string;
+  /**
+   * What the record itself states, kept only so the row can be checked against
+   * its neighbours (`validate.ts`). Never shown, never ranked on.
+   */
+  evidence?: LodgingRecordEvidence;
+}
+
+export interface LodgingRecordEvidence {
+  /** The source's own categories or tags, as recorded (Overture primary + alternates; OSM `tourism=*`). */
+  categories: string[];
+  /** The admin-1 area the record's own address states (Overture `region`, OSM `addr:state`/`addr:province`). */
+  region?: string;
+  /** ISO 3166-1 alpha-2, when the record's address states one. */
+  country?: string;
 }
 
 /**
@@ -127,7 +141,7 @@ const TYPE_WORDS: readonly [RegExp, LodgingPropertyType][] = [
   [/\bb ?& ?b\b|bed and breakfast/i, 'bed_and_breakfast'],
   [/\bresort\b|リゾート/i, 'resort'],
   [/\blodge\b|ロッジ/i, 'lodge'],
-  [/\bhut\b|\bhütte\b|山小屋|refugio|rifugio/i, 'mountain_hut'],
+  [/\bhut\b|h(ü|ue)tte\b|ヒュッテ|山小屋|refugio|rifugio|\brefuge\b|\bcabane\b|\bkoča\b|bivacco|bivouac/i, 'mountain_hut'],
 ];
 
 /** A type the name states, when the source's own category is generic. */
@@ -159,6 +173,11 @@ const NOT_A_PROPERTY = /バス停|停留所|bus ?stop|\bstation\b|駅$|parking l
  */
 const OTHER_TRADE = /\b(web ?site|web design|design studio|graphic design|software|digital marketing|marketing|advertising|consult(ancy|ants?|ing)|solutions|IT services|computer|printing|insurance|accountants?|law (firm|office)|solicitors?|attorneys?|real estate|estate agents?|bank|pharmacy|clinic|dental|hospital|school|academy|college|university|church|mosque|supermarket|hardware|garage|car (hire|rental)|logistics|freight|construction|engineering)\b/i;
 const SLEEP_WORD = /hotel|hostel|lodge|inn\b|motel|guest ?house|b ?& ?b|bed and breakfast|camp|resort|suites?|apartments?|villa|chalet|cottage|cabin|hut|refug|rifugio|gîte|gite|pension|hostal|posada|ryokan|minshuku|旅館|民宿|ホテル|宿/i;
+
+/** Whether a name itself says it is somewhere to sleep. */
+export function hasSleepWord(name: string): boolean {
+  return SLEEP_WORD.test(name);
+}
 
 export function isNotAProperty(name: string, context: { locality?: string | undefined } = {}): boolean {
   if (NOT_A_PROPERTY.test(name)) return true;

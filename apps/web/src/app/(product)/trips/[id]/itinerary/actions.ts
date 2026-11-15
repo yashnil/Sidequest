@@ -31,6 +31,7 @@ import { restorePlanVersion, restorePointsFor } from '@/lib/refine/restore';
 import { getTripDraft } from '@/lib/db/draft-repository';
 import { addCustomStop, easeReconciledDay, isReconciledItinerary, moveStopToDay, removeStopFromReconciledItinerary, setStopDuration, setStopKeep, shiftStop } from '@/lib/planning/reconciled-edits';
 import { repairReconciledDay } from '@/lib/planning/day-repair';
+import { applyTravelLimitChoice } from '@/lib/planning/travel-limit-choices';
 import { discoverFoodNear, discoverStaysNear } from '@/lib/providers/discovery';
 import {
   clearItineraryLock,
@@ -582,6 +583,29 @@ export async function fixDayAction(tripId: string, dayNumber: number): Promise<E
   if (!repaired.ok || !repaired.itinerary) return { ok: false, error: repaired.message };
   const persisted = persistEdit(tripId, { ok: true, itinerary: repaired.itinerary, changed: `${repaired.message} ${repaired.steps.join(' ')}` });
   return persisted.ok ? { ...persisted, steps: repaired.steps } : persisted;
+}
+
+/**
+ * 2026-11 — ONE DAILY-TRAVEL-LIMIT CHOICE, APPLIED.
+ *
+ * Keep the long day, or drop the traveller's own pick that takes it over
+ * (`lib/planning/travel-limit-choices.ts`). Deterministic and local: no model,
+ * no provider, no re-measure. A booked or locked stop is refused here as well
+ * as never offered. Persisted through `persistEdit`, so the change is a plan
+ * version and the toast's Undo is the exact restore; a dropped stop is skipped
+ * on the board inside the edit, so Undo gives that back too.
+ */
+export async function applyTravelLimitChoiceAction(tripId: string, optionId: string): Promise<EditActionResult> {
+  const context = await reconciledContext(tripId);
+  if (!context.ok) return { ok: false, error: context.error };
+  if (typeof optionId !== 'string' || optionId.length > 300) return { ok: false, error: 'That choice is not one this plan offers.' };
+  const lockedPlaceIds = new Set(getItineraryLocks(tripId).map((lock) => lock.placeId));
+  const bookedPlaceIds = new Set(listBookedItems(tripId).flatMap((item) => (item.status === 'booked' && item.placeId ? [item.placeId] : [])));
+  const result = applyTravelLimitChoice(context.itinerary, optionId, { lockedPlaceIds, bookedPlaceIds });
+  if (!result.ok) return { ok: false, error: result.message };
+  const dropped = result.dropPlaceId;
+  const persisted = persistEdit(tripId, result, dropped ? () => setSelection(tripId, dropped, 'excluded', 'user') : undefined);
+  return persisted.ok && dropped ? { ...persisted, restoresPlaceId: dropped } : persisted;
 }
 
 /** Status, cost or time edits on a booking the traveller typed. The itinerary is re-verified against it at the next render. */

@@ -408,7 +408,8 @@ export function buildCanonicalTripBuildInput(input: {
 
   const carAvailable = profile.transport.willDrive;
   const maxDrive = profile.transport.maxDailyDriveMinutes;
-  const driveExplicit = explicitly(profile.provenance, 'max_drive') || composer?.maxDailyDriveMinutes !== undefined;
+  /* The interview asks this as `daily_driving` (`interview/catalog.ts`); `max_drive` was never a provenance key, so a stated ceiling used to read as Sidequest's default and the planner's hard limit never switched on. */
+  const driveExplicit = explicitly(profile.provenance, 'daily_driving') || explicitly(profile.provenance, 'max_drive') || composer?.maxDailyDriveMinutes !== undefined;
   /*
    * A stated itinerary is the strongest statement of structure there is: the
    * places to sleep they named are the bases, and the hotel changes between

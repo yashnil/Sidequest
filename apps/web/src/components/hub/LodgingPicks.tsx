@@ -52,7 +52,9 @@ export function LodgingPicks({ tripId, request, place }: { tripId: string; reque
       ) : null}
       {result?.ok && picks.length === 0 ? (
         <p className="type-small text-ink-muted" data-testid="lodging-picks-empty">
-          {result.available === false ? result.reason : `No named places to stay are recorded within ${result.radiusKm} km of ${place}. The searches above cover the area.`}
+          {result.available === false ? result.reason : (result.heldBack ?? 0) > 0
+              ? `No listing within ${result.radiusKm} km of ${place} held together well enough to name (${result.heldBack} left out). The searches above cover the area.`
+              : `No named places to stay are recorded within ${result.radiusKm} km of ${place}. The searches above cover the area.`}
         </p>
       ) : null}
       {result?.ok && picks.length > 0 ? (
@@ -102,6 +104,11 @@ export function LodgingPicks({ tripId, request, place }: { tripId: string; reque
               </li>
             ))}
           </ol>
+          {result.limit !== undefined && picks.length < result.limit && (result.heldBack ?? 0) > 0 ? (
+            <p className="mt-3 type-small text-ink-muted" data-testid="lodging-picks-held-back">
+              {picks.length === 1 ? 'Only one listing' : `Only ${picks.length} listings`} here held together well enough to name. {result.heldBack === 1 ? 'One more was' : `${result.heldBack} more were`} left out — filed under another trade, placed somewhere its own address contradicts, or too thinly listed. The searches above cover the rest.
+            </p>
+          ) : null}
           <p className="mt-3 type-meta text-ink-faint" data-testid="lodging-picks-note">
             Prices and availability are not checked. Each search opens with your dates and party; the site you book on has the real rates.
             {result.attribution && result.attribution.length > 0 ? ` Data: ${result.attribution.join(' · ')}.` : ''}

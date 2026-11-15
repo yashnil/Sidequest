@@ -1,5 +1,5 @@
 import 'server-only';
-import { haversineKm, isNotAProperty, lodgingTypeFromName, nameSaysHotSpring, type LodgingAmenity, type LodgingLicence, type LodgingPropertyCandidate, type LodgingPropertyType } from '@sidequest/core';
+import { haversineKm, isNonLodgingCategory, isNotAProperty, lodgingTypeFromName, nameSaysHotSpring, type LodgingAmenity, type LodgingLicence, type LodgingPropertyCandidate, type LodgingPropertyType } from '@sidequest/core';
 import { readProviderCache, writeProviderCache } from '../../db/compiler-repository';
 import { fileIntersects, latestRelease, themeFiles, type CatalogFile, type FetchOptions } from '../overture/catalog';
 import { pointOf, rowPointInBox, scanFile, type BoundingBox, type ScanCounters } from '../overture/scan';
@@ -23,7 +23,7 @@ import { pointOf, rowPointInBox, scanFile, type BoundingBox, type ScanCounters }
 export const MIN_OVERTURE_LODGING_CONFIDENCE = 0.7;
 const BOX_BYTE_BUDGET = 40_000_000;
 const BOX_DEADLINE_MS = 25_000;
-const COLUMNS = ['id', 'names', 'confidence', 'operating_status', 'basic_category', 'taxonomy', 'websites', 'sources', 'addresses', 'bbox'] as const;
+const COLUMNS = ['id', 'names', 'confidence', 'operating_status', 'basic_category', 'taxonomy', 'categories', 'websites', 'sources', 'addresses', 'bbox'] as const;
 
 /** Overture's lodging leaves → the property type. A leaf not listed but under `lodging` is `other`. */
 export const OVERTURE_LODGING_TYPE: Readonly<Record<string, LodgingPropertyType>> = {
@@ -86,12 +86,22 @@ function cleanName(value: unknown): string {
   return typeof value === 'string' ? value.trim().replace(/^["'«“]+|["'»”]+$/g, '').replace(/\s+/g, ' ') : '';
 }
 
-function taxonomyOf(row: Record<string, unknown>): { category: string | null; leaf: string; hierarchy: string[] } {
+function taxonomyOf(row: Record<string, unknown>): { category: string | null; leaf: string; hierarchy: string[]; legacyPrimary: string | null; alternates: string[] } {
   const category = typeof row.basic_category === 'string' ? row.basic_category : null;
   const taxonomy = row.taxonomy as { primary?: unknown; hierarchy?: unknown } | null | undefined;
   const leaf = typeof taxonomy?.primary === 'string' ? taxonomy.primary : '';
   const hierarchy = Array.isArray(taxonomy?.hierarchy) ? taxonomy.hierarchy.filter((h): h is string => typeof h === 'string') : [];
-  return { category, leaf, hierarchy };
+  /* The older `categories` column: its primary is a second statement of what the row is; its alternates are search facets, read here only to refuse. */
+  const legacy = row.categories as { primary?: unknown; alternate?: unknown } | null | undefined;
+  const legacyPrimary = typeof legacy?.primary === 'string' ? legacy.primary : null;
+  const alternates = Array.isArray(legacy?.alternate) ? legacy.alternate.filter((a): a is string => typeof a === 'string') : [];
+  return { category, leaf, hierarchy, legacyPrimary, alternates };
+}
+
+/** A category the lodging branch owns: a mapped leaf, or anything under `lodging`. */
+function isLodgingCategory(value: string | null | undefined, hierarchy: readonly string[] = []): boolean {
+  if (!value) return false;
+  return value in OVERTURE_LODGING_TYPE || (hierarchy[0] === 'lodging' && hierarchy.includes(value));
 }
 
 function usable(row: Record<string, unknown>): boolean {
@@ -114,9 +124,16 @@ export function overtureHotSpring(row: Record<string, unknown>): OvertureHotSpri
 
 /** One Overture place row → a lodging candidate, or null when it is not a place to stay we can stand behind. */
 export function overtureLodgingRow(row: Record<string, unknown>): LodgingPropertyCandidate | null {
-  const { category, leaf, hierarchy } = taxonomyOf(row);
-  const inLodging = hierarchy[0] === 'lodging' || (category !== null && category in OVERTURE_LODGING_TYPE) || leaf in OVERTURE_LODGING_TYPE;
-  if (!inLodging) return null;
+  const { category, leaf, hierarchy, legacyPrimary, alternates } = taxonomyOf(row);
+  /*
+   * Positive lodging evidence: the row's PRIMARY category must be lodging —
+   * the modern leaf when it has one, else the basic category. A row whose two
+   * primary statements disagree (taxonomy says `web_designer`, the older
+   * column says `hotel`) is ambiguous and out.
+   */
+  const primary = leaf || category;
+  if (!isLodgingCategory(primary, hierarchy) && !(leaf === '' && hierarchy[0] === 'lodging')) return null;
+  if (legacyPrimary && !isLodgingCategory(legacyPrimary, hierarchy) && isNonLodgingCategory(legacyPrimary)) return null;
   if (!usable(row)) return null;
   const names = row.names as { primary?: unknown; common?: unknown } | null | undefined;
   const name = cleanName(names?.primary);
@@ -137,7 +154,11 @@ export function overtureLodgingRow(row: Record<string, unknown>): LodgingPropert
 
   const websites = Array.isArray(row.websites) ? row.websites : [];
   const website = websites.map(httpUrl).find((url): url is string => Boolean(url));
-  const addresses = Array.isArray(row.addresses) ? (row.addresses as { locality?: unknown }[]) : [];
+  const addresses = Array.isArray(row.addresses) ? (row.addresses as { locality?: unknown; region?: unknown; country?: unknown }[]) : [];
+  const region = cleanName(addresses[0]?.region);
+  const countryRaw = cleanName(addresses[0]?.country).toUpperCase();
+  const country = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : '';
+  const recorded = [...new Set([primary, legacyPrimary, ...alternates].filter((c): c is string => Boolean(c)))];
   const rawLocality = cleanName(addresses[0]?.locality);
   const locality = rawLocality && rawLocality === rawLocality.toUpperCase() && /\p{Lu}/u.test(rawLocality) ? rawLocality.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : rawLocality;
   const sources = Array.isArray(row.sources) ? (row.sources as { license?: unknown; dataset?: unknown }[]) : [];
@@ -157,6 +178,7 @@ export function overtureLodgingRow(row: Record<string, unknown>): LodgingPropert
     ...(locality ? { locality } : {}),
     ...(confidence !== undefined ? { confidence } : {}),
     licence,
+    evidence: { categories: recorded, ...(region ? { region } : {}), ...(country ? { country } : {}) },
     attribution: licence === 'Apache-2.0' ? 'Overture Maps Foundation · includes Foursquare data (Apache-2.0)' : 'Overture Maps Foundation',
   };
 }
@@ -243,7 +265,7 @@ const defaultCache: NonNullable<OvertureLodgingDeps['cache']> = {
 };
 
 export function overtureLodgingCacheKey(box: BoundingBox): string {
-  return ['overture-lodging', 'v1', MIN_OVERTURE_LODGING_CONFIDENCE, box.south, box.west, box.north, box.east].map((v) => (typeof v === 'number' ? v.toFixed(4) : v)).join('|');
+  return ['overture-lodging', 'v2', MIN_OVERTURE_LODGING_CONFIDENCE, box.south, box.west, box.north, box.east].map((v) => (typeof v === 'number' ? v.toFixed(4) : v)).join('|');
 }
 
 /**

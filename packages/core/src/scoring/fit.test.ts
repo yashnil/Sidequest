@@ -206,6 +206,16 @@ describe('feasibility gates', () => {
     expect(manzanar.fit.blockers[0]?.message).toContain('150');
   });
 
+  it('never quotes a driving ceiling nobody stated: an assumed cap is put in Sidequest\'s words', () => {
+    const { candidates } = board({ ...MAMMOTH_HIKER_ANSWERS, provenance: { daily_driving: { source: 'smart_default', strength: 'normal', confidence: 0.5 } } });
+    const manzanar = find(candidates, 'manzanar-historic-site');
+    const blocker = manzanar.fit.blockers.find((b) => b.code === 'exceeds_daily_travel');
+    expect(blocker?.message).toMatch(/Sidequest plans for/);
+    expect(JSON.stringify(manzanar.fit)).not.toMatch(/you said/);
+    const stated = find(board({ ...MAMMOTH_HIKER_ANSWERS, provenance: { daily_driving: { source: 'explicit', strength: 'hard', confidence: 1 } } }).candidates, 'manzanar-historic-site');
+    expect(stated.fit.blockers.find((b) => b.code === 'exceeds_daily_travel')?.message).toMatch(/you said/);
+  });
+
   it('removes a category the traveller asked to skip entirely', () => {
     const { candidates } = board({
       ...MAMMOTH_HIKER_ANSWERS,

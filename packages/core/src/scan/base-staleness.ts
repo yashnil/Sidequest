@@ -71,7 +71,7 @@ export function scanBaseUpgrade(region: CompiledRegion): ScanBaseUpgrade | null 
     const pa = pointAt.get(a);
     const pb = pointAt.get(b);
     if (!pa || !pb || haversineKm(pa, pb) <= 1.6) return measured;
-    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail: highSpeedRailBackbone(region.scope.countryCode) })?.minutes ?? measured;
+    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail: highSpeedRailBackbone(region.scope.countryCode, { regionCode: region.scope.administrative?.regionCode, points: [pa, pb] }) })?.minutes ?? measured;
   };
 
   const bases = region.bases

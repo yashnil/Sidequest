@@ -103,7 +103,7 @@ export function ProvisionalBoardView({
   tripDays: number;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   /*
    * HIDING WAS A ONE-WAY DOOR.
@@ -115,8 +115,17 @@ export function ProvisionalBoardView({
    * was stored, so a refresh did not help either.
    */
   const [showHidden, setShowHidden] = useState(false);
-  /** Which card is mid-save, so busy state is reported per card and not per page. */
-  const [savingId, setSavingId] = useState<string | null>(null);
+  /*
+   * MARKS IN FLIGHT OUTRANK A REFRESH THAT HAS NOT HEARD OF THEM.
+   *
+   * Each mark saves on its own round trip and every landed save refreshes the
+   * server state. Hiding two places quickly meant the first refresh carried the
+   * first mark only, the mirror reset to it, and the second card came back until
+   * its own save landed (a background board update did the same). Every mark
+   * still saving is kept here, by place, and laid over whatever the server says
+   * until that save answers. It also says which cards are busy, per card.
+   */
+  const [inFlight, setInFlight] = useState<Record<string, ProvisionalIntent | null>>({});
 
   const boardVersion = versionOf(board);
 
@@ -141,7 +150,9 @@ export function ProvisionalBoardView({
     value: selections,
   });
   if (mirror.key !== serverKey) setMirror({ key: serverKey, value: selections });
-  const chosen = mirror.key === serverKey ? mirror.value : selections;
+  const settled = mirror.key === serverKey ? mirror.value : selections;
+  const chosen: typeof selections = { ...settled };
+  for (const [placeId, intent] of Object.entries(inFlight)) chosen[placeId] = intent ?? undefined;
 
   const hiddenCards = board.cards.filter((card) => chosen[card.placeId] === 'hidden');
   const visible = showHidden
@@ -188,14 +199,21 @@ export function ProvisionalBoardView({
       value: { ...current.value, [placeId]: next ?? undefined },
     }));
     setError(null);
-    setSavingId(placeId);
+    setInFlight((current) => ({ ...current, [placeId]: next }));
     startTransition(async () => {
       const result = await setProvisionalIntentAction(tripId, placeId, next);
-      setSavingId(null);
+      setInFlight((current) => {
+        if (!(placeId in current) || current[placeId] !== next) return current;
+        const rest = { ...current };
+        delete rest[placeId];
+        return rest;
+      });
       if (!result.ok) {
         setMirror((current) => ({ key: current.key, value: selections }));
         setError(result.error ?? 'We could not save that.');
       } else {
+        /* Saved: keep it in the mirror until the refresh that knows about it arrives. */
+        setMirror((current) => ({ key: current.key, value: { ...current.value, [placeId]: next ?? undefined } }));
         router.refresh();
       }
     });
@@ -339,7 +357,7 @@ export function ProvisionalBoardView({
                   <Card
                     card={card}
                     intent={chosen[card.placeId]}
-                    saving={pending && savingId === card.placeId}
+                    saving={card.placeId in inFlight}
                     onChoose={choose}
                   />
                 </li>

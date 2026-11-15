@@ -596,7 +596,16 @@ export function fixturePlacement(proposal: ScanProposal, center: { lat: number; 
     positions.set(base.key, { coordinates: point, method: 'geocoder', provider: 'fixture-geocoder', approximate: false });
   });
   const first = proposal.bases[0] ? baseAt.get(proposal.bases[0].name.toLowerCase())! : center;
+  let farIndex = 0;
   proposal.candidates.forEach((candidate, i) => {
+    /* The `farpick` fixture's far locality (`fixture.ts#FIXTURE_FAR_LOCALITY`): a ring about 45 km round the first base, a quarter-turn apart. */
+    if (candidate.locality.toLowerCase().endsWith(' far reach')) {
+      const angle = (farIndex * Math.PI) / 2;
+      farIndex += 1;
+      const coordinates = { lat: first.lat + 0.4 * Math.cos(angle), lng: first.lng + (0.4 * Math.sin(angle)) / Math.cos((first.lat * Math.PI) / 180) };
+      positions.set(candidate.key, { coordinates, method: 'geocoder', provider: 'fixture-geocoder', approximate: false });
+      return;
+    }
     const anchor = baseAt.get(candidate.locality.toLowerCase()) ?? first;
     const angle = (i * 137.5 * Math.PI) / 180;
     const r = 0.01 + (i % 5) * 0.012;

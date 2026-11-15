@@ -51,6 +51,12 @@ const SCENARIOS: readonly Scenario[] = [
   { key: 'faroe-roadtrip', title: 'Faroe Islands road trip (unseen)', destination: 'Faroe Islands road trip', start: '2027-06-07', end: '2027-06-13', party: 'couple' },
   { key: 'oaxaca-food-culture', title: 'Oaxaca food and culture (unseen)', destination: 'Oaxaca food and culture', start: '2027-10-28', end: '2027-11-03', party: 'couple' },
   { key: 'madeira-levada-hiking', title: 'Madeira levada hiking (unseen)', destination: 'Madeira levada hiking', start: '2027-05-10', end: '2027-05-16', party: 'friends' },
+  /* Beta acceptance — never run before this pass; requirements written first (docs/final-completion/eval/requirements-beta.json). */
+  { key: 'azores-hot-springs', title: 'Azores hot springs and whales (unseen)', destination: 'Azores hot springs and whale watching', start: '2027-07-12', end: '2027-07-19', party: 'couple' },
+  { key: 'slovenia-family', title: 'Slovenia lakes and caves with kids (unseen)', destination: 'Slovenia lakes and caves', start: '2027-08-02', end: '2027-08-08', party: 'family' },
+  { key: 'torres-w-trek', title: 'Torres del Paine W trek (unseen)', destination: 'Torres del Paine W Trek', start: '2027-12-05', end: '2027-12-11', party: 'friends' },
+  { key: 'advisor-warm-unwind', title: 'Warm slow week to unwind (Help me choose, unseen)', advisor: 'A slow week somewhere warm in February, February 6-13, just the two of us. We want to unwind: beaches, good food, no long drives.', start: '2027-02-06', end: '2027-02-13', party: 'couple' },
+  { key: 'advisor-history-rail', title: 'Old towns by train (Help me choose, unseen)', advisor: 'Ten days in October, October 8-18, for two. We love history, old towns and food, not too hot, and we would like to get around by train.', start: '2027-10-08', end: '2027-10-18', party: 'couple' },
   { key: 'multigenerational', title: 'Multi-generational family holiday', destination: 'Algarve, Portugal', start: '2027-06-20', end: '2027-06-27', party: 'family', mustDo: 'Travelling with our children and their grandparents; easy days.' },
 ];
 const wanted = (process.env.STAGING_SCENARIOS ?? '').split(',').map((s) => s.trim()).filter(Boolean);

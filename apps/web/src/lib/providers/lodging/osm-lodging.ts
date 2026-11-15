@@ -24,6 +24,7 @@ export const OSM_LODGING_TYPE: Readonly<Record<string, LodgingPropertyType>> = {
   apartment: 'apartment',
   chalet: 'cottage',
   alpine_hut: 'mountain_hut',
+  wilderness_hut: 'mountain_hut',
   camp_site: 'campsite',
 };
 
@@ -111,6 +112,9 @@ export function osmLodgingCandidate(element: OsmLodgingElement): LodgingProperty
   const beds = whole(tags.beds, 10000);
   const website = httpUrl(tags.website ?? tags['contact:website'] ?? tags.url);
   const locality = (tags['addr:city'] ?? tags['addr:town'] ?? tags['addr:village'] ?? '').trim();
+  const region = (tags['addr:state'] ?? tags['addr:province'] ?? '').trim();
+  const countryRaw = (tags['addr:country'] ?? '').trim().toUpperCase();
+  const country = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : '';
 
   return {
     source: 'osm',
@@ -127,6 +131,11 @@ export function osmLodgingCandidate(element: OsmLodgingElement): LodgingProperty
     ...(website ? { website } : {}),
     ...(locality ? { locality } : {}),
     licence: 'ODbL-1.0',
+    evidence: {
+      categories: [`tourism=${tags.tourism}`, ...(tags.amenity ? [`amenity=${tags.amenity}`] : []), ...(tags.office ? [`office=${tags.office}`] : []), ...(tags.shop ? [`shop=${tags.shop}`] : []), ...(tags.craft ? [`craft=${tags.craft}`] : [])],
+      ...(region ? { region } : {}),
+      ...(country ? { country } : {}),
+    },
     attribution: '© OpenStreetMap contributors (ODbL)',
   };
 }

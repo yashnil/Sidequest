@@ -67,6 +67,8 @@ export const trailStageRecordSchema = z.object({
   startMinute: z.number().optional(),
   /** Where a split stage stops for the night when it is not one of the proposal's beds: a point on the way the traveller books a bed at. */
   addedBed: z.boolean().optional(),
+  /** A gap in the trail before this stage, km in a straight line: no stage was proposed between, so the way to where the walk resumes is ridden. */
+  gapBeforeKm: z.number().nonnegative().optional(),
 });
 export type TrailStageRecord = z.infer<typeof trailStageRecordSchema>;
 
@@ -83,6 +85,8 @@ export const trailRecordSchema = z.object({
   returnLeg: z.object({ fromBaseId: z.string().min(1), fromName: z.string().min(1), minutes: z.number().nonnegative(), basis: z.literal('estimated') }).optional(),
   /** Why the trip is not walked inn to inn, when it is not. */
   gap: z.string().min(1).optional(),
+  /** How the trail is fitted to this party, in words: the limits it is planned for, what was split, ridden or skipped, and the gaps ridden between sections. */
+  adaptation: z.string().min(1).optional(),
 });
 export type TrailRecord = z.infer<typeof trailRecordSchema>;
 

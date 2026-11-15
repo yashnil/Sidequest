@@ -89,6 +89,7 @@ import {
   verifiedLookup,
   type RouteFeasibility,
   highSpeedRailBackbone,
+  transportNetworkAt,
   MAX_GEO_ESTIMATE_DRIVE_KM,
   COLOCATED_KM,
   TIMELINE_MINUTE_LIMIT,
@@ -3322,7 +3323,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * correction so the day can say what happened.
      */
     const proposedTravelMode: TravelMode = travelModeFromDraft(hint);
-    const worldCheck =
+    const worldScreen =
       proposedTravelMode === 'unknown'
         ? { ok: true as const, refusal: null }
         : screenProposedMode(proposedTravelMode, {
@@ -3334,13 +3335,24 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
             },
             straightLineKm,
           });
+    /*
+     * Per leg, the ground's own network: a train or metro hint between two
+     * points a subdivision row places off any railway (an island region of a
+     * country with a mainland network) is affirmative evidence, refused here.
+     * A silence never refuses — only a matched row that says no.
+     */
+    const legGround = (hint === 'rail' || hint === 'high_speed_rail' || hint === 'metro') && worldScreen.ok && (fromCoordinates || toCoordinates)
+      ? transportNetworkAt(context.destinationScope?.countryCode, { regionCode: context.destinationScope?.regionCode, points: [fromCoordinates, toCoordinates] })
+      : null;
+    const groundRefuses = Boolean(legGround && legGround.basis === 'subdivision' && (hint === 'metro' ? !legGround.metro : hint === 'high_speed_rail' ? !legGround.highSpeedRail && !legGround.intercityRail : !legGround.intercityRail));
+    const worldCheck = groundRefuses ? { ok: false as const, refusal: legGround!.notes[0] ?? 'No railway runs here.' } : worldScreen;
     const hinted = worldCheck.ok ? hintedRaw : transportModeFor(undefined, context.matrix.mode, canDrive);
     const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
     /* A walk nobody would take on an operator-run trip is the operator's vehicle, never a shuttle the trip does not contain. */
     const vehicleCorrected = Boolean(tripVehicle && plausible.corrected);
     const mode = vehicleCorrected ? transportModeFor(tripVehicle, context.matrix.mode, canDrive) : plausible.mode;
-    const legHint: DraftTransport | undefined = vehicleCorrected ? tripVehicle : hint;
+    const legHint: DraftTransport | undefined = vehicleCorrected ? tripVehicle : groundRefuses ? undefined : hint;
     const vehicleLabel = tripVehicle && legHint === tripVehicle ? TRAVEL_MODE_LABELS[travelModeFromDraft(tripVehicle)] : null;
     /*
      * A FIGURE MEASURED FOR ANOTHER PROFILE IS NOT THIS LEG'S FIGURE.
@@ -3440,7 +3452,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const rawEstimate = !measured && !cellDisconnected && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
       ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot')
         ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
-        : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode, highSpeedRail: highSpeedRailBackbone(context.destinationScope?.countryCode) })
+        : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode, highSpeedRail: highSpeedRailBackbone(context.destinationScope?.countryCode, { regionCode: context.destinationScope?.regionCode, points: [fromCoordinates, toCoordinates] }) })
       : null;
     /*
      * Eval v3 — PROXIMITY IS NOT DRIVEABILITY. A road estimate is raised to the

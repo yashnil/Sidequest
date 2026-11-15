@@ -1,3 +1,6 @@
+import { networkComponentAt, subnationalNetworkFor, type NetworkComponent, type NetworkLocator } from './networks';
+
+type LatLng = { lat: number; lng: number };
 import type { BookingLead, CrowdPeriod, ModeConcept, ModeScope, ModeStatus, RealityFact, RealityTopic } from './schema';
 
 /**
@@ -760,16 +763,89 @@ export function jurisdictionFor(code: string | null | undefined): Jurisdiction |
  * not exist (a Kyrgyz park "by train", Algarve beaches by rail) because every
  * long car-free hop was written as rail and every short one as metro. A
  * country with no facts gets neither — unknown is not a railway.
+ *
+ * This is the country's *mainland* answer. Ask `publicTransportNetwork` with a
+ * locator (the scope's ISO 3166-2 code, the leg's points) for a piece of ground.
  */
-export function publicTransportNetwork(code: string | null | undefined): { intercityRail: boolean; metro: boolean } {
+export function publicTransportNetworkOfCountry(code: string | null | undefined): { intercityRail: boolean; metro: boolean } {
   const modes = jurisdictionFor(code)?.modes ?? [];
   const usable = (mode: string) => modes.some((m) => m.mode === mode && (m.status === 'recommended' || m.status === 'viable'));
   return { intercityRail: usable('intercity_train') || usable('high_speed_rail'), metro: usable('metro') };
 }
 
-/** Whether the country's own facts make high-speed rail the regional backbone (an estimator profile, `travel/estimate.ts`). Data, never a place name. */
-export function highSpeedRailBackbone(code: string | null | undefined): boolean {
+/** Whether the country's own facts make high-speed rail the regional backbone, on its mainland. */
+export function highSpeedRailBackboneOfCountry(code: string | null | undefined): boolean {
   return jurisdictionFor(code)?.modes.some((m) => m.mode === 'high_speed_rail' && m.status === 'recommended') ?? false;
+}
+
+/**
+ * What public transport runs here: the country's facts, narrowed by the
+ * subdivision the points (or the stated ISO 3166-2 code) fall in
+ * (`networks.ts`). Without a locator it is the country's answer.
+ */
+export function publicTransportNetwork(code: string | null | undefined, locator?: NetworkLocator): { intercityRail: boolean; metro: boolean } {
+  const network = transportNetworkAt(code, locator);
+  return { intercityRail: network.intercityRail, metro: network.metro };
+}
+
+/** Whether high-speed rail is the backbone here (an estimator profile, `travel/estimate.ts`). Data, never a place name. */
+export function highSpeedRailBackbone(code: string | null | undefined, locator?: NetworkLocator): boolean {
+  return transportNetworkAt(code, locator).highSpeedRail;
+}
+
+export interface TransportNetwork {
+  intercityRail: boolean;
+  highSpeedRail: boolean;
+  metro: boolean;
+  /** A matched component states that scheduled buses are thin. */
+  busSparse: boolean;
+  /** `subdivision` when a component row decided at least part of the answer. */
+  basis: 'country' | 'subdivision';
+  subdivisions: string[];
+  /** The components' own sentences, for audit. */
+  notes: string[];
+}
+
+/**
+ * What public transport runs for these points of this country.
+ *
+ * The country row is the ceiling. Every component the points fall in (or, with
+ * no point inside the stated subdivision, every component of it) can only take
+ * services away. A question spanning a component and the mainland gets the
+ * services common to both — ask per leg to get each leg's own answer.
+ */
+export function transportNetworkAt(countryCode: string | null | undefined, locator: NetworkLocator = {}): TransportNetwork {
+  const country = publicTransportNetworkOfCountry(countryCode);
+  const out: TransportNetwork = { intercityRail: country.intercityRail, highSpeedRail: highSpeedRailBackboneOfCountry(countryCode), metro: country.metro, busSparse: false, basis: 'country', subdivisions: [], notes: [] };
+  const components: { code: string; component: NetworkComponent }[] = [];
+  const points = (locator.points ?? []).filter((p): p is LatLng => Boolean(p) && Number.isFinite(p!.lat) && Number.isFinite(p!.lng));
+  const matched = points.map((p) => networkComponentAt(countryCode, p));
+  for (const m of matched) if (m) components.push(m);
+  const stated = subnationalNetworkFor(locator.regionCode);
+  if (stated && (!countryCode || stated.countryCode === countryCode.toUpperCase())) {
+    /* The stated subdivision decides unless every point was placed inside one of its own components. */
+    const allInside = points.length > 0 && matched.every((m) => m?.code === stated.code);
+    if (!allInside) for (const component of stated.components) components.push({ code: stated.code, component });
+  }
+  for (const { code, component } of components) {
+    out.intercityRail &&= component.intercityRail;
+    out.highSpeedRail &&= component.highSpeedRail;
+    out.metro &&= component.metro;
+    if (component.bus === 'sparse') out.busSparse = true;
+    out.basis = 'subdivision';
+    if (!out.subdivisions.includes(code)) out.subdivisions.push(code);
+    if (!out.notes.includes(component.note)) out.notes.push(component.note);
+  }
+  /* High-speed rail is a kind of rail: no railway means no high-speed railway. */
+  if (!out.intercityRail && out.basis === 'subdivision') out.highSpeedRail = false;
+  return out;
+}
+
+/** True when every point lies in a component that states thin buses and no railway: a car-free trip there moves by taxi or transfer, not by a bus timetable that barely exists. */
+export function busSparseWithoutRail(countryCode: string | null | undefined, locator: NetworkLocator): boolean {
+  const points = (locator.points ?? []).filter((p): p is LatLng => Boolean(p));
+  const each = points.length > 0 ? points.map((p) => transportNetworkAt(countryCode, { regionCode: locator.regionCode, points: [p] })) : [transportNetworkAt(countryCode, { regionCode: locator.regionCode })];
+  return each.every((n) => n.busSparse && !n.intercityRail);
 }
 
 export function jurisdictionCodes(): string[] {

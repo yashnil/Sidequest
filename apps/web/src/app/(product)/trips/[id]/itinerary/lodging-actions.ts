@@ -26,6 +26,10 @@ export interface LodgingActionResult {
   recommendations?: LodgingRecommendation[];
   /** How many named places were considered within `radiusKm`. */
   considered?: number;
+  /** Listings inside the radius left out because their record did not hold together. */
+  heldBack?: number;
+  /** The most the panel would show. */
+  limit?: number;
   radiusKm?: number;
   attribution?: string[];
   /** The trip reasons the ranking used, in words ("the hot springs you asked for"). */
@@ -112,6 +116,11 @@ export async function recommendLodgingAction(tripId: string, input: LodgingActio
       checkIn: dates.checkIn,
       checkOut: dates.checkOut,
       dayStarts: parsed.data.dayStarts.map((s) => ({ dayNumber: s.dayNumber, name: s.name, coordinates: { lat: s.lat, lng: s.lng } })),
+      /* A base that is itself a property (a lodge, a named inn) is not a place name a listing could be mistaken for. */
+      aliases:
+        base.baseKind === 'lodging_property' || base.baseKind === 'lodge'
+          ? []
+          : [...new Set([name, base.locality].filter((v): v is string => typeof v === 'string' && v.trim().length > 0))],
     },
     reading,
     { radiusKm },
@@ -122,6 +131,8 @@ export async function recommendLodgingAction(tripId: string, input: LodgingActio
     ...(found.reason ? { reason: found.reason } : {}),
     recommendations: ranked.recommendations,
     considered: ranked.considered,
+    heldBack: ranked.heldBack,
+    limit: ranked.limit,
     radiusKm,
     attribution: found.attribution,
     readingFor: reading.themes.filter((t) => t.theme !== 'transit').map((t) => t.because),

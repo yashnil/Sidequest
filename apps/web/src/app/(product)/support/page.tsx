@@ -51,5 +51,5 @@ export default function SupportPage() {
       body: <p>Report a shared link that should not be public, or a security problem, to the contact above. Please do not test against other people’s trips.</p>,
     },
   ];
-  return <LegalDocument eyebrow="Sidequest" title="Support" updated="24 October 2026" intro={<p>Sidequest is in private alpha, run by a small team.</p>} sections={sections} />;
+  return <LegalDocument eyebrow="Sidequest" title="Support" updated="15 November 2026" intro={<p>Sidequest is in beta, run by a small team.</p>} sections={sections} />;
 }

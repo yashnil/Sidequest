@@ -1,7 +1,8 @@
 import type { DestinationEntityType } from '../schemas/geography';
 import type { DestinationTrait } from '../interview/traits';
 import { countryFacts } from '../reference/countries';
-import { jurisdictionFor, type Jurisdiction, type JurisdictionSetup } from './jurisdictions';
+import { jurisdictionFor, transportNetworkAt, type Jurisdiction, type JurisdictionSetup } from './jurisdictions';
+import type { NetworkLocator } from './networks';
 import {
   MODE_CONCEPT_LABELS,
   travelRealitySchema,
@@ -44,6 +45,13 @@ export interface TravelRealityInput {
   capabilities?: { roadRouting: boolean; transit: boolean } | undefined;
   /** The traveller's stated willingness to drive, when the interview has it. */
   willDrive?: boolean | undefined;
+  /**
+   * Where on the ground the trip is: the scope's ISO 3166-2 code and/or its
+   * centre. A subdivision whose own network row says there is no railway (an
+   * island region of a country with a mainland network) makes the country's
+   * rail modes unavailable here (`networks.ts`).
+   */
+  network?: NetworkLocator | undefined;
 }
 
 const STATUS_CAUTION_RANK: Record<ModeStatus, number> = { recommended: 0, viable: 1, unknown: 2, friction: 3, discouraged: 4, unavailable: 5 };
@@ -187,6 +195,31 @@ export function buildTravelReality(input: TravelRealityInput): TravelReality {
       }
     }
     if (touched) facts.push(islandFact);
+  }
+  /*
+   * Infrastructure belongs to the ground, not the country: a subdivision row
+   * that states no railway (or no high-speed line) is affirmative evidence, so
+   * the country's rail modes become unavailable here. A metro the row does not
+   * name is unknown, never unavailable — the row is silent, not negative.
+   */
+  if (input.network && input.countries.length === 1 && rows.length === 1) {
+    const network = transportNetworkAt(input.countries[0], input.network);
+    if (network.basis === 'subdivision') {
+      const id = `subdivision-network-${network.subdivisions.join('-').toLowerCase()}`;
+      const statement = network.notes.join(' ');
+      let touched = false;
+      const lower = (mode: ModeConcept, to: ModeStatus) => {
+        const current = byMode.get(mode);
+        if (current && STATUS_CAUTION_RANK[current.status] < STATUS_CAUTION_RANK[to]) {
+          byMode.set(mode, { ...current, status: to, reason: statement, factIds: [...current.factIds, id] });
+          touched = true;
+        }
+      };
+      if (!network.intercityRail) lower('intercity_train', 'unavailable');
+      if (!network.highSpeedRail) lower('high_speed_rail', 'unavailable');
+      if (!network.metro) lower('metro', 'unknown');
+      if (touched) facts.push({ id, topic: 'transit', statement, authority: 'reference', freshness: 'medium', confidence: 'high', countries: [...input.countries], scope: 'regional' });
+    }
   }
   const modes = [...byMode.values()].sort((a, b) => STATUS_CAUTION_RANK[a.status] - STATUS_CAUTION_RANK[b.status] || a.mode.localeCompare(b.mode));
 

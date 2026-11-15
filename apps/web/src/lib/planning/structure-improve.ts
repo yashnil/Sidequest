@@ -528,6 +528,8 @@ export function improveStructure(kernel: PlannerKernel, seed: PlanState, options
   const okCache = new WeakMap<readonly PlannerCandidate[], Map<string, boolean>>();
   function dayOk(state: PlanState, i: number, stopsOf: (j: number) => readonly PlannerCandidate[], focus?: string): boolean {
     const row = state[i]!;
+    /* A section of a trail is judged against every other day's sections (walked in order), which the row cache cannot see. */
+    if (row.some((s) => s.trailOrder !== undefined && s.pinnedDay === undefined)) return kernel.checkDay(i, row, stopsOf, focus).ok;
     const flag = (j: number) => (j >= 0 && j < state.length && rowFacts(kernel, j, state[j]!).strenuous ? '1' : '0');
     const key = `${i}:${flag(i - 1)}${flag(i + 1)}`;
     let entry = okCache.get(row);

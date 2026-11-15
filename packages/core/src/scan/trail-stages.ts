@@ -119,6 +119,8 @@ export interface TrailStage {
   part?: number;
   /** Where a split stage breaks: the intermediate overnight. */
   splitAt?: { baseId: string; name: string; at: Point };
+  /** A gap in the trail before this stage, in km: the proposal named no stage between the last one's end and this one's start, so the way there is ridden. */
+  gapBeforeKm?: number;
 }
 
 export interface TrailStageInput {
@@ -138,10 +140,32 @@ function walkFigures(c: ScanCandidateProposal, measured: MeasuredStage | undefin
 }
 
 /**
- * The proposal's one-way walks as one ordered, contiguous sequence: the
- * longest chain in which each stage starts where the last one ended. Stages
- * that cannot be placed, or that join nothing, are reported and left to be
- * planned as walks of their own.
+ * A gap in the trail no more than this long — between where one walked section
+ * ends and the next begins — is ridden (a bus or a taxi from tonight's bed to
+ * where the walk resumes); a section farther than this from the rest is not
+ * part of the same walk.
+ */
+export const STAGE_GAP_MAX_KM = 40;
+/** A stage ending this close to where the sequence already ended walks ground it has already covered. */
+export const STAGE_OVERLAP_KM = 2;
+/** The most sequences of sections the ordering compares; far beyond any real proposal. */
+const SECTION_SEARCH_BUDGET = 20000;
+
+/**
+ * The proposal's one-way walks as one ordered sequence along the trail.
+ *
+ * Final pass — a proposal rarely names every stage: a live Kumano scan gave
+ * the trail's first stage, a gap, three joined stages and a separate final
+ * section. Following only the longest contiguous run left the other sections
+ * to be scheduled as day trips in any order (the trail's start on day 7). So
+ * the stages are first joined into contiguous sections (each starts where the
+ * last ended, within `STAGE_JOIN_KM`), and the sections are then put in one
+ * order: the one that walks the most stages, then the shortest total gap
+ * between sections, the model's own stage numbers only ever breaking a tie.
+ * A section after a gap carries `gapBeforeKm` (the ride from the last bed to
+ * where the walk resumes). A section farther than `STAGE_GAP_MAX_KM` from the
+ * rest, or one that ends where the sequence already ended, is reported and
+ * left out. Order is decided by where the stages are, never by their names.
  */
 export function orderTrailStages(input: {
   candidates: readonly TrailStageInput[];
@@ -149,7 +173,8 @@ export function orderTrailStages(input: {
   measured?: ReadonlyMap<string, MeasuredStage>;
 }): { stages: TrailStage[]; dropped: { name: string; reason: string }[] } {
   const dropped: { name: string; reason: string }[] = [];
-  const eligible: (TrailStage & { stated?: number; index: number })[] = [];
+  type Eligible = TrailStage & { stated?: number; index: number };
+  const eligible: Eligible[] = [];
   input.candidates.forEach(({ id, proposal: c }, index) => {
     if (c.walk?.shape !== 'point_to_point') return;
     const start = input.positionOf(c.key);
@@ -178,15 +203,17 @@ export function orderTrailStages(input: {
   if (eligible.length === 0) return { stages: [], dropped };
 
   const joins = (a: TrailStage, b: TrailStage) => haversineKm(a.end, b.start) <= STAGE_JOIN_KM;
+  /* Walking on to somewhere new: a stage that ends where the last one ended, or back where it began, covers ground already walked. */
+  const progresses = (a: TrailStage, b: TrailStage) => haversineKm(a.end, b.end) > STAGE_OVERLAP_KM && haversineKm(a.start, b.end) > STAGE_OVERLAP_KM;
   /* The model's stated order, then its proposal order: only ever a tie-break between stages that genuinely join. */
   const rank = (s: { stated?: number; index: number }) => (s.stated ?? 1000) * 1000 + s.index;
-  const chainFrom = (head: (typeof eligible)[number]) => {
+  const chainFrom = (head: Eligible, pool: readonly Eligible[]) => {
     const chain = [head];
     const used = new Set([head.key]);
     for (;;) {
       const at = chain[chain.length - 1]!;
-      const next = eligible
-        .filter((s) => !used.has(s.key) && joins(at, s))
+      const next = pool
+        .filter((s) => !used.has(s.key) && joins(at, s) && progresses(at, s))
         .sort((a, b) => {
           const wantA = at.stated !== undefined && a.stated === at.stated + 1 ? 0 : 1;
           const wantB = at.stated !== undefined && b.stated === at.stated + 1 ? 0 : 1;
@@ -198,16 +225,73 @@ export function orderTrailStages(input: {
     }
     return chain;
   };
-  const heads = eligible.filter((s) => !eligible.some((o) => o !== s && joins(o, s)));
-  const tries = (heads.length > 0 ? heads : eligible).slice().sort((a, b) => rank(a) - rank(b));
-  let best: (typeof eligible)[number][] = [];
-  for (const head of tries) {
-    const chain = chainFrom(head);
-    if (chain.length > best.length) best = chain;
+  /* 1. Contiguous sections: the longest run first, then the longest among what is left, and so on. */
+  const sections: Eligible[][] = [];
+  let left = eligible.slice();
+  while (left.length > 0) {
+    const heads = left.filter((s) => !left.some((o) => o !== s && joins(o, s) && progresses(o, s)));
+    const tries = (heads.length > 0 ? heads : left).slice().sort((a, b) => rank(a) - rank(b));
+    let best: Eligible[] = [];
+    for (const head of tries) {
+      const chain = chainFrom(head, left);
+      if (chain.length > best.length) best = chain;
+    }
+    sections.push(best);
+    const used = new Set(best.map((s) => s.key));
+    left = left.filter((s) => !used.has(s.key));
   }
-  const kept = new Set(best.map((s) => s.key));
-  for (const s of eligible) if (!kept.has(s.key)) dropped.push({ name: s.name, reason: 'It does not join the stages before and after it, so it stays a walk of its own.' });
-  const stages = best.map(({ stated: _stated, index: _index, ...stage }, i) => ({ ...stage, order: i + 1 }));
+  /* 2. One order over the sections: the most stages, then the least riding between sections, then the stated order. */
+  const firstRank = (section: readonly Eligible[]) => rank(section[0]!);
+  type Order = { path: number[]; stages: number; gapKm: number; inversions: number };
+  const ends = (path: readonly number[]) => path.flatMap((i) => sections[i]!.map((s) => s.end));
+  const better = (a: Order, b: Order | null) => {
+    if (!b) return true;
+    if (a.stages !== b.stages) return a.stages > b.stages;
+    if (Math.abs(a.gapKm - b.gapKm) > 0.5) return a.gapKm < b.gapKm;
+    if (a.inversions !== b.inversions) return a.inversions < b.inversions;
+    return a.path.map((i) => firstRank(sections[i]!)).join(',') < b.path.map((i) => firstRank(sections[i]!)).join(',');
+  };
+  let bestOrder: Order | null = null;
+  let budget = SECTION_SEARCH_BUDGET;
+  const visit = (path: number[], stages: number, gapKm: number, inversions: number) => {
+    budget -= 1;
+    const here: Order = { path: [...path], stages, gapKm, inversions };
+    if (better(here, bestOrder)) bestOrder = here;
+    if (budget <= 0 || stages >= MAX_TRAIL_STAGES) return;
+    const last = sections[path[path.length - 1]!]!;
+    const lastStage = last[last.length - 1]!;
+    const walked = ends(path);
+    for (let i = 0; i < sections.length; i += 1) {
+      if (path.includes(i)) continue;
+      const section = sections[i]!;
+      const gap = haversineKm(lastStage.end, section[0]!.start);
+      if (gap > STAGE_GAP_MAX_KM) continue;
+      if (section.some((s) => walked.some((e) => haversineKm(e, s.end) <= STAGE_OVERLAP_KM)) || !progresses(lastStage, section[0]!)) continue;
+      const stated = (s: Eligible) => s.stated;
+      const inv = path.reduce((n, j) => n + sections[j]!.filter((a) => section.some((b) => stated(a) !== undefined && stated(b) !== undefined && stated(a)! > stated(b)!)).length, 0);
+      path.push(i);
+      visit(path, stages + section.length, gapKm + gap, inversions + inv);
+      path.pop();
+    }
+  };
+  sections.forEach((_, i) => visit([i], sections[i]!.length, 0, 0));
+  const chosen = (bestOrder as Order | null)?.path ?? [0];
+  const flat: (Eligible & { gapBeforeKm?: number })[] = [];
+  chosen.forEach((i, n) => {
+    sections[i]!.forEach((stage, k) => {
+      if (flat.length >= MAX_TRAIL_STAGES) return;
+      const previous = flat[flat.length - 1];
+      flat.push(n > 0 && k === 0 && previous ? { ...stage, gapBeforeKm: Math.round(haversineKm(previous.end, stage.start) * 10) / 10 } : stage);
+    });
+  });
+  const kept = new Set(flat.map((s) => s.key));
+  const keptEnds = flat.map((s) => s.end);
+  for (const s of eligible) {
+    if (kept.has(s.key)) continue;
+    const overlaps = keptEnds.some((e) => haversineKm(e, s.end) <= STAGE_OVERLAP_KM);
+    dropped.push({ name: s.name, reason: overlaps ? 'It ends where another stage already ends, so it walks ground the trail already covers and stays a walk of its own.' : 'It does not join the stages before and after it, so it stays a walk of its own.' });
+  }
+  const stages = flat.map(({ stated: _stated, index: _index, ...stage }, i) => ({ ...stage, order: i + 1 }));
   return { stages, dropped };
 }
 
@@ -513,13 +597,22 @@ export function resolveTrailStages(input: {
       ...timing(assessment),
     });
   });
-  /* Which bed each stage leaves from and arrives at. */
+  /*
+   * Which bed each stage leaves from and arrives at. A stage after another one
+   * leaves from the bed the last one reached — walking on when it starts there,
+   * or riding the gap to where the walk resumes (`gapBeforeKm`) — never from
+   * some other bed merely nearer its start: that is how a live plan "walked"
+   * one stage from a hot-spring base and left the rest as day trips.
+   */
   const beds = [...input.beds, ...sleptAt];
-  return out.map((stage, i) => {
-    const from = nearestBed(stage.start, beds, TRAIL_START_NEAR_BED_KM);
-    const to = nearestBed(stage.end, beds, TRAIL_END_AT_BED_KM, from?.id ?? null);
-    return { ...stage, order: i + 1, fromBaseId: from?.id ?? null, toBaseId: to?.id ?? null };
+  const mapped: ResolvedTrailStage[] = [];
+  out.forEach((stage, i) => {
+    const previous = mapped[i - 1];
+    const fromId = previous?.toBaseId ?? nearestBed(stage.start, beds, TRAIL_START_NEAR_BED_KM)?.id ?? null;
+    const to = nearestBed(stage.end, beds, TRAIL_END_AT_BED_KM, fromId);
+    mapped.push({ ...stage, order: i + 1, fromBaseId: fromId, toBaseId: to?.id ?? null });
   });
+  return mapped;
 }
 
 /**
@@ -596,5 +689,34 @@ export function trailStageRecord(stage: ResolvedTrailStage, nameOf: (baseId: str
     ...(stage.part ? { part: stage.part } : {}),
     ...(extra.startMinute !== undefined ? { startMinute: extra.startMinute } : {}),
     ...(extra.addedBed ? { addedBed: true } : {}),
+    ...(stage.gapBeforeKm !== undefined ? { gapBeforeKm: stage.gapBeforeKm } : {}),
   };
+}
+
+/**
+ * How the trail is fitted to this party, in one or two sentences: the daily
+ * limits it is planned for, and what that changed — stages split with a night
+ * on the way, covered the usual other way, still to decide, and the gaps in
+ * the trail ridden between sections. Absent when nothing was adapted for an
+ * unremarkable party. Every word is about walking; nothing names a trail.
+ */
+export function trailAdaptation(stages: readonly Pick<ResolvedTrailStage, 'resolution' | 'part' | 'gapBeforeKm' | 'alternative'>[], limits: TrailLimits, followed: boolean): string | undefined {
+  const splits = stages.filter((s) => s.resolution === 'split' && s.part === 1).length;
+  const ridden = stages.filter((s) => s.resolution === 'alternative' && s.alternative?.mode !== 'skip').length;
+  const skipped = stages.filter((s) => s.resolution === 'alternative' && s.alternative?.mode === 'skip').length;
+  const open = stages.filter((s) => s.resolution === 'unresolved').length;
+  const gaps = stages.filter((s) => s.gapBeforeKm !== undefined).length;
+  const special = /children|mobility|slow/.test(limits.basis);
+  if (!special && splits + ridden + skipped + open + gaps === 0) return undefined;
+  const n = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+  const changes = [
+    splits > 0 ? `${n(splits, 'stage', 'stages')} split with a night on the way` : null,
+    ridden > 0 ? `${n(ridden, 'stage', 'stages')} covered by the usual transport instead of on foot` : null,
+    skipped > 0 ? `${n(skipped, 'section', 'sections')} skipped, as walkers usually do` : null,
+    open > 0 ? `${n(open, 'stage', 'stages')} still too long for this party, to decide on the day` : null,
+    gaps > 0 ? `${n(gaps, 'gap', 'gaps')} in the trail ridden between walked sections` : null,
+  ].filter((x): x is string => x !== null);
+  const lead = `Planned for ${limits.basis}: at most about ${trailHours(limits.walkMinutes)} of walking and ${limits.ascentM} m of climbing a day`;
+  const how = followed ? 'walked in the trail’s order from bed to bed' : 'walked in the trail’s order as day walks from where you sleep';
+  return `${lead}, ${how}${changes.length > 0 ? `; ${changes.join(', ')}` : ''}.`;
 }

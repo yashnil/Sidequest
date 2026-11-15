@@ -21,7 +21,7 @@ import {
 } from '@sidequest/core';
 import type { TripIntentRecord } from '@/lib/db/compiler-repository';
 import type { RegionContext } from '@/lib/region';
-import { buildTravelReality, withTravelReality, type TravelReality } from '@sidequest/core';
+import { buildTravelReality, singleRegionCode, withTravelReality, type TravelReality } from '@sidequest/core';
 import { capability } from '@/lib/providers/registry';
 
 /**
@@ -235,6 +235,8 @@ export function travelRealityFor(input: { signals: ScreeningSignals; screened: D
     ...(input.party ? { party: { size: input.party.members, drivers: input.party.drivers } } : {}),
     capabilities: { roadRouting: Boolean(capability('routing.drive')?.configured), transit: Boolean(capability('routing.transit')?.configured) },
     ...(input.willDrive !== undefined ? { willDrive: input.willDrive } : {}),
+    /* Infrastructure is a fact about the ground: the scope's own subdivision and centre narrow the country's network (an island region off the mainland railway). */
+    network: { regionCode: singleRegionCode(input.intent?.destinationIntent?.semantics?.jurisdictions, countries.length === 1 ? countries[0] : null), points: input.signals.center ? [input.signals.center] : [] },
   });
 }
 

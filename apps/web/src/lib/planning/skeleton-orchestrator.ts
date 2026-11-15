@@ -116,6 +116,7 @@ export function productionDestinationScope(compiled: CompiledRegion): BaseResolu
   const scope = compiled.scope;
   return {
     ...(scope.administrative.countryCode ? { countryCode: scope.administrative.countryCode } : {}),
+    ...(scope.administrative.regionCode ? { regionCode: scope.administrative.regionCode } : {}),
     ...(scope.administrativeBoundary
       ? { administrativeBounds: scope.administrativeBoundary }
       : scope.bounds

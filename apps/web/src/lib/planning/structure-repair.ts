@@ -26,7 +26,7 @@ import type { PlanState, PlannerCandidate, PlannerKernel } from './structure-pla
  * Pure and deterministic: fixed orders over days and ids, no clock.
  */
 
-export type DayNoteCode = 'transfer_over_limit' | 'travel_over_limit' | 'day_overfull' | 'edge_day_heavy' | 'hard_days_together' | 'open_day' | 'walk_return' | 'walk_luggage' | 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap';
+export type DayNoteCode = 'transfer_over_limit' | 'travel_over_limit' | 'day_overfull' | 'edge_day_heavy' | 'hard_days_together' | 'open_day' | 'walk_return' | 'walk_luggage' | 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap' | 'trail_adaptation';
 
 export interface DayNote {
   dayNumber: number;
@@ -271,6 +271,8 @@ export interface TravelLimitDay {
   dayNumber: number;
   travelMinutes: number;
   cause: 'transfer' | 'traveller_pick' | 'stops';
+  /** Set when the traveller chose to keep the day as planned (`travel-limit-choices.ts`). */
+  accepted?: boolean;
 }
 
 export interface TravelLimitChoice {
@@ -279,7 +281,18 @@ export interface TravelLimitChoice {
   label: string;
   detail: string;
   subject?: string;
+  /** For `drop_stop`: the board id of the stop that would go. */
+  placeId?: string;
   travelMinutes?: number;
+}
+
+export interface TravelLimitDecision {
+  dayNumber: number;
+  kind: 'accept_long_day' | 'drop_stop';
+  subject?: string;
+  placeId?: string;
+  travelMinutesBefore: number;
+  travelMinutesAfter: number;
 }
 
 export interface TravelLimitRecord {
@@ -289,6 +302,7 @@ export interface TravelLimitRecord {
   daysOver: number;
   days: TravelLimitDay[];
   choices: TravelLimitChoice[];
+  decisions?: TravelLimitDecision[];
 }
 
 /**
@@ -341,7 +355,7 @@ export function travelLimitRecord(kernel: PlannerKernel, state: PlanState): Trav
         const without = stops.filter((s) => s !== pick);
         const travel = loadOf(kernel, index, without).travel + day.transferMinutes;
         if (travel >= total) continue;
-        choices.push({ dayNumber: n, kind: 'drop_stop', label: `Drop ${pick.name} from day ${n}`, detail: `Without it day ${n} has about ${clock(travel)} of travel${travel <= limit ? ', inside your limit' : ''}.`, subject: pick.name, travelMinutes: Math.round(travel) });
+        choices.push({ dayNumber: n, kind: 'drop_stop', label: `Drop ${pick.name} from day ${n}`, detail: `Without it day ${n} has about ${clock(travel)} of travel${travel <= limit ? ', inside your limit' : ''}.`, subject: pick.name, placeId: pick.id, travelMinutes: Math.round(travel) });
       }
     }
   });

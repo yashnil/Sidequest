@@ -56,6 +56,17 @@ describe('Overture lodging rows (recorded around Hongū)', () => {
     expect(overtureLodgingRow({ ...row, operating_status: 'permanently_closed' })).toBeNull();
     expect(overtureLodgingRow({ ...row, basic_category: 'restaurant', taxonomy: { primary: 'restaurant', hierarchy: ['food_and_drink', 'restaurant'] } })).toBeNull();
   });
+
+  it('requires the primary category to be lodging, and keeps the address and categories as evidence', () => {
+    const row = { id: 'ev', names: { primary: 'Hotel Gracery' }, confidence: 0.95, operating_status: 'open', basic_category: 'hotel', taxonomy: { primary: 'hotel', hierarchy: ['lodging', 'hotel'] }, categories: { primary: 'hotel', alternate: ['restaurant'] }, addresses: [{ locality: '新宿区', region: '東京都', country: 'JP' }], bbox: { xmin: 139.7, xmax: 139.7, ymin: 35.69, ymax: 35.69 } };
+    expect(overtureLodgingRow(row)!.evidence).toEqual({ categories: ['hotel', 'restaurant'], region: '東京都', country: 'JP' });
+    /* A firm whose modern primary is another trade, even with a lodging basic category. */
+    expect(overtureLodgingRow({ ...row, taxonomy: { primary: 'web_designer', hierarchy: ['professional_services', 'web_designer'] } })).toBeNull();
+    /* Two primary statements that disagree. */
+    expect(overtureLodgingRow({ ...row, categories: { primary: 'web_designer', alternate: [] } })).toBeNull();
+    /* A Japanese hut name refines a generic category. */
+    expect(overtureLodgingRow({ ...row, names: { primary: '涸沢ヒュッテ' }, basic_category: 'lodging', taxonomy: { primary: 'lodging', hierarchy: ['lodging'] } })!.type).toBe('mountain_hut');
+  });
 });
 
 function names(): string[] {
@@ -126,6 +137,16 @@ describe('OpenStreetMap lodging elements', () => {
     expect(hotel).toMatchObject({ sourceId: 'osm:way/202', stars: 4, rooms: 30, amenities: [] });
     expect(hotel!.nearbyHotSpring).toEqual({ name: 'つぼ湯', metres: expect.any(Number) });
     expect(osmLodgingCandidate(elements[3]!)).toBeNull();
+  });
+
+  it('keeps the tags as evidence: a guesthouse with only tourism=guest_house stands; an office tag on the same element does not', () => {
+    const plain = osmLodgingCandidate({ type: 'node', id: 7, lat: 45.89, lon: 6.8, tags: { tourism: 'guest_house', name: 'Chez Marie', 'addr:state': 'Auvergne-Rhône-Alpes' } })!;
+    expect(plain).toMatchObject({ type: 'guesthouse', evidence: { categories: ['tourism=guest_house'], region: 'Auvergne-Rhône-Alpes' } });
+    const office = osmLodgingCandidate({ type: 'node', id: 8, lat: 45.89, lon: 6.8, tags: { tourism: 'hotel', office: 'it', name: 'Sky View House' } })!;
+    expect(office.evidence!.categories).toContain('office=it');
+    const kept = rankLodgingProperties([plain, office], { baseId: 'b', name: 'Les Houches', coordinates: { lat: 45.8906, lng: 6.7989 }, nights: 1, checkIn: '2026-07-01', checkOut: '2026-07-02', dayStarts: [] }, readTripForLodging({ primaryMode: 'drive', adults: 2, children: 0 }));
+    expect(kept.recommendations.map((r) => r.name)).toEqual(['Chez Marie']);
+    expect(osmLodgingCandidate({ type: 'node', id: 9, lat: 46, lon: 7, tags: { tourism: 'wilderness_hut', name: 'Cabane du Mont Fort' } })!.type).toBe('mountain_hut');
   });
 });
 

@@ -1379,6 +1379,8 @@ export const tripPackageSchema = z.object({
               travelMinutes: z.number().min(0),
               /** `transfer`: the move between stays (or the arrival/departure leg) alone is over; `traveller_pick`: a place the traveller chose; `stops`: Sidequest's own stops (only ever under a soft limit). */
               cause: z.enum(['transfer', 'traveller_pick', 'stops']),
+              /** The traveller chose to keep this day as planned, over the limit (`travel-limit-choices.ts`): a caution they own, no longer a decision. */
+              accepted: z.boolean().optional(),
             }),
           ),
           choices: z
@@ -1390,10 +1392,29 @@ export const tripPackageSchema = z.object({
                 detail: z.string().min(1),
                 /** The place a night would be added in, or the stop that would go. */
                 subject: z.string().min(1).optional(),
+                /** For `drop_stop`: the board place id of the stop that would go, so applying the choice finds the stop by identity, never by name. */
+                placeId: z.string().min(1).optional(),
                 travelMinutes: z.number().min(0).optional(),
               }),
             )
             .default([]),
+          /**
+           * What the traveller chose, with the planner's figures before and
+           * after. Each one is applied by `travel-limit-choices.ts` with no
+           * model and no provider, recorded as a plan version and undoable.
+           */
+          decisions: z
+            .array(
+              z.object({
+                dayNumber: z.number().int().positive(),
+                kind: z.enum(['accept_long_day', 'drop_stop']),
+                subject: z.string().min(1).optional(),
+                placeId: z.string().min(1).optional(),
+                travelMinutesBefore: z.number().min(0),
+                travelMinutesAfter: z.number().min(0),
+              }),
+            )
+            .optional(),
         })
         .optional(),
       /**

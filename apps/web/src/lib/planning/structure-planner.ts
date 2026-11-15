@@ -86,6 +86,44 @@ export interface PlannerCandidate {
    * it, and the day holds nothing else of Sidequest's choosing.
    */
   trailStage?: boolean;
+  /**
+   * Final pass — this section's place along the trail (1 first), on a trail
+   * trip, whether or not it is walked as a move. The days walk the trail in
+   * order: a section is never planned before one that comes earlier on the
+   * trail (`trailProgressionOk`). A live Kumano plan walked the trail's first
+   * stage on day 7, after its last.
+   */
+  trailOrder?: number;
+}
+
+/**
+ * Whether a section of the trail can go on day `index` without walking the
+ * trail out of order: nothing later on the trail on an earlier day, nothing
+ * earlier on a later one. A pinned section (a walked move, or the traveller's
+ * own lock) holds its day; the sections around it give way.
+ */
+export function trailProgressionOk(index: number, s: Pick<PlannerCandidate, 'id' | 'trailOrder' | 'pinnedDay'>, dayCount: number, stopsOf: (index: number) => readonly Pick<PlannerCandidate, 'id' | 'trailOrder'>[]): boolean {
+  if (s.trailOrder === undefined || s.pinnedDay !== undefined) return true;
+  for (let j = 0; j < dayCount; j += 1) {
+    if (j === index) continue;
+    for (const o of stopsOf(j)) {
+      if (o.id === s.id || o.trailOrder === undefined) continue;
+      if (j < index ? o.trailOrder > s.trailOrder : o.trailOrder < s.trailOrder) return false;
+    }
+  }
+  return true;
+}
+
+/** Pairs of sections walked out of the trail's order across a plan's days: 0 when the days follow the trail. */
+export function trailInversions(rows: readonly (readonly Pick<PlannerCandidate, 'trailOrder'>[])[]): number {
+  const seen: number[] = [];
+  let inversions = 0;
+  for (const row of rows) {
+    const orders = row.flatMap((s) => (s.trailOrder !== undefined ? [s.trailOrder] : []));
+    for (const o of orders) inversions += seen.filter((x) => x > o).length;
+    seen.push(...orders);
+  }
+  return inversions;
 }
 
 export interface PlannerBase {
@@ -629,6 +667,7 @@ export function createPlannerKernel(input: StructurePlannerInput): PlannerKernel
     const edge = day.isFirst || day.isLast;
     if (s.pinnedDay !== undefined && s.pinnedDay !== day.dayNumber) return fail('capacity', `You locked this to day ${s.pinnedDay}, and it no longer fits that day.`);
     if (s.closedDates?.includes(day.date)) return fail('closed', 'Its published hours say it is shut that day.');
+    if (!trailProgressionOk(day.index, s, days.length, stopsOf)) return fail('capacity', 'The trail is walked in its order, and no day between the sections before and after this one had room for it.');
     /* A trail stage was judged for this party when the stays were chosen; on its own move day it is the day. */
     if (s.trailStage) return null;
     const slot = slotOf(s);
@@ -861,9 +900,15 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
   function place(candidate: PlannerCandidate): { ok: true } | { ok: false; reason: DropReason; detail: string } {
     let best: { index: number; score: number; penalty: number } | null = null;
     let geographyOnly: { index: number; score: number } | null = null;
+    /* A section of the trail goes on the first day that will have it: placed in the trail's order, that walks the trail forward day by day. */
+    const inOrder = candidate.trailOrder !== undefined && candidate.pinnedDay === undefined;
     const failure = firstFailure(candidate, (day, index) => {
       const verdict = feasibility(candidate, day, index);
       if (!verdict.ok) return verdict;
+      if (inOrder) {
+        if (!best) best = { index, score: 0, penalty: 0 };
+        return null;
+      }
       const load = day.activityMinutes / Math.max(1, day.capacityMinutes);
       const penalty = weatherPenalty(candidate, day.weather);
       // A soft pull towards days already working in the same area, so a city day stays in one or two districts.
@@ -913,8 +958,10 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
    * unlocked include could fill the locked day first and turn the traveller's
    * own lock into a conflict.
    */
-  const lockedFirst = (c: PlannerCandidate) => ((c.status === 'must' && c.pinnedDay !== undefined) || c.trailStage ? 1 : 0);
-  const ordered = [...plannable].sort((a, b) => lockedFirst(b) - lockedFirst(a) || plannerPriority(b) - plannerPriority(a) || a.id.localeCompare(b.id));
+  const lockedFirst = (c: PlannerCandidate) => ((c.status === 'must' && c.pinnedDay !== undefined) || c.trailStage ? 2 : c.trailOrder !== undefined ? 1 : 0);
+  /* Then the trail's other sections, in the trail's order, so the days walk it forward. */
+  const trailRank = (c: PlannerCandidate) => (lockedFirst(c) === 1 ? c.trailOrder! : 0);
+  const ordered = [...plannable].sort((a, b) => lockedFirst(b) - lockedFirst(a) || trailRank(a) - trailRank(b) || plannerPriority(b) - plannerPriority(a) || a.id.localeCompare(b.id));
   const primaries = ordered.filter((c) => c.status !== 'candidate');
   const fillers = ordered.filter((c) => c.status === 'candidate' && c.fit >= FILLER_MIN_FIT);
   const take = (candidate: PlannerCandidate, capped: boolean | 'avoid_only'): boolean => {

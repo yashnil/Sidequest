@@ -3,6 +3,7 @@ import { EXPERIENCES, type Experience, type WorldRegion } from './catalog/schema
 import {
   ADVENTURE_LEVELS,
   FOCUS_EXPERIENCES,
+  GENTLE_READING,
   MOOD_EXPERIENCES,
   OPPOSITE_REFINEMENT,
   PURSUIT_EXPERIENCES,
@@ -12,7 +13,7 @@ import {
   type Refinement,
 } from './answers';
 import { originPointFromText, type OriginPoint } from './origin';
-import { conceptMoods, type ConceptWeight } from './concept';
+import { conceptIsGentle, conceptMoods, type ConceptWeight } from './concept';
 
 /**
  * ONE READING OF EVERYTHING THE TRAVELLER SAID, IN THE TERMS THE SCORER USES.
@@ -106,6 +107,12 @@ export interface AdvisorInterest {
   any?: boolean;
   /** Skiing or snowboarding was asked for by name: snow without lifts is not what they mean. */
   lifts?: boolean;
+  /**
+   * The mapping as the traveller asked for it, when Sidequest reads it more
+   * gently (`GENTLE_READING`). What they asked for stays their own wish
+   * (`ownWishes`) even where the scoring leans to the gentle way of having it.
+   */
+  stated?: Partial<Record<Experience, number>>;
 }
 
 export const FACTOR_IDS = [
@@ -196,7 +203,7 @@ export function focusOf(answers: TripComposerAnswers): FocusKey[] {
  * "mountains first, wildlife if it fits" is not scored as four equal wishes.
  * Unranked: equal, which is what the traveller actually said.
  */
-function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAnswers | undefined, refinements: Refinement[]): AdvisorInterest[] {
+function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAnswers | undefined, refinements: Refinement[], gentle = false): AdvisorInterest[] {
   const weights = new Map<FocusKey, number>();
   focus.forEach((key, index) => weights.set(key, ranked ? 1 / (1 + 0.7 * index) : 1));
   for (const refinement of refinements) {
@@ -227,7 +234,10 @@ function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAns
     if (key === 'beaches' && discovery?.swimStyle === 'diving') mapping = { snorkel_dive: 0.75, beaches_swimming: 0.15, coastal_scenery: 0.1 };
     if (key === 'beaches' && discovery?.swimStyle === 'snorkel') mapping = { beaches_swimming: 0.45, snorkel_dive: 0.4, coastal_scenery: 0.15 };
     if (key === 'lakes' && discovery?.swimStyle === 'lakes') mapping = { lakes: 1 };
-    interests.push({ key, weight, mapping, ...(key === 'snow' && discovery?.skiing ? { lifts: true } : {}) });
+    const hardStyle = key === 'mountains' && (discovery?.mountainStyle === 'hut_to_hut' || discovery?.mountainStyle === 'high_altitude');
+    const stated = gentle && !hardStyle ? mapping : null;
+    if (stated) mapping = gentleReading(stated);
+    interests.push({ key, weight, mapping, ...(stated ? { stated } : {}), ...(key === 'snow' && discovery?.skiing ? { lifts: true } : {}) });
   }
   /* A pursuit is something the traveller named outright, so it weighs as much as a lead interest. */
   for (const key of discovery?.pursuits ?? []) interests.push({ key, weight: 1, mapping: PURSUIT_EXPERIENCES[key] });
@@ -245,6 +255,20 @@ function interestsFrom(focus: FocusKey[], ranked: boolean, discovery: AdvisorAns
     interests.push({ key: mood, weight: Math.min(0.7, 0.35 + weight), mapping: MOOD_EXPERIENCES[mood], any: true });
   }
   return interests;
+}
+
+/** An interest read at its gentle end (`GENTLE_READING`); the shares still sum to what they did. */
+function gentleReading(mapping: Partial<Record<Experience, number>>): Partial<Record<Experience, number>> {
+  const out: Partial<Record<Experience, number>> = { ...mapping };
+  for (const [experience, share] of Object.entries(mapping) as [Experience, number][]) {
+    const shift = GENTLE_READING[experience];
+    if (!shift) continue;
+    const moved = share * shift.share;
+    out[experience] = share - moved;
+    out[shift.to] = (out[shift.to] ?? 0) + moved;
+    if (out[experience] === 0) delete out[experience];
+  }
+  return out;
 }
 
 /** The interests flattened to experience weights summing to one. */
@@ -374,7 +398,9 @@ export function profileFrom(answers: TripComposerAnswers): AdvisorProfile {
   else if (answers.children > 0 || needs.has('kids_under_12') || needs.has('seniors_in_group')) emphasis.group = Math.max(emphasis.group ?? 1, 2);
   /* A long trip is decided by sizing: three weeks in a ten-night place leaves half the trip unexplained. */
   if (nights) emphasis.duration = Math.max(emphasis.duration ?? 1, nights.max >= 14 ? 2.5 : 1.5);
-  const interests = interestsFrom(focus, discovery?.focusRanked === true, discovery, refinements);
+  /* A gentle kind of trip reads an ambiguous interest at its gentle end, unless the traveller asked for harder days. */
+  const gentle = conceptIsGentle(discovery?.concept ?? []) && (adventure === null || adventure <= 1);
+  const interests = interestsFrom(focus, discovery?.focusRanked === true, discovery, refinements, gentle);
   return {
     months,
     monthsFlexible: flexible,

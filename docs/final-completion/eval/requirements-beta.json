@@ -1,0 +1,389 @@
+[
+ {
+  "scenario": "azores-hot-springs",
+  "defining": [
+   {
+    "id": "furnas",
+    "label": "Furnas valley hot springs (Terra Nostra, Poça da Dona Beija) or cozido das Furnas",
+    "anyOf": [
+     "Furnas",
+     "Terra Nostra",
+     "Dona Beija",
+     "cozido",
+     "Caldeiras"
+    ]
+   },
+   {
+    "id": "whales",
+    "label": "A whale or dolphin watching trip (Ponta Delgada, Vila Franca, Pico, Faial)",
+    "anyOf": [
+     "whale",
+     "Whale",
+     "dolphin",
+     "cetacean"
+    ]
+   },
+   {
+    "id": "sete-cidades",
+    "label": "Sete Cidades crater lakes / Vista do Rei",
+    "anyOf": [
+     "Sete Cidades",
+     "Vista do Rei",
+     "Lagoa Azul",
+     "Lagoa Verde",
+     "Boca do Inferno"
+    ]
+   },
+   {
+    "id": "fogo-or-ferraria",
+    "label": "Lagoa do Fogo or Ponta da Ferraria ocean hot spring or Caldeira Velha",
+    "anyOf": [
+     "Lagoa do Fogo",
+     "Ferraria",
+     "Caldeira Velha"
+    ]
+   },
+   {
+    "id": "ponta-delgada",
+    "label": "Ponta Delgada town / Gorreana tea",
+    "anyOf": [
+     "Ponta Delgada",
+     "Gorreana",
+     "Portas da Cidade",
+     "tea plantation"
+    ]
+   }
+  ],
+  "redFlags": [
+   {
+    "id": "rail",
+    "label": "Trains or metro (none in the Azores)",
+    "anyOf": [
+     "train to",
+     "Train to",
+     "metro",
+     "Metro",
+     "railway",
+     "rail pass"
+    ]
+   },
+   {
+    "id": "drive-between-islands",
+    "label": "Driving between islands with no ferry or flight",
+    "anyOf": [
+     "drive to Pico",
+     "drive to Faial",
+     "drive to Terceira",
+     "drive to São Jorge"
+    ]
+   },
+   {
+    "id": "wrong-place",
+    "label": "Confusion with Madeira or the Canaries",
+    "anyOf": [
+     "Funchal",
+     "Teide",
+     "Tenerife",
+     "levada"
+    ]
+   }
+  ],
+  "notes": "São Miguel base (Ponta Delgada, maybe a Furnas night); rental car or tours; whale trips are booked boat tours from Ponta Delgada or Vila Franca; any other island needs a flight or ferry."
+ },
+ {
+  "scenario": "slovenia-family",
+  "defining": [
+   {
+    "id": "bled",
+    "label": "Lake Bled (island, castle) and/or Vintgar Gorge",
+    "anyOf": [
+     "Bled",
+     "Vintgar"
+    ]
+   },
+   {
+    "id": "bohinj",
+    "label": "Lake Bohinj / Savica waterfall / Vogel",
+    "anyOf": [
+     "Bohinj",
+     "Savica",
+     "Vogel"
+    ]
+   },
+   {
+    "id": "caves",
+    "label": "Postojna Cave / Predjama Castle / Škocjan Caves",
+    "anyOf": [
+     "Postojna",
+     "Predjama",
+     "Škocjan",
+     "Skocjan"
+    ]
+   },
+   {
+    "id": "ljubljana",
+    "label": "Ljubljana old town / castle",
+    "anyOf": [
+     "Ljubljana"
+    ]
+   },
+   {
+    "id": "family",
+    "label": "Child-suitable framing",
+    "anyOf": [
+     "family",
+     "kids",
+     "children",
+     "child"
+    ]
+   }
+  ],
+  "redFlags": [
+   {
+    "id": "strenuous",
+    "label": "Strenuous or high-alpine days for a family",
+    "anyOf": [
+     "Triglav summit",
+     "via ferrata",
+     "strenuous",
+     "scramble"
+    ]
+   },
+   {
+    "id": "wrong-country",
+    "label": "Slovakia or Croatia coast days",
+    "anyOf": [
+     "Bratislava",
+     "Plitvice",
+     "Dubrovnik",
+     "Split"
+    ]
+   }
+  ],
+  "notes": "Compact; 1–2 bases (Bled/Bohinj + Ljubljana or the karst); car or trains/buses; Vintgar and the caves are ticketed."
+ },
+ {
+  "scenario": "torres-w-trek",
+  "defining": [
+   {
+    "id": "base-torres",
+    "label": "Base of the Towers (Mirador Las Torres)",
+    "anyOf": [
+     "Base Torres",
+     "Base of the Towers",
+     "Mirador Las Torres",
+     "Mirador Base Las Torres",
+     "Chileno"
+    ]
+   },
+   {
+    "id": "frances",
+    "label": "Valle del Francés / Mirador Británico",
+    "anyOf": [
+     "Francés",
+     "Frances",
+     "Británico",
+     "Britanico",
+     "Italiano"
+    ]
+   },
+   {
+    "id": "grey",
+    "label": "Grey Glacier / Refugio Grey",
+    "anyOf": [
+     "Grey",
+     "Glaciar Grey"
+    ]
+   },
+   {
+    "id": "refugios",
+    "label": "Refugio/camp stage beds (Central, Chileno, Cuernos, Francés, Paine Grande, Grey)",
+    "anyOf": [
+     "Refugio",
+     "refugio",
+     "Cuernos",
+     "Paine Grande",
+     "Torre Central",
+     "Camping"
+    ]
+   },
+   {
+    "id": "gateway",
+    "label": "Puerto Natales gateway and the park bus/catamaran (Pudeto)",
+    "anyOf": [
+     "Puerto Natales",
+     "Pudeto",
+     "catamaran",
+     "Laguna Amarga"
+    ]
+   }
+  ],
+  "redFlags": [
+   {
+    "id": "rail",
+    "label": "Trains (none)",
+    "anyOf": [
+     "train to",
+     "Train to",
+     "metro",
+     "railway"
+    ]
+   },
+   {
+    "id": "hub",
+    "label": "Driving the W as day trips from one hotel",
+    "anyOf": [
+     "drive to Refugio Grey",
+     "drive to Valle del Francés"
+    ]
+   },
+   {
+    "id": "wrong-place",
+    "label": "Confusion with El Chaltén / Fitz Roy (Argentina)",
+    "anyOf": [
+     "Fitz Roy",
+     "El Chaltén",
+     "El Chalten",
+     "Perito Moreno"
+    ]
+   }
+  ],
+  "notes": "Point-to-point 4–5 days, refugio/camp beds booked far ahead, catamaran Pudeto–Paine Grande, bus from Puerto Natales; car-free on trail."
+ },
+ {
+  "scenario": "advisor-warm-unwind",
+  "defining": [
+   {
+    "id": "beach",
+    "label": "Beach time",
+    "anyOf": [
+     "beach",
+     "Beach",
+     "Playa",
+     "Praia",
+     "bay",
+     "Bay"
+    ]
+   },
+   {
+    "id": "food",
+    "label": "Good food named (market, restaurant, local dish)",
+    "anyOf": [
+     "market",
+     "Market",
+     "restaurant",
+     "seafood",
+     "food",
+     "Food"
+    ]
+   },
+   {
+    "id": "slow",
+    "label": "Unscheduled rest / slow time",
+    "anyOf": [
+     "Free time",
+     "free time",
+     "rest",
+     "relax",
+     "slow morning",
+     "at leisure"
+    ]
+   }
+  ],
+  "redFlags": [
+   {
+    "id": "long-drives",
+    "label": "Long driving days",
+    "anyOf": [
+     "4 hr drive",
+     "5 hr drive",
+     "road trip"
+    ]
+   },
+   {
+    "id": "cold",
+    "label": "A destination cold in February (northern winter)",
+    "anyOf": [
+     "ski",
+     "snow",
+     "aurora"
+    ]
+   },
+   {
+    "id": "early",
+    "label": "Dawn starts on a slow trip",
+    "anyOf": [
+     "05:",
+     "06:00",
+     "sunrise hike"
+    ]
+   }
+  ],
+  "notes": "Warm in February: tropics or southern hemisphere; 1–2 bases; short travel; maxDailyTravelMinutes 120.",
+  "maxDailyTravelMinutes": 120
+ },
+ {
+  "scenario": "advisor-history-rail",
+  "defining": [
+   {
+    "id": "old-towns",
+    "label": "Historic old towns / UNESCO centres",
+    "anyOf": [
+     "old town",
+     "Old Town",
+     "historic",
+     "cathedral",
+     "castle",
+     "medieval",
+     "Altstadt",
+     "centro storico"
+    ]
+   },
+   {
+    "id": "museum-history",
+    "label": "A history museum or major historic site",
+    "anyOf": [
+     "museum",
+     "Museum",
+     "palace",
+     "Palace",
+     "ruins",
+     "fortress"
+    ]
+   },
+   {
+    "id": "food",
+    "label": "Food named",
+    "anyOf": [
+     "market",
+     "Market",
+     "restaurant",
+     "tasting",
+     "food",
+     "Food"
+    ]
+   },
+   {
+    "id": "rail",
+    "label": "Moves between bases by train",
+    "anyOf": [
+     "train",
+     "Train",
+     "rail"
+    ]
+   }
+  ],
+  "redFlags": [
+   {
+    "id": "rental-car",
+    "label": "A rental car for a train trip",
+    "anyOf": [
+     "rental car",
+     "rent a car",
+     "pick up your car"
+    ]
+   }
+  ],
+  "notes": "October, mild: southern/central Europe or Japan likely; 2–4 bases joined by rail; a car would be a red flag."
+ }
+]

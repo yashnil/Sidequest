@@ -213,7 +213,16 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
   const driveCap = input.audit?.checks.find((c) => c.id === 'drive_cap');
   /* Over the traveller's own ceiling is a contradiction; over Sidequest's default is a caution. */
   const driveCapIsTheirs = input.contract ? !modelMayOverride(input.contract.transport.maxDailyDriveMinutes.lock) : false;
-  if (driveCap && !driveCap.ok) items.push({ area: 'transport', severity: driveCapIsTheirs ? 'blocker' : 'caution', detail: `${driveCapIsTheirs ? 'Driving runs over the ceiling you set' : 'A long driving day'}: ${driveCap.detail}.` });
+  /*
+   * Beta pass — a stated ceiling a day runs over is the traveller's decision
+   * (keep the long day, or drop a stop), not an impossibility, so it is a
+   * dependency. Where the planner wrote a travel-limit record, that record
+   * speaks for the same days with the choices attached (and goes quiet once
+   * the traveller keeps a day), so this check would only repeat it — and, as a
+   * second item the choice never clears, hold the headline after the choice.
+   */
+  const travelLimitSpeaks = (pkg?.planning?.travelLimit?.days.length ?? 0) > 0;
+  if (driveCap && !driveCap.ok && !(driveCapIsTheirs && travelLimitSpeaks)) items.push({ area: 'transport', severity: driveCapIsTheirs ? 'dependency' : 'caution', detail: `${driveCapIsTheirs ? 'Driving runs over the ceiling you set' : 'A long driving day'}: ${driveCap.detail}.` });
   const modePlausible = input.audit?.checks.find((c) => c.id === 'mode_plausible');
   if (modePlausible && !modePlausible.ok) items.push({ area: 'transport', severity: 'caution', detail: `A walk is written where the distance needs wheels: ${modePlausible.detail}.` });
   /* A stated prohibition against a mode the plan uses is a contradiction of a locked fact. */
@@ -333,12 +342,7 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
    * day, add a night, drop the move) — a dependency they own. Over Sidequest's
    * own default it is a caution: a preference traded off, and said.
    */
-  const travelLimit = pkg?.planning?.travelLimit;
-  for (const day of travelLimit?.days ?? []) {
-    const choices = (travelLimit?.choices ?? []).filter((c) => c.dayNumber === day.dayNumber).map((c) => c.label);
-    const detail = `Day ${day.dayNumber} has about ${Math.round(day.travelMinutes)} minutes of travel, over the ${travelLimit!.limitMinutes} a day ${travelLimit!.hard ? 'you set' : 'Sidequest assumed'}.${choices.length > 0 ? ` Choose: ${choices.join('; ')}.` : ''}`;
-    items.push({ area: 'transport', severity: travelLimit!.hard ? 'dependency' : 'caution', dayNumber: day.dayNumber, detail });
-  }
+  items.push(...travelLimitFeasibilityItems(pkg?.planning?.travelLimit));
   const bookedRespected = input.audit?.checks.find((c) => c.id === 'booked_respected');
   if (bookedRespected && !bookedRespected.ok) items.push({ area: 'booking', severity: 'blocker', detail: bookedRespected.detail });
 
@@ -430,6 +434,47 @@ export function buildFeasibilityReport(input: FeasibilityInput): FeasibilityRepo
     }
   }
 
+  return finishFeasibilityReport(items);
+}
+
+type TravelLimitRecordShape = NonNullable<NonNullable<NonNullable<Itinerary['package']>['planning']>['travelLimit']>;
+
+/**
+ * 2026-11 — THE TRAVELLER'S DAILY TRAVEL LIMIT, AS FEASIBILITY ITEMS.
+ *
+ * A day over a limit the traveller set themselves is a decision they own (a
+ * dependency) until they make it; once they have chosen to keep the long day
+ * (`days[].accepted`) it is a caution they chose, and says so. Over
+ * Sidequest's own default it is a caution from the start.
+ */
+export function travelLimitFeasibilityItems(travelLimit: TravelLimitRecordShape | undefined): FeasibilityItem[] {
+  if (!travelLimit) return [];
+  return travelLimit.days.map((day) => {
+    if (day.accepted) {
+      return { area: 'transport' as const, severity: 'caution' as const, dayNumber: day.dayNumber, detail: `Day ${day.dayNumber} keeps about ${Math.round(day.travelMinutes)} minutes of travel, over the ${travelLimit.limitMinutes} a day you set — you chose to keep it as planned.` };
+    }
+    const choices = (travelLimit.choices ?? []).filter((c) => c.dayNumber === day.dayNumber).map((c) => c.label);
+    const detail = `Day ${day.dayNumber} has about ${Math.round(day.travelMinutes)} minutes of travel, over the ${travelLimit.limitMinutes} a day ${travelLimit.hard ? 'you set' : 'Sidequest assumed'}.${choices.length > 0 ? ` Choose: ${choices.join('; ')}.` : ''}`;
+    return { area: 'transport' as const, severity: travelLimit.hard ? ('dependency' as const) : ('caution' as const), dayNumber: day.dayNumber, detail };
+  });
+}
+
+/** Whether a stored item is one `travelLimitFeasibilityItems` wrote. */
+function isTravelLimitItem(item: FeasibilityItem): boolean {
+  return item.area === 'transport' && item.dayNumber !== undefined && /^Day \d+ (has|keeps) about \d+ minutes of travel, over the \d+ a day /.test(item.detail);
+}
+
+/**
+ * The stored report with its travel-limit items replaced by the ones the
+ * record now implies, and the verdict re-derived. Everything else in the
+ * report is kept exactly: a travel-limit choice changes one day, and the
+ * other findings were made on facts it does not touch.
+ */
+export function refreshTravelLimitFeasibility(report: FeasibilityReport, travelLimit: TravelLimitRecordShape | undefined): FeasibilityReport {
+  return finishFeasibilityReport([...report.items.filter((item) => !isTravelLimitItem(item)), ...travelLimitFeasibilityItems(travelLimit)]);
+}
+
+function finishFeasibilityReport(items: readonly FeasibilityItem[]): FeasibilityReport {
   // --- verdict ---------------------------------------------------------------------------
   const SEVERITY_RANK = { blocker: 0, dependency: 1, caution: 2 } as const;
   const deduped = items

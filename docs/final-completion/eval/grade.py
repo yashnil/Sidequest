@@ -25,9 +25,10 @@ V3 = HERE.parent.parent / 'experience-transformation' / 'eval-v3'
 spec = importlib.util.spec_from_file_location('v3grade', V3 / 'grade.py')
 v3 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v3)
-for r in json.loads((HERE / 'requirements-unseen.json').read_text()):
-    v3.v2.REQ[r['scenario']] = r
-v3.NO_SELF_DRIVE.add('oaxaca-food-culture')
+for name in ('requirements-unseen.json', 'requirements-beta.json'):
+    for r in json.loads((HERE / name).read_text()):
+        v3.v2.REQ[r['scenario']] = r
+v3.NO_SELF_DRIVE.update({'oaxaca-food-culture', 'torres-w-trek', 'advisor-history-rail'})
 
 
 def grade_row(r):

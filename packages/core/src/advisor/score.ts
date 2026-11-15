@@ -540,6 +540,18 @@ function groupMeasure(destination: Destination, profile: AdvisorProfile): { meas
       parts.push(destination.family / 3);
       notes.push(destination.family >= 2 ? 'good with children' : 'harder with children');
     }
+    /*
+     * What the place is about, beside its family reading: somewhere built
+     * around high, hard mountain days or multi-day treks is an adult's trip
+     * however welcoming its towns are, unless that is what was asked for.
+     */
+    const altitudeLed = (destination.experiences.high_mountains ?? 0) >= 2.5 && destination.challenge.typical >= 2;
+    const trekLed = (destination.experiences.multi_day_trekking ?? 0) >= 2.5 && destination.challenge.typical >= 2;
+    const askedForIt = (profile.wants.high_mountains ?? 0) + (profile.wants.multi_day_trekking ?? 0) >= 0.35 || (profile.adventure ?? 0) >= 2;
+    if ((altitudeLed || trekLed) && !askedForIt) {
+      parts.push(0.35);
+      notes.push(altitudeLed ? 'high, demanding mountain days are hard with children' : 'built around multi-day treks, hard with children');
+    }
   }
   if (profile.olderTravellers) {
     parts.push(destination.lowMobility === null ? UNKNOWN_SUITABILITY : (destination.lowMobility + Math.max(0, 3 - destination.remoteness)) / 6);

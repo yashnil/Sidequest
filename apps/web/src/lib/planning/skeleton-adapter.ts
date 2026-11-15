@@ -916,6 +916,8 @@ export type SkeletonCorridorLocalitySearch = (
 export interface BaseResolutionScope {
   /** ISO-3166-1 alpha-2, when the destination's own administrative identity is known. */
   countryCode?: string;
+  /** ISO 3166-2 of the destination's subdivision, when a provider published one: what runs on the ground (a railway, a metro) is asked of it (`reality/networks.ts`). */
+  regionCode?: string;
   /**
    * The destination's real published/measured extent, unclipped —
    * `GeographicScope.administrativeBoundary`, or its clipped `bounds` when

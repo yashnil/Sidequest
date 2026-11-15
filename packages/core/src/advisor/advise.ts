@@ -5,7 +5,7 @@ import { arrayWorld, type Destination, type DestinationWorld } from './destinati
 import { profileFrom, type AdvisorProfile, type FactorId } from './profile';
 import { GOOD_MONTH, compareScored, monthWord, scoreDestination, seasonModelFor, type AdvisorExclusion, type ScoredDestination } from './score';
 import { overlap, selectShortlist, similarity } from './select';
-import { durationVerdict, staysNeeded, type VacationFit } from './concept';
+import { DESCRIBES_TRIP, conceptImportance, conceptLeaning, conceptPhrase, durationVerdict, staysNeeded, type VacationFit } from './concept';
 import { advisorKm } from './origin';
 import { travellerSeason, type Activity } from '../atlas/seasonality';
 import { ADVISOR_SHORTLIST_VERSION, type AdvisorPick, type AdvisorShortlist } from './shortlist-schema';
@@ -576,13 +576,25 @@ const EXCLUSION_RELAXATION: Record<AdvisorExclusion['code'], string> = {
 
 function driversOf(profile: AdvisorProfile, picks: readonly ScoredDestination[]): string[] {
   const out: string[] = [];
+  const measuredIds = new Set<FactorId>();
+  for (const pick of picks) for (const factor of pick.factors) if (factor.measure.kind === 'measured') measuredIds.add(factor.id);
+  /*
+   * What the list was ranked on, in the order it weighed. A kind of trip that
+   * carries the reading ("rest and restoration, family time") leads, and an
+   * activity picked beside it follows: the list once said only "mountains and
+   * trekking" while it had been ranked for a restful family trip.
+   */
+  const kind = profile.concept.length > 0 && measuredIds.has('vacation') ? conceptPhrase(profile.concept) : null;
+  const kindLeads = kind !== null && (profile.focus.length === 0 || conceptImportance(profile.concept) >= DESCRIBES_TRIP);
+  if (kind && kindLeads) out.push(`The kind of trip: ${kind.toLowerCase()}`);
   if (profile.focus.length > 0) {
     const lead = profile.interests.length > 1 && profile.interests[0]!.weight > profile.interests[1]!.weight ? `, ${interestLabel(profile.focus[0]!)} first` : '';
     out.push(`What you want to do: ${joinWords(profile.focus.map(interestLabel))}${lead}`);
+  } else if (profile.inferredInterests && !kind) {
+    out.push(`What we leaned towards: ${joinWords(profile.interests.map((interest) => interestLabel(interest.key)))}`);
   }
+  if (kind && !kindLeads) out.push(`The kind of trip: ${kind.toLowerCase()}`);
   if (profile.months) out.push(`Being in season in ${monthsLabel(profile.months)}`);
-  const measuredIds = new Set<FactorId>();
-  for (const pick of picks) for (const factor of pick.factors) if (factor.measure.kind === 'measured') measuredIds.add(factor.id);
   if (measuredIds.has('adventure') && profile.adventure !== null) out.push(`Adventure: ${['comfortable', 'active', 'rugged', 'expedition-style'][profile.adventure]}`);
   if (measuredIds.has('budget') && profile.budget !== null) out.push(`Budget: ${['', 'budget-conscious', 'moderate', 'comfortable', 'luxury'][profile.budget]}`);
   if (profile.nights) out.push(`Trip length: ${profile.nights.min === profile.nights.max ? profile.nights.min : `${profile.nights.min}–${profile.nights.max}`} nights`);
@@ -592,6 +604,7 @@ function driversOf(profile: AdvisorProfile, picks: readonly ScoredDestination[])
   if (profile.novelty === 'familiar') out.push('Proven classics');
   if (profile.car === 'no_car') out.push('No car needed');
   if (profile.kids) out.push('Travelling with children');
+  else if (profile.concept.some((entry) => entry.key === 'family_bonding')) out.push('Travelling as a family');
   if (profile.limitedMobility) out.push('Limited mobility');
   return out;
 }
@@ -614,7 +627,17 @@ function openQuestionsOf(profile: AdvisorProfile): string[] {
  */
 function signaturesOf(picks: readonly ScoredDestination[], profile: AdvisorProfile): string[] {
   const wanted = (Object.entries(profile.wants) as [Experience, number][]).filter(([, weight]) => weight > 0).map(([experience]) => experience);
-  const pool = wanted.length > 0 ? wanted : (Object.keys(EXPERIENCE_LABELS) as Experience[]);
+  /*
+   * When the kind of trip carries the reading, what carries it (hot springs,
+   * lakes, a beach for a restful trip) is part of what a place is picked for,
+   * and what works against it is said last: a restful family pick reads "lakes
+   * and day hiking", not "day hiking and high mountains".
+   */
+  const leaning = conceptImportance(profile.concept) >= DESCRIBES_TRIP ? conceptLeaning(profile.concept) : {};
+  const carried = (Object.entries(leaning) as [Experience, number][]).filter(([, weight]) => weight > 0).map(([experience]) => experience);
+  const merged = [...new Set([...wanted, ...carried])];
+  const pool = merged.length > 0 ? merged : (Object.keys(EXPERIENCE_LABELS) as Experience[]);
+  const tilt = (experience: Experience) => Math.sign(leaning[experience] ?? 0);
   const leadSet = new Set<Experience>(profile.leadStated && profile.interests[0] ? (Object.keys(profile.interests[0].mapping) as Experience[]) : []);
   return picks.map((scored, index) => {
     const others = picks.filter((_, other) => other !== index);
@@ -626,7 +649,7 @@ function signaturesOf(picks: readonly ScoredDestination[], profile: AdvisorProfi
       })
       .filter((entry) => entry.mine >= 2)
       /* What the trip must be brilliant at comes first, then what sets this one apart. */
-      .sort((a, b) => Number(leadSet.has(b.experience)) - Number(leadSet.has(a.experience)) || b.edge - a.edge || b.mine - a.mine || pool.indexOf(a.experience) - pool.indexOf(b.experience));
+      .sort((a, b) => Number(leadSet.has(b.experience)) - Number(leadSet.has(a.experience)) || tilt(b.experience) - tilt(a.experience) || b.edge - a.edge || b.mine - a.mine || pool.indexOf(a.experience) - pool.indexOf(b.experience));
     return joinWords(ranked.slice(0, 2).map((entry) => EXPERIENCE_LABELS[entry.experience].toLowerCase()));
   });
 }

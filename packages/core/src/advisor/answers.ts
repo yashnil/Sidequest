@@ -74,6 +74,20 @@ export const FOCUS_EXPERIENCES: Record<FocusKey, Partial<Record<Experience, numb
 };
 
 /**
+ * How an interest reads when the kind of trip is gentle (rest, family time, a
+ * beach week, easy nature) and nothing harder was asked for: each share moves,
+ * in part, to the gentle way of having the same thing. "Mountains" on a
+ * restful family trip is walks, views and lakes, not a multi-day trek. Data,
+ * read by `profile.ts`; a stated style ("hut-to-hut", "high and wild") or a
+ * stated appetite for hard days is never softened.
+ */
+export const GENTLE_READING: Partial<Record<Experience, { to: Experience; share: number }>> = {
+  multi_day_trekking: { to: 'day_hiking', share: 1 },
+  high_mountains: { to: 'lakes', share: 0.3 },
+  glaciers_ice: { to: 'coastal_scenery', share: 0.5 },
+};
+
+/**
  * PURSUITS: one thing a traveller named that no broad focus says precisely.
  *
  * "Hot springs" is not "volcanoes", "stargazing" is not "desert" and a food

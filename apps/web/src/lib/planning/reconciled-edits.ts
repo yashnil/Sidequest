@@ -21,7 +21,7 @@ export function isReconciledItinerary(itinerary: Itinerary): boolean {
   return itinerary.package !== undefined;
 }
 
-function refillFreeTime(day: ItineraryDay, items: readonly ItineraryItem[]): ItineraryItem[] {
+export function refillFreeTime(day: ItineraryDay, items: readonly ItineraryItem[]): ItineraryItem[] {
   const kept = items.filter((item) => item.kind !== 'free_time').sort((a, b) => a.startMinute - b.startMinute);
   const gaps: { start: number; end: number }[] = [];
   let cursor = day.window.startMinute;
@@ -43,7 +43,7 @@ function refillFreeTime(day: ItineraryDay, items: readonly ItineraryItem[]): Iti
   return [...kept, ...free].sort((a, b) => a.startMinute - b.startMinute || (a.kind === 'free_time' ? 1 : -1));
 }
 
-function recomputeTotals(day: ItineraryDay, items: readonly ItineraryItem[]): ItineraryDay['totals'] {
+export function recomputeTotals(day: ItineraryDay, items: readonly ItineraryItem[]): ItineraryDay['totals'] {
   const totals = { activityMinutes: 0, driveMinutes: 0, transitMinutes: 0, walkMinutes: 0, waitMinutes: 0, unverifiedMinutes: 0, estimatedMinutes: 0, allowanceMinutes: 0, travelKm: 0, freeMinutes: 0, unmeasuredLegCount: 0 };
   for (const item of items) {
     if (item.kind === 'activity') totals.activityMinutes += item.durationMinutes;

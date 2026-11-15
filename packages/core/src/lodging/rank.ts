@@ -1,4 +1,4 @@
-import { isNotAProperty } from './property';
+import { validateLodgingCandidates } from './validate';
 import { haversineKm } from '../travel/estimate';
 import { bookingComSearchUrl, propertyMapUrl } from './links';
 import {
@@ -158,6 +158,8 @@ export interface LodgingBaseContext {
   checkOut: string;
   /** Where each day based here begins. Empty when no stop has a position. */
   dayStarts: readonly LodgingDayStart[];
+  /** Other names the base answers to (its locality, its region): a listing named only this is the place, not a property. */
+  aliases?: readonly string[];
 }
 
 /* ---------------------------------------------------------------- results */
@@ -202,6 +204,15 @@ export interface LodgingRanking {
   radiusKm: number;
   /** Why the rest were left out, counted. */
   dropped: { reason: string; count: number }[];
+  /**
+   * Rows inside the radius left out because their record did not hold together
+   * (another trade, an address that names somewhere else, a type that does not
+   * fit where it is placed, too thin to stand behind). The panel says so when
+   * it shows fewer than it could.
+   */
+  heldBack: number;
+  /** The most it would show. */
+  limit: number;
 }
 
 /* ---------------------------------------------------------------- weights */
@@ -251,6 +262,8 @@ export const LODGING_RANK_POINTS = {
 
 const WHOLE_PLACE: ReadonlySet<LodgingPropertyType> = new Set(['apartment', 'holiday_rental', 'cottage']);
 const BUDGET_TYPES: ReadonlySet<LodgingPropertyType> = new Set(['hostel', 'guesthouse', 'minshuku', 'temple_lodging', 'mountain_hut', 'campsite']);
+/** Rejections that are about a record not holding together, as opposed to distance or a missing name. */
+const HELD_BACK: ReadonlySet<string> = new Set(['not somewhere to sleep', 'filed under another trade too', 'its own address names somewhere else', 'its type does not fit where it is placed', 'too thinly listed to stand behind']);
 const RUSTIC_TYPES: ReadonlySet<LodgingPropertyType> = new Set(['mountain_hut', 'campsite']);
 
 function amenity(candidate: LodgingPropertyCandidate, kind: LodgingAmenityKind): LodgingAmenity | undefined {
@@ -496,23 +509,11 @@ export function rankLodgingProperties(
   const drop = (reason: string) => dropped.set(reason, (dropped.get(reason) ?? 0) + 1);
   const rustic = reading.themes.some((t) => t.theme === 'rustic') || reading.preferredTypes.some((t) => RUSTIC_TYPES.has(t));
 
+  /* Evidence first (`validate.ts`): a row we cannot stand behind is left out, never shown with a caveat. */
+  const validation = validateLodgingCandidates(candidates, { name: base.name, coordinates: base.coordinates, ...(base.aliases ? { aliases: base.aliases } : {}) }, { radiusKm });
+  for (const { reason } of validation.rejected) drop(reason);
   const eligible: LodgingPropertyCandidate[] = [];
-  for (const candidate of candidates) {
-    const named = candidate.name.trim().length >= 2;
-    const placed = Number.isFinite(candidate.coordinates?.lat) && Number.isFinite(candidate.coordinates?.lng) && Math.abs(candidate.coordinates.lat) <= 90 && Math.abs(candidate.coordinates.lng) <= 180;
-    if (!named || !placed) {
-      drop('no name or no position');
-      continue;
-    }
-    /* Final pass — a business filed under lodging, or a row that is only the stay's own town name. */
-    if (isNotAProperty(candidate.name, { locality: candidate.locality ?? base.name })) {
-      drop('not somewhere to sleep');
-      continue;
-    }
-    if (haversineKm(base.coordinates, candidate.coordinates) > radiusKm) {
-      drop('outside the search radius');
-      continue;
-    }
+  for (const candidate of validation.kept) {
     if (RUSTIC_TYPES.has(candidate.type) && !rustic && !(candidate.type === 'mountain_hut' && reading.mode === 'foot')) {
       drop('a campsite or hut on a trip that did not ask for one');
       continue;
@@ -575,6 +576,8 @@ export function rankLodgingProperties(
     })),
     considered: eligible.length,
     radiusKm,
+    heldBack: validation.rejected.filter((r) => HELD_BACK.has(r.reason)).length,
+    limit,
     dropped: [...dropped].map(([reason, count]) => ({ reason, count })),
   };
 }

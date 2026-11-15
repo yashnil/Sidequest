@@ -34,7 +34,7 @@ export default function PrivacyPage() {
             <li>Trip details: destination, dates, arrival and departure times, the questionnaire answers, the places you pick or reject on the Discovery Board, the plan Sidequest builds, and every change you make to it.</li>
             <li>The people you travel with, if you describe them: a name or label, relationship, and any dietary or functional needs you choose to note. These are used only as planning constraints.</li>
             <li>Booking confirmations you import (pasted text, an email file, a PDF or a photo). Card numbers and similar details are removed before anything is stored or sent; only the redacted text and the extracted facts are kept, and only after you confirm them.</li>
-            <li>Feedback you send, the decisions you record, and leanings Sidequest learns from your choices (you can dismiss any of these on your profile).</li>
+            <li>Feedback you send, the decisions you record, and leanings Sidequest learns from your choices. Learned leanings only fill in interests you did not state; you can view and dismiss any of them on your profile, or switch learning off for your account.</li>
             <li>If you sign in with Google: your Google account identifier, email address, whether Google has verified it, your display name and profile picture URL, plus any travel profile fields you fill in.</li>
           </ul>
           <p>All of this is kept in one SQLite database on the server that runs Sidequest (currently a Railway volume in the operator’s chosen region).</p>
@@ -105,6 +105,13 @@ export default function PrivacyPage() {
       ),
     },
     {
+      id: 'children',
+      heading: 'Children',
+      body: (
+        <p>Sidequest is not meant to be used by children on their own. If you plan a family trip, you may describe a child’s age or needs as a planning constraint; that is stored with the trip like any other traveller detail and deleted with it.</p>
+      ),
+    },
+    {
       id: 'your-rights',
       heading: 'Download or delete your data',
       body: (
@@ -129,8 +136,8 @@ export default function PrivacyPage() {
     <LegalDocument
       eyebrow="Sidequest"
       title="Privacy notice"
-      updated="9 November 2026"
-      intro={<p>Sidequest plans trips from what you tell it. This notice says what it keeps, what it sends to other services to do that, and how to take it back.</p>}
+      updated="15 November 2026"
+      intro={<p>Sidequest is in beta. It plans trips from what you tell it. This notice says what it keeps, what it sends to other services to do that, and how to take it back.</p>}
       sections={sections}
     />
   );

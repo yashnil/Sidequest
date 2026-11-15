@@ -8,8 +8,17 @@
  * supplement can be exercised; the supplement (`already` given) proposes the rest.
  * `stuck` alongside it makes the supplement propose nothing new, so the open-data
  * top-up and the thin-board notice can be exercised. `routegap` exercises the
- * route coverage supplement (below).
+ * route coverage supplement (below). `farpick` adds four places in a locality
+ * ending "Far Reach", which the fixture placement puts on a ring about 45 km
+ * round the first base, a quarter-turn apart: each alone is a ~140-minute round
+ * trip (inside a 150-minute daily driving limit, so the board lets the
+ * traveller include it), but any two on one day are well over it. Four picks
+ * on a three-day trip cannot all have a day to themselves, so one day stays
+ * over the traveller's own limit for a reason that is theirs — the case the
+ * limit's choices (`travel-limit-choices.ts`) exist for.
  */
+/** The locality suffix the fixture placement puts far from every base (`placement.ts#fixturePlacement`). */
+export const FIXTURE_FAR_LOCALITY = 'Far Reach';
 const KINDS = [
   ['Old Quarter', 'neighbourhood', 'classic', 120, 'easy', 'mixed', ['neighbourhoods_and_local_life', 'history_and_culture']],
   ['Cathedral', 'religious_site', 'classic', 60, 'none', 'indoor', ['architecture_and_landmarks', 'history_and_culture']],
@@ -62,7 +71,7 @@ export function fixtureScanProposal(destinationName: string, typed: string, days
       { name, locality: name, nightsHint: Math.max(1, days - 3), why: 'The natural base, with the most within reach.' },
       ...(days >= 5 ? [{ name: second, locality: second, nightsHint: 2, why: 'Closer to the outdoor side quests.' }] : []),
     ],
-    candidates: KINDS.slice(0, count).filter((_, i) => (options.already ? true : !/\bthinscan\b/i.test(typed) || i < 4)).map(([label, kind, tier, duration, intensity, exposure, interests], i) => ({
+    candidates: [...KINDS.slice(0, count).filter((_, i) => (options.already ? true : !/\bthinscan\b/i.test(typed) || i < 4)).map(([label, kind, tier, duration, intensity, exposure, interests], i) => ({
       name: `${name} ${label}`,
       locality: i >= 7 && i % 2 === 1 && days >= 5 ? second : name,
       kind,
@@ -77,7 +86,11 @@ export function fixtureScanProposal(destinationName: string, typed: string, days
       rainyDayOk: exposure === 'indoor',
       interests,
       why: `A fixture ${kind.replace(/_/g, ' ')} for testing.`,
-    })).filter((c) => !options.already?.includes(c.name)).filter(() => !(options.already && /\bstuck\b/i.test(typed))),
+    })),
+      ...(/\bfarpick\b/i.test(typed) && !options.already
+          ? ['Lookout', 'Falls', 'Gorge', 'Tower'].map((label) => ({ name: `${name} ${FIXTURE_FAR_LOCALITY} ${label}`, locality: `${name} ${FIXTURE_FAR_LOCALITY}`, kind: 'viewpoint' as const, tier: 'hidden_gem' as const, durationMinutes: 30, intensity: 'easy' as const, costLevel: 1, exposure: 'outdoor' as const, bestTime: 'any', crowd: 'quiet', booking: 'none', rainyDayOk: false, interests: ['scenic_viewpoints', 'photography_golden_hour'] as const, why: 'A fixture viewpoint at the edge of the usual reach, for testing the daily travel limit.' }))
+          : [])]
+      .filter((c) => !options.already?.includes(c.name)).filter(() => !(options.already && /\bstuck\b/i.test(typed))),
     foodAreas: [{ name: `${name} Market Hall`, locality: name, specialty: 'local dishes', why: 'Fixture food area.' }],
     skipped: [{ name: `${name} Theme Park`, reason: 'Fixture: not a fit for this traveller.' }],
     package: {

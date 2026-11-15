@@ -379,10 +379,19 @@ export function scorePlace(
      * the traveller may take it anyway, and the planner will lay the day out
      * against the same caps and say honestly what fits.
      */
+    /*
+     * "You said" only quotes a traveller who said it. A driver who was never
+     * asked the daily-driving question carries Sidequest's default ceiling, so
+     * the same refusal is put in Sidequest's own words.
+     */
+    const driveSource = profile.provenance?.daily_driving?.source;
+    const driveCapStated = driveSource === 'explicit' || driveSource === 'existing_profile';
     if (isDriving) {
       blockers.push({
         code: 'exceeds_daily_travel',
-        message: `${assessment.reach.roundTripMinutes} min of driving round trip is past the ${profile.transport.maxDailyDriveMinutes} min at the wheel you said you would accept in a day.`,
+        message: driveCapStated
+          ? `${assessment.reach.roundTripMinutes} min of driving round trip is past the ${profile.transport.maxDailyDriveMinutes} min at the wheel you said you would accept in a day.`
+          : `${assessment.reach.roundTripMinutes} min of driving round trip is past the ${profile.transport.maxDailyDriveMinutes} min a day Sidequest plans for unless you tell it otherwise.`,
       });
     } else {
       cautions.push(

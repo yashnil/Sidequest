@@ -105,6 +105,8 @@ import {
   StopEditMenu,
 } from '@/app/(product)/trips/[id]/itinerary/edit-controls';
 import { ShareControl } from '@/app/(product)/trips/[id]/itinerary/share-controls';
+import { TravelLimitChoices } from '@/app/(product)/trips/[id]/itinerary/travel-limit-controls';
+import { travelLimitDayViews, type TravelLimitDayView } from '@/lib/planning/travel-limit-choices';
 import { TripRefreshControl, type PlanningUpgrade } from './hub/TripRefreshControl';
 import { VersionHistory } from './hub/VersionHistory';
 import { isMachineWeatherLabel, travellerVoice } from './plan-language';
@@ -601,6 +603,9 @@ export function ItineraryView({
   /* V9 §17 — a split day as a structure; the booked things on that date name what needs assigning. */
   const bookedOn = (date: string) => booked.filter((b) => b.status === 'booked' && (b.date === date || (b.type === 'lodging' && b.date && b.endDate && b.date <= date && date <= b.endDate))).map((b) => b.title);
 
+  /* 2026-11 — the days over the traveller's own daily travel limit, with what they can do about each (`travel-limit-choices.ts`). */
+  const travelLimitViews = new Map(travelLimitDayViews(itinerary, { lockedPlaceIds: new Set(lockedPlaceIds), bookedPlaceIds: new Set(booked.flatMap((b) => (b.status === 'booked' && b.placeId ? [b.placeId] : []))) }).map((view) => [view.dayNumber, view] as const));
+
   const days = (
     <PlaceSheetProvider>
     <DayFocusProvider initial={itinerary.days[0]?.dayNumber ?? 1}>
@@ -663,6 +668,7 @@ export function ItineraryView({
                     dayCount={itinerary.days.length}
                     anchorRoles={anchorRoles}
                     plannedOff={plannedOffByDayNumber[day.dayNumber] ?? []}
+                    travelLimit={travelLimitViews.get(day.dayNumber) ?? null}
                     stateBadge={visibleGraph ? <StateBadge dayNumber={day.dayNumber} {...dayState(visibleGraph, day.dayNumber)} /> : null}
                     split={day.split ? <SplitPlanCard plan={splitPlanFor(day, { bookingsOnDay: bookedOn(day.date) })!} {...(tripId ? { tripId } : {})} {...(partyDifferences ? { canSuggest: true } : {})} /> : null}
                   />
@@ -2220,8 +2226,11 @@ function DayCard({
   previousBaseName,
   chapterOpening = null,
   backups = [],
+  travelLimit = null,
 }: {
   day: ItineraryDay;
+  /** 2026-11 — this day over the traveller's own daily travel limit, with the choices Sidequest can apply. Owner only. */
+  travelLimit?: TravelLimitDayView | null;
   /** The plan's own written backups; the day shows the one tied to it, if any. */
   backups?: readonly { trigger: string; alternative: string; dayNumbers?: number[] }[];
   /** Where the traveller woke up. Absent on day one, where there is no move to describe. */
@@ -2639,6 +2648,8 @@ function DayCard({
           </ul>
         </div>
       ) : null}
+
+      {tripId && travelLimit ? <TravelLimitChoices tripId={tripId} view={travelLimit} /> : null}
 
       {/* The day's own actions, together and quiet, after the plan rather than in front of it. */}
       {/* 2026-11 — the day's three actions on one quiet row: directions, edit, and the details (map, hours, weather) that open below it. */}

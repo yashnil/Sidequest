@@ -1,4 +1,4 @@
-import { boundedLegMinutes, estimateLegMinutes, haversineKm, highSpeedRailBackbone, moveSideOf, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord } from '@sidequest/core';
+import { boundedLegMinutes, busSparseWithoutRail, estimateLegMinutes, haversineKm, highSpeedRailBackbone, moveSideOf, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -211,16 +211,34 @@ export function walkNotes(args: { plan: StructurePlan; bases: readonly PlannerBa
  * unresolved, the rest day, and the way home from the trail's end. Every
  * sentence is a figure Sidequest has, labelled as measured or estimated.
  */
-export type TrailNoteCode = 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap';
+export type TrailNoteCode = 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap' | 'trail_adaptation';
 export function trailNotes(args: { trail: TrailRecord; plan: StructurePlan; bases: readonly PlannerBase[] }): { dayNumber: number; code: TrailNoteCode; note: string }[] {
   const { trail, plan } = args;
   const notes: { dayNumber: number; code: TrailNoteCode; note: string }[] = [];
+  const total = trail.stages.length;
+  /*
+   * Final pass — a stage that is not a move (a trail walked as day walks from
+   * where it sleeps, or one the nights do not hold) is still a section of the
+   * trail, walked in its order: its day says which, so the order is visible.
+   */
+  const sectionNotes = () => {
+    for (const stage of trail.stages) {
+      if (stage.dayNumber !== undefined || stage.resolution === 'alternative') continue;
+      const day = plan.days.find((d) => d.stops.some((s) => s.candidate.id === stage.placeId));
+      if (!day) continue;
+      const base = args.bases.find((b) => b.id === day.baseId)?.name;
+      notes.push({ dayNumber: day.dayNumber, code: 'trail_stage', note: `Section ${stage.order} of ${total} of the trail, walked in its order as a day walk${base ? ` from ${base}` : ''} — about ${trailHours(stage.walkMinutes)} of walking; ride back to where you sleep from where it ends.` });
+    }
+  };
   if (!trail.followed) {
     if (trail.gap) notes.push({ dayNumber: 1, code: 'trail_gap', note: trail.gap });
+    if (trail.adaptation) notes.push({ dayNumber: 1, code: 'trail_adaptation', note: trail.adaptation });
+    sectionNotes();
     return notes;
   }
+  if (trail.adaptation) notes.push({ dayNumber: trail.stages.find((s) => s.dayNumber !== undefined)?.dayNumber ?? 1, code: 'trail_adaptation', note: trail.adaptation });
+  sectionNotes();
   const scheduled = new Set(plan.days.flatMap((d) => d.stops.map((s) => s.candidate.id)));
-  const total = trail.stages.length;
   for (const stage of trail.stages) {
     if (stage.dayNumber === undefined) continue;
     const route = stage.fromName && stage.toName ? `${stage.fromName} → ${stage.toName}` : stage.name;
@@ -240,7 +258,9 @@ export function trailNotes(args: { trail: TrailRecord; plan: StructurePlan; base
         ? `; set off at ${trailClock(setOff)}`
         : '';
     const addedBed = stage.addedBed && stage.toName ? ` ${stage.toName} was not one of the proposed beds: book a bed there before you go.` : '';
-    notes.push({ dayNumber: stage.dayNumber, code: 'trail_stage', note: `Stage ${stage.order} of ${total}: ${route}${figures ? `, ${figures}` : ''} (${basis}) — about ${trailHours(stage.walkMinutes)} of walking${timing}.${stage.resolution === 'split' && stage.note && stage.part === 1 ? ` ${stage.note}` : ''}${addedBed}` });
+    /* A gap in the trail before this stage: no stage was proposed between, so the way to where the walk resumes is ridden. */
+    const ride = stage.gapBeforeKm !== undefined ? ` First ride from ${stage.fromName ?? 'where you slept'} to where the walk resumes, about ${Math.round(stage.gapBeforeKm)} km away (a bus or taxi; no timetable was consulted).` : '';
+    notes.push({ dayNumber: stage.dayNumber, code: 'trail_stage', note: `Stage ${stage.order} of ${total}: ${route}${figures ? `, ${figures}` : ''} (${basis}) — about ${trailHours(stage.walkMinutes)} of walking${timing}.${ride}${stage.resolution === 'split' && stage.note && stage.part === 1 ? ` ${stage.note}` : ''}${addedBed}` });
   }
   for (const baseId of trail.restBaseIds) {
     const day = plan.days.find((d, i) => d.baseId === baseId && !d.relocation && i > 0 && i < plan.days.length - 1);
@@ -294,8 +314,17 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
     // A lock is the traveller's decision too: it outranks everything but their own skip of the same place.
     const stage = stageById.get(place.id);
     const walked = stage !== undefined && stage.resolution !== 'alternative';
+    /*
+     * Final pass — every section of a trail trip carries its place along the
+     * trail, walked as a move or not, so the days walk it in order (the
+     * planner's progression rule) and the trip is built around it: Sidequest's
+     * pick unless the traveller decided otherwise, outside the interest caps.
+     */
+    const recorded = trail?.stages.find((s) => s.placeId === place.id);
+    const orderTag = Number(tagValue(place.tags, 'trail-stage'));
+    const trailOrder = trail && recorded && recorded.resolution !== 'alternative' && Number.isFinite(orderTag) && orderTag > 0 ? orderTag : undefined;
     /* A stage the trail is walked on is Sidequest's pick for its move day unless the traveller already chose it. */
-    const status = selectionStatus === 'excluded' ? 'excluded' : lockedDay.has(place.id) ? 'must' : walked && selectionStatus === 'candidate' ? 'recommended' : selectionStatus;
+    const status = selectionStatus === 'excluded' ? 'excluded' : lockedDay.has(place.id) ? 'must' : (walked || trailOrder !== undefined) && selectionStatus === 'candidate' ? 'recommended' : selectionStatus;
     if (status === 'excluded') continue;
     const fitScore = (board as unknown as { fit?: { score?: number } }).fit?.score ?? 50;
     const primaryInterest = ((board as unknown as { fit?: { primaryInterest?: Interest } }).fit?.primaryInterest ?? place.interests[0] ?? null) as Interest | null;
@@ -334,6 +363,7 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
        * hike). A stage covered the usual other way is not workable as a walk,
        * with the reason the day also states.
        */
+      ...(trailOrder !== undefined ? { trailOrder, essential: true, primaryInterest: null } : {}),
       ...(walked ? { trailStage: true, essential: true, pinnedDay: lockedDay.get(place.id) ?? stage.dayNumber!, bestTime: 'any' as const, primaryInterest: null } : {}),
       ...(stage && !walked ? { blocked: stage.note ?? 'Not walked on this trip.', blockedCode: 'too_strenuous' } : {}),
     };
@@ -349,6 +379,27 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
   for (const c of pool) coordinates.set(c.id, c.coordinates);
   const walkEnds = new Map(pool.filter((c) => c.walkEnd).map((c) => [c.id, c.walkEnd!] as const));
   for (const b of bases) coordinates.set(b.id, b.coordinates);
+  /*
+   * Transport infrastructure is a fact about the ground, not the country
+   * (`@sidequest/core` `reality/networks.ts`): every "does a train run here?"
+   * below is asked with the scope's subdivision and the leg's own points, so
+   * an island region never inherits its country's mainland railway.
+   */
+  const networkScope: PlannerNetworkScope = {
+    countryCode: compiled.scope.countryCode ?? null,
+    regionCode: compiled.scope.administrative?.regionCode ?? null,
+    /*
+     * Where the ground's own row says buses are thin and there is no railway
+     * wherever the traveller sleeps, a car-free trip moves by taxi and arranged
+     * transfer — not on a bus timetable that barely reaches the places on the
+     * board. Data, never a place name; a followed trail keeps its buses and an
+     * operator keeps its vehicle.
+     */
+    transfers: false,
+  };
+  networkScope.transfers = !input.carAvailable && input.groundArrangement !== 'operator' && !trailFollowed && busSparseWithoutRail(networkScope.countryCode, { regionCode: networkScope.regionCode, points: bases.map((b) => b.coordinates) });
+  const carFreeMode = networkScope.transfers ? ('drive' as const) : ('rail' as const);
+  const hsrBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => highSpeedRailBackbone(networkScope.countryCode, { regionCode: networkScope.regionCode, points: [a, b] });
   /* The proposed places to sleep the stays do not use: only ever named as a night that would break a move over the limit. */
   const otherBases = compiled.bases
     .map((b) => ({ id: b.routingId ?? b.id, name: b.name, coordinates: b.coordinates }))
@@ -384,7 +435,7 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
           const onward = baseMinutes(from, to);
           return back !== undefined && onward !== null ? back + onward : onward;
         }
-        return haversineKm(end, target) <= 1.6 ? estimateLegMinutes({ from: end, to: target, mode: 'walk' })?.minutes ?? null : estimateLegMinutes({ from: end, to: target, mode: 'rail' })?.minutes ?? null;
+        return haversineKm(end, target) <= 1.6 ? estimateLegMinutes({ from: end, to: target, mode: 'walk' })?.minutes ?? null : estimateLegMinutes({ from: end, to: target, mode: carFreeMode, highSpeedRail: carFreeMode === 'rail' && hsrBetween(end, target) })?.minutes ?? null;
       }
     }
     return baseMinutes(from, to);
@@ -405,7 +456,7 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
     }
     // Car-free: a short walk is a walk; anything longer is public transport, estimated, never an impossible walk.
     if (pa && pb && haversineKm(pa, pb) <= 1.6) return typeof measured === 'number' && Number.isFinite(measured) ? measured : estimateLegMinutes({ from: pa, to: pb, mode: 'walk' })?.minutes ?? null;
-    return pa && pb ? estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail: highSpeedRailBackbone(compiled.scope.countryCode) })?.minutes ?? null : null;
+    return pa && pb ? estimateLegMinutes({ from: pa, to: pb, mode: carFreeMode, highSpeedRail: carFreeMode === 'rail' && hsrBetween(pa, pb) })?.minutes ?? null : null;
   };
 
   // --- weather per day, at the base where that night is spent --------------------------------
@@ -471,7 +522,7 @@ export function composeWithPlanner(rawInput: PlannerComposeInput): PlannerCompos
   if (trail) plan.dayNotes.push(...trailNotes({ trail, plan, bases }));
 
   const seasonalNotes = new Map(compiled.places.filter((p) => p.seasonalAccess.closureRisk !== 'none' && p.seasonalAccess.note).map((p) => [p.id, p.seasonalAccess.note!] as const));
-  const draft = draftFromPlan({ plan, bases, input, windows, poolSize: pool.length, minutes, coordinates, seasonalNotes });
+  const draft = draftFromPlan({ plan, bases, input, windows, poolSize: pool.length, minutes, coordinates, seasonalNotes, network: networkScope });
   if (trailFollowed && draft.package) {
     /* The two things a walk from inn to inn stands on, said before anything else the traveller books. */
     const prep = clip('Book a bed at every stage end, and a luggage transfer for each walking day — both need notice, and the inns can often arrange the bags.', DRAFT_SOFT_PROSE_CAPS.beforeYouGo);
@@ -565,6 +616,13 @@ export function themeFor(day: StructurePlan['days'][number], baseName: string, i
   return clip(body || `A slower day around ${baseName}`, DRAFT_SOFT_PROSE_CAPS.dayTheme);
 }
 
+/** Where the planner asks whether a train, a metro or a bus runs: the scope's country, its subdivision, and whether the ground says to ride taxis instead. */
+export interface PlannerNetworkScope {
+  countryCode: string | null;
+  regionCode: string | null;
+  transfers: boolean;
+}
+
 /** A car-free move shorter than this is a bus even where the country's backbone is rail. */
 export const MIN_CAR_FREE_RAIL_KM = 25;
 
@@ -581,19 +639,22 @@ export function carFreeMoveFor(
   to: { lat: number; lng: number } | undefined,
   countryCode: string | null | undefined,
   stops: readonly ({ lat: number; lng: number } | undefined)[] = [],
+  /** The scope's ISO 3166-2 subdivision; with the two beds it decides whether a train runs here (`reality/networks.ts`). */
+  regionCode?: string | null,
 ): { how: 'rail' | 'high_speed_rail' | 'bus'; when?: 'start' } | null {
   if (!from || !to) return null;
   const km = haversineKm(from, to);
   if (km <= 1.5) return null;
   const when = stops.some((stop) => moveSideOf(from, to, stop ?? null) === 'origin') ? {} : { when: 'start' as const };
-  if (km >= 100 && highSpeedRailBackbone(countryCode)) return { how: 'high_speed_rail', ...when };
+  const locator = { regionCode, points: [from, to] };
+  if (km >= 100 && highSpeedRailBackbone(countryCode, locator)) return { how: 'high_speed_rail', ...when };
   /*
    * A train only where the country's facts say trains run between towns, and
    * only for a hop long enough to be one: the facts are national, not a station
    * in every village, and a 9 km move between two Kii mountain villages printed
    * as a train. A shorter hop is the bus that does run.
    */
-  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode).intercityRail ? 'rail' : 'bus', ...when };
+  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode, locator).intercityRail ? 'rail' : 'bus', ...when };
 }
 
 function draftFromPlan(args: {
@@ -605,14 +666,16 @@ function draftFromPlan(args: {
   minutes: (a: string, b: string) => number | null;
   coordinates: Map<string, { lat: number; lng: number }>;
   seasonalNotes: ReadonlyMap<string, string>;
+  network?: PlannerNetworkScope;
 }): TripDraft {
   const { plan, bases, input } = args;
+  const networkScope: PlannerNetworkScope = args.network ?? { countryCode: input.region.compiled.scope.countryCode ?? null, regionCode: input.region.compiled.scope.administrative?.regionCode ?? null, transfers: false };
   const extras = input.extras;
   const draftBaseId = new Map(bases.map((b, i) => [b.id, `base-${i + 1}`]));
   const baseName = new Map(bases.map((b) => [b.id, b.name]));
   /* What public transport the country has, so a car-free leg never names a train that does not run. */
   /* A metro serves cities: on a regional, rural or trail trip a short hop is a bus even where the country has a metro somewhere. */
-  const countryNetwork = publicTransportNetwork(input.region.compiled.scope.countryCode);
+  const countryNetwork = publicTransportNetwork(networkScope.countryCode, { regionCode: networkScope.regionCode });
   const cityScale = input.region.compiled.scope.breadth === 'city' || input.region.compiled.scope.breadth === 'local';
   /* A trail corridor can read as "local" scope; a hop between its villages is a bus, never a metro (eval v3: "≈30 min train · ~4 km" to Chikatsuyu-oji). */
   const onTrail = input.region.basePortfolio?.decision?.trail?.followed === true;
@@ -634,7 +697,10 @@ function draftFromPlan(args: {
       const c = stop.candidate;
       const from = args.coordinates.get(previous);
       const km = from ? haversineKm(from, c.coordinates) : null;
-      const transport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category, { ...(input.groundArrangement ? { arrangement: input.groundArrangement } : {}), ...dayNetwork });
+      /* Per leg: the services the ground under both ends has (an island stop never takes the mainland's train). */
+      const legNetwork = from ? publicTransportNetwork(networkScope.countryCode, { regionCode: networkScope.regionCode, points: [from, c.coordinates] }) : dayNetwork;
+      const legTransport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category, { ...(input.groundArrangement ? { arrangement: input.groundArrangement } : {}), intercityRail: dayNetwork.intercityRail && legNetwork.intercityRail, metro: dayNetwork.metro && legNetwork.metro });
+      const transport = networkScope.transfers && legTransport === 'bus' ? 'taxi' : legTransport;
       previous = c.id;
       return {
         name: clip(c.name, 60),
@@ -692,7 +758,7 @@ function draftFromPlan(args: {
       ...(day.relocation && day.stops.some((s) => s.candidate.trailStage)
         ? { move: { how: 'walk' as const } }
         : day.relocation && !input.carAvailable
-        ? ((move) => (move ? { move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), input.region.compiled.scope.countryCode, day.stops.map((s) => args.coordinates.get(s.candidate.id) ?? s.candidate.coordinates)))
+        ? ((move) => (move ? { move: networkScope.transfers && move.how === 'bus' ? { ...move, how: 'taxi' as const } : move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), networkScope.countryCode, day.stops.map((s) => args.coordinates.get(s.candidate.id) ?? s.candidate.coordinates), networkScope.regionCode))
         : {}),
       anchors,
       meals: {
@@ -736,7 +802,8 @@ function draftFromPlan(args: {
   const urban = !input.carAvailable || bases.length === 1 && scheduled.every((c) => (args.minutes(bases[0]!.id, c.id) ?? 0) <= 45);
 
   const draft = {
-    archetype: archetypeFor({ bases: bases.length, carAvailable: input.carAvailable, urban }),
+    /* A car-free journey between beds is a rail route only where trains run between them; otherwise it is a moving route by road. */
+    archetype: ((a) => (a === 'rail_route' && !publicTransportNetwork(networkScope.countryCode, { regionCode: networkScope.regionCode, points: bases.map((b) => b.coordinates) }).intercityRail ? 'moving_route' : a))(archetypeFor({ bases: bases.length, carAvailable: input.carAvailable, urban })),
     /* About the trip, not about Sidequest's working: how many board places were weighed is the page's business, not the headline's. */
     purpose: clip(`${plan.days.length} days in ${input.destinationName}${topInterests.length > 0 ? `, built around ${joinAnd(topInterests)}` : ''}.`, DRAFT_SOFT_PROSE_CAPS.purpose),
     routeRationale: clip(
@@ -747,7 +814,7 @@ function draftFromPlan(args: {
     ),
     assumptions: [
       clip('Opening hours and access are checked when the plan is built where a provider has them; check the rest before you go.', DRAFT_SOFT_PROSE_CAPS.assumption),
-      ...(input.carAvailable ? [] : [clip('Public transport times are estimates; no timetable was consulted.', DRAFT_SOFT_PROSE_CAPS.assumption)]),
+      ...(input.carAvailable ? [] : [clip(networkScope.transfers ? 'Taxi and transfer times are estimated from distance; nobody quoted a fare or a pickup.' : 'Public transport times are estimates; no timetable was consulted.', DRAFT_SOFT_PROSE_CAPS.assumption)]),
     ],
     tradeoffs: plan.dropped
       .filter((d) => d.reason === 'capacity' && d.candidate.status !== 'candidate')
@@ -764,11 +831,11 @@ function draftFromPlan(args: {
     unresolved: plan.mustConflicts.slice(0, 8).map((m) => clip(`${m.name}: you asked for it, and it did not fit — ${m.detail}`, DRAFT_SOFT_PROSE_CAPS.unresolvedItem)),
     bookingPriorities: [...bookingLines, ...(extras?.package.bookingPriorities ?? [])].slice(0, 8).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.bookingPriority)),
     ...(signatures.length > 0 ? { signatures } : {}),
-    driving: input.groundArrangement === 'operator' ? 'operator_transfer' : input.carAvailable ? 'rental_self_drive' : 'none',
+    driving: input.groundArrangement === 'operator' ? 'operator_transfer' : input.carAvailable ? 'rental_self_drive' : networkScope.transfers ? 'taxi_rideshare' : 'none',
     package: {
       foodStrategy: (extras?.package.foodStrategy ?? []).slice(0, 8).map((line) => clip(line, DRAFT_SOFT_PROSE_CAPS.foodStrategy)),
       transport: (() => {
-        const derived = transportStrategyFor({ plan, bases, carAvailable: input.carAvailable, maxDailyTravelMinutes: input.carAvailable && input.maxDailyDriveMinutes ? Math.min(input.maxDailyTravelMinutes, input.maxDailyDriveMinutes) : input.maxDailyTravelMinutes, minutes: args.minutes, coordinates: args.coordinates });
+        const derived = transportStrategyFor({ plan, bases, carAvailable: input.carAvailable, transfers: networkScope.transfers, maxDailyTravelMinutes: input.carAvailable && input.maxDailyDriveMinutes ? Math.min(input.maxDailyTravelMinutes, input.maxDailyDriveMinutes) : input.maxDailyTravelMinutes, minutes: args.minutes, coordinates: args.coordinates });
         if (input.groundArrangement === 'operator') {
           return {
             summary: clip('An operator’s driver-guide and vehicle run the game drives and the roads between stays; nobody needs to hire or drive a car.', DRAFT_SOFT_PROSE_CAPS.transportSummary),
@@ -843,6 +910,8 @@ export function transportStrategyFor(input: {
   maxDailyTravelMinutes: number;
   minutes: (a: string, b: string) => number | null;
   coordinates: Map<string, { lat: number; lng: number }>;
+  /** The ground's own row says buses are thin and no railway runs: a car-free trip moves by taxi and transfer. */
+  transfers?: boolean;
 }): { summary: string; notes: string[] } {
   const hops: number[] = [];
   let furthest = 0;
@@ -868,6 +937,10 @@ export function transportStrategyFor(input: {
     } else {
       summary = `A car: stops sit up to ${Math.round(furthest)} minutes from where you sleep, and a typical day has about ${typical} minutes of driving against your ${input.maxDailyTravelMinutes}-minute limit.`;
     }
+  } else if (input.transfers) {
+    summary = `Taxis and arranged transfers: buses here are thin away from the main towns and there is no railway, so the longer hops are rides somebody else drives; a typical day has about ${typical} minutes of travel, estimated from distance.`;
+    notes.push('A hire car would make these days simpler for anyone in the party willing to drive.');
+    notes.push('Arrange the longer rides (to trailheads and viewpoints) the day before; taxis are scarce away from the main towns.');
   } else if (walkable >= 0.5) {
     summary = `On foot and by public transport: ${Math.round(walkable * 100)}% of the hops between stops are walks; the longer ones are public-transport rides, estimated rather than timed.`;
   } else {
@@ -942,6 +1015,13 @@ export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFa
    */
   const interior = composed.plan.days.slice(1, -1).filter((day) => day.capacityMinutes >= MIN_STOP_WINDOW_MINUTES && !day.relocation);
   if (!interior.some((day) => day.stops.length === 0)) return null;
+  /*
+   * Final pass — a trail trip's empty day is a rest day between stages, not a
+   * thin board, and the composition fallback knows nothing of the trail's
+   * order or its beds: handing the trip to it is how a walk becomes day trips
+   * in any order. The planner's plan, walked in order, stands.
+   */
+  if ((composed.stay?.trail?.stages.length ?? 0) > 0) return null;
   if (composed.poolSize === 0) return 'insufficient_placed_candidates';
   /* Everything plannable was either scheduled or left out for a reason other than the day being full: nothing remains to put on the empty day. */
   const spare = composed.plan.dropped.filter((d) => d.reason !== 'excluded' && d.reason !== 'out_of_season' && d.reason !== 'closed' && d.reason !== 'not_workable');

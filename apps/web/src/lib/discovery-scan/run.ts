@@ -29,6 +29,7 @@ import {
   type ScopeBreadth,
   JOURNEY_ARCHETYPE_LABELS,
   withStatedBases,
+  singleRegionCode,
 } from '@sidequest/core';
 import { getIntent, readProviderCache, writeProviderCache } from '../db/compiler-repository';
 import { getProfile, getTrip, setSelection, travellerDecisions } from '../db/repository';
@@ -774,6 +775,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       breadth: breadthFor(envelope.scale),
       center: envelope.center,
       ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
+      /* The one ISO 3166-2 subdivision the concept names, so "does a train run here?" is asked of the ground, not the country (`reality/networks.ts`). */
+      ...((code) => (code ? { regionCode: code } : {}))(singleRegionCode(concept?.jurisdictions, envelope.countryCode)),
       timeZone: envelope.timeZone ?? 'UTC',
       /* Each base, forecast point and trail stage reads its own zone from the boundaries; the envelope's is the fallback. */
       zoneAt: zoneAtPoint,

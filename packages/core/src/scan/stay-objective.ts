@@ -197,6 +197,8 @@ export interface TrailLink {
   /** The stage's walking time, from its distance and ascent. */
   walkMinutes: number;
   placeId: string;
+  /** A stage after a gap in the trail: the ride from the bed to where the walk resumes, estimated. */
+  transferMinutes?: number;
 }
 
 /**
@@ -427,7 +429,7 @@ function evaluate(model: Model, stays: readonly { baseId: string; nights: number
     /* A trail stage that ends at the next bed is the move: walked, bags sent ahead, no transfer to pay. */
     const stage = input.trailLinks?.find((link) => link.fromBaseId === from && link.toBaseId === to);
     if (stage) {
-      dayTransfer[d] = stage.walkMinutes;
+      dayTransfer[d] = stage.walkMinutes + (stage.transferMinutes ?? 0);
       walkedMoves.add(stage.placeId);
       continue;
     }

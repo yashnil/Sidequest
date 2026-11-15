@@ -34,6 +34,7 @@ import {
   trailBedChain,
   trailDayMinutes,
   trailLimitsFor,
+  trailAdaptation,
   trailStageRecord,
   trailStartMinute,
   TRAIL_DUSK_MARGIN_MINUTES,
@@ -738,7 +739,8 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
    */
   const pointAt = new Map(plan.points.map((p) => [p.id, p.coordinates] as const));
   /* Where the country's facts make high-speed rail the backbone, a long car-free hop is priced as one (`travel/estimate.ts`). */
-  const highSpeedRail = highSpeedRailBackbone(input.countryCode);
+  /* Per pair: an island region of a high-speed country is not on that backbone (`reality/networks.ts`). */
+  const highSpeedRail = (pa: { lat: number; lng: number }, pb: { lat: number; lng: number }) => highSpeedRailBackbone(input.countryCode, { regionCode: input.regionCode, points: [pa, pb] });
   const minutes = (a: string, b: string): number | null => {
     const measured = matrixMinutes(a, b);
     if (matrix.mode !== 'foot') return measured;
@@ -746,7 +748,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const pb = pointAt.get(b);
     if (!pa || !pb) return measured;
     if (haversineKm(pa, pb) <= CAR_FREE_WALK_KM) return measured;
-    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail })?.minutes ?? measured;
+    return estimateLegMinutes({ from: pa, to: pb, mode: 'rail', highSpeedRail: highSpeedRail(pa, pb) })?.minutes ?? measured;
   };
   const kmBetween = (a: string, b: string): number | null => {
     const i = index.get(a);
@@ -770,7 +772,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
     const at = pointAt.get(baseId);
     if (!at) return null;
     if (haversineKm(at, point) <= CAR_FREE_WALK_KM) return 0;
-    return estimateLegMinutes({ from: point, to: at, mode: matrix.mode === 'foot' ? 'rail' : 'drive', highSpeedRail })?.minutes ?? null;
+    return estimateLegMinutes({ from: point, to: at, mode: matrix.mode === 'foot' ? 'rail' : 'drive', highSpeedRail: highSpeedRail(point, at) })?.minutes ?? null;
   };
   /*
    * A route with no known gateway begins where its first proposed base is (the
@@ -1360,21 +1362,30 @@ function planTrailStages(
    * places to sleep, said to be booked like any stage end. Nothing is
    * invented: only points the geocoder placed for the trail's own stages.
    */
+  /*
+   * Not only when nothing chains: live Kumano (second pass) chained one stage
+   * between two proposed hot-spring villages, so the stage ends were never
+   * tried and the other stages became day trips from one base. Whenever the
+   * proposed beds leave stages off the chain, the placed stage ends are tried,
+   * and kept when they carry more of the trail.
+   */
   const stageEndBedIds: string[] = [];
-  if (trail.follow && waypoints.length > 0 && trailBedChain(resolved).chain.length < 2) {
+  const chainedCount = trailBedChain(resolved).stages.length;
+  if (trail.follow && waypoints.length > 0 && chainedCount < resolved.length) {
     const retry = resolveTrailStages({ ...stageArgs, beds: [...beds, ...(stageArgs.waypoints ?? [])] });
-    const chain = trailBedChain(retry).chain;
-    if (chain.length >= 2) {
+    const retried = trailBedChain(retry);
+    if (retried.chain.length >= 2 && retried.stages.length > chainedCount) {
       resolved = retry;
-      stageEndBedIds.push(...chain.filter((id) => waypoints.some((w) => w.id === id)));
+      stageEndBedIds.push(...retried.chain.filter((id) => waypoints.some((w) => w.id === id)));
     }
   }
   /* The nights on the way that are not proposed beds become places to sleep. */
   const addedBedIds: string[] = [];
+  const headBedId = trailBedChain(resolved).chain[0];
   for (const id of stageEndBedIds) {
     if (baseEntries.some((b) => b.id === id)) continue;
     const w = waypoints.find((x) => x.id === id)!;
-    baseEntries.push({ id: w.id, proposal: { key: w.id, name: w.name, locality: w.name, nightsHint: 1, why: 'Where a trail stage ends. Book a bed here like any stage end.' } });
+    baseEntries.push({ id: w.id, proposal: { key: w.id, name: w.name, locality: w.name, nightsHint: 1, why: id === headBedId ? 'Where the trail starts. Book a bed here for the night before the first stage.' : 'Where a trail stage ends. Book a bed here like any stage end.' } });
     positions.set(w.id, { ...w.position, locality: w.position.locality ?? w.name });
     pointAt.set(w.id, w.coordinates);
     addedBedIds.push(w.id);
@@ -1411,7 +1422,12 @@ function planTrailStages(
   /* A stage the party walks (or will have to sort out on the day) is the move; one replaced by the bus is an ordinary transfer. */
   const links: TrailLink[] = chained
     .filter((stage) => stage.resolution !== 'alternative')
-    .map((stage) => ({ fromBaseId: stage.fromBaseId!, toBaseId: stage.toBaseId!, walkMinutes: stage.walkMinutes, placeId: stage.placeId }));
+    .map((stage) => {
+      /* A stage after a gap in the trail starts with a ride from tonight's bed to where the walk resumes: estimated, never measured. */
+      const bed = stage.gapBeforeKm !== undefined ? pointAt.get(stage.fromBaseId!) : undefined;
+      const ride = bed ? estimateLegMinutes({ from: bed, to: stage.start, mode: 'public_bus' })?.minutes : undefined;
+      return { fromBaseId: stage.fromBaseId!, toBaseId: stage.toBaseId!, walkMinutes: stage.walkMinutes, placeId: stage.placeId, ...(ride ? { transferMinutes: Math.round(ride) } : {}) };
+    });
   const springs = placeEntries.filter((p) => p.proposal.kind === 'hot_spring').map((p) => positions.get(p.proposal.key)?.coordinates).filter((c): c is { lat: number; lng: number } => Boolean(c));
   const restBaseIds = chain.filter((id) => {
     const point = pointAt.get(id);
@@ -1455,14 +1471,14 @@ function trailRecordFor(
   const gap = followed
     ? undefined
     : !input.trail?.follow
-      ? 'You asked to drive to the walks, so the stages are planned as day walks from where you sleep.'
+      ? 'You asked to drive to the walks, so the stages are planned as day walks from where you sleep, in the trail’s order.'
       : trail.stages.length === 0
         ? 'The scan proposed no trail stages whose ends could be placed on a map, so this plan is not a walk from inn to inn: it is planned from where it sleeps.'
         : trail.chain.length < 2
-          ? 'The trail stages the scan proposed do not end where a place to sleep was proposed, so the stays cannot follow the trail; the stages are planned as walks from where you sleep.'
+          ? 'The trail stages the scan proposed do not end where a place to sleep was proposed, so the stays cannot follow the trail; the stages are planned as walks from where you sleep, in the trail’s order.'
           : input.traveller?.moveTolerance === 'stay_put' || input.maxBaseChanges === 0
-            ? input.capReason ? `One place to sleep (${input.capReason}), so the stages are planned as day walks from it.` : 'You asked to keep one place to sleep, so the stages are planned as day walks from it.'
-            : 'The nights do not stretch to sleeping along the trail, so the stages are planned as walks from where you sleep.';
+            ? input.capReason ? `One place to sleep (${input.capReason}), so the stages are planned as day walks from it, in the trail’s order.` : 'You asked to keep one place to sleep, so the stages are planned as day walks from it, in the trail’s order.'
+            : 'The nights do not stretch to sleeping along the trail, so the stages are planned as walks from where you sleep, in the trail’s order.';
   return {
     version: 1,
     followed,
@@ -1472,6 +1488,7 @@ function trailRecordFor(
     restBaseIds: followed ? trail.restBaseIds.filter((id) => (kept.find((k) => k.id === id)?.nights ?? 0) >= 2) : [],
     ...(lastBed && returnMinutes !== undefined ? { returnLeg: { fromBaseId: lastBed, fromName: nameOf(lastBed) ?? lastBed, minutes: Math.round(returnMinutes), basis: 'estimated' as const } } : {}),
     ...(gap ? { gap } : {}),
+    ...((adaptation) => (adaptation ? { adaptation } : {}))(trailAdaptation(trail.stages, limits, followed)),
   };
 }
 

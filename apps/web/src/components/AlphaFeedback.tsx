@@ -51,7 +51,7 @@ export function AlphaFeedback({ tripId, dayCount }: { tripId: string; dayCount: 
     <Panel className="mt-10 p-5" as="section" testId="alpha-feedback">
       <details>
         <summary className="cursor-pointer text-sm font-medium text-ink">Tell us about this plan</summary>
-        <p className="mt-2 type-small text-ink-muted">Sidequest is in private alpha. What you tell us goes to the team with a link to this trip and nothing else.</p>
+        <p className="mt-2 type-small text-ink-muted">Sidequest is in beta. What you tell us goes to the team with a link to this trip and nothing else.</p>
         <fieldset className="mt-4">
           <legend className="sr-only">What is this about?</legend>
           <div className="flex flex-wrap gap-2">

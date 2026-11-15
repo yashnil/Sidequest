@@ -204,6 +204,64 @@ export function conceptMoods(concept: readonly ConceptWeight[]): { mood: MoodKey
   return [...out.entries()].map(([mood, weight]) => ({ mood, weight }));
 }
 
+/** How much the kind of trip adds beyond the activities it implies, summed over the reading (0–1). */
+export function conceptImportance(concept: readonly ConceptWeight[]): number {
+  return Math.round(concept.reduce((sum, { key, weight }) => sum + weight * IMPORTANCE[key], 0) * 1000) / 1000;
+}
+
+/**
+ * The share of a reading that leaves the kind of trip, not an activity, to say
+ * what it is about, at which the request has said what the trip is for. "A
+ * retreat with my family, outdoors stuff" has: asking it to choose between
+ * "mountains and trekking" and "rail journeys" only converts a leaning into a
+ * pursuit it never named. "Somewhere outdoors in August" (gentle nature alone)
+ * has not.
+ */
+export const DESCRIBES_TRIP = 0.6;
+
+/** True when the kind of trip says what it is about, through concepts whose experience mix stands in for an activity. */
+export function conceptDescribesTrip(concept: readonly ConceptWeight[]): boolean {
+  const carried = concept.filter(({ key }) => SHAPES[key].mood !== null);
+  return carried.length > 0 && conceptImportance(carried) >= DESCRIBES_TRIP;
+}
+
+/**
+ * Kinds of trip that ask for ease in themselves, rather than being read off an
+ * activity word: "beaches" reads as a beach holiday and "scenery" as easy
+ * nature, but neither says the mountains in the same request should be gentle
+ * ("big mountain scenery", "beaches or mountains, either is fine").
+ */
+const WANTS_EASE = new Set<ConceptKey>(['restoration', 'wellness', 'family_bonding']);
+
+/**
+ * True when most of the reading is a kind of trip that wants ease — rest,
+ * wellness, family time — so an ambiguous interest is read at its gentle end
+ * ("mountains" as walks and lakes, not a multi-day trek). A concept that wants
+ * harder days (adventure, hiking, a trek) outweighs it.
+ */
+export function conceptIsGentle(concept: readonly ConceptWeight[]): boolean {
+  const gentle = concept.filter(({ key }) => WANTS_EASE.has(key)).reduce((sum, { weight }) => sum + weight, 0);
+  const hard = concept.filter(({ key }) => SHAPES[key].effort >= 2.5).reduce((sum, { weight }) => sum + weight, 0);
+  return gentle >= 0.5 && gentle > 2 * hard;
+}
+
+/**
+ * What the kind of trip leans towards and against, as experience weights: the
+ * carriers of every concept (weighted by the concept's share and importance),
+ * minus what each concept works against. Used to put the options that fit
+ * the request first and to say on a card what carries the trip.
+ */
+export function conceptLeaning(concept: readonly ConceptWeight[]): Partial<Record<Experience, number>> {
+  const out: Partial<Record<Experience, number>> = {};
+  for (const { key, weight } of concept) {
+    const shape = SHAPES[key];
+    const scale = weight * IMPORTANCE[key];
+    for (const experience of shape.carries) out[experience] = (out[experience] ?? 0) + scale / shape.carries.length;
+    for (const experience of shape.against) out[experience] = (out[experience] ?? 0) - scale / Math.max(2, shape.against.length);
+  }
+  return out;
+}
+
 /** A concept in one phrase, for the read-back ("A restful family trip in nature"). */
 export function conceptPhrase(concept: readonly ConceptWeight[]): string | null {
   if (concept.length === 0) return null;
@@ -271,15 +329,17 @@ export const OWN_WISH_SHARE = 0.3;
  * a trek. A wish is never read back to the traveller as working against their
  * trip (`vacationFit`), and is never a disqualifier (`conflicts.ts`).
  */
-export function ownWishes(interests: readonly { any?: boolean; mapping: Partial<Record<Experience, number>> }[], concept: readonly ConceptWeight[] = []): Set<Experience> {
+export function ownWishes(interests: readonly { any?: boolean; mapping: Partial<Record<Experience, number>>; stated?: Partial<Record<Experience, number>> }[], concept: readonly ConceptWeight[] = []): Set<Experience> {
   const out = new Set<Experience>();
   for (const interest of interests) {
     if (interest.any) continue;
-    const total = Object.values(interest.mapping).reduce((sum, share) => sum + (share ?? 0), 0);
+    /* What they asked for, before any gentler reading of it. */
+    const mapping = interest.stated ?? interest.mapping;
+    const total = Object.values(mapping).reduce((sum, share) => sum + (share ?? 0), 0);
     if (total === 0) continue;
-    for (const [experience, share] of Object.entries(interest.mapping) as [Experience, number][]) {
+    for (const [experience, share] of Object.entries(mapping) as [Experience, number][]) {
       if (share / total < OWN_WISH_SHARE) continue;
-      if (experience === 'multi_day_trekking' && (interest.mapping.day_hiking ?? 0) >= share) continue;
+      if (experience === 'multi_day_trekking' && (mapping.day_hiking ?? 0) >= share) continue;
       out.add(experience);
     }
   }

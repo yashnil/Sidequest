@@ -1,6 +1,8 @@
 import type { TripComposerAnswers } from '../schemas/composer';
 import type { WorldRegion } from './catalog/schema';
-import { FOCUS_KEYS, FOCUS_LABELS, emptyAdvisorAnswers, type AdvisorAnswers, type FocusKey } from './answers';
+import { FOCUS_EXPERIENCES, FOCUS_KEYS, FOCUS_LABELS, MOOD_EXPERIENCES, emptyAdvisorAnswers, type AdvisorAnswers, type FocusKey } from './answers';
+import type { Experience } from './catalog/schema';
+import { conceptDescribesTrip, conceptLeaning } from './concept';
 import { focusOf } from './profile';
 
 /**
@@ -118,6 +120,26 @@ const SEASON_OPTIONS: [string, string, TripComposerAnswers['dates']][] = [
   ['spring', 'March to May', { mode: 'season', season: 'spring', wantsRecommendation: false }],
 ];
 
+/**
+ * The interests in the order the request leans to them. What the words already
+ * said (the kind of trip, the mood) puts the options that fit it first and
+ * makes them likelier answers; with nothing said the order is the catalog's
+ * and the priors are uniform. Never a filter: every interest stays on offer.
+ */
+function focusOptions(answers: TripComposerAnswers): QuestionOption[] {
+  const said = discovery(answers);
+  const leaning: Partial<Record<Experience, number>> = { ...conceptLeaning(said.concept ?? []) };
+  for (const mood of said.moods ?? []) for (const [experience, share] of Object.entries(MOOD_EXPERIENCES[mood]) as [Experience, number][]) leaning[experience] = (leaning[experience] ?? 0) + share / 2;
+  const fit = (key: FocusKey) => (Object.entries(FOCUS_EXPERIENCES[key]) as [Experience, number][]).reduce((sum, [experience, share]) => sum + share * (leaning[experience] ?? 0), 0);
+  const fits = FOCUS_KEYS.map((key) => ({ key, fit: fit(key) }));
+  const top = Math.max(0, ...fits.map((entry) => entry.fit));
+  const weights = fits.map((entry) => ({ ...entry, weight: top > 0 ? 0.5 + Math.max(0, entry.fit) / top : 1 }));
+  const total = weights.reduce((sum, entry) => sum + entry.weight, 0);
+  return weights
+    .sort((a, b) => b.fit - a.fit || FOCUS_KEYS.indexOf(a.key) - FOCUS_KEYS.indexOf(b.key))
+    .map(({ key, weight }) => one(key, FOCUS_LABELS[key], weight / total, (next) => withDiscovery(next, { focus: [key], focusRanked: false })));
+}
+
 export const ADVISOR_QUESTIONS: readonly AdvisorQuestion[] = [
   {
     id: 'focus',
@@ -126,13 +148,17 @@ export const ADVISOR_QUESTIONS: readonly AdvisorQuestion[] = [
     select: 'many',
     effort: 1.4,
     essential: true,
-    options: () =>
-      FOCUS_KEYS.map((key) =>
-        one(key, FOCUS_LABELS[key], 1 / FOCUS_KEYS.length, (answers) => withDiscovery(answers, { focus: [key], focusRanked: false })),
-      ),
+    options: (answers) => focusOptions(answers),
     applies: () => true,
-    /* A request that named one precise thing ("hot springs") has said what the trip is about; a mood alone ("somewhere beautiful") has not. */
-    answered: (answers) => focusOf(answers).length > 0 || (discovery(answers).pursuits?.length ?? 0) > 0,
+    /*
+     * A request that named one precise thing ("hot springs") has said what the
+     * trip is about; a mood alone ("somewhere beautiful") has not. A kind of
+     * trip has when it carries the reading (`conceptDescribesTrip`): "a
+     * retreat with my family, outdoors stuff" is ranked on rest, family and
+     * gentle nature, and making it pick an activity turned the leaning into
+     * "mountains and trekking".
+     */
+    answered: (answers) => focusOf(answers).length > 0 || (discovery(answers).pursuits?.length ?? 0) > 0 || conceptDescribesTrip(discovery(answers).concept ?? []),
   },
   {
     id: 'lead',
@@ -242,12 +268,16 @@ export const ADVISOR_QUESTIONS: readonly AdvisorQuestion[] = [
     select: 'one',
     effort: 1,
     essential: false,
-    options: () => [
-      one('adults', 'Just adults', 0.65, (a) => ({ ...a, children: 0 })),
-      one('kids', 'With children', 0.2, (a) => ({ ...a, children: Math.max(1, a.children), travelerNeeds: [...new Set([...a.travelerNeeds, 'kids_under_12' as const])] })),
-      one('older', 'Older travellers', 0.1, (a) => ({ ...a, travelerNeeds: [...new Set([...a.travelerNeeds, 'seniors_in_group' as const])] })),
-      one('mobility', 'Someone with limited mobility', 0.05, (a) => ({ ...a, travelerNeeds: [...new Set([...a.travelerNeeds, 'mobility_limited' as const])] })),
-    ],
+    /* "With my family" says a family is going without saying how old: children become the likelier answer, and the first offered. */
+    options: (answers) => {
+      const family = (discovery(answers).concept ?? []).some((entry) => entry.key === 'family_bonding');
+      return [
+        one('adults', 'Just adults', family ? 0.25 : 0.65, (a) => ({ ...a, children: 0 })),
+        one('kids', 'With children', family ? 0.55 : 0.2, (a) => ({ ...a, children: Math.max(1, a.children), travelerNeeds: [...new Set([...a.travelerNeeds, 'kids_under_12' as const])] })),
+        one('older', 'Older travellers', family ? 0.15 : 0.1, (a) => ({ ...a, travelerNeeds: [...new Set([...a.travelerNeeds, 'seniors_in_group' as const])] })),
+        one('mobility', 'Someone with limited mobility', 0.05, (a) => ({ ...a, travelerNeeds: [...new Set([...a.travelerNeeds, 'mobility_limited' as const])] })),
+      ].sort((a, b) => b.prior - a.prior);
+    },
     applies: () => true,
     answered: (answers) => answers.children > 0 || answers.travelerNeeds.length > 0,
   },
