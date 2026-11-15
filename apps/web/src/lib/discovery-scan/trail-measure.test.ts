@@ -1,9 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeScanProposal } from '@sidequest/core';
 import { measureTrailStages, trailCacheKey } from './trail-measure';
+import { resetOrsBreaker } from '../providers/openrouteservice';
 import { buildScanTask, SCAN_INSTRUCTION, SCAN_PROMPT_VERSION } from './prompt';
 
 vi.mock('server-only', () => ({}));
+/* openrouteservice's quota breaker is process-wide: a 429 in one case must not shut the service for the next. */
+beforeEach(() => resetOrsBreaker());
 /* The brief's own rendering is tested with the brief; here only the task's trail words matter. */
 vi.mock('@sidequest/core', async (original) => ({ ...(await original<Record<string, unknown>>()), renderTravelerBriefXml: () => '<traveler_brief/>' }));
 
@@ -53,6 +56,7 @@ describe('a trail stage’s distance and climb, measured where possible', () => 
     const r1 = await measureTrailStages(proposal, positionOf, { http: { fetchImpl: limited, apiKey: 'test' } });
     expect(r1).toMatchObject({ calls: 1, failures: 1 });
     expect(r1.measured.size).toBe(0);
+    resetOrsBreaker();
     const broken = vi.fn(async () => json(500, { error: { code: 2099 } })) as unknown as typeof fetch;
     const r2 = await measureTrailStages(proposal, positionOf, { http: { fetchImpl: broken, apiKey: 'test' } });
     expect(r2).toMatchObject({ calls: 2, failures: 2 });
