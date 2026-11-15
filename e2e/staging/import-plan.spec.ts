@@ -42,7 +42,22 @@ test('imported itinerary: stated nights survive into a live-built trip', async (
   await asWritten.click();
   await page.waitForURL(/\/trips\/[0-9a-f-]{36}\//, { timeout: 120_000 });
   const tripId = /\/trips\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
-  if (!/\/questionnaire$/.test(page.url())) await page.goto(`/trips/${tripId}/questionnaire`);
+  /*
+   * A plan lands on /plan, where the destination is resolved; it hands over to
+   * the interview by itself, or asks which place was meant. Never skipped: the
+   * resolution is what gives the trip somewhere to be.
+   */
+  let resolution = 'interview';
+  if (!/\/questionnaire$/.test(page.url())) {
+    await page.waitForURL(/\/questionnaire$/, { timeout: 90_000 }).catch(() => undefined);
+    if (!/\/questionnaire$/.test(page.url())) {
+      resolution = (await page.locator('main').innerText().catch(() => '')).slice(0, 1500);
+      await page.screenshot({ path: `${OUT}/screens/imported-itinerary-plan-step.jpg`, type: 'jpeg', quality: 70, fullPage: true });
+      const choice = page.locator('main button, main a').filter({ hasText: /Japan|Tokyo|Continue|This one/i }).first();
+      if (await choice.isVisible().catch(() => false)) await choice.click();
+      await page.waitForURL(/\/questionnaire$/, { timeout: 120_000 });
+    }
+  }
   const defaults = page.getByTestId('interview-smart-defaults');
   await waitUntilInteractive(defaults);
   await defaults.click();
@@ -56,7 +71,7 @@ test('imported itinerary: stated nights survive into a live-built trip', async (
   await openHubView(page, 'days');
   const days = (await page.locator('#hub-view-days').innerText().catch(() => '')).slice(0, 30000);
   const plan = await readPlan(page);
-  record({ scenario: 'imported-itinerary', tripId, seconds, input: PLAN, read, headline, findings, changes, bases, stated, conflicts, overview, days, plan });
+  record({ scenario: 'imported-itinerary', tripId, seconds, resolution, input: PLAN, read, headline, findings, changes, bases, stated, conflicts, overview, days, plan });
   /* The claim under test: four stated stays, each honoured. */
   expect(stated.length).toBe(4);
   expect(stated.filter((s) => s.outcome === 'honoured').length).toBeGreaterThanOrEqual(3);
