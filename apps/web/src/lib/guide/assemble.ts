@@ -624,9 +624,10 @@ export function assembleGuide(input: GuideInput): GuideModel {
     { label: 'Stays', value: String(new Set(runs.map((run) => run.id)).size || 1) },
     { label: 'Stops', value: String(placedStops) },
   ];
-  if (strategy.totals.driveKm > 0) figures.push({ label: 'Driving', value: `${Math.round(strategy.totals.driveKm)} km` });
+  /* Final pass — a car-free trip's handful of road km (a taxi, a transfer) is not "Driving": the figure is shown only when the trip is driven. */
+  if (strategy.totals.driveKm > 0 && strategy.primaryMode === 'drive') figures.push({ label: 'Driving', value: `${Math.round(strategy.totals.driveKm)} km` });
 
-  const getAround = strategy.headline && said.take(strategy.headline) ? firstSentence(strategy.headline) : undefined;
+  const getAround = strategy.headline && said.take(strategy.headline) ? firstSentence(strategy.headline, 240) : undefined;
   const placeLang = intelligence.destinationContext.countryCode ? SCRIPT_LANG[intelligence.destinationContext.countryCode.toUpperCase()] : undefined;
 
   return {

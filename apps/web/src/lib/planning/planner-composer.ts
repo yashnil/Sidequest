@@ -122,6 +122,13 @@ export interface PlannerComposeInput {
    */
   groundArrangement?: 'operator' | 'self_drive' | 'public_transport' | 'undecided';
   /**
+   * Final pass — centres of the named parts that are cities (entity type city,
+   * metro area or municipality). A stay within reach of one is in a city, so a
+   * short car-free hop there may be the metro even on a multi-city trip
+   * ("Tokyo and Kyoto by train" printed every Tokyo hop as a bus).
+   */
+  metroAreas?: readonly { lat: number; lng: number }[];
+  /**
    * 2026-11 — the daily travel limit is the traveller's own rule (the trip
    * contract holds it at `user_explicit` or above), not Sidequest's default:
    * nothing of Sidequest's may take a day past it, and what cannot be helped is
@@ -610,7 +617,9 @@ function draftFromPlan(args: {
   /* A trail corridor can read as "local" scope; a hop between its villages is a bus, never a metro (eval v3: "≈30 min train · ~4 km" to Chikatsuyu-oji). */
   const onTrail = input.region.basePortfolio?.decision?.trail?.followed === true;
   const network = { ...countryNetwork, metro: countryNetwork.metro && cityScale && !onTrail };
+  const inMetroArea = (point: { lat: number; lng: number } | undefined) => Boolean(point && (input.metroAreas ?? []).some((c) => haversineKm(c, point) <= METRO_AREA_KM));
   const days: DraftDay[] = plan.days.map((day, i) => {
+    const dayNetwork = !network.metro && countryNetwork.metro && !onTrail && inMetroArea(args.coordinates.get(day.baseId)) ? { ...network, metro: true } : network;
     const isFirst = i === 0;
     const isLast = i === plan.days.length - 1;
     let previous = day.baseId;
@@ -618,7 +627,7 @@ function draftFromPlan(args: {
       const c = stop.candidate;
       const from = args.coordinates.get(previous);
       const km = from ? haversineKm(from, c.coordinates) : null;
-      const transport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category, { ...(input.groundArrangement ? { arrangement: input.groundArrangement } : {}), ...network });
+      const transport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category, { ...(input.groundArrangement ? { arrangement: input.groundArrangement } : {}), ...dayNetwork });
       previous = c.id;
       return {
         name: clip(c.name, 60),
@@ -909,6 +918,9 @@ export type PlannerFallbackReason = 'insufficient_candidates' | 'insufficient_pl
  */
 /** Under this much free time a day holds no stop, so its emptiness is not a shortage of candidates. */
 const MIN_STOP_WINDOW_MINUTES = 60;
+
+/** How far from a named city's centre a stay still counts as in that city, for naming the metro. */
+const METRO_AREA_KM = 25;
 
 export function plannerFallbackReasonOf(composed: PlannerComposition): PlannerFallbackReason | null {
   /*

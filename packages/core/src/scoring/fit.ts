@@ -861,7 +861,13 @@ function buildReasons(input: ReasonInput): string[] {
   if (
     assessment.detourClass === 'stretch' &&
     assessment.reach.status === 'measured' &&
-    (band === 'top_pick' || band === 'strong')
+    (band === 'top_pick' || band === 'strong') &&
+    /*
+     * Final pass — a long walking figure on a car-free trip is a stand-in for
+     * the bus or train the planner will route ("87 min on foot" printed beside
+     * a 40-minute bus). Not a claim this sentence can make.
+     */
+    !(assessment.reach.mode === 'walk' && assessment.reach.travelMinutes > 45)
   ) {
     /*
      * "Stretch" is the detour classifier's own verdict — past the radius the

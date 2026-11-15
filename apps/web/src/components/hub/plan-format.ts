@@ -66,8 +66,12 @@ export function shortDate(date: string): string {
   return humanDate(date).replace(/^\w+\s/, '');
 }
 
-export function firstSentence(text: string): string {
+export function firstSentence(text: string, max = 140): string {
   const match = /^[^.!?]*[.!?]/.exec(text.trim());
   const sentence = (match ? match[0] : text).trim();
-  return sentence.length > 140 ? `${sentence.slice(0, 137).trimEnd()}…` : sentence;
+  if (sentence.length <= max) return sentence;
+  /* Final pass — cut at a word, never mid-word ("estimated fro…" in a printed guide). */
+  const cut = sentence.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:—–-]+$/, '')}…`;
 }
