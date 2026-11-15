@@ -31,7 +31,7 @@ const KIND_KEYWORDS: { feature: string; pattern: RegExp }[] = [
   { feature: 'pace:fast', pattern: /\bpack(ed)? (more|it) in\b|\bbusier\b|\bmore stops\b/i },
 ];
 
-function interestKeywords(): { feature: string; pattern: RegExp }[] {
+export function interestKeywords(): { feature: string; pattern: RegExp }[] {
   return INTERESTS.map((interest: Interest) => {
     const label = INTEREST_LABELS[interest].toLowerCase().replace(/[^a-z ]/g, ' ').trim();
     const words = label.split(/\s+and\s+|\s+/).filter((w) => w.length > 3 && !['with', 'street', 'towns', 'easy'].includes(w));

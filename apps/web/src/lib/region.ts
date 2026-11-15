@@ -1,5 +1,6 @@
 import 'server-only';
 import {
+  applyLearnedInterests,
   buildDiscoveryBoard,
   checkRegionIntegrity,
   tripDates,
@@ -28,6 +29,7 @@ import { easternSierraRegionSource } from '@sidequest/core/data';
 import type { TravelTimeMatrix } from '@sidequest/geo';
 import { getCompiledRegion, getIntent } from './db/compiler-repository';
 import { getWeatherSnapshot, weatherScopeKey } from './weather/snapshot-repository';
+import { learnedForOwner } from './db/preference-evidence-repository';
 
 /**
  * The region id a dynamically compiled trip carries.
@@ -417,10 +419,25 @@ export function boardFor(
   profile: TravelerProfile,
   context: RegionContext,
 ): DiscoveryBoard {
+  /*
+   * Final pass — what Sidequest learned about this account fills only the
+   * interests this trip left unstated (`preference/apply.ts`), so the board,
+   * Auto-pick and the planner all rank with it; an answer given for this trip
+   * always wins. A ledger that cannot be read changes nothing.
+   */
+  const learnedProfile = ((): TravelerProfile => {
+    if (!trip.userId) return profile;
+    try {
+      const { interests, changes } = applyLearnedInterests(profile.interests, learnedForOwner({ userId: trip.userId, ownerToken: null }).learned);
+      return changes.length > 0 ? { ...profile, interests } : profile;
+    } catch {
+      return profile;
+    }
+  })();
   return buildDiscoveryBoard({
     region: context.region,
     places: context.places,
-    profile,
+    profile: learnedProfile,
     months: context.months,
     dates: context.dates,
     access: context.access,

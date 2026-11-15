@@ -123,6 +123,7 @@ export * from './lodging/links';
 export * from './lodging/rank';
 export * from './preference/evidence';
 export * from './preference/extract';
+export * from './preference/apply';
 
 export * from './weather/board';
 export * from './weather/board-backups';
