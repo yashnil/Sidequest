@@ -132,3 +132,8 @@ quota and destination-resolution failure modes found in eval-v3 and in this pass
 fixed and covered by tests; Mode 3 preserves a traveller's own plan live. Public launch needs the
 P1 list above — chiefly production routing/geocoding capacity, the Postgres move, legal review,
 and the island-transport and trail-consistency fixes. Native apps are a separate deliverable.
+
+## 12. Deployed commit and git status
+
+- Staging `https://sidequestweb-staging.up.railway.app` was confirmed (Railway deployment list, `SUCCESS`) on `7324cec`, whose application code is identical to `0704faa`, the last code commit that passed the full gate (9,738 unit tests, typecheck, lint, build, 48 desktop + 12 mobile browser tests). The commit adding this section is documentation only.
+- Branch `feat/trip-experience-release-pass`, pushed to `origin`; `main` untouched. Untracked: earlier eval runs' screenshots/PDFs under `docs/experience-transformation/` and this pass's `docs/final-completion/eval/live*/{screens,pdf}` (gitignored images and PDFs kept on disk).
