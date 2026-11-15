@@ -145,7 +145,9 @@ const FLIGHT_OFFERED_KM = 450;
 /** High-speed rail is the backbone only for real distances; a 40 km hop is a regional train or a road. */
 const HSR_MIN_KM = 100;
 /** Each way, the longest a day trip from a neighbouring bed reasonably takes. */
-export const DAY_TRIP_MAX_MINUTES = 90;
+export const DAY_TRIP_MAX_MINUTES = 120;
+/** The improved version drops at most this many stops; beyond it the traveller decides. */
+export const MAX_IMPROVEMENT_CUTS = 1;
 /** A reorder is worth saying only when it saves this share and this many straight-line km. */
 const REORDER_MIN_SHARE = 0.15;
 const REORDER_MIN_KM = 80;
@@ -482,7 +484,7 @@ export function critiquePlan(input: PlanCheckInput): PlanCheckResult {
     if (first === undefined) seen.set(key, base.index);
   }
 
-  /* ---- improve: merge short stops into day trips, cut if still too much, add nights ---- */
+  /* ---- improve: merge short stops into day trips, cut (once) if still too much, add nights ---- */
   let working: ImprovedPlanStop[] = (reorder ? [...reorder.map((i) => stops[i]!), ...stops.filter((s) => s.dayTrip)] : [...stops]).map((s) => ({ label: s.label, nights: s.nights ?? 0, dayTrip: s.dayTrip }));
   const changes: string[] = [];
   if (reorder) changes.push('Reordered to cut backtracking.');
@@ -513,10 +515,19 @@ export function critiquePlan(input: PlanCheckInput): PlanCheckResult {
       changes.push(`${label} becomes a day trip from ${host.label}.`);
     }
 
-    /* Still too many beds for the nights: drop the short stop that costs the route the most to reach. */
+    /*
+     * Still too many beds for the nights: drop the short stop that costs the
+     * route the most to reach — at most ONE. The critique does not know which
+     * stop is the traveller's highlight; cutting until the pace reads well
+     * turned "Seattle, Rainier, Olympic, Portland in 6 days" into a city pair
+     * with both parks gone. One cut, and "add nights" beside it, leaves the
+     * bigger reshaping to the traveller.
+     */
     const improvedStops = (): PlanCheckStopInput[] => working.map((s) => ({ ...byLabel.get(s.label)!, nights: s.nights, dayTrip: s.dayTrip, nightsBasis: byLabel.get(s.label)!.nightsBasis }));
     let after = readPace(improvedStops(), totalNights);
-    while (after.verdict === 'too_much' && after.bases.length > 2) {
+    let cuts = 0;
+    while (cuts < MAX_IMPROVEMENT_CUTS && after.verdict === 'too_much' && after.bases.length > 2) {
+      cuts += 1;
       const beds = working.filter((s) => !s.dayTrip);
       const candidates = beds
         .map((bed, i) => ({ bed, i }))

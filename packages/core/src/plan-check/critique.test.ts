@@ -139,3 +139,17 @@ describe('critiquePlan — unknown is not false', () => {
     }
   });
 });
+
+describe('critiquePlan — the improved version reshapes gently', () => {
+  it('drops at most one stop, and still offers to keep every stop with more nights', () => {
+    const result = critiquePlan({
+      totalNights: 6,
+      stops: [stop('Alpha', 35.68, 139.76, 2), stop('Bravo', 38.27, 140.87, 1), stop('Charlie', 37.9, 139.02, 1), stop('Delta', 36.65, 138.18, 1), stop('Echo', 36.56, 136.65, 1)],
+    });
+    expect(result.verdict).toBe('too_much');
+    expect(result.suggestions.filter((s) => s.kind === 'cut').length).toBeLessThanOrEqual(1);
+    expect(result.suggestions.some((s) => s.kind === 'add_nights')).toBe(true);
+    /* A day trip keeps a place in the trip; only a cut removes one. */
+    if (result.improved) expect(result.improved.stops.length).toBeGreaterThanOrEqual(4);
+  });
+});
