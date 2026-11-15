@@ -938,7 +938,8 @@ export interface ConceptCache {
  * 3: a city's travel extent and a type-coherent scale (V1 correctness wave).
  */
 /* 4 — production pass: a bare name two cities answer reads the one ten times larger (`promoteProminentNamesake`). 5 — only own, English and untagged names are aliases (Paris was "Bali"). 6 — a tenfold-prominent leader is not a question, a city and its same-named district are one reading, and an English-name match is exact ("Lisbon"). 7 — candidates carry the geocoder's importance and Wikidata item; a famous city abroad settles over small namesakes of another country ("Florence"), and rows of one Wikidata item or a same-named island inside its province are one reading ("Paris", "Bali"). */
-const CONCEPT_CACHE_EPOCH = 7;
+/* 8 — final pass: an `unknown` reading is never kept or served (staging served "Tanzania safari" as a settlement-scale unknown for thirty days, and its Serengeti fell outside the trip). */
+const CONCEPT_CACHE_EPOCH = 8;
 
 /** The cache key: the phrase, normalised, plus the resolution and semantics versions so a shape change invalidates everything. */
 export function conceptCacheKeyFor(text: string): string {
@@ -948,7 +949,9 @@ export function conceptCacheKeyFor(text: string): string {
 export async function resolveDestinationPhrase(input: { text: string; resolver: DestinationResolver | null; now: Date; maxGeocoderCalls?: number; interpreter?: DestinationInterpreter | null; cache?: ConceptCache }): Promise<{ outcome: GraphResolutionOutcome; resolution: DestinationResolution; semantics: DestinationSemantics }> {
   const graph = parseDestinationIntent(input.text);
   const cacheKey = conceptCacheKeyFor(input.text);
-  const cached = input.cache?.read(cacheKey) ?? null;
+  const stored = input.cache?.read(cacheKey) ?? null;
+  /* An `unknown` reading is the one a retry might improve; it is never served from the cache. */
+  const cached = stored && stored.concept.type !== 'unknown' ? stored : null;
   if (cached) {
     /*
      * A hit restores the concept *and* the resolution the same pass produced. The
@@ -976,6 +979,6 @@ export async function resolveDestinationPhrase(input: { text: string; resolver: 
    */
   const consulted = [...new Set([...(outcome.geocoderCalls > 0 && input.resolver ? [input.resolver.name] : []), ...(outcome.graph.countries.length > 0 ? ['country-reference'] : []), ...(outcome.interpretation && (outcome.interpretation.source === 'anthropic' || outcome.interpretation.source === 'cache' || outcome.interpretation.source === 'fixture') ? ['destination-interpreter'] : [])])];
   const resolution = resolutionForGraph(outcome, input.text, input.now, consulted);
-  if (input.cache && outcome.semantics.confidence !== 'low' && !centreIsStandIn(outcome.semantics.centerBasis)) input.cache.write(cacheKey, { concept: outcome.semantics, resolution });
+  if (input.cache && outcome.semantics.confidence !== 'low' && outcome.semantics.type !== 'unknown' && !centreIsStandIn(outcome.semantics.centerBasis)) input.cache.write(cacheKey, { concept: outcome.semantics, resolution });
   return { outcome, resolution, semantics: outcome.semantics };
 }
