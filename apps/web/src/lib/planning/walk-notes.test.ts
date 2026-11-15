@@ -46,6 +46,15 @@ describe('a car-free move says how it is made', () => {
     const village = { lat: 33.83, lng: 135.47 };
     expect(carFreeMoveFor(village, { lat: 33.87, lng: 135.56 }, 'JP')).toEqual({ how: 'bus', when: 'start' });
   });
+  it('opens the day with the move only when no stop is still by last night’s bed (eval v3: Bishkek → Song-Kol → back to the bazaar)', () => {
+    const bishkek = { lat: 42.87, lng: 74.6 };
+    const songKol = { lat: 41.85, lng: 75.12 };
+    const bazaar = { lat: 42.88, lng: 74.62 };
+    const shore = { lat: 41.86, lng: 75.14 };
+    expect(carFreeMoveFor(bishkek, songKol, 'KG', [shore])).toEqual({ how: expect.any(String), when: 'start' });
+    expect(carFreeMoveFor(bishkek, songKol, 'KG', [bazaar, shore])).toEqual({ how: expect.any(String) });
+    expect(carFreeMoveFor(bishkek, songKol, 'KG', [undefined, shore])).toEqual({ how: expect.any(String), when: 'start' });
+  });
   it('a hop across town, or an unplaced bed, states nothing', () => {
     expect(carFreeMoveFor(tokyo, { lat: 35.69, lng: 139.705 }, 'JP')).toBeNull();
     expect(carFreeMoveFor(undefined, kyoto, 'JP')).toBeNull();

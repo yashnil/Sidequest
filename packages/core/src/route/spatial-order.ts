@@ -30,7 +30,7 @@ import type { Coordinates } from '../schemas/common';
  *   (the chain covers the same ground more than twice).
  */
 
-export const ORDER_VIOLATION_KINDS = ['reversal', 'arrival_before_en_route', 'duplicate_crossing'] as const;
+export const ORDER_VIOLATION_KINDS = ['reversal', 'arrival_before_en_route', 'duplicate_crossing', 'move_backtrack'] as const;
 export type OrderViolationKind = (typeof ORDER_VIOLATION_KINDS)[number];
 
 export interface OrderedStop {
@@ -244,4 +244,104 @@ export function describeOrderReport(report: SpatialOrderReport, dayNumber: numbe
   if (report.verdict === 'unplaceable') return `Day ${dayNumber}'s order could not be checked: ${report.unplaced.slice(0, 3).join(', ')} ${report.unplaced.length === 1 ? 'has' : 'have'} not been placed on the map.`;
   if (report.verdict !== 'violation') return null;
   return `Day ${dayNumber}: ${report.violations[0]!.detail}`;
+}
+
+/* ============================================================================================
+ * A MOVING DAY — WHICH SIDE OF THE MOVE EACH STOP BELONGS TO.
+ * ============================================================================================ */
+
+/**
+ * Eval v3 — A BACKTRACK ACROSS THE MOVE.
+ *
+ * A live car-free Kyrgyzstan day moved Bishkek → Song-Kol by bus first thing,
+ * then sent the traveller back to Osh Bazaar in Bishkek, then back up to the
+ * lake for the night: three 160 km legs for one move. `compileSpatialOrder`
+ * judged the chain Bishkek → Osh Bazaar → stargazing → Song-Kol and found it
+ * coherent, because it did not know the day was laid out move-first.
+ *
+ * On a moving day every placed stop belongs to one side of the move: the
+ * **origin side** when it is nearer last night's base than tonight's, the
+ * **destination side** otherwise. Origin-side stops come before the move and
+ * destination-side stops after it. A stop on the origin side visited after the
+ * move (a move-first day) or after a destination-side stop (a free day) makes
+ * the traveller return toward where they left: a `move_backtrack`.
+ *
+ * The correction is the smallest one that is safely derivable: a stable
+ * partition — origin-side free stops first, destination-side after, each side
+ * in its authored order — with pinned and unplaced stops held at their own
+ * index (a pin is a decision; an unplaced stop is unknown, never "near"). When
+ * the origin side is non-empty the move cannot open the day, and `moveAt` says
+ * where it belongs.
+ */
+
+export type MoveSide = 'origin' | 'destination' | 'unknown';
+
+/** Below this the two bases are one place, and a stop has no side. */
+const SAME_PLACE_KM = 2;
+
+export function moveSideOf(origin: Coordinates | null, destination: Coordinates | null, point: Coordinates | null): MoveSide {
+  if (!origin || !destination || !point) return 'unknown';
+  if (greatCircleKm(origin, destination) <= SAME_PLACE_KM) return 'unknown';
+  return greatCircleKm(point, origin) < greatCircleKm(point, destination) ? 'origin' : 'destination';
+}
+
+export interface MoveDayInput {
+  origin: { id: string; name: string; coordinates: Coordinates | null };
+  destination: { id: string; name: string; coordinates: Coordinates | null };
+  stops: readonly OrderedStop[];
+  /** `start`: the day is laid out with the move first. `free`: the move is whichever leg crosses. */
+  moveAt: 'start' | 'free';
+}
+
+export interface MoveDayReport {
+  sides: Readonly<Record<string, MoveSide>>;
+  violations: readonly OrderViolation[];
+  /** The corrected order (the input order when nothing needed to move). */
+  order: readonly string[];
+  /** True when the corrected order differs from the input. */
+  reordered: boolean;
+  /**
+   * Where the move belongs in the corrected order: `start` (nothing on the
+   * origin side), `end` (nothing on the destination side) or `between` (after
+   * the last origin-side stop). Only `start` permits a move-first day.
+   */
+  moveAt: 'start' | 'end' | 'between';
+}
+
+export function compileMoveDay(input: MoveDayInput): MoveDayReport {
+  const origin = input.origin.coordinates;
+  const destination = input.destination.coordinates;
+  const sides: Record<string, MoveSide> = {};
+  for (const stop of input.stops) sides[stop.id] = moveSideOf(origin, destination, stop.coordinates);
+  const violations: OrderViolation[] = [];
+  let arrived = input.moveAt === 'start';
+  let arrivedAt: string | null = null;
+  for (const stop of input.stops) {
+    const side = sides[stop.id];
+    if (side === 'destination' && !arrived) {
+      arrived = true;
+      arrivedAt = stop.name;
+    } else if (side === 'origin' && arrived) {
+      const km = origin && stop.coordinates ? Math.round(greatCircleKm(stop.coordinates, origin)) : 0;
+      violations.push({
+        kind: 'move_backtrack',
+        stopId: stop.id,
+        stopName: stop.name,
+        detail: `${stop.name} is back near ${input.origin.name}${km > 0 ? ` (${km} km from it)` : ''} after the day has already moved on to ${arrivedAt ? `${arrivedAt}, near ${input.destination.name}` : input.destination.name}; it belongs before the move.`,
+      });
+    }
+  }
+
+  /* The stable partition, with pinned and unplaced stops held where they are. */
+  const held = input.stops.map((s) => s.pinned === true || sides[s.id] === 'unknown');
+  const free = input.stops.filter((_, i) => !held[i]);
+  const sorted = [...free.filter((s) => sides[s.id] === 'origin'), ...free.filter((s) => sides[s.id] === 'destination')];
+  let next = 0;
+  const order = input.stops.map((stop, i) => (held[i] ? stop.id : sorted[next++]!.id));
+  const reordered = order.some((id, i) => id !== input.stops[i]!.id);
+
+  const originCount = input.stops.filter((s) => sides[s.id] === 'origin').length;
+  const destinationCount = input.stops.filter((s) => sides[s.id] === 'destination').length;
+  const moveAt = originCount === 0 ? 'start' : destinationCount === 0 ? 'end' : 'between';
+  return { sides, violations, order, reordered, moveAt };
 }

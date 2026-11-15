@@ -11,6 +11,8 @@ import {
   haversineKm,
   normalizeScanProposal,
   planScanPoints,
+  outlyingBases,
+  type FootprintContext,
   routeCoverage,
   scanSufficiency,
   candidatesInReach,
@@ -415,15 +417,29 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         placement = { ...placement, positions: checked.positions };
       }
     }
+    /*
+     * The trip's evidence footprint: a place to sleep placed far outside it
+     * (`outlyingBases`) is unplaced by `planScanPoints` with its reason, and it
+     * is never a base the candidates are judged against below — a stray base in
+     * the wrong city would otherwise withdraw the very places that contradict it.
+     */
+    const footprint: FootprintContext = {
+      ...(concept?.extent && concept.extent.source !== 'none' ? { extent: concept.extent.bounds } : {}),
+      parts: (concept?.parts ?? []).flatMap((part) => (part.center ? [{ label: part.label, center: part.center }] : [])),
+    };
     /* …and against the proposal's own placed bases (`baseParts`): a candidate said to be at one base, placed by another, is unplaced rather than wrong. */
     {
-      const checked = withdrawCrossPartPositions(proposal, placement.positions, baseParts(proposal, placement.positions), BASE_MISMATCH_KM);
+      const outliers = outlyingBases(proposal, placement.positions, footprint);
+      if (outliers.length > 0) console.warn(`Discovery scan placement for ${tripId}: ${outliers.map((o) => `${o.name} [${o.ground}, ${o.gapKm} km]`).join('; ')} placed outside the trip's footprint, unplaced.`);
+      const judgedBases = new Map(placement.positions);
+      for (const o of outliers) judgedBases.set(o.key, null);
+      const checked = withdrawCrossPartPositions(proposal, placement.positions, baseParts(proposal, judgedBases), BASE_MISMATCH_KM);
       if (checked.withdrawn.length > 0) {
         console.warn(`Discovery scan placement for ${tripId}: ${checked.withdrawn.length} placed by a different base than their own locality, withdrawn (${checked.withdrawn.slice(0, 5).join(', ')}).`);
         placement = { ...placement, positions: checked.positions };
       }
     }
-    let plan = planScanPoints(proposal, placement.positions);
+    let plan = planScanPoints(proposal, placement.positions, { footprint });
     /*
      * A place to sleep the geocoder failed on (a timeout, a 5xx) is asked once
      * more on its own. A live Moab scan placed 25 places and lost the whole
@@ -448,7 +464,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         const positions = new Map(placement.positions);
         for (const [key, position] of again.positions) if (position) positions.set(key, position);
         placement = { ...placement, positions, geocoderCalls: placement.geocoderCalls + again.geocoderCalls };
-        plan = planScanPoints(proposal, placement.positions);
+        plan = planScanPoints(proposal, placement.positions, { footprint });
         console.warn(`Discovery scan base retry for ${tripId}: ${failedBases.map((d) => d.name).join(', ')} → ${plan.points.some((p) => p.kind === 'base') ? 'placed' : 'still unplaced'}.`);
       }
     }
@@ -527,7 +543,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         proposal = { ...proposal, bases: [...proposal.bases, ...newBases], candidates: [...proposal.candidates, ...supplement.proposal.candidates] };
         if (routeDiagnostics && newBases.length > 0) routeDiagnostics.basesAdded = newBases.length;
         placement = { ...placement, positions, diagnostics: [...placement.diagnostics, ...supplementPlacement.diagnostics.filter((d) => !d.isBase || newBases.some((b) => b.name === d.name))], placesCalls: placement.placesCalls + supplementPlacement.placesCalls, geocoderCalls: placement.geocoderCalls + supplementPlacement.geocoderCalls };
-        plan = planScanPoints(proposal, placement.positions);
+        plan = planScanPoints(proposal, placement.positions, { footprint });
         recovery.added = supplement.proposal.candidates.length;
       }
       const after = sufficiencyOf();
@@ -565,7 +581,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
             });
             proposal = { ...proposal, candidates: [...proposal.candidates, ...rekeyed] };
             placement = { ...placement, positions, providers: [...new Set([...placement.providers, 'openstreetmap'])] };
-            plan = planScanPoints(proposal, placement.positions);
+            plan = planScanPoints(proposal, placement.positions, { footprint });
             recovery.openDataAdded = rekeyed.length;
           }
         }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileSpatialOrder, describeOrderReport, greatCircleKm, type OrderedStop } from './spatial-order';
+import { compileMoveDay, compileSpatialOrder, describeOrderReport, greatCircleKm, moveSideOf, type OrderedStop } from './spatial-order';
 
 /**
  * V10 §7 — THE ICELAND ORDERING FAILURES, PINNED.
@@ -152,5 +152,60 @@ describe('the spatial-order compiler', () => {
     });
     expect(report.verdict).toBe('trivial');
     expect(Math.round(greatCircleKm(P.keflavik, P.reykjavik))).toBe(37);
+  });
+});
+
+/*
+ * Eval v3 — a moving day judged across its move. Synthetic coordinates on real
+ * ground: Bishkek → Song-Kol (≈115 km apart), the shape of the Kyrgyzstan run-3 day.
+ */
+describe('a moving day across its move', () => {
+  const K = {
+    bishkek: { lat: 42.87, lng: 74.6 },
+    songKol: { lat: 41.85, lng: 75.12 },
+    bazaar: { lat: 42.88, lng: 74.62 },
+    burana: { lat: 42.75, lng: 75.25 },
+    pass: { lat: 42.1, lng: 75.0 },
+    shore: { lat: 41.86, lng: 75.14 },
+  };
+  const origin = at('Bishkek', K.bishkek);
+  const destination = at('Song-Kol', K.songKol);
+
+  it('sides each stop by which base it is nearer, and has no side for an unplaced stop or a same-place move', () => {
+    expect(moveSideOf(K.bishkek, K.songKol, K.bazaar)).toBe('origin');
+    expect(moveSideOf(K.bishkek, K.songKol, K.shore)).toBe('destination');
+    expect(moveSideOf(K.bishkek, K.songKol, null)).toBe('unknown');
+    expect(moveSideOf(K.bishkek, { lat: 42.871, lng: 74.601 }, K.bazaar)).toBe('unknown');
+  });
+
+  it('a move-first day with a stop back by the origin is a backtrack; the move then belongs after it', () => {
+    const report = compileMoveDay({ origin, destination, stops: [stop('Osh Bazaar', K.bazaar), stop('Yurt stargazing', K.shore, 'night')], moveAt: 'start' });
+    expect(report.violations.map((v) => [v.kind, v.stopName])).toEqual([['move_backtrack', 'Osh Bazaar']]);
+    expect(report.violations[0]!.detail).toMatch(/back near Bishkek .* belongs before the move/);
+    expect(report.moveAt).toBe('between');
+    expect(report.reordered).toBe(false);
+  });
+
+  it('a free day that reaches the destination side and returns toward the origin is reordered, origin side first, each side in its own order', () => {
+    const report = compileMoveDay({ origin, destination, stops: [stop('Pass viewpoint', K.pass), stop('Osh Bazaar', K.bazaar), stop('Shore walk', K.shore), stop('Burana Tower', K.burana)], moveAt: 'free' });
+    expect(report.violations.map((v) => v.stopName)).toEqual(['Osh Bazaar', 'Burana Tower']);
+    expect(report.order).toEqual(['osh-bazaar', 'burana-tower', 'pass-viewpoint', 'shore-walk']);
+    expect(report.reordered).toBe(true);
+    expect(compileMoveDay({ origin, destination, stops: report.order.map((id) => stop(id, { 'osh-bazaar': K.bazaar, 'burana-tower': K.burana, 'pass-viewpoint': K.pass, 'shore-walk': K.shore }[id]!)), moveAt: 'free' }).violations).toEqual([]);
+  });
+
+  it('a pinned stop and an unplaced stop hold their index; the free stops partition around them', () => {
+    const report = compileMoveDay({ origin, destination, stops: [stop('Pass viewpoint', K.pass), stop('Sunset ridge', K.shore, 'sunset'), stop('Unmapped cafe', null), stop('Osh Bazaar', K.bazaar)], moveAt: 'free' });
+    expect(report.order).toEqual(['osh-bazaar', 'sunset-ridge', 'unmapped-cafe', 'pass-viewpoint']);
+    expect(report.sides['unmapped-cafe']).toBe('unknown');
+  });
+
+  it('a day already in order, or wholly on one side, is clean and says where the move goes', () => {
+    const clean = compileMoveDay({ origin, destination, stops: [stop('Osh Bazaar', K.bazaar), stop('Shore walk', K.shore)], moveAt: 'free' });
+    expect(clean.violations).toEqual([]);
+    expect(clean.reordered).toBe(false);
+    expect(clean.moveAt).toBe('between');
+    expect(compileMoveDay({ origin, destination, stops: [stop('Shore walk', K.shore)], moveAt: 'start' }).moveAt).toBe('start');
+    expect(compileMoveDay({ origin, destination, stops: [stop('Osh Bazaar', K.bazaar)], moveAt: 'free' }).moveAt).toBe('end');
   });
 });

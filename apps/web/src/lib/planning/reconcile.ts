@@ -6,6 +6,8 @@ import {
   ASSUMED_GATEWAY_TRANSFER_MINUTES,
   buildGatewayPlan,
   compileSpatialOrder,
+  compileMoveDay,
+  moveSideOf,
   describeEdgeTime,
   describeUnplaced,
   gatewayNodeSchema,
@@ -2641,6 +2643,8 @@ interface DayLayoutInput {
   confirmationMemo?: ConfirmationMemo;
   /** When the reconciliation ran — stamped on measured legs. */
   measuredAt?: string;
+  /** Eval v3 — the draft asked for the move first, but a stop still sits near last night's base; the move is the leg that crosses instead. */
+  moveDeferred?: boolean;
   /** The weather dataset days read from — the route-aware one when the caller fetched it. */
   weather: WeatherDataset;
 }
@@ -2709,7 +2713,7 @@ function orderByStatedHour(anchors: readonly ReconciledAnchor[]): ReconciledAnch
  * reported instead — §7 forbids optimising blindly, and a sunset viewpoint, an
  * opening window or a deliberate scenic sequence outranks distance.
  */
-function correctDayOrder(input: DayLayoutInput): { anchors: readonly ReconciledAnchor[]; report: SpatialOrderReport; corrected: boolean; softened: readonly string[] } {
+function correctDayOrder(input: DayLayoutInput): { anchors: readonly ReconciledAnchor[]; report: SpatialOrderReport; corrected: boolean; softened: readonly string[]; moveDeferred?: boolean } {
   const pointOf = (b: ResolvedBase | null, fallbackId: string): { id: string; name: string; coordinates: { lat: number; lng: number } | null } =>
     b ? { id: b.identity?.id ?? `base:${b.skeletonBaseId}`, name: b.displayName ?? b.name, coordinates: b.identity?.coordinates ?? null } : { id: fallbackId, name: 'your base', coordinates: null };
   const origin = input.relocation && input.previousBase ? pointOf(input.previousBase, 'base:previous') : pointOf(input.base, 'base:start');
@@ -2739,21 +2743,55 @@ function correctDayOrder(input: DayLayoutInput): { anchors: readonly ReconciledA
           { pinned: true as const, pinnedReason: `it sits inside ${input.episode!.name}` }
         : {}),
   }));
+  const byId = new Map(authored.map((a) => [a.id, a]));
+  /* A soft part-of-day hint that the reordering moved. Recorded, never silent. */
+  const softenedBy = (reordered: readonly ReconciledAnchor[]) =>
+    reordered
+      .filter((anchor, index) => timeOfDayIsBinding(anchor.draft.timeOfDay) && !timeOfDayIsHard(anchor.draft.timeOfDay) && authored[index]?.id !== anchor.id)
+      .map((anchor) => `${anchor.draft.name} (${anchor.draft.timeOfDay})`);
+  /*
+   * Eval v3 — A MOVING DAY IS JUDGED ACROSS ITS MOVE (`compileMoveDay`). A
+   * move-first day with a stop still near last night's base sent a Kyrgyzstan
+   * traveller 160 km to Song-Kol and back to Bishkek's bazaar. Stops on the
+   * origin side go before the move, those on the destination side after it;
+   * pinned stops hold their index; and a move-first day that keeps an
+   * origin-side stop no longer opens with the move (`moveDeferred`).
+   */
+  if (input.relocation && input.previousBase && origin.coordinates && destination.coordinates) {
+    const moveFirst = (input.draftDay?.move ?? null)?.when === 'start';
+    const move = compileMoveDay({ origin, destination, stops, moveAt: moveFirst ? 'start' : 'free' });
+    const moveDeferred = moveFirst && move.moveAt !== 'start';
+    if (move.violations.length > 0 || moveDeferred) {
+      const partitioned = move.order.map((id) => byId.get(id)).filter((a): a is ReconciledAnchor => a !== undefined);
+      const stopById = new Map(stops.map((s) => [s.id, s]));
+      /* The road's own order inside each side, from the unchanged compiler, once the sides are right. */
+      const within = compileSpatialOrder({ origin, destination, stops: partitioned.map((a) => stopById.get(a.id)!) });
+      const roadOrder = within.verdict === 'violation' && within.bestOrder.length === partitioned.length ? within.bestOrder.map((id) => byId.get(id)!).filter(Boolean) : partitioned;
+      /* Never a road order that crosses back over the move. */
+      const keepsSides = compileMoveDay({ origin, destination, stops: roadOrder.map((a) => stopById.get(a.id)!), moveAt: 'free' }).violations.length === 0;
+      const ordered = keepsSides ? roadOrder : partitioned;
+      const report: SpatialOrderReport = {
+        ...within,
+        verdict: move.violations.length > 0 || within.verdict === 'violation' ? 'violation' : within.verdict,
+        bestOrder: ordered.map((a) => a.id),
+        violations: [...move.violations, ...within.violations],
+      };
+      const changed = ordered.some((a, i) => a.id !== authored[i]!.id);
+      return { anchors: ordered, report, corrected: changed || moveDeferred, softened: softenedBy(ordered), moveDeferred };
+    }
+  }
   const report = compileSpatialOrder({ origin, destination, stops });
   if (report.verdict !== 'violation' || report.bestOrder.length !== authored.length) return { anchors: authored, report, corrected: false, softened: [] };
-  const byId = new Map(authored.map((a) => [a.id, a]));
   const reordered = report.bestOrder.map((id) => byId.get(id)).filter((a): a is ReconciledAnchor => a !== undefined);
   if (reordered.length !== authored.length) return { anchors: authored, report, corrected: false, softened: [] };
-  /* A soft part-of-day hint that the reordering moved. Recorded, never silent. */
-  const softened = reordered
-    .filter((anchor, index) => timeOfDayIsBinding(anchor.draft.timeOfDay) && !timeOfDayIsHard(anchor.draft.timeOfDay) && authored[index]?.id !== anchor.id)
-    .map((anchor) => `${anchor.draft.name} (${anchor.draft.timeOfDay})`);
-  return { anchors: reordered, report, corrected: true, softened };
+  return { anchors: reordered, report, corrected: true, softened: softenedBy(reordered) };
 }
 
 function layoutDay(input: DayLayoutInput): { day: ItineraryDay; dropped: DroppedAnchor[]; legsMeasured: number; legsUnmeasured: number; legsEstimated: number; order: SpatialOrderReport; orderCorrected: boolean; softened: readonly string[] } {
   const dropped: DroppedAnchor[] = [];
   const order = correctDayOrder(input);
+  /* A move-first day that still holds a stop near last night's base moves after that stop instead (`compileMoveDay`). */
+  if (order.moveDeferred) input = { ...input, moveDeferred: true };
   let kept = [...order.anchors];
   const ceiling = input.hardCeiling;
 
@@ -3526,7 +3564,13 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
    * absent, the transfer closes the day as it always did.
    */
   const move = draftDay?.move;
-  const moveFirst = Boolean(input.relocation && move && move.when === 'start');
+  const moveFirst = Boolean(input.relocation && move && move.when === 'start' && !input.moveDeferred);
+  /*
+   * Eval v3 — on a deferred move the crossing is the first leg that heads from
+   * the origin side to a stop on the destination side, not the leg that leaves
+   * the base (that one goes to a stop still near it). Set once the move is taken.
+   */
+  let crossedMidDay = false;
   if (moveFirst) {
     pushLeg(startPoint, endPoint, move!.how, 'transfer');
     cursor = endPoint;
@@ -3609,7 +3653,9 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * Only where all three points are placed. Without coordinates there is no
      * question to ask, and the V11 behaviour stands rather than being guessed at.
      */
-    const movesToward = (() => {
+    const crossingMidDay = Boolean(input.moveDeferred && declaredMove && !crossedMidDay && cursor !== startPoint && target.coordinates && startPoint.coordinates && endPoint.coordinates && moveSideOf(startPoint.coordinates, endPoint.coordinates, target.coordinates) === 'destination');
+    if (crossingMidDay) crossedMidDay = true;
+    const movesToward = crossingMidDay || (() => {
       if (!leavingBase || !declaredMove) return false;
       const from = startPoint.coordinates;
       const to = endPoint.coordinates;
@@ -3617,7 +3663,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       if (!from || !to || !at) return true;
       return haversineKm(at, to) <= haversineKm(at, from);
     })();
-    pushLeg(cursor, target, movesToward && declaredMove ? declaredMove.how : anchor.draft.transport, 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
+    pushLeg(cursor, target, movesToward && declaredMove ? declaredMove.how : anchor.draft.transport, crossingMidDay ? 'transfer' : 'approach', { inEpisode: episode !== null && episodeStopIds.has(anchor.id) && !firstStopOnEntryDay });
     if (!hadLunch && clock >= LUNCH_EARLIEST && clock <= LUNCH_LATEST) {
       hadLunch = placeMeal('lunch', draftDay?.meals?.lunch);
     }
@@ -3762,7 +3808,9 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      */
     const dayRoadMode = draftDay?.anchors.some((a) => a.transport === 'car') ? 'car' : draftDay?.anchors[0]?.transport;
     const transferHint = input.relocation ? (move?.how ?? inheritedMove ?? dayRoadMode) : undefined;
-    pushLeg(cursor, endPoint, transferHint, input.relocation ? 'transfer' : 'return', { inEpisode: episode !== null && !input.relocation && cursor !== startPoint });
+    /* The move was already made mid-day: the last hop to the new bed is local, never a second crossing. */
+    if (crossedMidDay) pushLeg(cursor, endPoint, undefined, 'return', { inEpisode: false });
+    else pushLeg(cursor, endPoint, transferHint, input.relocation ? 'transfer' : 'return', { inEpisode: episode !== null && !input.relocation && cursor !== startPoint });
   } else if (cursor !== endPoint) {
     pushLeg(cursor, endPoint, undefined, 'return', { inEpisode: episode !== null && offRoad });
   }

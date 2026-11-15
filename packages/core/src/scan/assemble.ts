@@ -20,6 +20,7 @@ import type { Region } from '../schemas/region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
 import { boundTravelMatrix } from '../travel/feasibility';
 import { highSpeedRailBackbone } from '../reality/jurisdictions';
+import { outlyingBases, type FootprintContext } from './base-footprint';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
 import type { StayDecision } from '../schemas/stay';
 import { allowedMoves, chooseStays, DEFAULT_STAY_TRAVELLER, type MustCoverPart, type StayTraveller, type TrailLink } from './stay-objective';
@@ -127,7 +128,7 @@ export interface ScanPointPlan {
   placeIdByKey: Map<string, string>;
   baseIdByKey: Map<string, string>;
   /** Proposals that could not be placed, with the reason, for the scan's own record and the board's footnote. */
-  unplaced: { key: string; name: string; reason: string; code: 'not_placed' | 'approximate_only' | 'duplicate' }[];
+  unplaced: { key: string; name: string; reason: string; code: 'not_placed' | 'approximate_only' | 'duplicate' | 'outside_footprint' }[];
 }
 
 /**
@@ -137,8 +138,10 @@ export interface ScanPointPlan {
  * where the locality *is* the place, and dropped otherwise, because a museum
  * pinned to the middle of its city is a pin in the wrong place.
  */
-export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<string, ResolvedPosition | null>): ScanPointPlan {
+export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<string, ResolvedPosition | null>, options: { footprint?: FootprintContext } = {}): ScanPointPlan {
   const taken = new Set<string>();
+  /* A place to sleep placed far outside the trip's own footprint is unplaced with its reason, never silently kept (`base-footprint.ts`). */
+  const outlying = new Map(outlyingBases(proposal, positions, options.footprint).map((o) => [o.key, o] as const));
   const points: ScanPoint[] = [];
   const placeIdByKey = new Map<string, string>();
   const baseIdByKey = new Map<string, string>();
@@ -147,6 +150,11 @@ export function planScanPoints(proposal: ScanProposal, positions: ReadonlyMap<st
     const position = positions.get(base.key);
     if (!position) {
       unplaced.push({ key: base.key, name: base.name, reason: 'Could not be placed on the map.', code: 'not_placed' });
+      continue;
+    }
+    const outlier = outlying.get(base.key);
+    if (outlier) {
+      unplaced.push({ key: base.key, name: base.name, reason: outlier.reason, code: 'outside_footprint' });
       continue;
     }
     /*

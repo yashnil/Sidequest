@@ -1,4 +1,4 @@
-import { boundedLegMinutes, estimateLegMinutes, haversineKm, highSpeedRailBackbone, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord } from '@sidequest/core';
+import { boundedLegMinutes, estimateLegMinutes, haversineKm, highSpeedRailBackbone, moveSideOf, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -533,23 +533,32 @@ export function themeFor(day: StructurePlan['days'][number], baseName: string, i
 /** A car-free move shorter than this is a bus even where the country's backbone is rail. */
 export const MIN_CAR_FREE_RAIL_KM = 25;
 
-/** How a car-free move between two beds is made: a train, high-speed where the country's facts make it the backbone and the hop is long; nothing for a hop across town. */
+/**
+ * How a car-free move between two beds is made: a train, high-speed where the country's facts make it the backbone and the hop is long; nothing for a hop across town.
+ *
+ * Eval v3 — the move opens the day (`when: 'start'`) only when none of the day's
+ * stops is still on the origin side (`moveSideOf`). A Kyrgyzstan day took the
+ * bus to Song-Kol first and then went back to Bishkek for its bazaar; with a
+ * stop near last night's base, the move is the leg that crosses instead.
+ */
 export function carFreeMoveFor(
   from: { lat: number; lng: number } | undefined,
   to: { lat: number; lng: number } | undefined,
   countryCode: string | null | undefined,
-): { how: 'rail' | 'high_speed_rail' | 'bus'; when: 'start' } | null {
+  stops: readonly ({ lat: number; lng: number } | undefined)[] = [],
+): { how: 'rail' | 'high_speed_rail' | 'bus'; when?: 'start' } | null {
   if (!from || !to) return null;
   const km = haversineKm(from, to);
   if (km <= 1.5) return null;
-  if (km >= 100 && highSpeedRailBackbone(countryCode)) return { how: 'high_speed_rail', when: 'start' };
+  const when = stops.some((stop) => moveSideOf(from, to, stop ?? null) === 'origin') ? {} : { when: 'start' as const };
+  if (km >= 100 && highSpeedRailBackbone(countryCode)) return { how: 'high_speed_rail', ...when };
   /*
    * A train only where the country's facts say trains run between towns, and
    * only for a hop long enough to be one: the facts are national, not a station
    * in every village, and a 9 km move between two Kii mountain villages printed
    * as a train. A shorter hop is the bus that does run.
    */
-  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode).intercityRail ? 'rail' : 'bus', when: 'start' };
+  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode).intercityRail ? 'rail' : 'bus', ...when };
 }
 
 function draftFromPlan(args: {
@@ -636,7 +645,7 @@ function draftFromPlan(args: {
        * make it the backbone and the hop is long enough to be one.
        */
       ...(day.relocation && !input.carAvailable
-        ? ((move) => (move ? { move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), input.region.compiled.scope.countryCode))
+        ? ((move) => (move ? { move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), input.region.compiled.scope.countryCode, day.stops.map((s) => args.coordinates.get(s.candidate.id) ?? s.candidate.coordinates)))
         : {}),
       anchors,
       meals: {

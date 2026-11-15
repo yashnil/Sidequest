@@ -329,4 +329,68 @@ describe('the day itself', () => {
     expect(transfer?.travel?.modeCorrectedFrom).toBeUndefined();
     expect(transfer?.travel?.mode).toBe('drive');
   });
+
+  /*
+   * Eval v3 — the Kyrgyzstan run-3 shape on synthetic ground: a car-free day that
+   * moved by bus first thing, went back to a bazaar in the town it had left, and
+   * back up again for the night stop by the new base.
+   */
+  const moveWorld = () =>
+    fictionalWorld({ name: 'Moveland', center: { lat: 42.5, lng: 75 }, places: [{ name: 'Town A', lat: 42.87, lng: 74.6, entityType: 'city' }, { name: 'Lake Camp', lat: 41.85, lng: 75.12, entityType: 'city' }, { name: 'Old Bazaar', lat: 42.88, lng: 74.62 }, { name: 'Shore Stargazing', lat: 41.86, lng: 75.14 }, { name: 'Pass Viewpoint', lat: 42.1, lng: 75.0 }], basics: { startDate: '2026-07-10', endDate: '2026-07-12' } });
+
+  it('a move-first day with a stop still by last night’s base visits it before the move, and the crossing is the bus', async () => {
+    const world = moveWorld();
+    const draft = draftOf({
+      bases: [{ id: 'a', name: 'Town A', nights: 1 }, { id: 'b', name: 'Lake Camp', nights: 1 }],
+      days: [
+        { base: 'a', anchors: [] },
+        { base: 'b', relocation: true, move: { how: 'bus', when: 'start' }, anchors: [{ name: 'Old Bazaar', category: 'market' }, { name: 'Shore Stargazing', category: 'viewpoint', timeOfDay: 'night' }] },
+        { base: 'b', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    const legs = result.itinerary.days[1]!.items.filter((i) => i.kind === 'travel').map((i) => i.travel!);
+    /* Never Town A → Lake Camp → Old Bazaar → back up: one crossing, after the bazaar. */
+    expect(legs.map((l) => `${l.fromName} → ${l.toName}`)).toEqual(['Town A → Old Bazaar', 'Old Bazaar → Shore Stargazing', 'Shore Stargazing → Lake Camp']);
+    expect(legs[1]!.hint).toBe('bus');
+    expect(legs[1]!.role).toBe('transfer');
+    expect(legs.filter((l) => l.hint === 'bus')).toHaveLength(1);
+    const order = result.dayOrders.find((o) => o.dayNumber === 2)!;
+    expect(order.corrected).toBe(true);
+    expect(order.report.violations.some((v) => v.kind === 'move_backtrack' && v.stopName === 'Old Bazaar')).toBe(true);
+    expect(result.deviations.some((d) => d.kind === 'day_order_corrected' && d.skeletonDayNumber === 2 && /before the move/.test(d.detail))).toBe(true);
+  });
+
+  it('a free moving day that reaches the new base’s side and then returns toward the old one is reordered across the move', async () => {
+    const world = moveWorld();
+    const draft = draftOf({
+      bases: [{ id: 'a', name: 'Town A', nights: 1 }, { id: 'b', name: 'Lake Camp', nights: 1 }],
+      days: [
+        { base: 'a', anchors: [] },
+        { base: 'b', relocation: true, anchors: [{ name: 'Pass Viewpoint', category: 'viewpoint', transport: 'car' }, { name: 'Old Bazaar', category: 'market', transport: 'car' }] },
+        { base: 'b', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    expect(result.itinerary.days[1]!.items.filter((i) => i.kind === 'activity').map((i) => i.title)).toEqual(['Old Bazaar', 'Pass Viewpoint']);
+    expect(result.dayOrders.find((o) => o.dayNumber === 2)!.report.violations.some((v) => v.kind === 'move_backtrack')).toBe(true);
+  });
+
+  it('a move-first day whose stops are all by the new base keeps the move first', async () => {
+    const world = moveWorld();
+    const draft = draftOf({
+      bases: [{ id: 'a', name: 'Town A', nights: 1 }, { id: 'b', name: 'Lake Camp', nights: 1 }],
+      days: [
+        { base: 'a', anchors: [] },
+        { base: 'b', relocation: true, move: { how: 'bus', when: 'start' }, anchors: [{ name: 'Shore Stargazing', category: 'viewpoint', timeOfDay: 'night' }] },
+        { base: 'b', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    const legs = result.itinerary.days[1]!.items.filter((i) => i.kind === 'travel').map((i) => i.travel!);
+    expect(legs[0]!.fromName).toBe('Town A');
+    expect(legs[0]!.toName).toBe('Lake Camp');
+    expect(legs[0]!.role).toBe('transfer');
+    expect(result.dayOrders.find((o) => o.dayNumber === 2)!.corrected).toBe(false);
+  });
 });
