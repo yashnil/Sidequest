@@ -17,7 +17,7 @@ describe('robots and the sitemap', () => {
   it('list only public pages once indexing is on, and point robots at the sitemap', () => {
     const env = { SIDEQUEST_INDEXABLE: 'on', SIDEQUEST_BASE_URL: 'https://sidequest.test/' };
     const urls = sitemapEntries(env).map((entry) => entry.url);
-    expect(urls).toEqual(['https://sidequest.test/', 'https://sidequest.test/decide', 'https://sidequest.test/privacy', 'https://sidequest.test/terms', 'https://sidequest.test/support']);
+    expect(urls).toEqual(['https://sidequest.test/', 'https://sidequest.test/decide', 'https://sidequest.test/improve', 'https://sidequest.test/privacy', 'https://sidequest.test/terms', 'https://sidequest.test/support']);
     expect(urls.some((url) => /\/(trips|share|api|labs)/.test(url))).toBe(false);
     Object.assign(process.env, env);
     const allowed = robots();

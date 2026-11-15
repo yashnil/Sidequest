@@ -10,7 +10,7 @@ import type { MetadataRoute } from 'next';
  */
 export const dynamic = 'force-dynamic';
 
-export const PUBLIC_PATHS = ['/', '/decide', '/privacy', '/terms', '/support'] as const;
+export const PUBLIC_PATHS = ['/', '/decide', '/improve', '/privacy', '/terms', '/support'] as const;
 
 export function sitemapEntries(env: Record<string, string | undefined> = process.env): MetadataRoute.Sitemap {
   const indexable = (env.SIDEQUEST_INDEXABLE ?? '').trim().toLowerCase() === 'on';

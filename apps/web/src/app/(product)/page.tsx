@@ -119,7 +119,7 @@ export default async function HomePage() {
               <div className="rise-in" style={{ ['--d' as string]: '120ms' }}>
                 <DestinationLine id="home-destination" className="mt-9" />
               </div>
-              <ul className="rise-in mt-5 flex flex-wrap gap-x-6 gap-y-1 text-sm" style={{ ['--d' as string]: '180ms' }} aria-label="Two ways to start">
+              <ul className="rise-in mt-5 flex flex-wrap gap-x-6 gap-y-1 text-sm" style={{ ['--d' as string]: '180ms' }} aria-label="Three ways to start">
                 <li>
                   <Link href="/trips/new" className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--color-atlas-ink)] underline decoration-white/25 underline-offset-[6px] hover:decoration-[var(--color-flare)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2" data-testid="home-new-trip">
                     I know where I want to go
@@ -131,7 +131,7 @@ export default async function HomePage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/trips/new?have=plan" className="inline-flex min-h-11 items-center gap-2 text-[var(--color-atlas-muted)] underline decoration-white/15 underline-offset-[6px] hover:text-[var(--color-atlas-ink)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2">
+                  <Link href="/improve" className="inline-flex min-h-11 items-center gap-2 font-semibold text-[var(--color-atlas-ink)] underline decoration-white/25 underline-offset-[6px] hover:decoration-[var(--color-flare)] focus-visible:outline-2 focus-visible:outline-[var(--color-glacier)] focus-visible:outline-offset-2" data-testid="home-improve">
                     I already have a plan
                   </Link>
                 </li>

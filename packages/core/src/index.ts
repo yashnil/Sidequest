@@ -230,3 +230,4 @@ export * from './interests/schema';
 // Seed data is reachable at `@sidequest/core/data`, never from here. See the
 // note at the top of this file.
 export * from './scan';
+export * from './plan-check';

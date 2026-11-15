@@ -214,6 +214,14 @@ export const ACTION_RATE_RULES = {
   compile_start: { capacity: 3, refillPerMinute: 1 },
   /** One geocoder round-trip against a volunteer-run service. */
   destination_resolve: { capacity: 6, refillPerMinute: 3 },
+  /**
+   * "I already have a plan": places every stop of a rough plan through the
+   * same geocoder — up to two lookups per stop, twelve stops at most, most of
+   * them answered from the thirty-day concept cache on a second press — and
+   * the "Plan this" press that follows draws from the same bucket. Sized for
+   * somebody editing their plan and checking again, not for a loop.
+   */
+  plan_check: { capacity: 8, refillPerMinute: 3 },
   /** One climate call plus local reads; recomputed on trip-length changes. */
   preflight: { capacity: 8, refillPerMinute: 4 },
   /**
