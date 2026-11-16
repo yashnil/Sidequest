@@ -169,15 +169,25 @@ export class ComponentIndex {
     const c = this.cell(ref.index, ref.cx, ref.cy);
     const sx = ref.cx / this.sub - 180 + CORNER_EPS;
     const sy = ref.cy / this.sub - 90 + CORNER_EPS;
-    let current = c.corner;
+    /*
+     * Parity per polygon, never a running toggle: the edges are stored in no
+     * particular order along the ray, and a toggle read "left Sandoy, entered
+     * Hestur" backwards whenever Hestur's edge came first (a live Faroe leg
+     * across the sea was judged one landmass). The point is inside polygon k
+     * exactly when an odd number of k's edges separate it from the corner — an
+     * even number for the corner's own polygon.
+     */
+    const crossings = new Map<number, number>();
     for (const run of c.runs) {
       for (let k = 0; k + 1 < run.xs.length; k += 1) {
         if (segmentsCross(sx, sy, p.lng, p.lat, run.xs[k]!, run.ys[k]!, run.xs[k + 1]!, run.ys[k + 1]!)) {
-          current = current === run.id ? 0 : run.id;
+          crossings.set(run.id, (crossings.get(run.id) ?? 0) + 1);
         }
       }
     }
-    return current;
+    if (c.corner && (crossings.get(c.corner) ?? 0) % 2 === 0) return c.corner;
+    for (const [id, count] of crossings) if (id !== c.corner && count % 2 === 1) return id;
+    return 0;
   }
 
   /**

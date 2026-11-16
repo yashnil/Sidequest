@@ -24,6 +24,8 @@ describe('the shipped water index', () => {
     ['an archipelago hop (Lofoten Reine → Bodø)', p(67.932, 13.089), p(67.28, 14.405)],
     ['a vehicle-ferry island (Naples → Capri)', p(40.85, 14.25), p(40.551, 14.243)],
     ['a Pacific island pair (Maui Kahului → Lānaʻi City)', p(20.889, -156.47), p(20.827, -156.92)],
+    /* The live Faroe leg the index first judged one landmass: Sandoy to a pin on Hestur, both islands' edges in one cell. */
+    ['Sandoy (Sandur) → Hestur', p(61.8348502, -6.8167192), p(61.9526532, -6.8953519)],
   ])('%s is two landmasses', (_label, a, b) => {
     expect(assessCrossing(index, a, b).verdict).toBe('separate_land');
   });
