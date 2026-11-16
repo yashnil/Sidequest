@@ -205,3 +205,17 @@ describe('audit pass — an operator-run trip moves in the operator vehicle', ()
     expect(carFreeMoveHow({ how: 'rail' }, 'public_transport', true)).toEqual({ how: 'rail' });
   });
 });
+
+describe('audit pass — a cluster of sights on a small island is not a metro city', () => {
+  it('a dense Naxos board in a country with a metro and a railway names neither', () => {
+    const base = { lat: 37.105, lng: 25.376 };
+    const around = (i: number) => ({ lat: base.lat + 0.006 * Math.cos(i), lng: base.lng + 0.008 * Math.sin(i) });
+    const places: Spot[] = [
+      ...Array.from({ length: 10 }, (_, i) => ({ name: `Harbour Sight ${i + 1}`, at: around(i) })),
+      { name: 'Inland Village', at: { lat: 37.051, lng: 25.494 } },
+      { name: 'South Beach', at: { lat: 37.05, lng: 25.39 } },
+    ];
+    const { words } = board({ countryCode: 'GR', timeZone: 'Europe/Athens', bases: [{ name: 'Harbour Town', at: base }], places });
+    expect(words.filter((w) => w === 'metro' || RAIL.includes(w ?? ''))).toEqual([]);
+  });
+});

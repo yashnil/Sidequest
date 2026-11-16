@@ -85,6 +85,7 @@ import { beginGeneration, clearGenerationDraftSaved, finishGeneration, markGener
 import { fetchReferenceRates } from '../providers/fx';
 import { buildFailure, classifyCompositionFailure, encodeBuildFailure, type BuildFailure } from './build-failure';
 import { saveFxRates } from '@/lib/db/intelligence-repository';
+import { metroAreaCentres } from './metro-areas';
 
 /**
  * THE ONE CANONICAL PRODUCTION ITINERARY-GENERATION ORCHESTRATOR.
@@ -601,7 +602,7 @@ async function generatePlan(
           essentialIds,
           /* The daily limit is a hard rule when the traveller set it (or accepted it), never when it is Sidequest's default. */
           ...(!modelMayOverride(contract.transport.maxDailyTravelMinutes.lock) || (input.movement.carAvailable !== false && input.movement.maxDailyDriveMinutes.value && !modelMayOverride(contract.transport.maxDailyDriveMinutes.lock)) ? { travelLimitHard: true } : {}),
-          metroAreas: (concept?.parts ?? []).filter((part) => part.center && (part.featureType === 'city' || part.featureType === 'metro_area' || part.featureType === 'municipality')).map((part) => part.center),
+          metroAreas: metroAreaCentres(concept?.parts ?? []),
           /* The journey archetype's ground arrangement: an operator safari is written as one, whatever car the traveller could have. */
           ...(journey ? { groundArrangement: journey.strategy.ground } : qualityContract ? { groundArrangement: qualityContract.transport.mode } : {}),
         });

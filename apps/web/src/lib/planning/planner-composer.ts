@@ -712,7 +712,15 @@ function draftFromPlan(args: {
    */
   const placedPoints = [...args.coordinates.entries()].filter(([id]) => !bases.some((b) => b.id === id)).map(([, point]) => point);
   const dense = (point: { lat: number; lng: number }) => placedPoints.filter((p) => haversineKm(p, point) <= URBAN_RADIUS_KM).length >= URBAN_MIN_PLACES;
-  const inMetroArea = (point: { lat: number; lng: number } | undefined) => Boolean(point && ((input.metroAreas ?? []).some((c) => haversineKm(c, point) <= METRO_AREA_KM) || dense(point)));
+  /*
+   * Audit pass — a cluster of sights is not a city with a metro. A live
+   * Cyclades plan printed "Train to Plaka Beach" on Naxos: Oia and Naxos Town
+   * are dense with places, and density alone promoted the country's metro
+   * there. On a small island (`small-island.ts`) density no longer names a
+   * metro; a named city part still does, and a city-scale trip never relied on
+   * density.
+   */
+  const inMetroArea = (point: { lat: number; lng: number } | undefined) => Boolean(point && ((input.metroAreas ?? []).some((c) => haversineKm(c, point) <= METRO_AREA_KM) || (dense(point) && !onSmallIsland([point]))));
   const days: DraftDay[] = plan.days.map((day, i) => {
     const dayNetwork = !network.metro && countryNetwork.metro && !onTrail && inMetroArea(args.coordinates.get(day.baseId)) ? { ...network, metro: true } : network;
     const isFirst = i === 0;
