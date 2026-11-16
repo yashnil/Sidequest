@@ -1,7 +1,7 @@
 'use client';
 
 import { announceTripEdit } from '@/components/hub/EditToast';
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { buttonClass, cx } from '@/components/ui';
 import { callAction } from '@/components/client-action';
@@ -243,6 +243,18 @@ export function BookedStatusControl({ tripId, id, status, cost, paid, refundable
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const currencyRef = useRef<HTMLInputElement>(null);
+  const saveCost = () => {
+    const raw = amountRef.current?.value.trim() ?? '';
+    if (raw === '') return;
+    const amount = Number(raw);
+    const currency = (currencyRef.current?.value ?? '').trim().toUpperCase();
+    if (!Number.isFinite(amount) || amount < 0) return setError('The cost needs to be a number.');
+    if (!/^[A-Z]{3}$/.test(currency)) return setError('Add the currency as three letters, for example EUR or JPY.');
+    if (cost && cost.amount === amount && cost.currency === currency) return;
+    apply({ cost: { amount, currency } });
+  };
   const apply = (patch: Record<string, unknown>) => {
     setError(null);
     startTransition(async () => {
@@ -280,7 +292,9 @@ export function BookedStatusControl({ tripId, id, status, cost, paid, refundable
           <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-180">▾</span>
         </summary>
         <span className="absolute left-0 top-full z-20 mt-1.5 flex w-max max-w-[min(22rem,80vw)] flex-wrap items-center gap-2 rounded-[12px] border border-rule bg-paper-raised p-3 shadow-[var(--shadow-panel)]">
+          {/* Audit pass — a cost is saved with the currency the traveller gives it (never a silent USD), on Enter or when the field is left. */}
           <input
+            ref={amountRef}
             type="number"
             min={0}
             step={1}
@@ -291,13 +305,25 @@ export function BookedStatusControl({ tripId, id, status, cost, paid, refundable
             data-testid="booked-cost"
             disabled={pending}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                const amount = Number((event.target as HTMLInputElement).value);
-                if (Number.isFinite(amount) && amount >= 0) apply({ cost: { amount, currency: cost?.currency ?? 'USD' } });
-              }
+              if (event.key === 'Enter') saveCost();
             }}
+            onBlur={saveCost}
           />
-          {cost?.currency ? <span className="text-ink-faint">{cost.currency}</span> : null}
+          <input
+            ref={currencyRef}
+            type="text"
+            defaultValue={cost?.currency ?? ''}
+            placeholder="EUR"
+            maxLength={3}
+            aria-label="Currency (three letters)"
+            className={cx(FIELD, 'w-16 py-1 uppercase')}
+            data-testid="booked-currency"
+            disabled={pending}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') saveCost();
+            }}
+            onBlur={saveCost}
+          />
           <select value={paid ?? ''} disabled={pending} className={cx(FIELD, 'py-1')} aria-label="Paid" data-testid="booked-paid" onChange={(event) => apply(event.target.value ? { paid: event.target.value } : {})}>
             <option value="">Paid?</option>
             {Object.entries(PAID_LABELS).map(([value, label]) => (

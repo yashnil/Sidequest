@@ -191,6 +191,18 @@ function tileDay(date: string): string {
 
 export function BookedItemRow({ tripId, item }: { tripId: string; item: BookedPlanItem }) {
   const [pending, startTransition] = useTransition();
+  /* Audit pass — a booked fact (its reference, cost and terms) is removed on a second press, like every other destructive control, and a refusal is said. */
+  const [confirming, setConfirming] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  function remove() {
+    setRemoveError(null);
+    startTransition(async () => {
+      const outcome = await callAction(() => removeBookedItemAction(tripId, item.id));
+      if (!outcome.ok) return setRemoveError(outcome.message);
+      if (!outcome.value.ok) return setRemoveError(outcome.value.error ?? 'That booking was not removed.');
+      setConfirming(false);
+    });
+  }
   const hasConfirmation = Boolean(item.confirmationRef || item.url || item.cost || item.paid || item.refundable || item.cancellationDeadline || item.provider);
   return (
     <li className="py-4" data-testid="booked-item" data-source={item.source ?? 'typed'}>
@@ -226,10 +238,22 @@ export function BookedItemRow({ tripId, item }: { tripId: string; item: BookedPl
         <span className="inline-flex basis-full flex-wrap items-center gap-1.5 pl-16">
           <BookedStatusControl tripId={tripId} id={item.id} status={item.status} {...(item.cost ? { cost: item.cost } : {})} {...(item.paid ? { paid: item.paid } : {})} {...(item.refundable ? { refundable: item.refundable } : {})} />
           <AddConfirmationButton tripId={tripId} item={item} />
-          <button type="button" disabled={pending} onClick={() => startTransition(async () => void (await removeBookedItemAction(tripId, item.id)))} className={cx(buttonClass('ghost', 'sm'), 'text-ink-muted hover:text-clay')} data-testid="booked-remove">
-            Remove
-          </button>
+          {confirming ? (
+            <>
+              <button type="button" disabled={pending} onClick={remove} className={cx(buttonClass('ghost', 'sm'), 'text-clay')} data-testid="booked-remove-confirm">
+                {pending ? 'Removing…' : 'Remove this booking'}
+              </button>
+              <button type="button" disabled={pending} onClick={() => setConfirming(false)} className={buttonClass('ghost', 'sm')} data-testid="booked-remove-cancel">
+                Keep it
+              </button>
+            </>
+          ) : (
+            <button type="button" disabled={pending} onClick={() => setConfirming(true)} className={cx(buttonClass('ghost', 'sm'), 'text-ink-muted hover:text-clay')} data-testid="booked-remove">
+              Remove
+            </button>
+          )}
         </span>
+        {removeError ? <ErrorNote>{removeError}</ErrorNote> : null}
       </div>
       {hasConfirmation ? (
         <details className="mt-1 pl-16 print:hidden" data-testid="booked-confirmation">
@@ -400,7 +424,12 @@ export function CheckBox({ tripId, list, itemId, checked, label, hint, testId }:
         onChange={(e) => {
           const next = e.target.checked;
           setLocal(next);
-          if (tripId) startTransition(async () => void (await setCheckAction(tripId, list, itemId, next)));
+          /* Audit pass — a tick the server refused is unticked again, never left showing as saved. */
+          if (tripId)
+            startTransition(async () => {
+              const outcome = await callAction(() => setCheckAction(tripId, list, itemId, next));
+              if (!outcome.ok || !outcome.value.ok) setLocal(!next);
+            });
         }}
         className="mt-1 h-[18px] w-[18px] shrink-0 accent-[var(--color-accent)]"
         {...(testId ? { 'data-testid': testId } : {})}

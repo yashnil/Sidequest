@@ -270,6 +270,8 @@ export function AskSidequest(props: AskSidequestProps) {
     startTransition(async () => {
       try {
         record(await props.onAsk({ tripId: props.tripId, request: trimmed, idempotencyKey, ...(structural ? { structural: true } : {}) }));
+      } catch {
+        setExchanges((previous) => [...previous, { kind: 'error', text: 'That did not reach Sidequest. Nothing changed — try again.' }]);
       } finally {
         setBusy(false);
       }
@@ -285,9 +287,16 @@ export function AskSidequest(props: AskSidequestProps) {
      */
     setExchanges((previous) => [...previous.map((entry) => (entry.kind === 'proposal' && entry.runId === runId ? { ...entry, answered: choice } : entry)), { kind: 'request', text: choice }]);
     setBusy(true);
+    /* Audit pass — a refused or failed answer reopens the card: it never reads "Applied." for a change that did not land. */
+    const reopen = (text: string) =>
+      setExchanges((previous) => [...previous.map((entry) => (entry.kind === 'proposal' && entry.runId === runId ? { ...entry, answered: undefined } : entry)), { kind: 'error', text }]);
     startTransition(async () => {
       try {
-        record(await props.onAnswer({ tripId: props.tripId, runId, answer: choice }));
+        const reply = await props.onAnswer({ tripId: props.tripId, runId, answer: choice });
+        if (!reply.ok && reply.error) reopen(reply.error);
+        else record(reply);
+      } catch {
+        reopen('That did not reach Sidequest. Nothing changed — try again.');
       } finally {
         setBusy(false);
       }
