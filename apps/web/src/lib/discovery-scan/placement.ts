@@ -31,6 +31,8 @@ export interface PlacementOptions {
   /** How far from the destination centre a match may be before it is refused. */
   maxDistanceKm: number;
   countryCode?: string;
+  /** Every country the destination spans, when it spans more than one (`DestinationConcept.countries`). */
+  countryCodes?: readonly string[];
   countryName?: string;
   /** Places-provider lookups allowed this scan. */
   placesBudget: number;
@@ -110,10 +112,23 @@ function countryOf(place: NominatimPlace): string | undefined {
   return place.address?.country_code?.toUpperCase();
 }
 
+/**
+ * Audit pass — whether a row's country belongs to this trip. A destination the
+ * concept says spans several countries (a trail across three borders) accepts
+ * every one of them; the live Tour du Mont Blanc lost its Swiss and Italian
+ * stages to a single-country gate. Unknown ≠ wrong: a row without a country passes.
+ */
+export function countryBelongs(code: string | undefined | null, options: Pick<PlacementOptions, 'countryCode' | 'countryCodes'>): boolean {
+  if (!code || !options.countryCode) return true;
+  const upper = code.toUpperCase();
+  if (upper === options.countryCode.toUpperCase()) return true;
+  return (options.countryCodes ?? []).some((c) => c.toUpperCase() === upper);
+}
+
 function judge(place: NominatimPlace, options: PlacementOptions): { point: { lat: number; lng: number } } | { refused: 'country_mismatch' | 'outside_envelope' | 'no_results' } {
   const point = { lat: Number(place.lat), lng: Number(place.lon) };
   if (!Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return { refused: 'no_results' };
-  if (options.countryCode && countryOf(place) && countryOf(place) !== options.countryCode.toUpperCase()) return { refused: 'country_mismatch' };
+  if (!countryBelongs(countryOf(place), options)) return { refused: 'country_mismatch' };
   if (haversineKm(options.center, point) > options.maxDistanceKm) return { refused: 'outside_envelope' };
   return { point };
 }
@@ -363,7 +378,8 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
   let placesCalls = 0;
   let geocoderCalls = 0;
   const providers = new Set<string>();
-  const country = options.countryName ? `, ${options.countryName}` : '';
+  /* A destination across several countries is never asked for as if it sat in one of them ("Rifugio Bonatti, …, France"); the country gate still holds the allowed set. */
+  const country = options.countryName && (options.countryCodes?.length ?? 0) <= 1 ? `, ${options.countryName}` : '';
   const radiusKm = Math.min(50, Math.max(10, options.maxDistanceKm / 4));
 
   const named = new Set(matchNamedMustDos(options.namedByTraveller ?? [], proposal.candidates.map((c) => ({ id: c.key, name: c.name }))));
@@ -397,7 +413,7 @@ export async function placeScanProposal(proposal: ScanProposal, options: Placeme
         /* The provider's own name is the clean form of a descriptive one the deterministic reading kept as written. Matched, never stored. */
         if (found && item.identityType === 'unchanged' && found.name.trim().toLowerCase() !== item.lookupName.trim().toLowerCase() && providerNameIsCanonical(item.lookupName, found.name)) canonicalizedByProvider = true;
         const far = found ? haversineKm(options.center, found.coordinates) > options.maxDistanceKm : false;
-        const wrongCountry = found ? Boolean(options.countryCode && found.countryCode && found.countryCode.toUpperCase() !== options.countryCode.toUpperCase()) : false;
+        const wrongCountry = found ? !countryBelongs(found.countryCode, options) : false;
         const partial = found ? Boolean(wholePhrase && !providerNameCoversPhrase(wholePhrase, found.name)) : false;
         /* Matched, never stored: Google's display name only decides whether the answer is the thing itself. */
         const wrongKind = found ? answerIsWrongKind({ lookupName: item.lookupName, resultName: found.name, googleTypes: found.types }) : false;
@@ -602,7 +618,7 @@ async function recoverAccessPoint(input: {
   let sawAmbiguity = false;
   let sawFailure = false;
   const near = (point: { lat: number; lng: number }) => haversineKm(anchor, point) <= radiusKm && haversineKm(input.options.center, point) <= input.options.maxDistanceKm;
-  const countryOk = (code: string | undefined) => !input.options.countryCode || !code || code.toUpperCase() === input.options.countryCode.toUpperCase();
+  const countryOk = (code: string | undefined) => countryBelongs(code, input.options);
   for (const query of accessRecoveryQueries(input.name, input.kind).slice(0, MAX_ACCESS_QUERIES)) {
     if (input.http) {
       placesCalls += 1;

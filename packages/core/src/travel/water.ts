@@ -46,6 +46,8 @@ interface LngLat {
 
 const Q = 1e5;
 const CORNER_EPS = 1e-6;
+/** Land this large or larger wins a snap over a closer islet or sea stack. */
+const SUBSTANTIAL_LAND_KM2 = 1;
 
 interface Run {
   id: number;
@@ -189,8 +191,11 @@ export class ComponentIndex {
     const kmPerDegLng = 111.32 * Math.max(0.05, Math.cos((p.lat * Math.PI) / 180));
     const spanCells = Math.max(1, Math.ceil((maxKm / kmPerDegLng) * this.sub));
     const spanCellsY = Math.max(1, Math.ceil((maxKm / kmPerDegLat) * this.sub));
-    let best = 0;
-    let bestKm = maxKm;
+    /* The closest approach of every component within reach. */
+    const closest = new Map<number, number>();
+    const offer = (id: number, km: number) => {
+      if (km <= maxKm && km < (closest.get(id) ?? Number.POSITIVE_INFINITY)) closest.set(id, km);
+    };
     const cx0 = Math.floor((p.lng + 180) * this.sub);
     const cy0 = Math.floor((p.lat + 90) * this.sub);
     for (let dy = -spanCellsY; dy <= spanCellsY; dy += 1) {
@@ -204,27 +209,40 @@ export class ComponentIndex {
             /* A whole cell of land nearby: its nearest edge is at least the gap to the cell. */
             const gx = Math.max(0, Math.abs(dx) - 1) / this.sub;
             const gy = Math.max(0, Math.abs(dy) - 1) / this.sub;
-            const km = Math.hypot(gx * kmPerDegLng, gy * kmPerDegLat);
-            if (km < bestKm) {
-              bestKm = km;
-              best = ref.id;
-            }
+            offer(ref.id, Math.hypot(gx * kmPerDegLng, gy * kmPerDegLat));
           }
           continue;
         }
         const c = this.cell(ref.index, ref.cx, ref.cy);
         for (const run of c.runs) {
           for (let k = 0; k + 1 < run.xs.length; k += 1) {
-            const km = pointSegmentKm(p, run.xs[k]!, run.ys[k]!, run.xs[k + 1]!, run.ys[k + 1]!, kmPerDegLng, kmPerDegLat);
-            if (km < bestKm) {
-              bestKm = km;
-              best = run.id;
-            }
+            offer(run.id, pointSegmentKm(p, run.xs[k]!, run.ys[k]!, run.xs[k + 1]!, run.ys[k + 1]!, kmPerDegLng, kmPerDegLat));
           }
         }
       }
     }
-    return best;
+    /*
+     * A pin in the water at the foot of a cliff is about the shore, not the sea
+     * stack beside it: a substantial landmass within reach is preferred over a
+     * closer islet (the live Faroe plan read a waterfall on its own island as a
+     * crossing to a stack). Only where nothing substantial is near does the
+     * closest islet stand.
+     */
+    let best = 0;
+    let bestKm = Number.POSITIVE_INFINITY;
+    let substantial = 0;
+    let substantialKm = Number.POSITIVE_INFINITY;
+    for (const [id, km] of closest) {
+      if (km < bestKm) {
+        bestKm = km;
+        best = id;
+      }
+      if (this.areaKm2(id) >= SUBSTANTIAL_LAND_KM2 && km < substantialKm) {
+        substantialKm = km;
+        substantial = id;
+      }
+    }
+    return substantial || best;
   }
 }
 

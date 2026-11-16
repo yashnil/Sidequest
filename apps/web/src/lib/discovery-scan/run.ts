@@ -418,6 +418,8 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           maxDistanceKm: reach,
           ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
           ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+          /* Audit pass — a destination that spans several countries (a trail across three borders) places its far side too. */
+          ...((concept?.countries?.length ?? 0) > 1 ? { countryCodes: concept!.countries } : {}),
           placesBudget: proposal.candidates.length,
           namedByTraveller: namedMustDos,
           priorities,
