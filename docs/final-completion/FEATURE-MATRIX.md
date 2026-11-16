@@ -12,7 +12,7 @@ Source of truth for "what the product does", reconciled against `sidequest_maste
 | Capability | State | Evidence | Limit / gap |
 |---|---|---|---|
 | Mode 1 — I know where I want to go | Verified | `app/(product)/page.tsx`, `trips/new/`, `e2e/composer.spec.ts`, `e2e/intake.spec.ts` | — |
-| Mode 2 — help me choose | Limited | `decide/advisor-actions.ts`, `packages/atlas` (~36.8k destinations), `e2e/decide.spec.ts`, benchmark harness, `advisor/intent.test.ts` (beta pass: a vague request is read as a concept; gentle reading; children mark down hard-led places) | Niche requests can rank weak estimators; question selection is CPU-heavy (~100 ms/step) |
+| Mode 2 — help me choose | Limited | `decide/advisor-actions.ts`, `packages/atlas` (~36.8k destinations), `e2e/decide.spec.ts`, benchmark harness, `advisor/intent.test.ts` (beta pass: a vague request is read as a concept; gentle reading; children mark down hard-led places) | Niche requests can rank weak estimators; question selection is CPU-heavy (~100 ms/step). Audit pass: a region that resolved as one of its towns is planned as its own places (`advisor/adoption.ts`); the card's car judgement carries into the transport default |
 | Mode 3 — optimise my existing plan | Verified (live) | `/improve`, `plan-check/{parse,critique}.ts`, `contract/stated-itinerary.ts`, `e2e/stated-plan.spec.ts`, live `eval/live3` (4/4 stated stays honoured) | No tick-able reshaping proposal when every night was stated |
 | Natural-language input | Verified | `lib/destinations/interpretation.ts`, `advisor/parse.ts`, `e2e/destination-semantics.spec.ts` | — |
 | Adaptive questionnaire | Verified | `trips/[id]/questionnaire`, `advisor/interview-policy.ts`, `e2e/interview*.spec.ts` | — |
@@ -24,10 +24,10 @@ Source of truth for "what the product does", reconciled against `sidequest_maste
 | Itinerary generation (planner-first) | Verified | `structure-planner.ts`, `production-plan.ts`, `e2e/itinerary.spec.ts`, `e2e/build-lifecycle.spec.ts` | — |
 | Degraded routing keeps the trip | Verified (final pass) | `providers/openrouteservice.ts` quota breaker, `planning/routing-evidence.ts`, `package.planning.routing` | A thin board still uses the labelled model fallback |
 | Destination understanding | Limited | `lib/destinations/intent-resolution.ts` (unseen live: Faroe, Oaxaca, Madeira resolve) | — |
-| Transport infrastructure per ground | Verified (beta pass) | `packages/core/src/reality/networks.ts` (ISO 3166-2 and island rows), `transportNetworkAt`, `ground-network.test.ts` | Rows cover 15 subdivisions/islands; a row may only remove a service the country states |
-| Route order and topology | Limited | `route/spatial-order.ts` (incl. move-day backtracks, final pass), `travel/feasibility.ts` | A point no router reaches stays a labelled straight-line estimate |
+| Transport infrastructure per ground | Verified (beta pass) | `packages/core/src/reality/networks.ts` (ISO 3166-2 and island rows), `transportNetworkAt`, `ground-network.test.ts` | Rows cover 15 subdivisions/islands; a row may only remove a service the country states. Audit pass: no intercity rail on a landmass under 1,000 km² (`planning/small-island.ts`); metro only in a city the traveller named or an urban-type destination; operator moves are operator transfers. **Open:** a move-day train between towns where one end has no station (needs station data) |
+| Route order and topology | Limited | `route/spatial-order.ts` (incl. move-day backtracks, final pass), `travel/feasibility.ts` | A point no router reaches stays a labelled straight-line estimate. Audit pass: an unmeasured leg between landmasses is "Crossing to …" with an allowance, never a timed drive; a same-land leg over a bay or lake is raised for the road around (`travel/water.ts`, offline OSM land + HydroLAKES). Narrow straits below the simplified coastline read as land |
 | Bases and stays | Limited | `scan/stay-objective.ts`, `scan/base-footprint.ts` (final pass) | A town keeps one base by archetype even at a region's edge |
-| Trails and treks | Limited | `scan/trail-stages.ts` (every gap-free run chained), `structure-planner.ts#trailProgressionOk`, `trail-progression.test.ts` | Depends on the discovery call naming the stages; see BETA-REPORT live results |
+| Trails and treks | Limited | `scan/trail-stages.ts` (every gap-free run chained), `structure-planner.ts#trailProgressionOk`, `trail-progression.test.ts` | Depends on the discovery call naming the stages. Audit pass: trails and routes place across borders (TMB: 6 stays in 3 countries live), and day 1 states which section is walked; a section is never called the whole trail |
 | Time zones | Verified (final pass) | `packages/core/src/time/zone-lookup.ts` (IANA boundaries), sky timing, ICS | Within-day calendar items use the day's base zone |
 | Meals | Limited | `food/meal-rank.ts`, `e2e/food.spec.ts` | Restaurant hours are rarely known and never implied |
 | Weather and seasonality | Limited | `e2e/weather.spec.ts`, BEST_TIME, `atlas/seasonality.ts` | Forecast only inside the horizon; climate normals beyond |
@@ -46,7 +46,7 @@ Source of truth for "what the product does", reconciled against `sidequest_maste
 | PWA installability and offline | Limited | `app/manifest.ts`, `public/trip-offline-sw.js`, `e2e/v9-cross-device.spec.ts` | No real-device install test |
 | Native iOS / Android apps | Missing | no `apps/mobile` | Future deliverable — path below |
 | Feedback-based learning | Limited | `preference/apply.ts`, `region.ts#boardFor`, profile off switch, `region.learned.test.ts` | Fills unstated interests only; no learned ranking model |
-| Data layer | External | `lib/db/client.ts` (SQLite) | Supabase/Postgres move not made; single-instance deployment |
+| Data layer | External | `lib/db/client.ts` (SQLite) | Supabase/Postgres move not made; single-instance deployment. **No Railway volume backup or schedule exists on staging or production (audit pass)** |
 | Accounts and auth | External | `api/auth/google/*` | Google OAuth only; needs Google credentials per deployment |
 
 ## Native apps — the concrete path (not in this release)
