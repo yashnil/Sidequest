@@ -37,11 +37,12 @@ describe('the metro in a named city', () => {
 });
 
 describe('audit pass — only cities the traveller named promote a metro', () => {
-  it('an interpreter’s representative towns are not metro areas; a named city still is', async () => {
+  it('a region’s representative towns are not metro areas, whatever row placed them; a city the phrase named still is', async () => {
     const { metroAreaCentres } = await import('./metro-areas');
-    const named = { center: { lat: 35.68, lng: 139.76 }, featureType: 'city', source: 'geocoder' as const };
-    const picked = { center: { lat: 36.417, lng: 25.432 }, featureType: 'city', source: 'interpretation' as const };
-    const valley = { center: { lat: 36.0, lng: 25.0 }, featureType: 'natural', source: 'geocoder' as const };
-    expect(metroAreaCentres([named, picked, valley])).toEqual([named.center]);
+    const tokyo = { label: 'Tokyo', center: { lat: 35.68, lng: 139.76 }, featureType: 'city', source: 'geocoder' as const };
+    const naxos = { label: 'Naxos', center: { lat: 37.105, lng: 25.376 }, featureType: 'city', source: 'geocoder' as const };
+    const picked = { label: 'Fira', center: { lat: 36.417, lng: 25.432 }, featureType: 'city', source: 'interpretation' as const };
+    expect(metroAreaCentres([tokyo, naxos, picked], ['Tokyo', 'Kyoto'])).toEqual([tokyo.center]);
+    expect(metroAreaCentres([naxos, picked], ['Cyclades'])).toEqual([]);
   });
 });
