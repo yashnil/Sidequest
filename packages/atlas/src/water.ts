@@ -33,7 +33,11 @@ export function loadWaterIndex(): WaterIndex | null {
   const atlas = atlasPath();
   if (!atlas) return null;
   const landFile = join(dirname(atlas), LAND_FILE);
-  if (!existsSync(landFile)) return null;
+  if (!existsSync(landFile)) {
+    console.warn('No land index beside the atlas; water crossings are judged by routers alone.');
+    return null;
+  }
+  const started = performance.now();
   try {
     const land = new ComponentIndex(gunzipSync(readFileSync(landFile)));
     let lakes: ComponentIndex | null = null;
@@ -46,6 +50,7 @@ export function loadWaterIndex(): WaterIndex | null {
       }
     }
     slot.held = { land, lakes };
+    console.info(`Land index loaded${lakes ? ' with lakes' : ' (no lake file)'} in ${Math.round(performance.now() - started)} ms.`);
   } catch (error) {
     console.error('The land index could not be loaded; water crossings are judged by routers alone.', { reason: error instanceof Error ? error.message : String(error) });
     slot.held = null;
