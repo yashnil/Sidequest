@@ -282,6 +282,21 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     if (!prepared) return fail('internal_generation_error', 'trip disappeared');
     const { trip, profile, envelope, conceptGateways, concept, conceptCountries, canonical, dates, days, namedMustDos, promptInput, journey, trail, statedStays } = prepared;
     if (envelope.route) console.warn(`Discovery scan for ${tripId}: a route-shaped trip (${envelope.route.kind}, "${envelope.route.cue}").`);
+    /*
+     * Audit pass — which countries a placement may answer from, the same for
+     * every placement this scan makes (the proposal, a supplement, retried
+     * beds, the beds at walk ends). A walk or a drive does not stop at a border:
+     * the live Tour du Mont Blanc resolved as one point in one country and lost
+     * its Swiss and Italian stages and beds to the country gate. On a trail or
+     * a route the distance gate refuses a same-named place far away and the
+     * country is not asked; elsewhere a concept spanning several countries
+     * accepts each of them.
+     */
+    const placementCountry = {
+      ...(envelope.countryCode && !trail.trail && !envelope.route ? { countryCode: envelope.countryCode } : {}),
+      ...(envelope.countryName && !trail.trail && !envelope.route ? { countryName: envelope.countryName } : {}),
+      ...(conceptCountries.length > 1 ? { countryCodes: conceptCountries } : {}),
+    };
     if (!envelope.center || (envelope.center.lat === 0 && envelope.center.lng === 0)) {
       return fail('destination_unplaced', 'no destination centre');
     }
@@ -416,17 +431,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       : await placeScanProposal(proposal, {
           center: envelope.center,
           maxDistanceKm: reach,
-          /*
-           * Audit pass — a walk or a drive does not stop at a border. The live
-           * Tour du Mont Blanc resolved as one point in one country and lost its
-           * Swiss and Italian stages to the country gate; on a trail or a route
-           * the distance gate (`maxDistanceKm`) is what refuses a same-named
-           * place far away, and the country is not asked. Elsewhere, a concept
-           * that spans several countries accepts each of them.
-           */
-          ...(envelope.countryCode && !trail.trail && !envelope.route ? { countryCode: envelope.countryCode } : {}),
-          ...(envelope.countryName && !trail.trail && !envelope.route ? { countryName: envelope.countryName } : {}),
-          ...(conceptCountries.length > 1 ? { countryCodes: conceptCountries } : {}),
+          ...placementCountry,
           placesBudget: proposal.candidates.length,
           namedByTraveller: namedMustDos,
           priorities,
@@ -440,7 +445,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
     if (openData && statedBases.keys.length > 0 && isGeocoderEnabled() && !fixtureScan()) {
       const missing = proposal.bases.filter((b) => statedBases.keys.includes(b.key) && !placement!.positions.get(b.key));
       if (missing.length > 0) {
-        const again = await placeScanProposal({ ...proposal, candidates: [], bases: missing }, { center: envelope.center, maxDistanceKm: reach, ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}), ...(envelope.countryName ? { countryName: envelope.countryName } : {}), placesBudget: 0, namedByTraveller: namedMustDos, priorities, deadline: () => false }).catch(() => null);
+        const again = await placeScanProposal({ ...proposal, candidates: [], bases: missing }, { center: envelope.center, maxDistanceKm: reach, ...placementCountry, placesBudget: 0, namedByTraveller: namedMustDos, priorities, deadline: () => false }).catch(() => null);
         if (again) {
           const positions = new Map(placement.positions);
           for (const [key, position] of again.positions) if (position) positions.set(key, position);
@@ -498,8 +503,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
         {
           center: envelope.center,
           maxDistanceKm: reach,
-          ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
-          ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+          ...placementCountry,
           placesBudget: 0,
           namedByTraveller: namedMustDos,
           priorities,
@@ -578,8 +582,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           : await placeScanProposal({ ...supplement.proposal, bases: newBases }, {
               center: envelope.center,
               maxDistanceKm: reach,
-              ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
-              ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+              ...placementCountry,
               placesBudget: supplement.proposal.candidates.length,
               deadline: () => false,
             });
@@ -717,8 +720,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
             {
               center: envelope.center,
               maxDistanceKm: reach,
-              ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
-              ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
+              ...placementCountry,
               placesBudget: 0,
               namedByTraveller: [],
               priorities,
