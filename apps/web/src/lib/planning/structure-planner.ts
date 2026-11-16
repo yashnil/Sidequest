@@ -983,7 +983,15 @@ export function planStructure(input: StructurePlannerInput): StructurePlan {
     if (interest) interestCount.set(interest, (interestCount.get(interest) ?? 0) + 1);
     return true;
   };
-  for (const candidate of primaries) take(candidate, candidate.status !== 'must');
+  /*
+   * Audit pass (2026-11) — an essential is the trip's purpose, not a share of
+   * its mix. A "Tanzania safari" whose traveller never ticked wildlife carried
+   * the default cap of one wildlife stop, and the plan kept one crater and
+   * filled the rest with markets and hot springs. An essential (the contract's
+   * own, a bounded handful) is held back only by an interest the traveller
+   * asked to avoid.
+   */
+  for (const candidate of primaries) take(candidate, candidate.status === 'must' ? false : candidate.essential ? 'avoid_only' : true);
 
   // --- 3. fill thin days from high-fit candidates nobody decided on --------------------------
   /*
@@ -1179,7 +1187,7 @@ function reexplain(kernel: ReturnType<typeof createPlannerKernel>, state: PlanSt
     if (candidate.status === 'candidate' && candidate.fit < FILLER_MIN_FIT) continue;
     const interest = candidate.primaryInterest;
     const cap = interest ? input.frequencyCaps[interest] : undefined;
-    if (candidate.status !== 'must' && interest && cap !== undefined && (cap === 0 || (counts.get(interest) ?? 0) >= cap)) {
+    if (candidate.status !== 'must' && interest && cap !== undefined && (cap === 0 || (!candidate.essential && (counts.get(interest) ?? 0) >= cap))) {
       dropped.push({ candidate, reason: 'frequency', detail: 'You already have as much of this kind of thing as you asked for.' });
       continue;
     }

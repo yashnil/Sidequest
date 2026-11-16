@@ -52,7 +52,7 @@ import { buildFailure, classifyModelError, type BuildFailureCause } from '../pla
 import { boardFor, foodProviderChoice, resolveTripRegion } from '../region';
 import { seedPlannerAutoPicks } from '../planning/seed-autopicks';
 import { SCAN_INSTRUCTION, SCAN_JSON_TAG, SCAN_PROMPT_VERSION, buildScanSupplementTask, buildScanTask, buildScanUntrusted, scanCandidateTarget, scanProposalWireSchema } from './prompt';
-import { BASE_MISMATCH_KM, baseParts, fixturePlacement, placeScanProposal, withdrawCrossPartPositions } from './placement';
+import { BASE_MISMATCH_KM, baseParts, fixturePlacement, placeScanProposal, withdrawCrossPartPositions, withdrawLocalityOutliers } from './placement';
 import { journeyFor, strategicBaseChanges } from '../planning/journey';
 import { linkWikidataIds } from '../providers/wikidata-link';
 import { providerUserAgent } from '../net/user-agent';
@@ -469,6 +469,11 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       if (checked.withdrawn.length > 0) {
         console.warn(`Discovery scan placement for ${tripId}: ${checked.withdrawn.length} placed by a different base than their own locality, withdrawn (${checked.withdrawn.slice(0, 5).join(', ')}).`);
         placement = { ...placement, positions: checked.positions };
+      }
+      const consensus = withdrawLocalityOutliers(proposal, placement.positions, envelope.countryName);
+      if (consensus.withdrawn.length > 0) {
+        console.warn(`Discovery scan placement for ${tripId}: ${consensus.withdrawn.length} placed far from every other candidate of their own locality, withdrawn (${consensus.withdrawn.slice(0, 5).join(', ')}).`);
+        placement = { ...placement, positions: consensus.positions };
       }
     }
     let plan = planScanPoints(proposal, placement.positions, { footprint });

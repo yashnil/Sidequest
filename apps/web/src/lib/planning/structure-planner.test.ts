@@ -368,3 +368,26 @@ describe('a distant area is gathered rather than revisited (eval v2: the island 
     expect(scheduledIds(improvedPlan).filter((id) => id.startsWith('west-')).length).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe('audit pass — an essential is the purpose of the trip, not a share of its mix', () => {
+  const drive = (id: string, dLat: number, dLng: number, essential: boolean) =>
+    c(id, { coordinates: at(dLat, dLng), durationMinutes: 240, interests: ['wildlife'], primaryInterest: 'wildlife', category: 'nature', kindLabel: 'Wildlife', essential, status: 'recommended' });
+  /* Markets and viewpoints near the base, ranked above the drives, fill the days — the shape of the live safari plan. */
+  const town = Array.from({ length: 10 }, (_, i) => c(`town-${i}`, { coordinates: at(0.01 * i, 0.01), fit: 90, significance: 0.8, interests: ['markets_and_street_food'], primaryInterest: 'markets_and_street_food' }));
+  const parks = (essential: boolean) => [drive('park-north', 0.2, 0, essential), drive('park-east', 0, 0.3, essential), drive('park-south', -0.25, 0, essential), ...town];
+
+  it('three essential game drives in different parks all schedule, though the traveller never ticked wildlife (cap 1)', () => {
+    const plan = planStructure(input(parks(true), { frequencyCaps: { wildlife: 1 } }));
+    expect(scheduledIds(plan).filter((id) => id.startsWith('park-')).length).toBe(3);
+  });
+
+  it('the same drives, not essential, are still held to the mix the traveller asked for', () => {
+    const plan = planStructure(input(parks(false), { frequencyCaps: { wildlife: 1 } }));
+    expect(scheduledIds(plan).filter((id) => id.startsWith('park-')).length).toBeLessThan(3);
+  });
+
+  it('a traveller who asked to avoid it still wins over an essential', () => {
+    const plan = planStructure(input(parks(true), { frequencyCaps: { wildlife: 0 } }));
+    expect(scheduledIds(plan).filter((id) => id.startsWith('park-'))).toEqual([]);
+  });
+});

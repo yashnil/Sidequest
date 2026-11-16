@@ -269,6 +269,74 @@ export function withdrawCrossPartPositions(
 }
 
 /**
+ * Audit pass (2026-11) — WHAT THE OTHER CANDIDATES OF THE SAME PLACE SAY.
+ *
+ * `withdrawCrossPartPositions` needs a placed base or part to judge against,
+ * and the live beta's Tanzania safari had none for the Serengeti (its base was
+ * lost to the geocoder), so two "Central Serengeti" activities placed at tour
+ * offices in Arusha, 250 km away, survived — and the plan "reached" the
+ * Serengeti from Arusha. The proposal's own candidates are evidence too: those
+ * whose localities share a distinctive word ("Serengeti", "Ngorongoro") should
+ * land together. A member far outside its group's own spread is withdrawn — the
+ * place is not deleted, only an implausible position is.
+ *
+ * Conservative by construction: a group needs at least three placed members,
+ * and an outlier must lie beyond both `LOCALITY_OUTLIER_MIN_KM` and 1.5 × the
+ * radius around the group's medoid that holds two thirds of it — so at most a
+ * third can ever be withdrawn, and a park 150 km across keeps its far corners —
+ * and it must be farther than that floor from every member of the core, so the
+ * far end of a route strung along shared-name localities is never a stray. Generic words (directions, "park", "near"…)
+ * never form a group, and no place name is read anywhere here.
+ */
+export const LOCALITY_OUTLIER_MIN_KM = 80;
+export const LOCALITY_OUTLIER_FACTOR = 1.5;
+const LOCALITY_GENERIC = new Set(
+  'north northern south southern east eastern west western central centre center upper lower old new greater inner outer near around between area areas region district province county state park national reserve conservation valley lake lakes river mount mountain mountains hills hill island islands coast coastal beach bay village town city old-town downtown gateway entrance road the and of de la le el del da di du von van st saint san santa'.split(' '),
+);
+
+function localityWords(locality: string, countryName: string | undefined): string[] {
+  const country = new Set((countryName ?? '').toLowerCase().split(/[^\p{L}]+/u).filter(Boolean));
+  return [...new Set(locality.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 4 && !LOCALITY_GENERIC.has(w) && !country.has(w)))];
+}
+
+export function withdrawLocalityOutliers(
+  proposal: Pick<ScanProposal, 'candidates'>,
+  positions: ReadonlyMap<string, ResolvedPosition | null>,
+  countryName?: string,
+): { positions: Map<string, ResolvedPosition | null>; withdrawn: string[] } {
+  const next = new Map(positions);
+  const groups = new Map<string, { key: string; at: { lat: number; lng: number } }[]>();
+  for (const candidate of proposal.candidates) {
+    const at = positions.get(candidate.key);
+    if (!at) continue;
+    for (const word of localityWords(candidate.locality ?? '', countryName)) {
+      const list = groups.get(word) ?? [];
+      list.push({ key: candidate.key, at: at.coordinates });
+      groups.set(word, list);
+    }
+  }
+  const out = new Set<string>();
+  for (const members of groups.values()) {
+    if (members.length < 3) continue;
+    /* The medoid — the member closest to all the others — is not dragged by the outliers the way a mean or a coordinate median is. */
+    const sums = members.map((m) => members.reduce((sum, o) => sum + haversineKm(m.at, o.at), 0));
+    const centre = members[sums.indexOf(Math.min(...sums))]!.at;
+    const distances = members.map((m) => haversineKm(m.at, centre));
+    /* The radius two thirds of the group sits within; a park's far corners widen it, a few strays cannot. */
+    const core = [...distances].sort((a, b) => a - b)[Math.ceil((members.length * 2) / 3) - 1]!;
+    const limit = Math.max(LOCALITY_OUTLIER_MIN_KM, LOCALITY_OUTLIER_FACTOR * core);
+    /* …and it must be a stray, not the far end of a route: farther than the floor from every member of the core. A ring road's last stops always have a neighbour. */
+    const coreMembers = members.filter((_, i) => distances[i]! <= limit);
+    for (const [i, m] of members.entries()) {
+      if (distances[i]! <= limit) continue;
+      if (coreMembers.every((o) => haversineKm(o.at, m.at) > LOCALITY_OUTLIER_MIN_KM)) out.add(m.key);
+    }
+  }
+  for (const key of out) next.set(key, null);
+  return { positions: next, withdrawn: [...out] };
+}
+
+/**
  * Eval v3 — THE SAME CHECK AGAINST THE PROPOSAL'S OWN PLACES TO SLEEP. A live
  * Tanzania scan placed "Serengeti Balloon Safari" (locality "Serengeti") at the
  * operator's office in Arusha, 300 km from the trip's own Serengeti base; the
