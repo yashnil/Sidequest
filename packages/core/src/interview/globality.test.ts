@@ -141,7 +141,7 @@ describe('safe defaults when the evidence is thin', () => {
   });
 
   it('audit pass — a trip adopted from a shortlist card that said "no car needed" starts without a car, and decide-for-me keeps it so', () => {
-    const base = contextFor({ name: 'Highland Lake Towns', tripDays: 10, entityType: 'natural_feature', breadth: 'region', featureType: 'water', center: { lat: 14.7, lng: -91.2 }, startDate: '2027-03-19' });
+    const base = contextFor({ name: 'Highland Lake Towns', tripDays: 10, entityType: 'natural_region', breadth: 'region', featureType: 'water', center: { lat: 14.7, lng: -91.2 }, startDate: '2027-03-19' });
     const ctx: InterviewContext = { ...base, destination: { ...base.destination, advisorCarNeed: 'unnecessary' } };
     const answers = fresh(ctx);
     const decision = questionById(ctx, answers, 'transport_mode')!.smartDefault!(ctx, answers);
