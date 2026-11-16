@@ -1,4 +1,4 @@
-import { boundedLegMinutes, busSparseWithoutRail, estimateLegMinutes, haversineKm, highSpeedRailBackbone, moveSideOf, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord } from '@sidequest/core';
+import { boundedLegMinutes, busSparseWithoutRail, estimateLegMinutes, haversineKm, highSpeedRailBackbone, moveSideOf, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord, trailScope, type TrailScope } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
 import type { RegionContext } from '../region';
@@ -211,7 +211,16 @@ export function walkNotes(args: { plan: StructurePlan; bases: readonly PlannerBa
  * unresolved, the rest day, and the way home from the trail's end. Every
  * sentence is a figure Sidequest has, labelled as measured or estimated.
  */
-export type TrailNoteCode = 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap' | 'trail_adaptation';
+export type TrailNoteCode = 'trail_stage' | 'trail_alternative' | 'trail_unresolved' | 'trail_rest' | 'trail_return' | 'trail_gap' | 'trail_adaptation' | 'trail_scope';
+
+/** Which stages a plan walks, from its structure (`trailScope`). */
+export function trailScopeOf(trail: TrailRecord, plan: Pick<StructurePlan, 'days'>): TrailScope | null {
+  const scheduled = new Set(plan.days.flatMap((d) => d.stops.map((s) => s.candidate.id)));
+  return trailScope(
+    trail.stages.map((s) => ({ order: s.order, fromName: s.fromName, toName: s.toName, resolution: s.resolution, walkedOnDay: scheduled.has(s.placeId) })),
+    trail.dropped.length,
+  );
+}
 export function trailNotes(args: { trail: TrailRecord; plan: StructurePlan; bases: readonly PlannerBase[] }): { dayNumber: number; code: TrailNoteCode; note: string }[] {
   const { trail, plan } = args;
   const notes: { dayNumber: number; code: TrailNoteCode; note: string }[] = [];
@@ -230,6 +239,8 @@ export function trailNotes(args: { trail: TrailRecord; plan: StructurePlan; base
       notes.push({ dayNumber: day.dayNumber, code: 'trail_stage', note: `Section ${stage.order} of ${total} of the trail, walked in its order as a day walk${base ? ` from ${base}` : ''} — about ${trailHours(stage.walkMinutes)} of walking; ride back to where you sleep from where it ends.` });
     }
   };
+  const scope = trailScopeOf(trail, plan);
+  if (scope) notes.push({ dayNumber: 1, code: 'trail_scope', note: scope.sentence });
   if (!trail.followed) {
     if (trail.gap) notes.push({ dayNumber: 1, code: 'trail_gap', note: trail.gap });
     if (trail.adaptation) notes.push({ dayNumber: 1, code: 'trail_adaptation', note: trail.adaptation });

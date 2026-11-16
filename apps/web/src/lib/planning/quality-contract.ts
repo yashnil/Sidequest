@@ -10,6 +10,9 @@ import {
   type TripComposerAnswers,
   type TripQualityContract,
   type TripQualityEvaluation,
+  trailScope,
+  type TrailRecord,
+  type TrailScope,
 } from '@sidequest/core';
 
 /**
@@ -132,7 +135,7 @@ export function asksForHireCar(itinerary: Pick<Itinerary, 'transportStrategy'>):
   return /\b(?:rental|hire)[ -]car\b|\bcar hire\b|\brent(?:ing)? a car\b/i.test(text);
 }
 
-export function evaluateQualityContract(contract: TripQualityContract, itinerary: Pick<Itinerary, 'days' | 'transportStrategy'> & { package?: Itinerary['package'] }, board: readonly DiscoveryCandidate[], pickedIds: ReadonlySet<string>, extraSelfDrive = false, trail?: { followed: boolean; gap?: string | undefined } | null): TripQualityEvaluation {
+export function evaluateQualityContract(contract: TripQualityContract, itinerary: Pick<Itinerary, 'days' | 'transportStrategy'> & { package?: Itinerary['package'] }, board: readonly DiscoveryCandidate[], pickedIds: ReadonlySet<string>, extraSelfDrive = false, trail?: TrailRecord | { followed: boolean; gap?: string | undefined } | null): TripQualityEvaluation {
   const tagsById = new Map(board.map((c) => [c.place.id, c.place.tags] as const));
   return evaluateTripQualityContract(contract, {
     days: itinerary.days.map((day) => {
@@ -152,6 +155,13 @@ export function evaluateQualityContract(contract: TripQualityContract, itinerary
     }),
     board: board.map((c) => ({ id: c.place.id, name: c.place.name, kind: kindOf(c.place.tags) })),
     selfDriveRequested: extraSelfDrive || asksForHireCar(itinerary),
-    trail: trail ?? itinerary.package?.planning?.stay?.trail ?? null,
+    trail: withScope(trail ?? itinerary.package?.planning?.stay?.trail ?? null, itinerary),
   });
+}
+
+/** A followed trail's record, with which stages the itinerary actually walks (`trailScope`). */
+function withScope(trail: (TrailRecord | { followed: boolean; gap?: string | undefined }) | null, itinerary: Pick<Itinerary, 'days'>): { followed: boolean; gap?: string | undefined; scope?: TrailScope | null } | null {
+  if (!trail || !('stages' in trail) || !trail.followed) return trail;
+  const scheduled = new Set(itinerary.days.flatMap((d) => d.items.flatMap((item) => ('placeId' in item && typeof item.placeId === 'string' ? [item.placeId] : []))));
+  return { ...trail, scope: trailScope(trail.stages.map((s) => ({ order: s.order, fromName: s.fromName, toName: s.toName, resolution: s.resolution, walkedOnDay: scheduled.has(s.placeId) })), trail.dropped.length) };
 }

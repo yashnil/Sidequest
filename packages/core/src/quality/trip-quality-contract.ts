@@ -228,6 +228,42 @@ export function buildTripQualityContract(input: TripQualityContractInput): TripQ
   };
 }
 
+/* ---------- trail scope ---------- */
+
+export interface TrailScope {
+  from: string;
+  to: string;
+  walked: number;
+  found: number;
+  /** The walked stages end where they began. */
+  closed: boolean;
+  /** Stages Sidequest found were left unwalked: this is a section of the trail. */
+  partial: boolean;
+  sentence: string;
+}
+
+/**
+ * Audit pass (2026-11) — WHICH PART OF THE TRAIL THE PLAN WALKS. A "Tour du
+ * Mont Blanc trek" planned as three of the six stages found, with four idle
+ * nights at the start, read as the trek. The plan says what it walks, from
+ * where to where, how many of the stages found, and whether it closes back to
+ * its start. Read only from the stage records; no trail is named here.
+ */
+export function trailScope(stages: readonly { order: number; fromName: string | null; toName: string | null; resolution: string; walkedOnDay: boolean }[], droppedCount = 0): TrailScope | null {
+  const walked = stages.filter((s) => s.walkedOnDay && s.resolution !== 'alternative').sort((a, b) => a.order - b.order);
+  if (walked.length === 0) return null;
+  const from = walked[0]!.fromName;
+  const to = walked[walked.length - 1]!.toName;
+  if (!from || !to) return null;
+  const fold = (x: string) => x.normalize('NFKD').replace(/\p{M}/gu, '').trim().toLowerCase();
+  const found = new Set(stages.map((s) => s.order)).size + droppedCount;
+  const walkedCount = new Set(walked.map((s) => s.order)).size;
+  const closed = fold(from) === fold(to);
+  const partial = walkedCount < found;
+  const sentence = `This plan walks the trail from ${from} to ${to}: ${walkedCount} of the ${found} stage${found === 1 ? '' : 's'} Sidequest found${closed ? ', back to where it began' : ''}.${partial ? ` The other ${found - walkedCount} ${found - walkedCount === 1 ? 'is' : 'are'} not walked on these dates, so this is a section of the trail, not all of it.` : ''}`;
+  return { from, to, walked: walkedCount, found, closed, partial, sentence };
+}
+
 /* ---------- evaluation ---------- */
 
 export type ContractFailureStage = 'discovery' | 'selection' | 'scheduling' | 'transport' | 'timing' | 'pace';
@@ -260,7 +296,7 @@ export interface PlanForContract {
   /** Whether bookings, budget or prepare ask for a self-drive hire car. */
   selfDriveRequested: boolean;
   /** The stay decision's trail record (`scan/trail-stages.ts`), when the scan judged one: whether the stays follow it, and why not. */
-  trail?: { followed: boolean; gap?: string | undefined } | null;
+  trail?: { followed: boolean; gap?: string | undefined; scope?: TrailScope | null } | null;
 }
 
 function matches(e: EssentialExperience, stop: { placeId?: string; name: string; kind?: ScanKind | null }): boolean {
@@ -295,6 +331,10 @@ export function evaluateTripQualityContract(contract: TripQualityContract, plan:
    * contract, said in its own words — never papered over with day hikes that
    * look like a trek. The walk itself is still checked above.
    */
+  /* Audit pass — a section is not the trail: walking part of what was found is said, never presented as the whole. */
+  if (contract.structure === 'trail_stages' && plan.trail?.scope?.partial) {
+    violations.push({ id: 'trail_section', severity: 'warn', stage: 'scheduling', detail: plan.trail.scope.sentence, recovery: 'Add days, or choose the section you most want to walk and rebuild; Sidequest will not call a section the whole trail.' });
+  }
   if (contract.structure === 'trail_stages' && plan.trail && !plan.trail.followed) {
     violations.push({ id: 'trail_stages', severity: 'warn', stage: 'discovery', detail: plan.trail.gap ?? 'This trip is not planned as a walk from inn to inn.', recovery: 'Add the trail stages that suit the party, with places to sleep at their ends, on the Discovery Board, or tell Sidequest which section to walk.' });
   }
