@@ -1,3 +1,4 @@
+import { checkRegionIntegrity } from '../region/source';
 import { describe, expect, it } from 'vitest';
 import { normalizeScanProposal } from './proposal';
 import { assessTrailStage, civilDuskMinute, corridorPosition, orderTrailStages, resolveTrailStages, splitPointsAlong, trailBedChain, trailLimitsFor, trailStartMinute, type TrailStage } from './trail-stages';
@@ -281,6 +282,27 @@ describe('the stays follow the trail', () => {
     expect(trail.stages.every((s) => s.resolution === 'walk' && s.dayNumber !== undefined)).toBe(true);
     /* The villages the trail sleeps in were never proposed as beds: each says to book a bed there. */
     expect(trail.stages.filter((s) => s.addedBed).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('every place to sleep the trail added has a travel-time row, estimated and labelled, so the region passes its integrity check', () => {
+    /* Beta acceptance — live Kumano, Torres and the point-to-point trek all failed discovery with base_missing_from_matrix on these beds. */
+    for (const assembled of [
+      fictionalTrailRegion({ bedsOnly: ['alder'] }),
+      fictionalTrailRegion({ longThirdStage: true, townBetween: true, dates: ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17'] }),
+    ]) {
+      expect(checkRegionIntegrity(assembled.region)).toEqual([]);
+      const added = assembled.region.basePortfolio!.decision!.trail!.stages.filter((s) => s.addedBed && s.toBaseId).map((s) => s.toBaseId!);
+      expect(added.length).toBeGreaterThan(0);
+      const m = assembled.region.travelTimes;
+      for (const baseId of added) {
+        const routingId = assembled.region.bases.find((b) => b.id === baseId)!.routingId;
+        const i = m.ids.indexOf(routingId);
+        expect(i).toBeGreaterThanOrEqual(0);
+        const others = m.minutes[i]!.filter((_, j) => j !== i);
+        expect(others.every((v) => v > 0)).toBe(true);
+        if (m.feasibility) expect(m.feasibility[i]!.filter((_, j) => j !== i).every((f) => f !== 'verified')).toBe(true);
+      }
+    }
   });
 
   it('splits a too-long stage at the village between and sleeps there', () => {

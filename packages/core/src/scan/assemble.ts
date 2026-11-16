@@ -19,6 +19,7 @@ import type { WeatherLocation } from '../schemas/weather';
 import type { Region } from '../schemas/region';
 import { estimateLegMinutes, haversineKm } from '../travel/estimate';
 import { boundTravelMatrix } from '../travel/feasibility';
+import type { RouteFeasibility } from '../schemas/route-feasibility';
 import { highSpeedRailBackbone } from '../reality/jurisdictions';
 import { outlyingBases, type FootprintContext } from './base-footprint';
 import { SCAN_KIND_PROFILES, walkingMinutes, type ScanBaseProposal, type ScanCandidateProposal, type ScanProposal } from './proposal';
@@ -251,6 +252,67 @@ export function estimatedScanMatrix(points: readonly ScanPoint[], mode: 'car' | 
     /* Eval v3 — a straight line says how far, never that a road joins the two ends. */
     feasibility: points.map((a) => points.map((b) => (a.id === b.id ? 'verified' : status))),
   };
+}
+
+/**
+ * Beta acceptance — rows for places to sleep a followed trail added after the
+ * matrix was measured (a stage end the chain sleeps at). Each new cell is the
+ * same coordinate estimate `estimatedScanMatrix` writes, marked
+ * `plausible_unverified` (a measured matrix with no per-cell record gains one,
+ * its own cells `verified`): never a measurement, never zero, and never a
+ * missing row — the region's integrity check refuses a base no day can start
+ * from, and that refusal failed every live trek on staging.
+ */
+export function withEstimatedRows(
+  matrix: TravelTimeMatrixData,
+  added: readonly { id: string; coordinates: { lat: number; lng: number } }[],
+  pointOf: (id: string) => { lat: number; lng: number } | undefined,
+): TravelTimeMatrixData {
+  const fresh = added.filter((p, i) => !matrix.ids.includes(p.id) && added.findIndex((q) => q.id === p.id) === i);
+  if (fresh.length === 0) return matrix;
+  const estimateMode: TransportMode = matrix.mode === 'car' ? 'drive' : 'walk';
+  const fallbackMode: 'car' | 'foot' = matrix.mode === 'car' ? 'car' : 'foot';
+  const ids = [...matrix.ids, ...fresh.map((p) => p.id)];
+  const n = matrix.ids.length;
+  const coords = ids.map((id, i) => (i >= n ? fresh[i - n]!.coordinates : pointOf(id)));
+  const estimate = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+    Math.max(1, Math.round(estimateLegMinutes({ from: a, to: b, mode: estimateMode })?.minutes ?? fallbackMinutes({ coordinates: a } as ScanPoint, { coordinates: b } as ScanPoint, fallbackMode)));
+  /* A row with no known point keeps a figure (the schema holds numbers) but says no estimate stands behind it. */
+  const longest = Math.max(1, ...matrix.minutes.flat().filter((v) => Number.isFinite(v)));
+  const minutes: number[][] = [];
+  const km: number[][] = [];
+  const feasibility: RouteFeasibility[][] = [];
+  const oldStatus = (i: number, j: number): RouteFeasibility => matrix.feasibility?.[i]?.[j] ?? (matrix.provenance.kind === 'measured' ? 'verified' : 'plausible_unverified');
+  for (let i = 0; i < ids.length; i += 1) {
+    minutes.push([]);
+    km.push([]);
+    feasibility.push([]);
+    for (let j = 0; j < ids.length; j += 1) {
+      if (i < n && j < n) {
+        minutes[i]!.push(matrix.minutes[i]![j]!);
+        km[i]!.push(matrix.km[i]![j]!);
+        feasibility[i]!.push(oldStatus(i, j));
+        continue;
+      }
+      const a = coords[i];
+      const b = coords[j];
+      if (i === j) {
+        minutes[i]!.push(0);
+        km[i]!.push(0);
+        feasibility[i]!.push('verified');
+      } else if (a && b) {
+        minutes[i]!.push(estimate(a, b));
+        km[i]!.push(Math.round(haversineKm(a, b) * 10) / 10);
+        feasibility[i]!.push('plausible_unverified');
+      } else {
+        minutes[i]!.push(longest);
+        km[i]!.push(0);
+        feasibility[i]!.push('provider_unavailable');
+      }
+    }
+  }
+  const keepFeasibility = matrix.feasibility !== undefined || matrix.provenance.kind === 'measured';
+  return { ...matrix, ids, minutes, km, ...(keepFeasibility ? { feasibility } : {}) };
 }
 
 /** The civil zone at a point: the boundary lookup when the caller supplied one, else the destination's zone. */
@@ -719,7 +781,7 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
    * two stops either side of a cliff are as far apart as the road between them,
    * not as the crow flies. Idempotent, so a matrix bounded upstream is unchanged.
    */
-  const matrix = input.matrix.feasibility ? boundTravelMatrix({ matrix: input.matrix }).matrix : input.matrix;
+  let matrix = input.matrix.feasibility ? boundTravelMatrix({ matrix: input.matrix }).matrix : input.matrix;
   const nights = Math.max(0, input.dates.length - 1);
   const index = new Map(matrix.ids.map((id, i) => [id, i]));
   const matrixMinutes = (a: string, b: string): number | null => {
@@ -813,6 +875,10 @@ export function assembleScanRegion(input: AssembleScanRegionInput): ScanAssembly
    * what the stays follow (`trail-stages.ts`, `stay-objective.ts#trail`).
    */
   const trailPlan = input.trail ? planTrailStages(input, placeEntries, baseEntries, positions, pointAt) : null;
+  if (trailPlan && trailPlan.addedBedIds.length > 0) {
+    matrix = withEstimatedRows(matrix, trailPlan.addedBedIds.flatMap((id) => (pointAt.get(id) ? [{ id, coordinates: pointAt.get(id)! }] : [])), (id) => pointAt.get(id));
+    matrix.ids.forEach((id, i) => index.set(id, i));
+  }
   const trailLinks = trailPlan && input.trail?.follow
     ? trailPlan.links
     : trailLinksFor(placeEntries, baseEntries, (key) => positions.get(key) ?? null, (id) => pointAt.get(id));
