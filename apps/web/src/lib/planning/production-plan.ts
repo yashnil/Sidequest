@@ -603,6 +603,7 @@ async function generatePlan(
           /* The daily limit is a hard rule when the traveller set it (or accepted it), never when it is Sidequest's default. */
           ...(!modelMayOverride(contract.transport.maxDailyTravelMinutes.lock) || (input.movement.carAvailable !== false && input.movement.maxDailyDriveMinutes.value && !modelMayOverride(contract.transport.maxDailyDriveMinutes.lock)) ? { travelLimitHard: true } : {}),
           metroAreas: metroAreaCentres(concept?.parts ?? [], (intent?.destinationIntent?.graph?.children ?? []).map((child) => child.label)),
+          ...(concept?.type ? { destinationType: concept.type } : {}),
           /* The journey archetype's ground arrangement: an operator safari is written as one, whatever car the traveller could have. */
           ...(journey ? { groundArrangement: journey.strategy.ground } : qualityContract ? { groundArrangement: qualityContract.transport.mode } : {}),
         });

@@ -23,7 +23,7 @@ type Spot = { name: string; at: { lat: number; lng: number }; kind?: string; min
 
 const DATES = ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16'];
 
-function board(input: { countryCode: string; timeZone: string; regionCode?: string; bases: Spot[]; places: Spot[] }) {
+function board(input: { countryCode: string; timeZone: string; regionCode?: string; bases: Spot[]; places: Spot[]; breadth?: 'local' | 'region'; destinationType?: string }) {
   const raw = {
     bases: input.bases.map((b) => ({ name: b.name, locality: b.name, nightsHint: 3, why: 'A town to sleep in.' })),
     candidates: input.places.map((p, i) => ({
@@ -57,7 +57,7 @@ function board(input: { countryCode: string; timeZone: string; regionCode?: stri
     regionId: 'scan-ground-network',
     destinationName: 'A test region',
     entityType: 'state_or_province',
-    breadth: 'region',
+    breadth: input.breadth ?? 'region',
     center: input.bases[0]!.at,
     countryCode: input.countryCode,
     ...(input.regionCode ? { regionCode: input.regionCode } : {}),
@@ -83,7 +83,7 @@ function board(input: { countryCode: string; timeZone: string; regionCode?: stri
   } as unknown as Trip;
   const region = { region: compiled.region, places: compiled.places, access: compiled.access, hours: compiled.operatingHours, weather: null, food: null, matrix: compiled.travelTimes, transit: undefined, scheduledNetwork: null, baseId: compiled.bases.find((b) => b.id === compiled.primaryBaseId)!.routingId, basePortfolio: compiled.basePortfolio, months: [10], dates: [...DATES], compiled } as unknown as RegionContext;
   const candidates = compiled.places.map((place) => ({ place, fit: { score: 80, blockers: [] } }) as unknown as DiscoveryCandidate);
-  const composed = composeWithPlanner({ trip, profile: defaultProfileFor(trip, null), region, candidates, selections: [], extras: null, destinationName: 'A test region', carAvailable: false, maxDailyTravelMinutes: 240 });
+  const composed = composeWithPlanner({ trip, profile: defaultProfileFor(trip, null), region, candidates, selections: [], extras: null, destinationName: 'A test region', carAvailable: false, maxDailyTravelMinutes: 240, ...(input.destinationType ? { destinationType: input.destinationType } : {}) });
   const draft = composed.draft;
   const words = [...draft.days.flatMap((d) => d.anchors.map((a) => a.transport)), ...draft.days.flatMap((d) => (d.move ? [d.move.how] : []))];
   return { draft, words, composed, compiled };
@@ -216,6 +216,22 @@ describe('audit pass — a cluster of sights on a small island is not a metro ci
       { name: 'South Beach', at: { lat: 37.05, lng: 25.39 } },
     ];
     const { words } = board({ countryCode: 'GR', timeZone: 'Europe/Athens', bases: [{ name: 'Harbour Town', at: base }], places });
+    expect(words.filter((w) => w === 'metro' || RAIL.includes(w ?? ''))).toEqual([]);
+  });
+});
+
+describe('audit pass — a city-sized scope is not a city', () => {
+  it('an island read at settlement scale names no metro or train for its hops', () => {
+    const base = { lat: 36.417, lng: 25.432 };
+    const places: Spot[] = [
+      { name: 'Caldera Path', at: { lat: 36.44, lng: 25.42 } },
+      { name: 'Hill Village', at: { lat: 36.385, lng: 25.45 } },
+      { name: 'Wine Terrace', at: { lat: 36.38, lng: 25.43 } },
+      { name: 'South Ruins', at: { lat: 36.36, lng: 25.47 } },
+      { name: 'Black Beach', at: { lat: 36.36, lng: 25.48 } },
+      { name: 'North Point', at: { lat: 36.46, lng: 25.375 } },
+    ];
+    const { words } = board({ countryCode: 'GR', timeZone: 'Europe/Athens', bases: [{ name: 'Cliff Town', at: base }], places, breadth: 'local', destinationType: 'island' });
     expect(words.filter((w) => w === 'metro' || RAIL.includes(w ?? ''))).toEqual([]);
   });
 });

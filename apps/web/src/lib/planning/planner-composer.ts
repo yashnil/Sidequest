@@ -129,6 +129,8 @@ export interface PlannerComposeInput {
    * ("Tokyo and Kyoto by train" printed every Tokyo hop as a bus).
    */
   metroAreas?: readonly { lat: number; lng: number }[];
+  /** Audit pass — the destination concept's own type (`GEOGRAPHIC_SEMANTIC_TYPES`), when one was read: a metro at city scale needs a settlement or city region. */
+  destinationType?: string | null;
   /**
    * 2026-11 — the daily travel limit is the traveller's own rule (the trip
    * contract holds it at `user_explicit` or above), not Sidequest's default:
@@ -701,7 +703,15 @@ function draftFromPlan(args: {
   /* What public transport the country has, so a car-free leg never names a train that does not run. */
   /* A metro serves cities: on a regional, rural or trail trip a short hop is a bus even where the country has a metro somewhere. */
   const countryNetwork = publicTransportNetwork(networkScope.countryCode, { regionCode: networkScope.regionCode });
-  const cityScale = input.region.compiled.scope.breadth === 'city' || input.region.compiled.scope.breadth === 'local';
+  /*
+   * Audit pass — a city-sized scope is not a city. "Cyclades island hopping"
+   * once resolved as an island at settlement scale and every hop on Naxos and
+   * Santorini became "Train to …" (a metro hint). Where the destination's own
+   * type is known, a metro at city scale needs it to be a settlement or a city
+   * region; an unknown type keeps the old reading.
+   */
+  const urbanType = input.destinationType === undefined || input.destinationType === null || input.destinationType === 'settlement' || input.destinationType === 'city_region';
+  const cityScale = (input.region.compiled.scope.breadth === 'city' || input.region.compiled.scope.breadth === 'local') && urbanType;
   /* A trail corridor can read as "local" scope; a hop between its villages is a bus, never a metro (eval v3: "≈30 min train · ~4 km" to Chikatsuyu-oji). */
   const onTrail = input.region.basePortfolio?.decision?.trail?.followed === true;
   const network = { ...countryNetwork, metro: countryNetwork.metro && cityScale && !onTrail };
