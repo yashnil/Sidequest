@@ -276,6 +276,12 @@ export async function completeQuestionnaireAction(
   if (!boardIsUsable && (destination === 'scan' || destination === 'scan_and_build') && scanView(tripId).state !== 'running') {
     const fence = await guardBilledAction('scan_start');
     if (fence) return { ok: false, error: fence };
+    /* Audit pass — a destination the plan screen had not finished resolving is resolved here, once, before the scan needs its centre. */
+    const pending = getIntent(tripId);
+    if (pending?.destinationQuery?.trim() && !pending.resolution && !pending.selectedDestination) {
+      const { resolveDestinationAction } = await import('@/app/(product)/trips/[id]/plan/actions');
+      await resolveDestinationAction(tripId).catch(() => null);
+    }
     const caller = await callerKey();
     const started = startDiscoveryScan(tripId, { autoBuild: destination === 'scan_and_build', caller: caller ?? 'interview_scan_action' });
     /* A scan that cannot run here is not an error on this screen: the discover page says why, beside the button, and offers what can run. */

@@ -8,6 +8,8 @@ import { startDiscoveryScan } from '@/lib/discovery-scan/run';
 import { scanFailureCopy, travellerScanView, type ScanFailureCopy, type TravellerScanView } from '@/lib/discovery-scan/view';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
 import { callerKey, guardBilledAction } from '@/lib/net/caller';
+import { getIntent } from '@/lib/db/compiler-repository';
+import { resolveDestinationAction } from '@/app/(product)/trips/[id]/plan/actions';
 
 /**
  * V1 CONVERGENCE — "FIND PLACES FOR MY TRIP".
@@ -29,18 +31,29 @@ export type StartScanActionResult =
 const TRIP_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export async function startDiscoveryScanAction(tripId: string, options: { autoBuild?: boolean } = {}): Promise<StartScanActionResult> {
-  /* The interview is done when the traveller asks for places (or for smart defaults, which scans first). */
-  productEvent('interview_completed', tripId, { smartDefaults: Boolean(options.autoBuild) });
   if (typeof tripId !== 'string' || !TRIP_ID.test(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
   const refusal = await tripAccessRefusal(tripId);
   if (refusal) return { ok: false, error: refusal };
   if (!getTrip(tripId)) return { ok: false, error: 'We could not find that trip any more.' };
+  /* The interview is done when the traveller asks for places (or for smart defaults, which scans first). Counted only for the owner. */
+  productEvent('interview_completed', tripId, { smartDefaults: Boolean(options.autoBuild) });
 
   /* A press while a scan runs is the same scan: attach before the fence, which only charges new work. */
   if (scanView(tripId).state === 'running') return { ok: true, started: false, view: travellerScanView(tripId) };
 
   const fence = await guardBilledAction('scan_start');
   if (fence) return { ok: false, error: fence };
+  /*
+   * Audit pass — the destination is resolved by the plan screen's client on
+   * mount, and a traveller who leaves it before the geocoder answers (a
+   * several-part phrase takes several calls) used to reach a scan with no
+   * centre: "destination_unplaced". Resolve on demand, once, behind the same
+   * fence the plan screen uses — as the timing review already does.
+   */
+  const intent = getIntent(tripId);
+  if (intent?.destinationQuery?.trim() && !intent.resolution && !intent.selectedDestination) {
+    await resolveDestinationAction(tripId).catch(() => null);
+  }
   const caller = await callerKey();
   try {
     const result = startDiscoveryScan(tripId, { autoBuild: options.autoBuild === true, caller: caller ?? 'discover_scan_action' });
