@@ -1,0 +1,599 @@
+[
+ {
+  "scenario": "family-wellness-march",
+  "run": null,
+  "build": null,
+  "defining_present": 2,
+  "defining_total": 4,
+  "defining": {
+   "restful-outdoors": {
+    "present": true,
+    "stage": null
+   },
+   "restorative": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "family-suitable": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "free-time": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [
+   "strenuous"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 140,
+  "total_travel": 870,
+  "days_over_limit": 2,
+  "bases": 1,
+  "stops": 20,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 2,
+  "board_size": 23,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 1,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "The Guesthouse",
+   "Hotel Fonda del Sol",
+   "Hotel Utz Rajil",
+   "La Casa Colibri"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 222
+ },
+ {
+  "scenario": "madeira-levada-hiking",
+  "run": null,
+  "build": null,
+  "defining_present": 2,
+  "defining_total": 6,
+  "defining": {
+   "pico-ruivo": {
+    "present": true,
+    "stage": null
+   },
+   "25-fontes-risco": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "caldeirao-verde": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "sao-lourenco": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "another-levada": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "funchal": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 145,
+  "total_travel": 440,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 18,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 29,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Residencial Chafariz",
+   "Hotel Catedral",
+   "Funchal109 Hostel",
+   "The Marketplace by Storytellers"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 208
+ },
+ {
+  "scenario": "tokyo-kyoto-transit",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "shinkansen": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "sakura": {
+    "present": true,
+    "stage": null
+   },
+   "kyoto-core": {
+    "present": true,
+    "stage": null
+   },
+   "tokyo-core": {
+    "present": true,
+    "stage": null
+   },
+   "two-bases": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 270,
+  "total_travel": 950,
+  "days_over_limit": 1,
+  "bases": 2,
+  "stops": 17,
+  "empty_ordinary_days": 1,
+  "one_stop_days": 1,
+  "board_size": 36,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "APA Hotel Nishi Shinjuku Gochome Eki Tower",
+   "Hotel Tokyo Shinjuku Tei",
+   "一直旅館",
+   "東急ステイ 西新宿"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 141
+ },
+ {
+  "scenario": "tanzania-safari",
+  "run": null,
+  "build": null,
+  "defining_present": 3,
+  "defining_total": 5,
+  "defining": {
+   "serengeti": {
+    "present": false,
+    "stage": "selection"
+   },
+   "ngorongoro": {
+    "present": true,
+    "stage": null
+   },
+   "tarangire-manyara": {
+    "present": true,
+    "stage": null
+   },
+   "guided-vehicle": {
+    "present": false,
+    "stage": "selection"
+   },
+   "gateway": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 205,
+  "total_travel": 830,
+  "days_over_limit": 0,
+  "bases": 2,
+  "stops": 12,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 4,
+  "board_size": 23,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Rich Hotel",
+   "Shamba Lodge Arusha",
+   "Briston Hotel",
+   "Wademac Arusha Inn"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 218
+ },
+ {
+  "scenario": "oaxaca-food-culture",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 6,
+  "defining": {
+   "dia-de-muertos": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "markets": {
+    "present": true,
+    "stage": null
+   },
+   "monte-alban": {
+    "present": true,
+    "stage": null
+   },
+   "mezcal-valley": {
+    "present": true,
+    "stage": null
+   },
+   "santo-domingo": {
+    "present": true,
+    "stage": null
+   },
+   "mole-cooking": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [
+   "self-drive",
+   "coast-day-trip"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 223,
+  "total_travel": 658,
+  "days_over_limit": 0,
+  "bases": 2,
+  "stops": 20,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 31,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 1,
+  "consistency": [
+   "hire car on a no-self-drive trip"
+  ],
+  "slow_measured_rides": [],
+  "hard_n": 3,
+  "lodging_names": [
+   "Motel and Suites Urban",
+   "Hotel Marqués Del Valle",
+   "Hotel Gala Oaxaca",
+   "Hostal Don Miguel"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 224
+ },
+ {
+  "scenario": "faroe-roadtrip",
+  "run": null,
+  "build": null,
+  "defining_present": 6,
+  "defining_total": 6,
+  "defining": {
+   "mulafossur": {
+    "present": true,
+    "stage": null
+   },
+   "saksun-tjornuvik": {
+    "present": true,
+    "stage": null
+   },
+   "gjogv-slaettaratindur": {
+    "present": true,
+    "stage": null
+   },
+   "sorvagsvatn": {
+    "present": true,
+    "stage": null
+   },
+   "mykines-or-north": {
+    "present": true,
+    "stage": null
+   },
+   "torshavn-kirkjubour": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [
+   "drive-to-mykines"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 277,
+  "total_travel": 930,
+  "days_over_limit": 0,
+  "bases": 3,
+  "stops": 18,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 39,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 2,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "Gamla hotellið í Miðvági",
+   "Zarepta",
+   "Hotel Vagar",
+   "Ró Guesthouse"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 202
+ },
+ {
+  "scenario": "azores-hot-springs",
+  "run": null,
+  "build": null,
+  "defining_present": 5,
+  "defining_total": 5,
+  "defining": {
+   "furnas": {
+    "present": true,
+    "stage": null
+   },
+   "whales": {
+    "present": true,
+    "stage": null
+   },
+   "sete-cidades": {
+    "present": true,
+    "stage": null
+   },
+   "fogo-or-ferraria": {
+    "present": true,
+    "stage": null
+   },
+   "ponta-delgada": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 215,
+  "total_travel": 710,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 23,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 25,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Domus Vallis",
+   "Furnas Valley",
+   "Quinta Da Mó",
+   "Canto's Green Garden & SPA"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 157
+ },
+ {
+  "scenario": "slovenia-family",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "bled": {
+    "present": true,
+    "stage": null
+   },
+   "bohinj": {
+    "present": true,
+    "stage": null
+   },
+   "caves": {
+    "present": true,
+    "stage": null
+   },
+   "ljubljana": {
+    "present": true,
+    "stage": null
+   },
+   "family": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 190,
+  "total_travel": 673,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 17,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 29,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 1,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "BELVILLA (SI-04260-15) Tranquil Apartment in Bled with Garden",
+   "BELVILLA (SI-04260-22) Luxurious Apartment in Bled with Garden",
+   "BELVILLA (SI-04260-40) Beautiful Apartment in Bled near Lake",
+   "The Jungle Apartments - Vila Džungla"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 125
+ },
+ {
+  "scenario": "advisor-warm-unwind",
+  "run": null,
+  "build": null,
+  "defining_present": 3,
+  "defining_total": 3,
+  "defining": {
+   "beach": {
+    "present": true,
+    "stage": null
+   },
+   "food": {
+    "present": true,
+    "stage": null
+   },
+   "slow": {
+    "present": true,
+    "stage": null
+   }
+  },
+  "red_flags": [
+   "cold"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 125,
+  "total_travel": 563,
+  "days_over_limit": 1,
+  "bases": 1,
+  "stops": 21,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 25,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "Mobay Kotch",
+   "Ashanti Inn Guest House",
+   "Brandon Hill Guest House",
+   "DREAM Hostel"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 210
+ },
+ {
+  "scenario": "advisor-history-rail",
+  "run": null,
+  "build": null,
+  "defining_present": 2,
+  "defining_total": 4,
+  "defining": {
+   "old-towns": {
+    "present": false,
+    "stage": "discovery"
+   },
+   "museum-history": {
+    "present": true,
+    "stage": null
+   },
+   "food": {
+    "present": true,
+    "stage": null
+   },
+   "rail": {
+    "present": false,
+    "stage": "selection"
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 125,
+  "total_travel": 708,
+  "days_over_limit": 0,
+  "bases": 1,
+  "stops": 31,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 0,
+  "board_size": 46,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Fez Yamanda Guesthouse & Restaurant",
+   "Riad Verus",
+   "Médina Social Club",
+   "Dar Borj B&B in Fez,Morocco 菲斯之麗民宿 ダー ボース民宿）"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 284
+ }
+]

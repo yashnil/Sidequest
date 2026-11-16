@@ -1,0 +1,182 @@
+[
+ {
+  "scenario": "kumano-kodo",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "nakahechi-walk": {
+    "present": true,
+    "stage": null
+   },
+   "hongu-taisha": {
+    "present": true,
+    "stage": null
+   },
+   "nachi-hayatama": {
+    "present": true,
+    "stage": null
+   },
+   "onsen-village-stay": {
+    "present": true,
+    "stage": null
+   },
+   "luggage-transfer": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [
+   "overlong-stage"
+  ],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 160,
+  "total_travel": 627,
+  "days_over_limit": 2,
+  "bases": 7,
+  "stops": 24,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 3,
+  "board_size": 38,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 1,
+  "lodging_names": [
+   "近露そら",
+   "熊野野菜ベース",
+   "Guest house Chikatsuyu Cherry Garden 近露 櫻の園（Chikatsuyu sakuranosono）",
+   "さーどぷれいす熊野古道"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 256
+ },
+ {
+  "scenario": "point-to-point-trek",
+  "run": null,
+  "build": null,
+  "defining_present": 3,
+  "defining_total": 6,
+  "defining": {
+   "tmb-walk": {
+    "present": true,
+    "stage": null
+   },
+   "italy-section": {
+    "present": true,
+    "stage": null
+   },
+   "swiss-section": {
+    "present": false,
+    "stage": "selection"
+   },
+   "french-return": {
+    "present": false,
+    "stage": "selection"
+   },
+   "refuge-nights": {
+    "present": true,
+    "stage": null
+   },
+   "booking-ahead": {
+    "present": false,
+    "stage": "discovery"
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 175,
+  "total_travel": 636,
+  "days_over_limit": 3,
+  "bases": 4,
+  "stops": 14,
+  "empty_ordinary_days": 2,
+  "one_stop_days": 2,
+  "board_size": 29,
+  "contract_gap": true,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Gite Michel Fagot",
+   "Les Chalets Elena",
+   "Chalet Pic Rouge",
+   "Camping Bellevue"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 331
+ },
+ {
+  "scenario": "torres-w-trek",
+  "run": null,
+  "build": null,
+  "defining_present": 4,
+  "defining_total": 5,
+  "defining": {
+   "base-torres": {
+    "present": true,
+    "stage": null
+   },
+   "frances": {
+    "present": true,
+    "stage": null
+   },
+   "grey": {
+    "present": true,
+    "stage": null
+   },
+   "refugios": {
+    "present": true,
+    "stage": null
+   },
+   "gateway": {
+    "present": false,
+    "stage": "selection"
+   }
+  },
+  "red_flags": [],
+  "sky_violations": [],
+  "early_starts": [],
+  "early_violation": false,
+  "transport_contradiction": false,
+  "max_day_travel": 140,
+  "total_travel": 635,
+  "days_over_limit": 0,
+  "bases": 2,
+  "stops": 8,
+  "empty_ordinary_days": 0,
+  "one_stop_days": 2,
+  "board_size": 33,
+  "contract_gap": false,
+  "impossible_legs": [],
+  "far_days": 0,
+  "consistency": [],
+  "slow_measured_rides": [],
+  "hard_n": 0,
+  "lodging_names": [
+   "Refugio Los Cuernos"
+  ],
+  "pdf": {
+   "compact": 200,
+   "complete": 200
+  },
+  "seconds": 204
+ }
+]
