@@ -416,10 +416,17 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
       : await placeScanProposal(proposal, {
           center: envelope.center,
           maxDistanceKm: reach,
-          ...(envelope.countryCode ? { countryCode: envelope.countryCode } : {}),
-          ...(envelope.countryName ? { countryName: envelope.countryName } : {}),
-          /* Audit pass — a destination that spans several countries (a trail across three borders) places its far side too. */
-          ...((concept?.countries?.length ?? 0) > 1 ? { countryCodes: concept!.countries } : {}),
+          /*
+           * Audit pass — a walk or a drive does not stop at a border. The live
+           * Tour du Mont Blanc resolved as one point in one country and lost its
+           * Swiss and Italian stages to the country gate; on a trail or a route
+           * the distance gate (`maxDistanceKm`) is what refuses a same-named
+           * place far away, and the country is not asked. Elsewhere, a concept
+           * that spans several countries accepts each of them.
+           */
+          ...(envelope.countryCode && !trail.trail && !envelope.route ? { countryCode: envelope.countryCode } : {}),
+          ...(envelope.countryName && !trail.trail && !envelope.route ? { countryName: envelope.countryName } : {}),
+          ...(conceptCountries.length > 1 ? { countryCodes: conceptCountries } : {}),
           placesBudget: proposal.candidates.length,
           namedByTraveller: namedMustDos,
           priorities,
