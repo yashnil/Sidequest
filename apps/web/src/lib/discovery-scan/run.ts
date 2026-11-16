@@ -724,7 +724,7 @@ export async function runDiscoveryScan(tripId: string, scanId: string, options: 
           'matrix',
         );
     noteScanCounters(tripId, scanId, { timed: timed.measuredPairs, measured: timed.matrix.provenance.kind === 'measured' }, new Date());
-    console.warn(`Scan matrix for ${tripId}: ${timed.measuredPairs}/${timed.totalPairs} pairs measured (${timed.baseRows.measured}/${timed.baseRows.total} base↔place) in ${timed.requests.sent}/${timed.requests.planned} requests; ${timed.counts.bounded_estimate} bounded, ${timed.counts.disconnected} disconnected.`);
+    console.warn(`Scan matrix for ${tripId}: ${timed.measuredPairs}/${timed.totalPairs} pairs measured (${timed.baseRows.measured}/${timed.baseRows.total} base↔place) in ${timed.requests.sent}/${timed.requests.planned} requests; ${timed.counts.bounded_estimate} bounded, ${timed.counts.disconnected} disconnected, ${timed.counts.other_mode_required} across water.`);
 
     // --- 3b. somewhere to eat (open map data; never fails the scan) -------------------
     const regionId = `scan-${tripId.slice(0, 8)}-${scanId}`;

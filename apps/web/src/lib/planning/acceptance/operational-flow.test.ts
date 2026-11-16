@@ -113,8 +113,12 @@ describe('canonical flow — recorded Google operational evidence reaches the pl
     expect(stop.operational?.attribution).toBe('Place data © Google');
     expect(stop.operational?.recheck).toBe(stop.operational?.outcome !== 'open_at_time');
     expect(stop.startMinute).toBeGreaterThanOrEqual(600);
-    // PRODUCT RECOVERY V1 — the legs before it now carry honest estimates, so the visit lands in the late afternoon; it still starts before the recorded 18:00 close.
-    expect(stop.startMinute).toBeLessThan(1080);
+    // PRODUCT RECOVERY V1 — the legs before it carry honest estimates. Audit pass: the fixture's
+    // Lisbon-shaped points sit either side of the Tagus estuary, so those estimates are raised for
+    // the road around the water; a visit that now starts after the recorded 18:00 close must be
+    // flagged by the hours check rather than shown as open.
+    if (stop.startMinute >= 1080) expect(stop.operational?.outcome).not.toBe('open_at_time');
+    else expect(stop.startMinute).toBeLessThan(1080);
     // Terms: no Google hours values, no Google name, no website persisted.
     const json = JSON.stringify(stored);
     expect(json).not.toContain('Rua do Moinho');

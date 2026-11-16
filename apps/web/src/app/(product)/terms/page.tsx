@@ -63,7 +63,7 @@ export default function TermsPage() {
       id: 'attribution',
       heading: 'Map data and images',
       body: (
-        <p>Map data © OpenStreetMap contributors, available under the Open Database Licence. Images and facts from Wikimedia Commons and Wikidata are credited on the page where they appear under their own licences. Place data includes the Overture Maps Foundation’s open place files, used under their published licences. “Help me choose” draws on Wikivoyage (contributors, CC BY-SA 4.0) and the open datasets credited beside its results. Place data from Google is shown under Google’s terms where it is used.</p>
+        <p>Map data © OpenStreetMap contributors, available under the Open Database Licence. Images and facts from Wikimedia Commons and Wikidata are credited on the page where they appear under their own licences. Place data includes the Overture Maps Foundation’s open place files, used under their published licences. “Help me choose” draws on Wikivoyage (contributors, CC BY-SA 4.0) and the open datasets credited beside its results. Place data from Google is shown under Google’s terms where it is used. Water crossings are judged against OpenStreetMap coastline land polygons (© OpenStreetMap contributors, ODbL) and HydroLAKES (Messager et al. 2016, CC BY 4.0).</p>
       ),
     },
     {

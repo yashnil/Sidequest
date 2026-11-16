@@ -86,6 +86,9 @@ import {
   boundedLegMinutes,
   lowerBoundFrom,
   matrixFeasibility,
+  assessCrossing,
+  waterCrossingAllowanceMinutes,
+  aroundWaterMinutes,
   verifiedLookup,
   type RouteFeasibility,
   highSpeedRailBackbone,
@@ -138,6 +141,7 @@ import {
   type UnresolvedRelocation,
 } from './skeleton-adapter';
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
+import { loadWaterIndex } from '@sidequest/atlas';
 import { arrangementFromDraft } from './arrangement';
 import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRoad, episodesOf, type AnchorRole, type DraftAnchor, type DraftEpisode, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving, timeOfDayIsBinding, timeOfDayIsHard } from './trip-draft';
 
@@ -3448,12 +3452,29 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
      * as a drive; its placeholder figure is not a journey.
      */
     const cellFeasibility = matrixFeasibility(context.matrix, from.id, to.id);
+    /*
+     * Audit pass (2026-11) — A STRAIGHT LINE DOES NOT KNOW ABOUT THE SEA.
+     * "Drive to Mykines, ≈45 min, estimated from map distance" was a plan for an
+     * island reached by boat. Where nobody measured a ground leg and the
+     * straight line runs between landmasses, or mostly over sea or lake, the
+     * estimate is withdrawn: the leg keeps its endpoints, holds a crossing
+     * allowance and says why (`travel/water.ts`). A router's measurement always
+     * outranks this — a bridge, a causeway and a car ferry are roads to it.
+     */
+    const groundLeg = mode === 'drive' || mode === 'walk' || mode === 'rideshare' || mode === 'private_transfer' || mode === 'shuttle' || mode === 'public_bus' || mode === 'bicycle' || mode === 'rail';
+    const crossing = !measured && groundLeg && !inEpisode && fromCoordinates && toCoordinates ? assessCrossing(loadWaterIndex(), fromCoordinates, toCoordinates) : null;
+    const overWater = crossing?.verdict === 'separate_land';
+    /* Same land, mostly water on the line: the road goes around. The estimate stands, raised and labelled (`aroundWaterMinutes`). */
+    const aroundWater = crossing?.verdict === 'water_between';
     const cellDisconnected = cellFeasibility === 'disconnected' && (mode === 'drive' || mode === 'rideshare' || mode === 'private_transfer' || mode === 'shuttle');
-    const rawEstimate = !measured && !cellDisconnected && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
+    const rawEstimateBase = !measured && !cellDisconnected && !overWater && (routable || geoEstimable) && !walkRefused && !beyondRoadEstimate && fromCoordinates && toCoordinates
       ? matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot')
         ? { minutes: Math.max(5, Math.round(matrixFigure.minutes / 5) * 5), straightLineKm: haversineKm(fromCoordinates, toCoordinates), approxKm: Math.round(matrixFigure.km || haversineKm(fromCoordinates, toCoordinates) * 1.3), kmh: matrixFigure.minutes > 0 ? Math.round(((matrixFigure.km || 0) / matrixFigure.minutes) * 60) : 0 }
         : estimateLegMinutes({ from: fromCoordinates, to: toCoordinates, mode, highSpeedRail: highSpeedRailBackbone(context.destinationScope?.countryCode, { regionCode: context.destinationScope?.regionCode, points: [fromCoordinates, toCoordinates] }) })
       : null;
+    /* A matrix cell already carries the raise (`boundTravelMatrix`); only the estimator's own figure is raised here. */
+    const fromMatrixCell = Boolean(rawEstimateBase && matrixFigure && matrixFigure.minutes > 0 && (mode === 'drive' ? context.matrix.mode === 'car' : mode === 'walk' && context.matrix.mode === 'foot'));
+    const rawEstimate = rawEstimateBase && aroundWater && !fromMatrixCell ? { ...rawEstimateBase, minutes: aroundWaterMinutes(rawEstimateBase.minutes) } : rawEstimateBase;
     /*
      * Eval v3 — PROXIMITY IS NOT DRIVEABILITY. A road estimate is raised to the
      * floor that measured legs prove (the region's verified cells and whatever
@@ -3476,13 +3497,15 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
           ? 'mode_not_routed'
           : noRouteAnswered
             ? 'no_route_found'
-            : 'provider_unavailable';
+            : overWater
+              ? 'water_crossing'
+              : 'provider_unavailable';
     const minutes = walkRefused ? null : (measured?.minutes ?? estimate?.minutes ?? null);
     const km = walkRefused ? null : (measured?.km ?? null);
     const geometry = confirmation?.geometry && confirmation.geometry.length > 1 ? encodePolyline(simplifyPolyline(confirmation.geometry)) : undefined;
     const basis: TravelSegment['basis'] = measured ? (confirmation?.basis ?? (context.matrix.mode === 'transit' ? 'scheduled' : 'static')) : estimate ? 'estimated' : undefined;
     const sameLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) === normalizeName(to.locality));
-    const allowance = !measured && !estimate ? unknownLegAllowanceMinutes({ mode, sameLocality, role }) : null;
+    const allowance = !measured && !estimate ? (overWater && !noRouteAnswered && fromCoordinates && toCoordinates ? waterCrossingAllowanceMinutes(haversineKm(fromCoordinates, toCoordinates)) : unknownLegAllowanceMinutes({ mode, sameLocality, role })) : null;
     const stamp = input.measuredAt ?? new Date().toISOString();
     const travel: TravelSegment = {
       fromId: from.id,
@@ -3498,7 +3521,7 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
       ...(basis ? { basis } : {}),
       ...(measured ? { measuredAt: confirmation?.measuredAt ?? stamp, provider: confirmation?.provider ?? (!trustedMatrix || context.matrix.provenance.kind === 'measured' ? 'routing-matrix' : `${context.matrix.provenance.kind}-road-data`) } : {}),
       ...(estimate ? { measuredAt: stamp, provider: 'sidequest-geo-estimate', estimateKind: 'geo' as const, estimate: { straightLineKm: Math.round(estimate.straightLineKm * 10) / 10, approxKm: estimate.approxKm, kmh: estimate.kmh } } : {}),
-      feasibility: legFeasibility({ measured: Boolean(measured) && !walkRefused, estimate: Boolean(estimate) && !walkRefused, bounded, cell: cellFeasibility, unmeasuredReason, noRouteAnswered }),
+      feasibility: overWater && !measured && !noRouteAnswered ? 'other_mode_required' : legFeasibility({ measured: Boolean(measured) && !walkRefused, estimate: Boolean(estimate) && !walkRefused, bounded, cell: cellFeasibility, unmeasuredReason, noRouteAnswered }),
       ...(plausible.corrected ? { modeCorrectedFrom: hinted } : !worldCheck.ok ? { modeCorrectedFrom: hintedRaw } : {}),
       ...(legHint ? { hint: legHint } : {}),
       ...(confirmation?.staticMinutes !== undefined ? { staticMinutes: confirmation.staticMinutes } : {}),
@@ -3514,15 +3537,19 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     items.push({
       id: `d${input.dayNumber}-leg-${items.length}`,
       kind: 'travel',
-      title: `${shown || estimate ? `${vehicleLabel ?? labelFor(mode)} to` : 'Travel to'} ${to.name}`,
+      title: `${shown || estimate ? `${vehicleLabel ?? labelFor(mode)} to` : unmeasuredReason === 'water_crossing' ? 'Crossing to' : 'Travel to'} ${to.name}`,
       ...span(clock, duration),
       travel,
       reason: shown
         ? `${shown.minutes} min ${basis === 'traffic_aware' ? 'with traffic' : basis === 'scheduled' ? 'from a timetable' : 'measured'}${km !== null ? `, ${Math.round(km)} km` : ''}${viaBases ? ' base to base; today’s stops sit along the way' : ''}.`
         : estimate && bounded
           ? `At least ${estimate.minutes} min by ${labelFor(mode).toLowerCase()} — not measured directly, but measured journeys from a common point show it cannot be shorter; the map distance (${Math.round(estimate.straightLineKm)} km straight) understates the road.`
+        : estimate && aroundWater
+          ? `About ${estimate.minutes} min by ${labelFor(mode).toLowerCase()} — the straight line crosses ${crossing?.lake ? 'a lake' : 'water'}, so the road goes around it (or a boat crosses); estimated from map distance, not a measured route.`
         : estimate
           ? `About ${estimate.minutes} min by ${labelFor(mode).toLowerCase()}, estimated from map distance (roughly ${estimate.approxKm} km) — not a measured route.${plausible.corrected ? ` The plan said ${labelFor(hinted).toLowerCase()}; ${Math.round(straightLineKm ?? 0)} km apart is not a ${labelFor(hinted).toLowerCase()}.` : ''}`
+          : unmeasuredReason === 'water_crossing'
+            ? `Across water — ${from.name} and ${to.name} stand on different landmasses and no road between them was measured. Check the ferry, boat or bridge before you go; the day holds ${duration} minutes for the crossing and shows times as parts of the day.`
           : hint && !roadRoutable(hint)
             ? `${hint.replace(/_/g, ' ')} — a journey Sidequest's road router cannot measure; the day holds ${duration} minutes for it and shows times as parts of the day.`
             : `Travel time not measured or estimated for this leg; the day holds a ${duration}-minute allowance and shows times as parts of the day.`,

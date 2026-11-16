@@ -1,5 +1,6 @@
 import type { RoutingProvider, ProviderGapReason } from '@sidequest/compiler';
-import { boundTravelMatrix, estimatedScanMatrix, haversineKm, routePairKey, type RouteFeasibility, type ScanPoint, type TravelTimeMatrixData } from '@sidequest/core';
+import { loadWaterIndex } from '@sidequest/atlas';
+import { assessCrossing, boundTravelMatrix, estimatedScanMatrix, haversineKm, routePairKey, type BoundMatrixInput, type RouteFeasibility, type ScanPoint, type TravelTimeMatrixData, type WaterIndex } from '@sidequest/core';
 
 /**
  * EVAL V3 — MEASURE THE PAIRS THAT DECIDE GEOGRAPHY, THEN BOUND THE REST.
@@ -94,6 +95,27 @@ export function planScanMatrixRequests(points: readonly Pick<ScanPoint, 'kind' |
 /** A gap reason that says the router could not be asked or could not answer, rather than that it looked and declined. */
 function providerGap(reason: ProviderGapReason): boolean {
   return reason !== 'insufficient_evidence' && reason !== 'not_found';
+}
+
+/**
+ * Audit pass — the water check for the scan's unmeasured cells: a pair whose
+ * straight line runs between landmasses, or mostly over sea or lake, is not
+ * scheduled as a road or foot journey nobody measured (`travel/water.ts`).
+ * Memoised per unordered pair; `index` defaults to the shipped land index.
+ */
+export function scanCrossing(points: readonly ScanPoint[], index: WaterIndex | null = loadWaterIndex()): BoundMatrixInput['crossing'] {
+  if (!index) return undefined;
+  const memo = new Map<string, ReturnType<NonNullable<BoundMatrixInput['crossing']>>>();
+  return (i, j) => {
+    const key = i < j ? `${i}:${j}` : `${j}:${i}`;
+    if (memo.has(key)) return memo.get(key)!;
+    const a = points[i]!.coordinates;
+    const b = points[j]!.coordinates;
+    const verdict = assessCrossing(index, a, b).verdict;
+    const out = verdict === 'separate_land' || verdict === 'water_between' ? { verdict, straightLineKm: haversineKm(a, b) } : null;
+    memo.set(key, out);
+    return out;
+  };
 }
 
 export interface ScanMatrixOutcome {
@@ -236,7 +258,7 @@ export async function measureScanMatrix(input: { points: readonly ScanPoint[]; m
           : estimate.provenance,
     feasibility: prior,
   };
-  const bounded = boundTravelMatrix({ matrix: raw, disconnected });
+  const bounded = boundTravelMatrix({ matrix: raw, disconnected, crossing: scanCrossing(points) });
   return {
     matrix: bounded.matrix,
     source: measuredPairs > 0 ? routing!.name : 'distance estimates',
@@ -254,7 +276,7 @@ export function estimatedScanOutcome(points: readonly ScanPoint[], mode: 'car' |
   const n = points.length;
   const isBase = points.map((p) => p.kind === 'base');
   const baseRowTotal = points.reduce((sum, _, i) => sum + points.reduce((s, __, j) => s + (i !== j && isBase[i] !== isBase[j] ? 1 : 0), 0), 0);
-  const bounded = boundTravelMatrix({ matrix: estimatedScanMatrix(points, mode) });
+  const bounded = boundTravelMatrix({ matrix: estimatedScanMatrix(points, mode), crossing: scanCrossing(points) });
   return {
     matrix: bounded.matrix,
     source: 'distance estimates',

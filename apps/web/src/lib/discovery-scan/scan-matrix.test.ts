@@ -4,7 +4,7 @@ import type { ScanPoint } from '@sidequest/core';
 
 vi.mock('server-only', () => ({}));
 
-import { MAX_SCAN_MATRIX_REQUESTS, SCAN_MATRIX_MAX_ELEMENTS, measureScanMatrix, planScanMatrixRequests } from './scan-matrix';
+import { MAX_SCAN_MATRIX_REQUESTS, SCAN_MATRIX_MAX_ELEMENTS, estimatedScanOutcome, measureScanMatrix, planScanMatrixRequests } from './scan-matrix';
 import { ORS_MATRIX_MAX_PAIRS } from '../providers/openrouteservice';
 import { MAX_MATRIX_PAIRS_PER_REQUEST } from '../providers/valhalla';
 
@@ -160,5 +160,40 @@ describe('route feasibility from the scan', () => {
     expect(outcome.counts.provider_unavailable).toBe(6);
     expect(outcome.measuredPairs).toBe(0);
     expect(outcome.matrix.provenance.source).toBe('sidequest-geo-estimate');
+  });
+});
+
+describe('audit pass — an unmeasured cell across the sea is not a drive', () => {
+  /* Unseen ground: an Aegean island hop and a Scottish island with no bridge. Coordinates only — no name is read. */
+  const points = [
+    pt('naxos-chora', 'base', 37.105, 25.376),
+    pt('naxos-apeiranthos', 'place', 37.074, 25.521),
+    pt('paros-naoussa', 'place', 37.123, 25.238),
+    pt('oban', 'base', 56.415, -5.472),
+    pt('mull-tobermory', 'place', 56.622, -6.068),
+  ];
+  const id = (k: string) => points.findIndex((p) => p.id === k);
+
+  it('labels the crossings other_mode_required and keeps the same-island pair an ordinary estimate', () => {
+    const { matrix, counts } = estimatedScanOutcome(points, 'car');
+    const f = (a: string, b: string) => matrix.feasibility![id(a)]![id(b)];
+    expect(f('naxos-chora', 'paros-naoussa')).toBe('other_mode_required');
+    expect(f('oban', 'mull-tobermory')).toBe('other_mode_required');
+    expect(f('naxos-chora', 'naxos-apeiranthos')).toBe('provider_unavailable');
+    expect(counts.other_mode_required).toBeGreaterThanOrEqual(4);
+  });
+
+  it('a router that measured the pair (a car ferry or bridge) outranks the geometry', async () => {
+    const routing: RoutingProvider = {
+      name: 'stub',
+      matrix: vi.fn(async ({ points: pts }) => ({
+        ids: pts.map((p: { id: string }) => p.id),
+        minutes: pts.map(() => pts.map(() => 70)),
+        km: pts.map(() => pts.map(() => 40)),
+        provenance: { kind: 'measured', note: 'stub' },
+      })) as unknown as RoutingProvider['matrix'],
+    } as RoutingProvider;
+    const out = await measureScanMatrix({ points, mode: 'car', routing, deadline: () => false });
+    expect(out.matrix.feasibility![id('oban')]![id('mull-tobermory')]).toBe('verified');
   });
 });

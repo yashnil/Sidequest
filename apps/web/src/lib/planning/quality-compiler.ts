@@ -100,7 +100,7 @@ export interface QualityCompilerResult {
  * `provider_unavailable`, where nobody was asked because an endpoint had no
  * coordinate — which is Sidequest's work and not the traveller's problem.
  */
-const EXCUSED_UNMEASURED = new Set(['mode_not_routed', 'operator_unpublished', 'no_route_found', 'not_remeasured_after_edit']);
+const EXCUSED_UNMEASURED = new Set(['mode_not_routed', 'operator_unpublished', 'no_route_found', 'not_remeasured_after_edit', 'water_crossing']);
 
 /** The fraction of legs a measurement actually reached, and the day totals that depend on it. */
 function legStats(itinerary: Itinerary): { measured: number; estimated: number; unmeasured: number; total: number; transfersUnmeasured: number; transfersUnexcused: number } {

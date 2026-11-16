@@ -1858,6 +1858,8 @@ function travelProvenanceLabel(travel: TravelSegment): string {
           return 'travel time not measured — no route was found between these two points';
         case 'operator_unpublished':
           return 'travel time not measured — the operator does not publish one';
+        case 'water_crossing':
+          return 'crosses water — no road between these points was measured; check the ferry, boat or bridge';
         default:
           return 'travel time not measured';
       }
