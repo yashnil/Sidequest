@@ -13,3 +13,4 @@ export * from './parse';
 export * from './climate-check';
 export * from './summary';
 export * from './research-need';
+export * from './adoption';

@@ -631,8 +631,16 @@ function semanticsFor(input: {
      * islands made the pair a 2,500 km "country-scale" region.
      */
     const urbanTypeOf = (featureType: string | undefined) => (featureType === 'municipality' ? 'city_region' : featureType && ['city', 'town', 'village', 'settlement', 'hamlet'].includes(featureType) ? 'settlement' : null);
+    /*
+     * Audit pass — "Fes, Chefchaouen and Meknes, Morocco": the closing country
+     * is where the listed places sit, not a part to cover. Its whole box in the
+     * union framed three towns at country scale. It counts only when nothing
+     * else placed.
+     */
+    const placedPlaces = graph.children.filter((c) => c.kind !== 'country' && c.resolution && c.resolution.source !== 'interpretation');
     const travelParts = graph.children
       .filter((c) => c.resolution && c.resolution.source !== 'interpretation')
+      .filter((c) => c.kind !== 'country' || placedPlaces.length === 0)
       .map((c) => {
         const r = c.resolution!;
         const urban = urbanTypeOf(r.featureType);

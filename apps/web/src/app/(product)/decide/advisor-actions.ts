@@ -4,6 +4,7 @@ import { savedPartyHint } from '@/lib/party/known-party';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
+  adoptionPhrase,
   partyFromSaved,
   ARRIVAL_PLANNING_MINUTES,
   DEPARTURE_PLANNING_MINUTES,
@@ -325,11 +326,13 @@ export async function adoptAdvisorPickAction(id: string, pickId: string, party?:
       : saved
         ? { adults: saved.adults, children: Math.max(saved.children, session.answers.children), partyBasis: 'profile' as const }
         : { adults: session.answers.adults, children: session.answers.children, partyBasis: 'assumed' as const };
+  /* Audit pass — a region that resolves as one of its own towns is planned as its own places, never as that one town (`advisor/adoption.ts`). */
+  const destinationPhrase = adoptionPhrase(pick, chosen.nights);
   const answers: TripComposerAnswers = {
     ...session.answers,
     ...resolvedParty,
     mode: 'known_destination',
-    destinationQuery: pick.resolveAs,
+    destinationQuery: destinationPhrase,
     dates: { ...dates, startDate: window.startDate, endDate: window.endDate },
     duration: { ...session.answers.duration, mode: 'fixed', nights: chosen.nights },
     updatedAt: now.toISOString(),
@@ -337,7 +340,7 @@ export async function adoptAdvisorPickAction(id: string, pickId: string, party?:
 
   const basics = tripBasicsSchema.safeParse({
     mode: 'known_destination',
-    destinationInput: pick.resolveAs,
+    destinationInput: destinationPhrase,
     regionId: DYNAMIC_REGION_ID,
     startDate: window.startDate,
     endDate: window.endDate,
@@ -369,7 +372,7 @@ export async function adoptAdvisorPickAction(id: string, pickId: string, party?:
     const adopted = getDb().transaction((): string | null => {
       const created = createTrip(basics.data, ownerToken, userId).id;
       saveComposerAnswers(created, answers);
-      saveDestinationQuery(created, 'known_destination', pick.resolveAs);
+      saveDestinationQuery(created, 'known_destination', destinationPhrase);
       if (!resolveDecisionSession(id, created, now)) throw new AlreadyChosen();
       return created;
     });
