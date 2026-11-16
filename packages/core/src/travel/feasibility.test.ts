@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundTravelMatrix, boundedLegMinutes, lowerBoundFrom, routePairKey, triangleLowerBound, verifiedLookup } from './feasibility';
+import { boundTravelMatrix, boundedLegMinutes, lowerBoundFrom, routePairKey, triangleLowerBound, verifiedLookup, waterCrossingAllowanceMinutes } from './feasibility';
 import { estimatedScanMatrix } from '../scan/assemble';
 import { travelFigurePrefix } from './estimate';
 import type { ScanPoint } from '../scan/assemble';
@@ -109,5 +109,55 @@ describe('boundedLegMinutes and the printed mark', () => {
     expect(travelFigurePrefix({ provenance: 'estimated', feasibility: 'bounded_estimate' })).toBe('≥');
     expect(travelFigurePrefix({ provenance: 'estimated' })).toBe('≈');
     expect(travelFigurePrefix({ provenance: 'measured', feasibility: 'verified' })).toBe('');
+  });
+});
+
+describe('audit pass — a straight line across water is not a road anybody measured', () => {
+  const matrix = (feasibility?: ('verified' | 'plausible_unverified')[][]) => ({
+    mode: 'car' as const,
+    ids: ['base', 'island', 'shore'],
+    minutes: [
+      [0, 45, 20],
+      [45, 0, 50],
+      [20, 50, 0],
+    ],
+    km: [
+      [0, 22, 10],
+      [22, 0, 25],
+      [10, 25, 0],
+    ],
+    provenance: { kind: 'estimated' as const, note: 'test' },
+    ...(feasibility ? { feasibility } : {}),
+  });
+  /* base and shore share land; island is across the sea from both. */
+  const crossing = (i: number, j: number) => (i === 1 || j === 1 ? { verdict: 'separate_land' as const, straightLineKm: 17 } : null);
+
+  it('labels unmeasured crossings other_mode_required with a crossing allowance, never the road estimate', () => {
+    const out = boundTravelMatrix({ matrix: matrix(), crossing });
+    expect(out.matrix.feasibility![0]![1]).toBe('other_mode_required');
+    expect(out.matrix.minutes[0]![1]).toBe(waterCrossingAllowanceMinutes(17));
+    expect(out.matrix.feasibility![0]![2]).toBe('plausible_unverified');
+    expect(out.counts.other_mode_required).toBe(4);
+  });
+
+  it('never overrides a measured cell: a router that timed the pair found the bridge or the car ferry', () => {
+    const v = 'verified' as const;
+    const u = 'plausible_unverified' as const;
+    const out = boundTravelMatrix({ matrix: matrix([[v, v, u], [v, v, u], [u, u, v]]), crossing });
+    expect(out.matrix.feasibility![0]![1]).toBe('verified');
+    expect(out.matrix.minutes[0]![1]).toBe(45);
+  });
+
+  it('is idempotent', () => {
+    const once = boundTravelMatrix({ matrix: matrix(), crossing });
+    const twice = boundTravelMatrix({ matrix: once.matrix });
+    expect(twice.matrix.feasibility).toEqual(once.matrix.feasibility);
+    expect(twice.matrix.minutes).toEqual(once.matrix.minutes);
+  });
+
+  it('the allowance grows with the crossing and is a quarter-hour figure', () => {
+    expect(waterCrossingAllowanceMinutes(0)).toBe(30);
+    expect(waterCrossingAllowanceMinutes(17)).toBe(90);
+    expect(waterCrossingAllowanceMinutes(60) % 15).toBe(0);
   });
 });

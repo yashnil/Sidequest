@@ -109,6 +109,8 @@ const UNKNOWN_REASON: Record<UnmeasuredTravelReason, JourneyUnknownReason> = {
   operator_unpublished: 'operator_has_not_published',
   not_remeasured_after_edit: 'not_required',
   provider_unavailable: 'outside_provider_coverage',
+  /* The leg crosses water no router measured: there is a crossing to arrange, which no provider here can time. */
+  water_crossing: 'no_provider_for_mode',
 };
 
 function truthOf(segment: TravelSegment, mode: TravelMode, context: JourneyContext): JourneyTruth {

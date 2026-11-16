@@ -143,6 +143,7 @@ export * from './travel/plausibility';
 export * from './intelligence/anchor-kind';
 export * from './reference/countries';
 export * from './travel/scheduled-stops';
+export * from './travel/water';
 
 export * from './region/season';
 export * from './region/expansion';

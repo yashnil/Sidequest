@@ -256,7 +256,7 @@ export function legFromSegment(input: {
   const unmeasuredReason: TransportLeg['unmeasuredReason'] | undefined =
     basis !== 'unmeasured'
       ? undefined
-      : !roadRoutable
+      : !roadRoutable || input.segment.unmeasuredReason === 'water_crossing'
         ? 'mode_not_road_routable'
         : input.segment.unmeasuredReason === 'no_route_found'
           ? 'no_route_found'

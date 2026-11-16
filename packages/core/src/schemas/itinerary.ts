@@ -129,6 +129,8 @@ export const UNMEASURED_TRAVEL_REASONS = [
   'not_remeasured_after_edit',
   /** PRODUCT RECOVERY V1 — no configured router covered this pair (or none was configured, or the deadline had passed), and one end had no coordinate to estimate from. Nobody said "no route"; nobody was asked. */
   'provider_unavailable',
+  /** Audit pass (2026-11) — nobody measured this ground leg and its straight line runs between landmasses or mostly over sea or lake (`travel/water.ts`); a straight-line estimate would be a drive across water. */
+  'water_crossing',
 ] as const;
 export const unmeasuredTravelReasonSchema = z.enum(UNMEASURED_TRAVEL_REASONS);
 export type UnmeasuredTravelReason = z.infer<typeof unmeasuredTravelReasonSchema>;

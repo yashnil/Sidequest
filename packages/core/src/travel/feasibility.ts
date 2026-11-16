@@ -1,5 +1,6 @@
 import type { RouteFeasibility } from '../schemas/route-feasibility';
 import type { TravelTimeMatrixData } from '../schemas/compiled-region';
+import { aroundWaterMinutes } from './water';
 
 /**
  * EVAL V3 — PROXIMITY IS NOT DRIVEABILITY.
@@ -113,6 +114,18 @@ export interface BoundMatrixInput {
   disconnected?: ReadonlySet<string>;
   /** The status of an unmeasured cell no bound improves. */
   unmeasuredStatus?: 'plausible_unverified' | 'provider_unavailable';
+  /**
+   * Audit pass — what a straight line between cells i and j crosses
+   * (`travel/water.ts#assessCrossing`). An unmeasured cell whose ends stand on
+   * different landmasses is not a road or foot journey anybody has seen: it
+   * becomes `other_mode_required` with a conservative crossing allowance
+   * (`waterCrossingAllowanceMinutes`). One whose straight line is mostly water
+   * on the same land keeps its status but is raised by the road-around factor
+   * (`water.ts#aroundWaterMinutes`).
+   * A measured or bounded cell is never touched — a router that timed the pair
+   * found the bridge or the car ferry.
+   */
+  crossing?: (i: number, j: number) => { verdict: 'separate_land' | 'water_between'; straightLineKm: number } | null;
 }
 
 export interface BoundMatrixResult {
@@ -144,12 +157,20 @@ export function boundTravelMatrix(input: BoundMatrixInput): BoundMatrixResult {
       let status: RouteFeasibility;
       if (input.disconnected?.has(routePairKey(from, to)) || prior?.[i]?.[j] === 'disconnected') status = 'disconnected';
       else if (isMeasured(i, j)) status = 'verified';
+      else if (prior?.[i]?.[j] === 'other_mode_required') status = 'other_mode_required';
       else {
         const estimate = matrix.minutes[i]?.[j];
         const priorStatus = prior?.[i]?.[j];
         const base = priorStatus === 'provider_unavailable' || priorStatus === 'plausible_unverified' ? priorStatus : fallback;
         const leg = boundedLegMinutes({ estimate: typeof estimate === 'number' && Number.isFinite(estimate) ? estimate : null, bound: n > 2 ? triangleLowerBound(partial, i, j, pivots) : null, fallback: base });
-        if (leg) {
+        const water = leg?.feasibility === 'bounded_estimate' ? null : (input.crossing?.(i, j) ?? null);
+        if (water?.verdict === 'separate_land') {
+          minutes[i]![j] = Math.max(leg?.minutes ?? 0, waterCrossingAllowanceMinutes(water.straightLineKm));
+          status = 'other_mode_required';
+        } else if (leg && water?.verdict === 'water_between') {
+          minutes[i]![j] = aroundWaterMinutes(leg.minutes);
+          status = leg.feasibility;
+        } else if (leg) {
           minutes[i]![j] = leg.minutes;
           status = leg.feasibility;
         } else status = base;
@@ -159,6 +180,17 @@ export function boundTravelMatrix(input: BoundMatrixInput): BoundMatrixResult {
     }),
   );
   return { matrix: { ...matrix, minutes, feasibility }, counts };
+}
+
+/**
+ * A planning allowance for a crossing nobody timed: half an hour to reach the
+ * pier and board, then the straight line at a slow boat's 20 km/h, rounded up
+ * to a quarter hour. It is an allowance to plan around, never a timetable, and
+ * the leg that carries it says so.
+ */
+export function waterCrossingAllowanceMinutes(straightLineKm: number): number {
+  const km = Number.isFinite(straightLineKm) && straightLineKm > 0 ? straightLineKm : 0;
+  return Math.ceil((30 + (km / 20) * 60) / 15) * 15;
 }
 
 /** The status of one cell of a matrix, when it carries a grid. */
