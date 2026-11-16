@@ -340,6 +340,8 @@ export const ACTION_RATE_RULES = {
    * the presser.
    */
   trip_recheck: { capacity: 12, refillPerMinute: 4 },
+  /** Audit pass — a PDF the renderer must print (headless Chromium, up to 90 s); a cached file is free. */
+  guide_pdf: { capacity: 4, refillPerMinute: 1 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type GuardedActionKind = keyof typeof ACTION_RATE_RULES;
@@ -360,7 +362,15 @@ export type GuardedActionKind = keyof typeof ACTION_RATE_RULES;
  * so production cannot drift into this by accident.
  */
 function fencesDisabledForTesting(): boolean {
-  return process.env.SIDEQUEST_ACTION_FENCES === 'off';
+  if (process.env.SIDEQUEST_ACTION_FENCES !== 'off') return false;
+  /* Audit pass — never in a real deployment: under `next start` the switch counts only for a server whose own base URL is loopback (the local suites), which no deployment is. */
+  if (process.env.NODE_ENV !== 'production') return true;
+  try {
+    const host = new URL(process.env.SIDEQUEST_BASE_URL ?? '').hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -94,7 +94,16 @@ async function anthropicInterpreter(): Promise<DestinationInterpreter> {
   return {
     name: 'anthropic',
     async interpret({ text, graph, evidence }) {
-      const gate = dailySpendGate(new Date(), 'destination_interpretation');
+      /*
+       * Audit pass — charged to whoever asked, never to one shared key: an
+       * anonymous caller typing unique phrases used to spend the one share every
+       * traveller's interpretation drew on. Only a real call is fenced; a cached
+       * reading never reaches here.
+       */
+      const { callerKey, guardAction } = await import('@/lib/net/caller');
+      const caller = (await callerKey().catch(() => null)) ?? 'destination_interpretation';
+      if (await guardAction('billed_hourly').catch(() => null)) return { concept: null, source: 'declined', modelCalls: 0 };
+      const gate = dailySpendGate(new Date(), caller);
       if (!gate.allowed) return { concept: null, source: 'declined', modelCalls: 0 };
       const model = new ResearchModel({ maxCalls: 1, model: process.env.SIDEQUEST_DESTINATION_INTERPRETER_MODEL?.trim() || 'claude-sonnet-5', maxRetries: 0 });
       try {
@@ -111,10 +120,10 @@ async function anthropicInterpreter(): Promise<DestinationInterpreter> {
           maxTokens: 1024,
           timeoutMs: 20_000,
         });
-        recordDailySpend('model_calls', 1, new Date(), 'destination_interpretation');
+        recordDailySpend('model_calls', 1, new Date(), caller);
         return { concept, source: 'anthropic', modelCalls: 1 };
       } catch (error) {
-        recordDailySpend('model_calls', 1, new Date(), 'destination_interpretation');
+        recordDailySpend('model_calls', 1, new Date(), caller);
         console.warn('Destination interpretation failed', { name: error instanceof Error ? error.name : 'unknown' });
         return { concept: null, source: 'failed', modelCalls: 1 };
       }

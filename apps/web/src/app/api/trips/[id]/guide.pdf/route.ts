@@ -6,6 +6,7 @@ import { loadGuide } from '@/lib/guide/load';
 import { guideVariantOf, type GuideVariant } from '@/lib/guide/model';
 import { mintGuideToken } from '@/lib/guide/token';
 import { tripAccessRefusal } from '@/lib/net/trip-access';
+import { guardAction } from '@/lib/net/caller';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,7 +72,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   const guide = await loadGuide({ trip, variant, audience: 'owner' });
   if (!guide) return NextResponse.json({ error: 'no_plan' }, { status: 404 });
-  const key = `${id}:${variant}:` + createHash('sha256').update(GUIDE_LAYOUT_VERSION).update(JSON.stringify(guide)).digest('hex');
+  /* Audit pass — the guide carries the instant it was assembled; hashing it made every request a miss. The content, not the clock, is the key. */
+  const { generatedAt: _assembledAt, ...content } = guide as typeof guide & { generatedAt?: unknown };
+  void _assembledAt;
+  const key = `${id}:${variant}:` + createHash('sha256').update(GUIDE_LAYOUT_VERSION).update(JSON.stringify(content)).digest('hex');
   const headers = {
     'content-type': 'application/pdf',
     'content-disposition': `attachment; filename="${filename(trip.basics.destinationInput, variant)}"`,
@@ -80,6 +84,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const hit = cached(key);
   if (hit) return new Response(Buffer.from(hit), { headers });
 
+  /* Audit pass — every miss starts a headless browser on the renderer: fenced per caller, so one loop cannot queue renders for everybody. */
+  const refused = await guardAction('guide_pdf');
+  if (refused) return NextResponse.json({ error: 'busy', message: refused }, { status: 429 });
   const token = mintGuideToken(id, variant);
   if (!token) return fallback();
   const source = `${renderer.sourceOrigin}${guidePrintPath(id, variant)}&t=${encodeURIComponent(token)}`;
