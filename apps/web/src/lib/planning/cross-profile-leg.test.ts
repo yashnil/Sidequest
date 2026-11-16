@@ -80,3 +80,32 @@ describe('a walk never borrows a car measurement', () => {
     }
   });
 });
+
+describe('audit pass — a car-free trip never drives', () => {
+  it('a road hop on a trip with no car is a taxi or rideshare, even when the traveller could drive', async () => {
+    const world = fictionalWorld({
+      name: 'Valleyland',
+      center: { lat: 33.84, lng: 135.77 },
+      profile: { willDrive: true },
+      places: [
+        { name: 'Upper Village', lat: 33.84, lng: 135.77, entityType: 'city' as const },
+        { name: 'Shrine Gate', lat: 33.6, lng: 135.95 },
+      ],
+      basics: { startDate: '2026-05-01', endDate: '2026-05-03' },
+    });
+    const draft = draftOf({
+      driving: 'none',
+      bases: [{ id: 'b', name: 'Upper Village', nights: 2 }],
+      days: [
+        { base: 'b', anchors: [{ name: 'Shrine Gate', role: 'core', transport: 'bus' }] },
+        { base: 'b', anchors: [{ name: 'Shrine Gate', role: 'core' }] },
+        { base: 'b', anchors: [] },
+      ],
+    });
+    const result = await reconcileTripDraft({ draft, context: world.context });
+    const legs = result.itinerary.days.flatMap((d) => d.items).filter((i) => i.kind === 'travel' && i.travel);
+    expect(legs.length).toBeGreaterThan(0);
+    expect(legs.filter((l) => l.travel!.mode === 'drive').map((l) => l.title)).toEqual([]);
+    expect(legs.every((l) => !/^Drive to /.test(l.title))).toBe(true);
+  });
+});

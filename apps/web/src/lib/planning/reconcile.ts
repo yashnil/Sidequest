@@ -3355,7 +3355,17 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
     /* A walk nobody would take on an operator-run trip is the operator's vehicle, never a shuttle the trip does not contain. */
     const vehicleCorrected = Boolean(tripVehicle && plausible.corrected);
-    const mode = vehicleCorrected ? transportModeFor(tripVehicle, context.matrix.mode, canDrive) : plausible.mode;
+    const modeChosen = vehicleCorrected ? transportModeFor(tripVehicle, context.matrix.mode, canDrive) : plausible.mode;
+    /*
+     * Audit pass — a car-free trip never drives. A followed trail (and any trip
+     * whose ground is public transport) still carried the traveller's
+     * willDrive into the default mode, so a 52 km road hop on the Kumano Kodo
+     * read "45 min drive". On such a trip a road leg somebody else drives is a
+     * taxi or rideshare — the same word the estimator uses when nobody in the
+     * party drives — and its figure is unchanged.
+     */
+    const carFreeGround = groundArrangement === 'transit' || groundArrangement === 'taxi' || groundArrangement === 'none';
+    const mode = carFreeGround && modeChosen === 'drive' ? 'rideshare' : modeChosen;
     const legHint: DraftTransport | undefined = vehicleCorrected ? tripVehicle : groundRefuses ? undefined : hint;
     const vehicleLabel = tripVehicle && legHint === tripVehicle ? TRAVEL_MODE_LABELS[travelModeFromDraft(tripVehicle)] : null;
     /*

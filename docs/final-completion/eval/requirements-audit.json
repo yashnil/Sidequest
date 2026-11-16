@@ -1,0 +1,31 @@
+[
+ {
+  "scenario": "cyclades-islands",
+  "defining": [
+   { "id": "santorini", "label": "Santorini caldera (Oia, Fira, caldera walk)", "anyOf": ["Santorini", "Oia", "Fira", "Thira", "caldera"] },
+   { "id": "naxos-or-paros", "label": "Naxos or Paros (Portara, Chora, Naoussa, Lefkes)", "anyOf": ["Naxos", "Paros", "Portara", "Naoussa", "Lefkes", "Apeiranthos"] },
+   { "id": "milos-or-other", "label": "A further Cycladic island (Milos, Sifnos, Folegandros, Mykonos, Tinos, Ios)", "anyOf": ["Milos", "Sifnos", "Folegandros", "Mykonos", "Tinos", "Ios", "Sarakiniko", "Delos"] },
+   { "id": "beach", "label": "Beach time", "anyOf": ["beach", "Beach"] }
+  ],
+  "redFlags": [
+   { "id": "drive-between-islands", "label": "A timed drive between two islands (no road joins them)", "pattern": "min drive[^\\n]{0,80}(Santorini|Naxos|Paros|Milos|Mykonos|Ios|Sifnos|Folegandros|Tinos)" },
+   { "id": "rail", "label": "Trains (none on the Cyclades)", "anyOf": ["train to", "Train to", "railway", "rail pass"] }
+  ],
+  "notes": "Island-hopping is by ferry between islands; each island moves by bus, scooter, taxi or a short hire. Any inter-island leg must be a crossing (ferry), never a timed drive. Written 2026-11-15 before any run."
+ },
+ {
+  "scenario": "botswana-safari",
+  "defining": [
+   { "id": "okavango", "label": "Okavango Delta (mokoro, Moremi, delta camps)", "anyOf": ["Okavango", "Moremi", "mokoro", "Delta"] },
+   { "id": "chobe", "label": "Chobe National Park / Chobe riverfront", "anyOf": ["Chobe", "Kasane", "Savuti", "Linyanti"] },
+   { "id": "game-drives", "label": "Game drives in at least two distinct parks or reserves", "anyOf": ["game drive", "Game drive", "safari drive"] },
+   { "id": "pans-or-falls", "label": "Makgadikgadi / Nxai Pans, Central Kalahari or a Victoria Falls side trip", "anyOf": ["Makgadikgadi", "Nxai", "Kalahari", "Victoria Falls", "pans"] }
+  ],
+  "redFlags": [
+   { "id": "self-drive-rental", "label": "A self-drive hire car on an operator-led safari", "anyOf": ["Book a rental car", "hire car", "rental car"] },
+   { "id": "town-built", "label": "Built around a town (Maun, Kasane, Gaborone) rather than the parks", "pattern": "built around (markets|street food|museums)" },
+   { "id": "rail", "label": "Trains", "anyOf": ["train to", "Train to", "railway"] }
+  ],
+  "notes": "Usually Maun and Kasane as gateways with nights in or beside the Okavango Delta/Moremi and Chobe; light-aircraft transfers between delta camps; operator vehicles. Written 2026-11-15 before any run."
+ }
+]
