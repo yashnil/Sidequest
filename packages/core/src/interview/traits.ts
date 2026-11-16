@@ -197,6 +197,8 @@ export interface DestinationQuestionContext {
   assumption?: DestinationAssumption;
   /** V7 §3 — what is operationally true here, when the country is known. Read by the transport question and the sketch. */
   reality?: TravelReality;
+  /** Audit pass — the shortlist card's car judgement, when the trip was adopted from one (`TripComposerAnswers.advisorCarNeed`). */
+  advisorCarNeed?: 'unnecessary' | 'helpful' | 'essential';
 }
 
 const BREADTH_RANK: Record<ScopeBreadth, number> = {

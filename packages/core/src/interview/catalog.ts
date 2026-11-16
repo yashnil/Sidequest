@@ -667,7 +667,7 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
         return { willDrive: false, willUseShuttles: true, transportPriority: 'best_value', privateTransfers: 'if_needed', transportChoice: 'transit_walk' };
     }
   },
-  smartDefault: (ctx) => {
+  smartDefault: (ctx, answers) => {
     /*
      * V7 §7 — A RECOMMENDATION NEEDS EVIDENCE ABOUT THE COUNTRY, NOT A SHAPE.
      *
@@ -678,6 +678,18 @@ const TRANSPORT_MODE: QuestionDefinition = choice({
      * honest default is "Sidequest will choose after it sees the route".
      */
     const reality = ctx.destination.reality;
+    /*
+     * Audit pass — the shortlist card this trip was adopted from already said
+     * "no car needed" for this destination; the plan then defaulted to a hire
+     * car and the product contradicted itself with nobody's choice in between.
+     * The card's judgement is the destination prior. The traveller's own
+     * answer, as always, replaces it.
+     */
+    if (ctx.destination.advisorCarNeed === 'unnecessary') {
+      const offered = (TRANSPORT_MODE.options?.(ctx, answers) ?? []).map((o) => o.value);
+      const value = ['rail_transfers', 'no_car', 'transit_walk', 'boats_transfers', 'taxis', 'guided'].find((v) => offered.includes(v));
+      if (value) return { value, reason: `Your shortlist said ${ctx.destination.proseName} needs no car, so the plan starts without one. Change this if you would rather drive.`, source: 'destination_prior' };
+    }
     const fromReality = movementFromReality(reality);
     if (reality?.recommendation && fromReality) {
       const value = fromReality === 'rail_transfers' ? 'rail_transfers' : fromReality === 'car' ? 'rent_car' : fromReality === 'guided' ? 'guided' : fromReality === 'boat' ? 'boats_transfers' : fromReality === 'transit_walk' ? 'transit_walk' : 'mixed';

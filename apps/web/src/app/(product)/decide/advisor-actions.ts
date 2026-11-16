@@ -333,6 +333,7 @@ export async function adoptAdvisorPickAction(id: string, pickId: string, party?:
     ...resolvedParty,
     mode: 'known_destination',
     destinationQuery: destinationPhrase,
+    ...(pick.carNeed && pick.carNeed !== 'unknown' ? { advisorCarNeed: pick.carNeed } : {}),
     dates: { ...dates, startDate: window.startDate, endDate: window.endDate },
     duration: { ...session.answers.duration, mode: 'fixed', nights: chosen.nights },
     updatedAt: now.toISOString(),

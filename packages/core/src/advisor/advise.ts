@@ -491,6 +491,8 @@ export function pickFrom(scored: ScoredDestination, profile: AdvisorProfile, rol
     radiusKm: d.radiusKm,
     resolveAs: d.resolveAs,
     ...(d.wikidataId ? { wikidataId: d.wikidataId } : {}),
+    /* The card's own car judgement, carried so planning starts from what the card said (audit pass). */
+    carNeed: d.access.car,
     role,
     score: Math.round(scored.score * 1000) / 1000,
     coverage: Math.round(scored.coverage * 100) / 100,

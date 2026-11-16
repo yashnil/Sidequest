@@ -360,6 +360,13 @@ export const tripComposerAnswersSchema = z.object({
   researchRequestedAt: z.string().optional(),
   pace: z.enum(['slow', 'balanced', 'packed']).optional(),
   transport: transportIntentSchema.optional(),
+  /**
+   * Audit pass — the shortlist card's car judgement for the destination this
+   * trip was adopted from ("no car needed"). Sidequest's assessment, never the
+   * traveller's answer: it is a destination prior for the transport question,
+   * which the traveller's own choice always replaces.
+   */
+  advisorCarNeed: z.enum(['unnecessary', 'helpful', 'essential']).optional(),
   /** Minutes at the wheel a single day may hold. Absent means nobody has said. */
   maxDailyDriveMinutes: z.number().int().min(0).max(480).optional(),
   budget: budgetBandSchema.optional(),

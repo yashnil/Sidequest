@@ -31,6 +31,8 @@ export const advisorPickSchema = z.object({
   radiusKm: z.number(),
   resolveAs: z.string(),
   wikidataId: z.string().optional(),
+  /** Whether getting around needs a car, as the card says it ("no car needed", "easier with a car"). Absent on sessions stored before it existed. */
+  carNeed: z.enum(['unnecessary', 'helpful', 'essential', 'unknown']).nullable().default(null),
   role: z.enum(['primary', 'alternate']),
   score: z.number(),
   coverage: z.number(),

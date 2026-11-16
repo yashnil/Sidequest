@@ -140,6 +140,20 @@ describe('safe defaults when the evidence is thin', () => {
     expect(decision.reason).toMatch(/will choose how to get around .* once it sees the route/);
   });
 
+  it('audit pass — a trip adopted from a shortlist card that said "no car needed" starts without a car, and decide-for-me keeps it so', () => {
+    const base = contextFor({ name: 'Highland Lake Towns', tripDays: 10, entityType: 'natural_feature', breadth: 'region', featureType: 'water', center: { lat: 14.7, lng: -91.2 }, startDate: '2027-03-19' });
+    const ctx: InterviewContext = { ...base, destination: { ...base.destination, advisorCarNeed: 'unnecessary' } };
+    const answers = fresh(ctx);
+    const decision = questionById(ctx, answers, 'transport_mode')!.smartDefault!(ctx, answers);
+    expect(['rent_car', 'self_drive', 'mixed']).not.toContain(decision.value);
+    expect(decision.source).toBe('destination_prior');
+    expect(decision.reason).toMatch(/shortlist said .* needs no car/);
+    const { answers: decided } = applySmartDefaults({ answers, ctx, now: NOW });
+    expect(decided.willDrive).toBe(false);
+    /* The same place with no card behind it keeps the old, non-committal default. */
+    expect(questionById(base, fresh(base), 'transport_mode')!.smartDefault!(base, fresh(base)).reason).not.toMatch(/shortlist/);
+  });
+
   it('a rail-oriented country reads as transit-rich and leads with trains, not a hire car', () => {
     const ctx = railRegion();
     expect(ctx.destination.traits).toContain('transit_rich');

@@ -252,7 +252,10 @@ export function carriedFieldsFor(composer: TripComposerAnswers | null, carried: 
 export function interviewContextFor(input: ScreeningInputs & { offeredInterests: readonly Interest[]; carried: readonly string[]; answers?: QuestionnaireAnswers; party?: InterviewContext['traveller']['party'] }): InterviewContext {
   const composer = input.intent?.composer ?? null;
   return {
-    destination: destinationContextFor(input, { ...(input.party ? { party: input.party } : {}), ...(input.answers?.provenance.transport_mode?.source === 'explicit' ? { willDrive: input.answers.willDrive } : {}) }),
+    destination: {
+      ...destinationContextFor(input, { ...(input.party ? { party: input.party } : {}), ...(input.answers?.provenance.transport_mode?.source === 'explicit' ? { willDrive: input.answers.willDrive } : {}) }),
+      ...(composer?.advisorCarNeed ? { advisorCarNeed: composer.advisorCarNeed } : {}),
+    },
     traveller: {
       ...(input.party ? { party: input.party } : {}),
       travelerNeeds: input.trip.basics.travelerNeeds,
