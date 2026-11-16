@@ -118,7 +118,7 @@ The medium findings were fixed (§2). Both deployed environments set `SIDEQUEST_
 - **Verified:**
   - `bd47977` (packages-only) was BUILDING and then **SUCCESS**.
   - `84e4d02` was **SUCCESS**.
-  - `5a21449`, `c6ad697` and `f89e1c1` were each **SUCCESS**; final deployment `1cb1713a` = `f89e1c1`.
+  - `5a21449`, `c6ad697`, `f89e1c1` and the final push `3347c86` (code `00af94b`) were each **SUCCESS**; staging runs `3347c86`.
   - Public pages `/`, `/decide`, `/improve`, `/signin`, `/privacy`, `/terms` return 200; `/api/health` is ok.
   - The production build logs "Land index loaded with lakes in ~115 ms".
   - The docs-only `9929564` stayed SKIPPED, as intended.
