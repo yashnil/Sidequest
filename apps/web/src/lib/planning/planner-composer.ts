@@ -1,3 +1,4 @@
+import { onSmallIsland } from './small-island';
 import { boundedLegMinutes, busSparseWithoutRail, estimateLegMinutes, haversineKm, highSpeedRailBackbone, moveSideOf, lowerBoundFrom, publicTransportNetwork, matrixFeasibility, verifiedLookup, type Itinerary, type StayDecision, type DiscoveryCandidate, type Interest, type TravelerProfile, type Trip, type UnscheduledPlace, type UnscheduledReasonCode, type WeatherDataset, trailClock, trailHours, type TrailRecord, trailScope, type TrailScope } from '@sidequest/core';
 import { buildDailyWindows, resolveConfig } from '@sidequest/planner';
 import type { DiscoverySelection } from '@sidequest/core';
@@ -665,7 +666,7 @@ export function carFreeMoveFor(
    * in every village, and a 9 km move between two Kii mountain villages printed
    * as a train. A shorter hop is the bus that does run.
    */
-  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode, locator).intercityRail ? 'rail' : 'bus', ...when };
+  return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode, locator).intercityRail && !onSmallIsland([from, to]) ? 'rail' : 'bus', ...when };
 }
 
 /**
@@ -722,7 +723,9 @@ function draftFromPlan(args: {
       const from = args.coordinates.get(previous);
       const km = from ? haversineKm(from, c.coordinates) : null;
       /* Per leg: the services the ground under both ends has (an island stop never takes the mainland's train). */
-      const legNetwork = from ? publicTransportNetwork(networkScope.countryCode, { regionCode: networkScope.regionCode, points: [from, c.coordinates] }) : dayNetwork;
+      const legNetworkRaw = from ? publicTransportNetwork(networkScope.countryCode, { regionCode: networkScope.regionCode, points: [from, c.coordinates] }) : dayNetwork;
+      /* Audit pass — a leg on a small island never takes the mainland's train (`small-island.ts`). */
+      const legNetwork = legNetworkRaw.intercityRail && from && onSmallIsland([from, c.coordinates]) ? { ...legNetworkRaw, intercityRail: false, highSpeedRail: false } : legNetworkRaw;
       const legTransport = transportFor(input.carAvailable, args.minutes(previous, c.id), km, c.category, { ...(input.groundArrangement ? { arrangement: input.groundArrangement } : {}), intercityRail: dayNetwork.intercityRail && legNetwork.intercityRail, metro: dayNetwork.metro && legNetwork.metro });
       const transport = networkScope.transfers && legTransport === 'bus' ? 'taxi' : legTransport;
       previous = c.id;

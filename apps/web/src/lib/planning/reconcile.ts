@@ -143,6 +143,7 @@ import {
 import type { SkeletonEvidencePacket } from '@/lib/benchmark/baseline/skeleton-packet';
 import { loadWaterIndex } from '@sidequest/atlas';
 import { arrangementFromDraft } from './arrangement';
+import { onSmallIsland } from './small-island';
 import { TRIP_DRAFT_SCHEMA_VERSION, draftAnchorId, episodeForDay, episodeIsOffRoad, episodesOf, type AnchorRole, type DraftAnchor, type DraftEpisode, type DraftTransport, type TripDraft, movementShapeOf, impliesSelfDriving, timeOfDayIsBinding, timeOfDayIsHard } from './trip-draft';
 
 /**
@@ -3348,8 +3349,11 @@ function attemptLayout(input: DayLayoutInput, anchors: readonly ReconciledAnchor
     const legGround = (hint === 'rail' || hint === 'high_speed_rail' || hint === 'metro') && worldScreen.ok && (fromCoordinates || toCoordinates)
       ? transportNetworkAt(context.destinationScope?.countryCode, { regionCode: context.destinationScope?.regionCode, points: [fromCoordinates, toCoordinates] })
       : null;
-    const groundRefuses = Boolean(legGround && legGround.basis === 'subdivision' && (hint === 'metro' ? !legGround.metro : hint === 'high_speed_rail' ? !legGround.highSpeedRail && !legGround.intercityRail : !legGround.intercityRail));
-    const worldCheck = groundRefuses ? { ok: false as const, refusal: legGround!.notes[0] ?? 'No railway runs here.' } : worldScreen;
+    const groundRefuses =
+      Boolean(legGround && legGround.basis === 'subdivision' && (hint === 'metro' ? !legGround.metro : hint === 'high_speed_rail' ? !legGround.highSpeedRail && !legGround.intercityRail : !legGround.intercityRail)) ||
+      /* Audit pass — an intercity train on a small island is not a fact anybody checked (`small-island.ts`); a timetabled answer still stands. */
+      Boolean((hint === 'rail' || hint === 'high_speed_rail') && worldScreen.ok && confirmation?.basis !== 'scheduled' && fromCoordinates && toCoordinates && onSmallIsland([fromCoordinates, toCoordinates]));
+    const worldCheck = groundRefuses ? { ok: false as const, refusal: legGround?.notes[0] ?? 'No railway runs here.' } : worldScreen;
     const hinted = worldCheck.ok ? hintedRaw : transportModeFor(undefined, context.matrix.mode, canDrive);
     const crossLocality = Boolean(from.locality && to.locality && normalizeName(from.locality) !== normalizeName(to.locality));
     const plausible = plausibleModeFor({ hinted, straightLineKm: straightLineKm ?? (crossLocality && hinted === 'walk' ? Number.POSITIVE_INFINITY : null), ...(groundArrangement ? { arrangement: groundArrangement } : {}), canDrive, transitTrip: context.matrix.mode === 'transit' });
