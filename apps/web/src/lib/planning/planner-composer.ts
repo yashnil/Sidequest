@@ -668,6 +668,19 @@ export function carFreeMoveFor(
   return { how: km >= MIN_CAR_FREE_RAIL_KM && publicTransportNetwork(countryCode, locator).intercityRail ? 'rail' : 'bus', ...when };
 }
 
+/**
+ * How a car-free move day travels. Audit pass — on an operator-run trip (a
+ * safari's driver-guide) it is the operator's transfer, never a public bus
+ * nobody checked runs there (the live Tanzania plan printed "≈3 hr 55 min bus"
+ * between two park lodges). Where buses are sparse and transfers are the norm,
+ * a bus becomes a taxi, as before.
+ */
+export function carFreeMoveHow<M extends { how: 'rail' | 'high_speed_rail' | 'bus'; when?: 'start' }>(move: M, groundArrangement: PlannerComposeInput['groundArrangement'], transfers: boolean): Omit<M, 'how'> & { how: 'rail' | 'high_speed_rail' | 'bus' | 'taxi' | 'private_transfer' } {
+  if (groundArrangement === 'operator') return { ...move, how: 'private_transfer' };
+  if (transfers && move.how === 'bus') return { ...move, how: 'taxi' };
+  return move;
+}
+
 function draftFromPlan(args: {
   windows: readonly PlannerDayWindow[];
   plan: StructurePlan;
@@ -769,7 +782,7 @@ function draftFromPlan(args: {
       ...(day.relocation && day.stops.some((s) => s.candidate.trailStage)
         ? { move: { how: 'walk' as const } }
         : day.relocation && !input.carAvailable
-        ? ((move) => (move ? { move: networkScope.transfers && move.how === 'bus' ? { ...move, how: 'taxi' as const } : move } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), networkScope.countryCode, day.stops.map((s) => args.coordinates.get(s.candidate.id) ?? s.candidate.coordinates), networkScope.regionCode))
+        ? ((move) => (move ? { move: carFreeMoveHow(move, input.groundArrangement, networkScope.transfers) } : {}))(carFreeMoveFor(args.coordinates.get(plan.days[i - 1]?.baseId ?? ''), args.coordinates.get(day.baseId), networkScope.countryCode, day.stops.map((s) => args.coordinates.get(s.candidate.id) ?? s.candidate.coordinates), networkScope.regionCode))
         : {}),
       anchors,
       meals: {

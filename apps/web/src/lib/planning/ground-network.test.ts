@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { assembleScanRegion, estimatedScanMatrix, normalizeScanProposal, planScanPoints, type DiscoveryCandidate, type ResolvedPosition, type Trip } from '@sidequest/core';
-import { carFreeMoveFor, composeWithPlanner } from './planner-composer';
+import { carFreeMoveFor, carFreeMoveHow, composeWithPlanner } from './planner-composer';
 import { defaultProfileFor } from './default-profile';
 import type { RegionContext } from '../region';
 import { reconcileTripDraft } from './reconcile';
@@ -190,5 +190,18 @@ describe('the reconciler screens every leg against the ground under it', () => {
     ]);
     expect(travel.mode).toBe('rail');
     expect(travel.hint).toBe('rail');
+  });
+});
+
+describe('audit pass — an operator-run trip moves in the operator vehicle', () => {
+  it('a move on an operator safari is the operator transfer, whatever the network would have offered', () => {
+    expect(carFreeMoveHow({ how: 'bus' }, 'operator', false)).toEqual({ how: 'private_transfer' });
+    expect(carFreeMoveHow({ how: 'rail', when: 'start' }, 'operator', false)).toEqual({ how: 'private_transfer', when: 'start' });
+  });
+
+  it('elsewhere the network decides as before: a bus where buses run, a taxi where transfers are the norm', () => {
+    expect(carFreeMoveHow({ how: 'bus' }, 'public_transport', false)).toEqual({ how: 'bus' });
+    expect(carFreeMoveHow({ how: 'bus' }, undefined, true)).toEqual({ how: 'taxi' });
+    expect(carFreeMoveHow({ how: 'rail' }, 'public_transport', true)).toEqual({ how: 'rail' });
   });
 });
